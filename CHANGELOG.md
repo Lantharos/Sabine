@@ -1,3 +1,8 @@
+# Unreleased
+
+- Windows shared-texture rendering preserves pixel alignment instead of shrinking the
+  sampled frame by one pixel, keeping text and fine details sharp at native resolution.
+
 # Sabine 0.27
 
 - Windows OSR connections switch accepted sockets to blocking reads before authentication,

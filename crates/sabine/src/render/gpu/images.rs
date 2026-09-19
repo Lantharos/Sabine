@@ -313,12 +313,12 @@ impl GpuRenderer {
                 width,
                 height,
                 uv_origin: [
-                    (source_origin.0 as f32 + 0.5) / source_width as f32,
-                    (source_origin.1 as f32 + 0.5) / source_height as f32,
+                    source_origin.0 as f32 / source_width as f32,
+                    source_origin.1 as f32 / source_height as f32,
                 ],
                 uv_size: [
-                    width.saturating_sub(1) as f32 / source_width as f32,
-                    height.saturating_sub(1) as f32 / source_height as f32,
+                    width as f32 / source_width as f32,
+                    height as f32 / source_height as f32,
                 ],
                 external: true,
             },
