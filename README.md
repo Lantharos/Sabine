@@ -19,6 +19,11 @@ sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.28" }
 cargo install --git https://github.com/Lantharos/Sabine --tag v0.28 sabine-cli
 ```
 
+Run `sabine -V` or `sabine --version` to see the CLI version, installed shared service version,
+and running daemon version separately. If the service is missing or the daemon is stopped, the
+output says so. This only reads local state; it does not start the daemon or check for updates.
+Shared service updates do not replace a separately installed CLI.
+
 For the TypeScript helpers used by the web UI:
 
 ```sh

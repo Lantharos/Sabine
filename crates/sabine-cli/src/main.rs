@@ -155,7 +155,27 @@ enum RuntimeSubcommand {
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) if error.kind() == clap::error::ErrorKind::DisplayVersion => {
+            println!("Sabine CLI: {}", sabine_service::SABINE_VERSION);
+            println!(
+                "Sabine service (installed): {}",
+                sabine_service::installed_service_version()
+                    .as_deref()
+                    .unwrap_or("not installed")
+            );
+            println!(
+                "Sabine daemon (running): {}",
+                sabine_service::running_daemon_version()
+                    .as_deref()
+                    .unwrap_or("not running")
+            );
+            return ExitCode::SUCCESS;
+        }
+        Err(error) => error.exit(),
+    };
+    match cli.command {
         Command::New { name, template } => template::new_app(&name, &template),
         Command::Dev {
             source,

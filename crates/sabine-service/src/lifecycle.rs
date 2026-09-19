@@ -12,7 +12,7 @@ pub use autostart::{
 };
 pub use daemon::{
     complete_system_update, ensure_daemon_running, is_daemon_running, resolve_service_executable,
-    run_daemon, start_daemon,
+    run_daemon, running_daemon_version, start_daemon,
 };
 
 const POLICY_FILE: &str = "service-policy.json";

@@ -42,6 +42,10 @@ pub struct StagedSystemUpdate {
     pub previous_service: Option<PathBuf>,
 }
 
+pub fn installed_service_version() -> Option<String> {
+    current_installation().map(|(version, _)| version)
+}
+
 pub fn cached_service_path() -> PathBuf {
     current_installation()
         .map(|(_, path)| path.join(service_binary_name()))
