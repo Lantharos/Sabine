@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.28
 
 - Windows shared-texture rendering preserves pixel alignment instead of shrinking the
   sampled frame by one pixel, keeping text and fine details sharp at native resolution.
