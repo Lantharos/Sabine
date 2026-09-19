@@ -112,6 +112,13 @@ pub fn is_daemon_running() -> bool {
     daemon_state().is_some_and(|state| process_alive(state.pid as i32))
 }
 
+pub fn running_daemon_version() -> Option<String> {
+    let state = daemon_state().filter(|state| process_alive(state.pid as i32))?;
+    let actual = process_executable(state.pid)?;
+    let expected = service_daemon_path(&service_path_for_version(&state.version));
+    (actual.file_name() == expected.file_name()).then_some(state.version)
+}
+
 pub fn start_daemon() -> ServiceResult<()> {
     ensure_daemon_running().map(|_| ())
 }
