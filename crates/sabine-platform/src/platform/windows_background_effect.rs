@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Mica uses DWM attributes; blur/acrylic use the dynamically loaded
+// SetWindowCompositionAttribute entry point and its accent-policy ABI.
+// These are different contracts, not interchangeable names for one effect.
+
 use std::sync::{Arc, OnceLock};
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};

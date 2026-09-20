@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Windows needs D3D12 for shared-texture import and a DirectComposition visual
+// for the transparent swapchain. Changing either backend or presentation mode
+// can break the browser surface even when ordinary wgpu drawing still works.
+
 use std::sync::OnceLock;
 
 pub(super) fn shared() -> wgpu::Instance {

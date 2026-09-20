@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// CEF's callback handle is borrowed, not ours to keep. Import only the host's
+// copied D3D12 resource on the matching adapter; release its slot after GPU use.
+// A valid HANDLE is not a promise that the pixels are still yours.
+
 use wgpu::hal::api::Dx12;
 use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 

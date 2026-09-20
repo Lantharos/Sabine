@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Winsock accepts inherit the listener's nonblocking mode. The accepted OSR
+// stream must be switched back to blocking before authentication and frame reads,
+// or WSAEWOULDBLOCK (10035) turns a healthy connection into a browser crash loop.
+
 use std::{
     sync::{
         Arc, Mutex,

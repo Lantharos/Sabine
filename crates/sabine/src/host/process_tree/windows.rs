@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Killing one Windows PID does not clean up Chromium's process tree. The job
+// object owns that cleanup; its kill-on-close and breakaway rules affect every
+// child. WM_CLOSE is only the polite request, not the teardown guarantee.
+
 use std::{
     io,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
