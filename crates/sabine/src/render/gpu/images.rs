@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// The Windows shared-texture path must keep its release callback until GPU
+// sampling finishes. Its crop UVs describe pixel edges, not pixel centers;
+// adding a half-texel inset here resamples the whole page into a blurry mess.
+
 use image::GenericImageView;
 use std::ops::Range;
 

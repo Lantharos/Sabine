@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Windows host probes need CREATE_NO_WINDOW, and a complete host includes its
+// DLL and chrome_elf.dll beside the executable. Finding the .exe alone does not
+// mean Chromium can start. Resource paths and sandbox access also belong to setup.
+
 //! CEF host embedder sources and cmake build.
 //!
 //! Apps and the CLI call [`ensure_host`] to materialize `sabine-host` next to

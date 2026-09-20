@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// On Windows, Chromium's ANGLE device must match the compositor's adapter LUID.
+// A software compositor needs d3d11-warp, not ordinary d3d11. Picking a different
+// device can kill shared-texture import before the first browser frame.
+
 mod window;
 
 use std::{

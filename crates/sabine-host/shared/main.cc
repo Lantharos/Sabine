@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// The Windows host runs through Chromium's sandbox bootstrap and receives its
+// sandbox_info in RunWinMain. A plain executable entry point is not equivalent;
+// keep the sandbox bootstrap contract intact when changing host startup.
+
 #include "app/app.h"
 #include "runtime/probe.h"
 

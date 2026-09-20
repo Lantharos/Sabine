@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Windows login startup uses an interactive, limited scheduled task targeting
+// the GUI-subsystem daemon. Keep its battery and execution-time settings: the
+// defaults can stop background maintenance long after a successful login.
+
 use std::{
     fs,
     path::Path,

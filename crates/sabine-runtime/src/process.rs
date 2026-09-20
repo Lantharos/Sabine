@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// On Windows, redirecting stdout does not stop a console executable from
+// opening conhost. Background helpers need CREATE_NO_WINDOW as well.
+// Quiet output and an invisible process are annoyingly different things.
+
 use std::{ffi::OsStr, process::Command};
 
 pub fn background_command(program: impl AsRef<OsStr>) -> Command {

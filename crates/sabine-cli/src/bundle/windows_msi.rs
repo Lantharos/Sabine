@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// MSI upgrades, per-user component key paths, and deferred/rollback action
+// ordering are part of the install transaction. Keep setup after InstallFiles
+// and unregister before RemoveFiles; XML that builds can still fail at install.
+
 use super::config::BundleApp;
 use std::{fs, path::Path};
 

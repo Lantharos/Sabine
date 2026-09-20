@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// NSIS strings have their own escaping rules, and cancellation must reach the
+// running setup helper. Keep the per-user registry paths and payload inventory
+// aligned with uninstall; this is not a shell script with a wizard attached.
+
 use super::config::BundleApp;
 use std::{
     fs,

@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// The current user's access is not the Chromium AppContainer's access. Runtime
+// files also need read/execute access for ALL RESTRICTED APPLICATION PACKAGES.
+// Keep existing ACLs and inheritance intact; do not "fix" this by disabling the sandbox.
+
 use std::{ffi::c_void, os::windows::ffi::OsStrExt, path::Path, ptr};
 use windows::{
     Win32::{

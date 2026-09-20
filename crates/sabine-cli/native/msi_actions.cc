@@ -1,3 +1,10 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// MSI deferred actions receive their command through CustomActionData. The
+// child needs explicit handle inheritance, pipe draining, cancellation polling,
+// and CREATE_NO_WINDOW. A blocked pipe can hang setup; a stray console is not
+// an installer progress window. Keep rollback and cancellation distinct.
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

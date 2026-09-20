@@ -1,3 +1,9 @@
+// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
+//
+// Windows Chromium subprocesses look beside the runtime DLLs for ICU and .pak
+// files even when the browser has explicit resource paths. Keep the Release
+// hard links to Resources; removing these apparent duplicates breaks startup.
+
 use std::{io, path::Path};
 
 pub fn prepare_runtime_assets(runtime_dir: &Path) -> io::Result<()> {
