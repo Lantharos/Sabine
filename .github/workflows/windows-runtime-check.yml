@@ -1,0 +1,37 @@
+name: Published Windows runtime checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published Sabine release tag
+        required: true
+        default: v0.28
+      cef_versions:
+        description: Comma-separated full CEF versions to compare
+        required: true
+        default: 152.0.7+g83ffcba+chromium-152.0.7977.83,152.0.8+g1ce985c+chromium-152.0.7977.134
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Exercise the published host with each runtime
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SABINE_CHECK_TAG: ${{ inputs.tag }}
+          SABINE_CHECK_CEF_VERSIONS: ${{ inputs.cef_versions }}
+        run: |
+          ./scripts/windows-runtime-check.ps1 -Tag $env:SABINE_CHECK_TAG -CefVersions ($env:SABINE_CHECK_CEF_VERSIONS.Split(',')) -OutputDirectory "$env:RUNNER_TEMP/runtime-check"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-runtime-diagnostics
+          path: ${{ runner.temp }}/runtime-check/diagnostics
+          if-no-files-found: error

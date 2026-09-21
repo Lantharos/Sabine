@@ -309,6 +309,12 @@ sabine-service maintain
 `sabine runtime doctor` validates the runtime layout and launches the matching CEF host with a
 headless smoke probe. Its JSON output includes `probe_error` when the host cannot start.
 
+The manual **Published Windows runtime checks** workflow compares a released Sabine host against
+specified CEF versions on a Windows runner. It downloads the published binaries without rebuilding
+the host, checks archive hashes, and runs each runtime with a fresh profile. The diagnostic artifact
+contains the results, process errors, and Windows/graphics versions. This checks runtime updates
+against an existing release; it does not publish a release or prove behavior on every Windows PC.
+
 ## Learn more
 
 - [Implementation guide](docs/implementation-guide.md) — process model, bridge, guests, bundling, and platform notes
