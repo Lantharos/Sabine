@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'This check requires Windows' }
 . "$PSScriptRoot/windows-browser-check.ps1"
+. "$PSScriptRoot/windows-crash-capture.ps1"
 $root = [IO.Path]::GetFullPath($OutputDirectory)
 $diagnostics = Join-Path $root 'diagnostics'
 New-Item -ItemType Directory -Force $diagnostics | Out-Null
@@ -62,6 +63,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Could not prepare sandbox access: $directory" }
         }
         $result = [ordered]@{
+            mode = 'published'
             cef = $version
             bootstrap = (Get-Item (Join-Path $hostDirectory 'sabine-host.exe')).VersionInfo.FileVersion
             library = (Get-Item (Join-Path $runtime 'Release/libcef.dll')).VersionInfo.FileVersion
@@ -74,8 +76,33 @@ try {
         } catch {
             $result.error = $_.ToString()
             Write-Host "FAILED $version`: $_"
+            try {
+                Save-SabineHostCrash -HostDirectory $hostDirectory -RuntimeDirectory $runtime -OutputDirectory (Join-Path $diagnostics $version)
+            } catch {
+                Write-Host "Crash capture failed: $_"
+            }
         }
         $results += [pscustomobject]$result
+        if (-not $result.passed) {
+            Copy-Item (Join-Path $runtime 'Release/bootstrap.exe') (Join-Path $hostDirectory 'sabine-host.exe') -Force
+            Copy-Item (Join-Path $runtime 'Release/chrome_elf.dll') $hostDirectory -Force
+            $matched = [ordered]@{
+                mode = 'runtime-bootstrap'
+                cef = $version
+                bootstrap = (Get-Item (Join-Path $hostDirectory 'sabine-host.exe')).VersionInfo.FileVersion
+                library = $result.library
+                passed = $false
+                error = $null
+            }
+            try {
+                Test-SabineBrowser -RuntimeDirectory $runtime
+                $matched.passed = $true
+            } catch {
+                $matched.error = $_.ToString()
+                Write-Host "FAILED matching bootstrap $version`: $_"
+            }
+            $results += [pscustomobject]$matched
+        }
         $results | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $diagnostics 'results.json')
     }
     Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | ConvertTo-Json | Set-Content (Join-Path $diagnostics 'windows.json')
