@@ -8,7 +8,9 @@ use std::{
 };
 
 mod artifacts;
+mod manual;
 mod state;
+pub use manual::{ComponentUpdate, update_components};
 
 use artifacts::{
     copy_directory, download_file, extract_system_archive, fetch_system_manifest,
@@ -33,6 +35,7 @@ enum SystemUpdateMode {
         release_version: String,
     },
     Routine,
+    Manual,
 }
 
 #[derive(Clone, Debug)]
@@ -378,42 +381,30 @@ fn install_latest_system(
     mode: SystemUpdateMode,
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<Option<StagedSystemUpdate>> {
-    let _lock = lock_system_installation()?;
     let requested_version = match &mode {
         SystemUpdateMode::Required(required) => Some(required.label()),
         SystemUpdateMode::Repair {
             release_version, ..
         } => Some(release_version.clone()),
-        SystemUpdateMode::Routine => None,
+        SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
     };
     let manifest = fetch_system_manifest(requested_version.as_deref())?;
-    if !SYSTEM_UPDATE_PUBLIC_KEYS
-        .lines()
-        .map(str::trim)
-        .filter(|key| !key.is_empty())
-        .any(|key| verify_system_release(&manifest, key).is_ok())
-    {
-        return Err(ServiceError::Update(
-            "Sabine release signature is not trusted".to_string(),
-        ));
-    }
-    if manifest.schema != 1 {
-        return Err(ServiceError::Update(format!(
-            "unsupported Sabine release schema {}",
-            manifest.schema
-        )));
-    }
-    if manifest.version.trim().is_empty() {
-        return Err(ServiceError::Update(
-            "Sabine release version is missing".to_string(),
-        ));
-    }
+    install_system_release(mode, manifest, on_progress)
+}
+
+fn install_system_release(
+    mode: SystemUpdateMode,
+    manifest: SystemReleaseManifest,
+    on_progress: &mut impl FnMut(PrepareProgress),
+) -> ServiceResult<Option<StagedSystemUpdate>> {
+    let _lock = lock_system_installation()?;
+    validate_system_release(&manifest)?;
     let compatibility = normalized_release_compatibility(&manifest)?;
     let required = match &mode {
         SystemUpdateMode::Required(required) | SystemUpdateMode::Repair { required, .. } => {
             Some(*required)
         }
-        SystemUpdateMode::Routine => None,
+        SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
     };
     if let Some(required) = required
         && (compatibility.major != required.major || compatibility.build < required.build)
@@ -611,4 +602,30 @@ mod tests {
         assert!(!managed_system_is_older(crate::SABINE_VERSION));
         assert!(!managed_system_is_older("999.0.0"));
     }
+}
+
+fn validate_system_release(manifest: &SystemReleaseManifest) -> ServiceResult<()> {
+    if !SYSTEM_UPDATE_PUBLIC_KEYS
+        .lines()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .any(|key| verify_system_release(manifest, key).is_ok())
+    {
+        return Err(ServiceError::Update(
+            "Sabine release signature is not trusted".to_string(),
+        ));
+    }
+    if manifest.schema != 1 {
+        return Err(ServiceError::Update(format!(
+            "unsupported Sabine release schema {}",
+            manifest.schema
+        )));
+    }
+    if manifest.version.trim().is_empty() {
+        return Err(ServiceError::Update(
+            "Sabine release version is missing".to_string(),
+        ));
+    }
+    normalized_release_compatibility(manifest)?;
+    Ok(())
 }

@@ -13,6 +13,7 @@ pub(crate) fn fetch_manifest<T: DeserializeOwned>(url: &str) -> ServiceResult<T>
             break;
         }
         let response = ureq::get(url)
+            .header("User-Agent", concat!("Sabine/", env!("CARGO_PKG_VERSION")))
             .config()
             .timeout_global(Some(remaining))
             .timeout_connect(Some(Duration::from_secs(15)))

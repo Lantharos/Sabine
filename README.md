@@ -22,7 +22,8 @@ cargo install --git https://github.com/Lantharos/Sabine --tag v0.28 sabine-cli
 Run `sabine -V` or `sabine --version` to see the CLI version, installed shared service version,
 and running daemon version separately. If the service is missing or the daemon is stopped, the
 output says so. This only reads local state; it does not start the daemon or check for updates.
-Shared service updates do not replace a separately installed CLI.
+`sabine update` updates the CLI, shared service, daemon, native host, and CEF.
+Background service maintenance leaves a separately installed CLI unchanged.
 
 For the TypeScript helpers used by the web UI:
 
@@ -167,12 +168,23 @@ policy = "automatic"
 
 ```sh
 sabine install .
-sabine update
+sabine update                         # CLI, service, daemon, host, and CEF
+sabine update --force                 # bypass release soak time
+sabine update cef                     # CEF only
+sabine update com.example.app         # a registered app
+sabine update --all                   # components and registered apps
+sabine update .                       # refresh a source install
 sabine bundle . --target portable --release
 sabine bundle . --target deb --release
 sabine bundle . --target msi --release
 sabine bundle . --target dmg --release
 ```
+
+Manual updates honor the release soak by default. `--force` selects the newest published stable
+release even before GitHub promotes it to latest, but does not bypass signatures, hashes, failed
+release backoff, or downgrade protection. CEF updates use the latest compatible runtime and must
+pass the Chromium rendering probe. Package-managed app updates are downloaded for approval in
+the app; store-managed apps remain with their store.
 
 ## Publishing and updates
 

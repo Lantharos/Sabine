@@ -3,22 +3,21 @@ mod commands;
 mod desktop_types;
 mod dev;
 mod icon_assets;
+mod install;
 mod macos_bundle;
 mod process_tree;
 mod release;
 mod runtime;
-mod source_assets;
-mod source_desktop;
-mod source_install;
 mod template;
+mod update;
 mod web_detect;
 
 use std::{path::PathBuf, process::ExitCode};
 
 use bundle::BundleOptions;
 use clap::{Parser, Subcommand};
+use install::source::InstallOptions;
 use runtime::RuntimeCommand;
-use source_install::{InstallOptions, UpdateOptions};
 
 #[derive(Debug, Parser)]
 #[command(name = "sabine", version = sabine_service::SABINE_VERSION, about = "Sabine web runtime tooling")]
@@ -64,10 +63,14 @@ enum Command {
         #[arg(long)]
         no_desktop: bool,
     },
+    /// Update Sabine and CEF, or a named component/app.
     Update {
         target: Option<String>,
-        #[arg(long)]
+        #[arg(long, conflicts_with = "target")]
         all: bool,
+        /// Bypass release soak time, retaining signature and version checks.
+        #[arg(long)]
+        force: bool,
     },
     Bundle {
         #[arg(default_value = ".")]
@@ -212,7 +215,7 @@ fn main() -> ExitCode {
             command,
             autostart,
             no_desktop,
-        } => match source_install::install(InstallOptions {
+        } => match install::source::install(InstallOptions {
             source,
             id,
             name,
@@ -226,15 +229,13 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
-        Command::Update { target, all } => {
-            match source_install::update(UpdateOptions { target, all }) {
-                Ok(code) => code,
-                Err(error) => {
-                    eprintln!("{error}");
-                    ExitCode::from(1)
-                }
+        Command::Update { target, all, force } => match update::run(target, all, force) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
             }
-        }
+        },
         Command::Bundle {
             source,
             target,
