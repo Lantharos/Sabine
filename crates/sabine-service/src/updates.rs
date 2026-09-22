@@ -23,7 +23,7 @@ use installers::{
 impl SabineService {
     pub fn maintain(&self) -> ServiceResult<MaintenanceReport> {
         let mut update_failures = Vec::new();
-        let runtime = match self.maintain_runtime() {
+        let runtime = match self.update_runtime() {
             Ok(runtime) => Some(runtime),
             Err(error) => {
                 update_failures.push(format!("runtime: {error}"));
@@ -90,7 +90,14 @@ impl SabineService {
         })
     }
 
-    fn maintain_runtime(&self) -> ServiceResult<sabine_runtime::RuntimeInfo> {
+    pub fn update_runtime(&self) -> ServiceResult<sabine_runtime::RuntimeInfo> {
+        self.update_runtime_with_progress(|_| {})
+    }
+
+    pub fn update_runtime_with_progress(
+        &self,
+        progress: impl FnMut(sabine_runtime::RuntimeInstallProgress),
+    ) -> ServiceResult<sabine_runtime::RuntimeInfo> {
         retry_quarantined_runtimes()?;
         let runtime = if self.runtime.allow_user_install
             && matches!(
@@ -98,7 +105,7 @@ impl SabineService {
                 sabine_runtime::RuntimeMode::SharedPreferred
                     | sabine_runtime::RuntimeMode::SystemPreferred
             ) {
-            update_user_runtime_with_progress(&self.runtime, |_| {})?
+            update_user_runtime_with_progress(&self.runtime, progress)?
         } else {
             resolve_runtime(&self.runtime)?
         };
@@ -128,7 +135,11 @@ impl SabineService {
         self.update_app_with_soak(id, true)
     }
 
-    fn update_app_with_soak(&self, id: &str, require_soak: bool) -> ServiceResult<AppUpdateStatus> {
+    pub fn update_app_with_soak(
+        &self,
+        id: &str,
+        require_soak: bool,
+    ) -> ServiceResult<AppUpdateStatus> {
         let _update_lock = self.app_update_lock(id)?;
         let app = self.app(id)?;
         let update = app

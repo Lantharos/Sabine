@@ -6,9 +6,9 @@ use std::process::Stdio;
 
 #[cfg(target_os = "linux")]
 use crate::commands::command_exists;
+use crate::install::source::SourceApp;
 #[cfg(target_os = "macos")]
 use crate::macos_bundle::xml;
-use crate::source_install::SourceApp;
 
 #[cfg(target_os = "linux")]
 pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> String {
@@ -42,7 +42,7 @@ pub fn install_autostart(
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let directory = crate::source_install::autostart_dir()?;
+        let directory = crate::install::source::autostart_dir()?;
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         return std::fs::write(
             directory.join(format!("{}.desktop", app.id)),

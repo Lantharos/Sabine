@@ -10,9 +10,9 @@ mod types;
 mod updates;
 
 pub use install::{
-    StagedSystemUpdate, cached_service_path, ensure_service_executable, find_service_executable,
-    installed_service_version, repair_system_installation, rollback_system_update,
-    service_daemon_path, stage_system_update,
+    ComponentUpdate, StagedSystemUpdate, cached_service_path, ensure_service_executable,
+    find_service_executable, installed_service_version, repair_system_installation,
+    rollback_system_update, service_daemon_path, stage_system_update, update_components,
 };
 pub use lifecycle::{
     PrepareProgress, PrepareStage, ServicePolicy, ServiceReadyReport, adopt, adopt_with_runtime,

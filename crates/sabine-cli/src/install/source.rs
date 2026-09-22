@@ -1,3 +1,5 @@
+mod launcher;
+use launcher::launcher_script;
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -6,8 +8,10 @@ use std::{
 
 use crate::{
     icon_assets,
-    source_assets::{self, StagedAssets},
-    source_desktop,
+    install::{
+        assets::{self as source_assets, StagedAssets},
+        desktop as source_desktop,
+    },
 };
 
 #[derive(Debug)]
@@ -175,7 +179,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn registered_apps() -> Result<Vec<SourceApp>, String> {
+pub(crate) fn registered_apps() -> Result<Vec<SourceApp>, String> {
     let root = apps_root()?;
     if !root.exists() {
         return Ok(Vec::new());
@@ -191,7 +195,7 @@ fn registered_apps() -> Result<Vec<SourceApp>, String> {
     Ok(apps)
 }
 
-fn read_registered_app(id: &str) -> Result<SourceApp, String> {
+pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {
     read_registry_record(&app_dir(&sanitize_id(id))?.join("source-install.toml"))
 }
 
@@ -231,86 +235,6 @@ fn read_registry_record(path: &Path) -> Result<SourceApp, String> {
         mime_types,
         autostart,
     })
-}
-
-fn launcher_script(app: &SourceApp, app_dir: &Path, assets: &StagedAssets) -> String {
-    #[cfg(target_os = "windows")]
-    {
-        let command = app.command.clone().unwrap_or_else(|| {
-            format!(
-                "cargo run --manifest-path \"{}\" --",
-                app.source.join("Cargo.toml").display()
-            )
-        });
-        let mut environment = String::new();
-        let manifest = app.source.join("Sabine.toml");
-        if manifest.is_file() {
-            environment.push_str(&format!(
-                "set \"SABINE_MANIFEST_PATH={}\"\r\n",
-                manifest.display()
-            ));
-        }
-        if let Some(web_entry) = &assets.web_entry {
-            environment.push_str(&format!(
-                "set \"SABINE_WEB_ENTRY={}\"\r\n",
-                web_entry.display()
-            ));
-        }
-        format!(
-            "@echo off\r\nset \"SABINE_APP_ID={}\"\r\nset \"SABINE_APP_DIR={}\"\r\nset \"SABINE_SOURCE_DIR={}\"\r\n{}cd /d \"{}\"\r\n{} %*\r\n",
-            app.id,
-            app_dir.display(),
-            app.source.display(),
-            environment,
-            app.source.display(),
-            command
-        )
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let source = shell_quote(&app.source.display().to_string());
-        let mut exports = vec![
-            format!("export SABINE_APP_ID={}", shell_quote(&app.id)),
-            format!(
-                "export SABINE_APP_DIR={}",
-                shell_quote(&app_dir.display().to_string())
-            ),
-            format!(
-                "export SABINE_SOURCE_DIR={}",
-                shell_quote(&app.source.display().to_string())
-            ),
-        ];
-        let manifest = app.source.join("Sabine.toml");
-        if manifest.is_file() {
-            exports.push(format!(
-                "export SABINE_MANIFEST_PATH={}",
-                shell_quote(&manifest.display().to_string())
-            ));
-        }
-        if let Some(web_dir) = &assets.web_dir {
-            exports.push(format!(
-                "export SABINE_WEB_DIR={}",
-                shell_quote(&web_dir.display().to_string())
-            ));
-        }
-        if let Some(web_entry) = &assets.web_entry {
-            exports.push(format!(
-                "export SABINE_WEB_ENTRY={}",
-                shell_quote(&web_entry.display().to_string())
-            ));
-        }
-        let exports = exports.join("\n");
-        match &app.command {
-            Some(command) => format!(
-                "#!/bin/sh\nset -e\n{exports}\ncd {source}\nexec sh -c {} sh \"$@\"\n",
-                shell_quote(&format!("{command} \"$@\""))
-            ),
-            None => format!(
-                "#!/bin/sh\nset -e\n{exports}\ncd {source}\nexec cargo run --manifest-path {} -- \"$@\"\n",
-                shell_quote(&app.source.join("Cargo.toml").display().to_string())
-            ),
-        }
-    }
 }
 
 fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> String {
@@ -434,11 +358,6 @@ fn sanitize_id(value: &str) -> String {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
 fn absolute_path(path: &Path) -> Result<PathBuf, String> {
     let path = if path.is_absolute() {
         path.to_path_buf()
@@ -454,11 +373,11 @@ fn absolute_path(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
-fn apps_root() -> Result<PathBuf, String> {
+pub(crate) fn apps_root() -> Result<PathBuf, String> {
     Ok(data_home()?.join("sabine/apps"))
 }
 
-fn app_dir(id: &str) -> Result<PathBuf, String> {
+pub(crate) fn app_dir(id: &str) -> Result<PathBuf, String> {
     Ok(apps_root()?.join(id))
 }
 
@@ -472,7 +391,7 @@ pub(crate) fn autostart_dir() -> Result<PathBuf, String> {
     Ok(config_home()?.join("autostart"))
 }
 
-fn data_home() -> Result<PathBuf, String> {
+pub(crate) fn data_home() -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     if let Some(path) = env::var_os("LOCALAPPDATA") {
         return Ok(PathBuf::from(path));
