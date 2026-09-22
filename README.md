@@ -410,7 +410,8 @@ Run `scripts/publish.sh --dry-run` to preview the next build, or supply a versio
 `scripts/publish.sh 0.29 --prepare` updates versions and runs local checks without committing,
 tagging or pushing. Review and commit those changes before a subsequent publish invocation.
 
-`scripts/publish.sh` publishes the next build automatically; `scripts/publish.sh 0.29` selects
+`scripts/publish.sh` publishes the next build automatically, or resumes the current prepared
+version if it has no tag yet; `scripts/publish.sh 0.29` selects
 an explicit version. Starting from clean, synchronized `main`, it updates workspace dependencies,
 the lockfile, Rust version constants, JavaScript packages, current documentation references and
 the Windows runtime-check default. It turns `# Unreleased` notes into the versioned changelog,
