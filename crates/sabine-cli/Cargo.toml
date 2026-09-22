@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-ctrlc.workspace = true
+ctrlc = { workspace = true, features = ["termination"] }
 dunce.workspace = true
 sabine-host.workspace = true
 sabine-runtime.workspace = true
