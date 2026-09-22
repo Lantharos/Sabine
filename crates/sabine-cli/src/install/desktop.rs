@@ -7,6 +7,50 @@ use std::process::Stdio;
 #[cfg(target_os = "linux")]
 use crate::commands::command_exists;
 use crate::install::source::SourceApp;
+
+pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
+    let icon = crate::icon_assets::install_user_icon(&app.id, app.icon.as_deref())?;
+    #[cfg(target_os = "linux")]
+    {
+        let directory = crate::install::source::data_home()?.join("applications");
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        std::fs::write(
+            directory.join(format!("{}.desktop", app.id)),
+            entry(app, executable, icon.as_deref()),
+        )
+        .map_err(|error| error.to_string())?;
+        refresh_database(&directory);
+    }
+    #[cfg(target_os = "windows")]
+    install_windows_shortcut(app, executable, icon.as_deref())?;
+    #[cfg(target_os = "macos")]
+    install_macos_app(app, executable, icon.as_deref())?;
+    Ok(())
+}
+
+pub fn link_macos_bundle(id: &str, bundle: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
+        let directory = Path::new(&home).join("Applications");
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let path = directory.join(format!("{id}.app"));
+        if path.is_symlink() {
+            std::fs::remove_file(&path).map_err(|error| error.to_string())?;
+        } else if path.exists() {
+            return Err(format!(
+                "{} already exists; uninstall it first",
+                path.display()
+            ));
+        }
+        std::os::unix::fs::symlink(bundle, path).map_err(|error| error.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (id, bundle);
+        Err("macOS application bundles require macOS".into())
+    }
+}
 #[cfg(target_os = "macos")]
 use crate::macos_bundle::xml;
 
@@ -61,7 +105,7 @@ pub fn install_autostart(
                 "/t",
                 "REG_SZ",
                 "/d",
-                &wrapper.display().to_string(),
+                &format!("\"{}\"", wrapper.display()),
                 "/f",
             ])
             .status()
@@ -98,8 +142,11 @@ pub fn install_windows_shortcut(
 ) -> Result<(), String> {
     let name = powershell_string(&app.id);
     let target = powershell_string(&wrapper.display().to_string());
+    let icon = _desktop_icon
+        .map(|icon| format!("$shortcut.IconLocation='{}';", powershell_string(icon)))
+        .unwrap_or_default();
     let script = format!(
-        "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; $shortcut.Save()"
+        "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}$shortcut.Save()"
     );
     let status = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
@@ -183,7 +230,14 @@ fn desktop_value(value: &str) -> String {
 
 #[cfg(target_os = "linux")]
 fn desktop_exec(path: &Path) -> String {
-    path.display().to_string().replace(' ', "\\ ")
+    let escaped = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('`', "\\`")
+        .replace('$', "\\$")
+        .replace('%', "%%");
+    format!("\"{}\"", escaped.replace('\\', "\\\\"))
 }
 
 #[cfg(target_os = "windows")]

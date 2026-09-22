@@ -123,6 +123,10 @@ pub fn start_daemon() -> ServiceResult<()> {
     ensure_daemon_running().map(|_| ())
 }
 
+pub(crate) fn stop_daemon() -> ServiceResult<()> {
+    stop_stale_daemon()
+}
+
 pub fn run_daemon() -> ServiceResult<()> {
     let Some(pid_guard) = claim_daemon_pid()? else {
         return Ok(());

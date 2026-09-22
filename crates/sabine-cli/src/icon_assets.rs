@@ -13,6 +13,9 @@ pub fn install_user_icon(app_id: &str, icon: Option<&Path>) -> Result<Option<Str
     let Some(icon) = icon.filter(|icon| icon.is_file()) else {
         return Ok(None);
     };
+    if !cfg!(target_os = "linux") {
+        return Ok(Some(icon.display().to_string()));
+    }
     let hicolor = data_home()?.join("icons/hicolor");
     install_icon_set(app_id, icon, &hicolor)?;
     refresh_icon_cache(&hicolor);

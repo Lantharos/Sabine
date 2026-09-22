@@ -200,11 +200,14 @@ pub fn uninstall_login_autostart() -> ServiceResult<()> {
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = Command::new("systemctl")
-            .args(["--user", "disable", "--now", "sabine.service"])
-            .status();
-        let _ = fs::remove_file(systemd_user_directory()?.join("sabine.service"));
-        run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
+        let unit = systemd_user_directory()?.join("sabine.service");
+        if unit.is_file() {
+            let _ = Command::new("systemctl")
+                .args(["--user", "disable", "--now", "sabine.service"])
+                .status();
+            fs::remove_file(unit)?;
+            run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
+        }
     }
     #[cfg(target_os = "macos")]
     if let Some(home) = std::env::var_os("HOME") {

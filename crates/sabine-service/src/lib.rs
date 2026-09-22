@@ -2,12 +2,15 @@ mod archive;
 mod http;
 mod install;
 mod installer_payload;
+pub use installer_payload::remove_app_payload;
 mod lifecycle;
 mod registry;
 mod rollout;
 mod signing;
 mod types;
+mod uninstall;
 mod updates;
+pub use uninstall::uninstall_system;
 
 pub use install::{
     ComponentUpdate, StagedSystemUpdate, cached_service_path, ensure_service_executable,
@@ -137,3 +140,6 @@ mod tests {
         ));
     }
 }
+
+mod app_data;
+pub use app_data::browser_profile_path;

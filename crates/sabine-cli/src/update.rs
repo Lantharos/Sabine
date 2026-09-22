@@ -67,22 +67,48 @@ fn update_cef() -> Result<(), String> {
     println!("Checking CEF and validating Chromium startup…");
     sabine_service::ensure_service_executable(|progress| println!("{}", progress.message))
         .map_err(|error| error.to_string())?;
+    let mut last = String::new();
     let runtime = SabineService::default()
-        .update_runtime_with_progress(|progress| println!("{}", progress.message))
+        .update_runtime_with_progress(|progress| {
+            if progress.message != last {
+                println!("{}", progress.message);
+                last = progress.message;
+            }
+        })
         .map_err(|error| error.to_string())?;
     println!("CEF {} is ready", runtime.version);
     Ok(())
 }
 
 fn update_app(target: &str, force: bool) -> Result<(), String> {
-    if Path::new(target).exists() || crate::install::source::read_registered_app(target).is_ok() {
-        crate::install::source::update(crate::install::source::UpdateOptions {
-            target: Some(target.into()),
-            all: false,
-        })?;
+    if Path::new(target).is_dir() {
+        let app =
+            crate::install::source::detect_source_app(Path::new(target), None, None, None, false)?;
+        if let Some(mut install) = crate::install::bundle_install(&app.id)? {
+            install.source = app.source;
+            return crate::install::rebuild_bundle(&app.id, install);
+        }
+        crate::install::source::update(target)?;
+        return Ok(());
+    }
+    if crate::install::source::read_registered_app(target).is_ok() {
+        crate::install::source::update(target)?;
         return Ok(());
     }
     let service = SabineService::default();
+    if service
+        .app(target)
+        .map_err(|error| error.to_string())?
+        .manifest
+        .update
+        .is_none()
+    {
+        if let Some(install) = crate::install::bundle_install(target)? {
+            return crate::install::rebuild_bundle(target, install);
+        }
+        println!("{target} has no configured update source");
+        return Ok(());
+    }
     match service
         .update_app_with_soak(target, !force)
         .map_err(|error| error.to_string())?

@@ -24,12 +24,6 @@ pub struct InstallOptions {
     pub autostart: bool,
 }
 
-#[derive(Debug)]
-pub struct UpdateOptions {
-    pub target: Option<String>,
-    pub all: bool,
-}
-
 #[derive(Clone, Debug)]
 pub struct SourceApp {
     pub id: String,
@@ -50,30 +44,19 @@ pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
         options.command,
         options.autostart,
     )?;
+    if super::bundle_install(&app.id)?.is_some() {
+        return Err("this app is installed as a production bundle; use install --bundle or uninstall it before installing a source launcher".into());
+    }
     register_app(&app, options.desktop)?;
     println!("installed {} from {}", app.name, app.source.display());
     Ok(ExitCode::SUCCESS)
 }
 
-pub fn update(options: UpdateOptions) -> Result<ExitCode, String> {
-    if options.all {
-        let apps = registered_apps()?;
-        if apps.is_empty() {
-            println!("no source installs are registered");
-            return Ok(ExitCode::SUCCESS);
-        }
-        for app in apps {
-            update_registered_app(&app)?;
-        }
-        return Ok(ExitCode::SUCCESS);
-    }
-
-    let app = match options.target {
-        Some(target) if Path::new(&target).exists() => {
-            detect_source_app(Path::new(&target), None, None, None, false)?
-        }
-        Some(target) => read_registered_app(&target)?,
-        None => detect_source_app(Path::new("."), None, None, None, false)?,
+pub fn update(target: &str) -> Result<ExitCode, String> {
+    let app = if Path::new(target).exists() {
+        detect_source_app(Path::new(target), None, None, None, false)?
+    } else {
+        read_registered_app(target)?
     };
     update_registered_app(&app)?;
     Ok(ExitCode::SUCCESS)
@@ -86,7 +69,7 @@ fn update_registered_app(app: &SourceApp) -> Result<(), String> {
     Ok(())
 }
 
-fn detect_source_app(
+pub(crate) fn detect_source_app(
     source: &Path,
     id: Option<String>,
     name: Option<String>,
@@ -96,9 +79,19 @@ fn detect_source_app(
     let source = absolute_path(source)?;
     let metadata = source_assets::metadata(&source);
     crate::desktop_types::validate(&metadata.mime_types)?;
-    let package_name = package_name(&source.join("Cargo.toml"));
-    let version =
-        package_value(&source.join("Cargo.toml"), "version").unwrap_or_else(|| "0.1.0".to_string());
+    let manifest = cargo_manifest(&source);
+    let package_name = package_name(&manifest);
+    let configured: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
+        .ok()
+        .and_then(|text| toml::from_str(&text).ok())
+        .unwrap_or_default();
+    let version = configured
+        .get("app")
+        .and_then(|app| app.get("version"))
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| package_value(&manifest, "version"))
+        .unwrap_or_else(|| "0.1.0".into());
     let name = name
         .or(metadata.name)
         .or_else(|| package_name.clone())
@@ -177,22 +170,6 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
         source_desktop::install_autostart(app, &wrapper, desktop_icon.as_deref())?;
     }
     Ok(())
-}
-
-pub(crate) fn registered_apps() -> Result<Vec<SourceApp>, String> {
-    let root = apps_root()?;
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-    let mut apps = Vec::new();
-    for entry in fs::read_dir(root).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let record = entry.path().join("source-install.toml");
-        if record.exists() {
-            apps.push(read_registry_record(&record)?);
-        }
-    }
-    Ok(apps)
 }
 
 pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {
@@ -374,7 +351,7 @@ fn absolute_path(path: &Path) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn apps_root() -> Result<PathBuf, String> {
-    Ok(data_home()?.join("sabine/apps"))
+    Ok(sabine_service::service_data_dir().join("apps"))
 }
 
 pub(crate) fn app_dir(id: &str) -> Result<PathBuf, String> {
@@ -391,15 +368,8 @@ pub(crate) fn autostart_dir() -> Result<PathBuf, String> {
     Ok(config_home()?.join("autostart"))
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn data_home() -> Result<PathBuf, String> {
-    #[cfg(target_os = "windows")]
-    if let Some(path) = env::var_os("LOCALAPPDATA") {
-        return Ok(PathBuf::from(path));
-    }
-    #[cfg(target_os = "macos")]
-    if let Some(path) = env::var_os("HOME") {
-        return Ok(PathBuf::from(path).join("Library/Application Support"));
-    }
     if let Some(path) = env::var_os("XDG_DATA_HOME") {
         return Ok(PathBuf::from(path));
     }
@@ -418,6 +388,7 @@ fn config_home() -> Result<PathBuf, String> {
         .ok_or_else(|| "HOME is not set".to_string())
 }
 
+#[cfg(target_os = "linux")]
 fn home_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(PathBuf::from)
 }
@@ -436,4 +407,18 @@ fn make_executable(path: &Path) -> io::Result<()> {
         let _ = path;
         Ok(())
     }
+}
+
+fn cargo_manifest(source: &Path) -> PathBuf {
+    let config: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
+        .ok()
+        .and_then(|text| toml::from_str(&text).ok())
+        .unwrap_or_default();
+    source.join(
+        config
+            .get("app")
+            .and_then(|app| app.get("cargo_manifest"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or("Cargo.toml"),
+    )
 }

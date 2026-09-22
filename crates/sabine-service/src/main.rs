@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use sabine_service::{
     AppManifest, AppUpdateStatus, SabineService, ensure_ready, install_login_autostart_with,
-    load_policy, set_login_autostart, uninstall_login_autostart,
+    load_policy, set_login_autostart,
 };
 use std::{path::PathBuf, process::ExitCode};
 
@@ -20,7 +20,7 @@ struct Cli {
 enum Command {
     /// Install login/startup autostart for the Sabine service.
     Install,
-    /// Remove login autostart, registered apps, and Sabine service data.
+    /// Remove shared Sabine components after uninstalling registered apps.
     Uninstall,
     /// Disable login autostart; apps will start the service on demand instead.
     PreferOnDemand,
@@ -78,12 +78,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             println!("installed Sabine service at login");
         }
         Command::Uninstall => {
-            uninstall_login_autostart()?;
-            uninstall_registered_apps(&service)?;
-            if service.root().is_dir() {
-                std::fs::remove_dir_all(service.root())?;
-            }
-            println!("uninstalled Sabine and its registered apps");
+            sabine_service::uninstall_system(false)?;
+            println!("uninstalled Sabine components; app data was kept");
         }
         Command::PreferOnDemand => {
             set_login_autostart(false)?;
@@ -229,25 +225,3 @@ fn wait_for_process(pid: u32) {
 
 #[cfg(not(any(unix, target_os = "windows")))]
 fn wait_for_process(_pid: u32) {}
-
-fn uninstall_registered_apps(service: &SabineService) -> Result<(), Box<dyn std::error::Error>> {
-    for app in service.apps()? {
-        let id = app.manifest.id;
-        let _ = service.unregister(&id);
-        #[cfg(target_os = "linux")]
-        if let Some(home) = std::env::var_os("HOME") {
-            let home = std::path::PathBuf::from(home);
-            let _ =
-                std::fs::remove_file(home.join(".config/autostart").join(format!("{id}.desktop")));
-        }
-        #[cfg(target_os = "macos")]
-        if let Some(home) = std::env::var_os("HOME") {
-            let _ = std::fs::remove_file(
-                std::path::PathBuf::from(home)
-                    .join("Library/LaunchAgents")
-                    .join(format!("{id}.plist")),
-            );
-        }
-    }
-    Ok(())
-}

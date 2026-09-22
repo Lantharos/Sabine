@@ -11,6 +11,36 @@ use crate::{AppManifest, RegisteredApp, SabineService, ServiceError, ServiceResu
 
 const INVENTORY: &str = ".sabine-install.json";
 
+pub fn remove_app_payload(root: &Path, id: &str) -> ServiceResult<()> {
+    if fs::symlink_metadata(root)?.is_symlink() {
+        return Err(invalid("installed payload cannot be a symbolic link"));
+    }
+    let inventory = read_inventory(root, id)?;
+    let mut directories = BTreeSet::new();
+    for file in inventory.files {
+        for parent in file.ancestors().skip(1) {
+            directories.insert(parent.to_path_buf());
+        }
+        match fs::remove_file(root.join(file)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    for directory in directories.into_iter().rev() {
+        match fs::remove_dir(root.join(directory)) {
+            Ok(()) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct Inventory {
     id: String,
