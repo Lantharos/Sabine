@@ -20,14 +20,15 @@ pub(crate) const NOTICE_ARG: &str = "--sabine-notice";
 
 pub(crate) fn show_failure(title: &str, error: &dyn std::fmt::Display) {
     sabine_runtime::report_error("startup", error);
-    let message = format!(
-        "{error}\n\nDetails: {}",
-        sabine_runtime::diagnostic_path("startup").display()
-    );
-    if let Ok(executable) = std::env::current_exe() {
-        let _ = background_command(executable)
+    let message = error.to_string();
+    let shown = std::env::current_exe().ok().is_some_and(|executable| {
+        background_command(executable)
             .args([NOTICE_ARG, title, &message])
-            .status();
+            .status()
+            .is_ok_and(|status| status.success())
+    });
+    if !shown {
+        ui::emergency_notice(title, &message);
     }
 }
 
@@ -35,10 +36,16 @@ pub(crate) const BOOTSTRAP_ARG: &str = "--sabine-bootstrap";
 
 pub(crate) fn run_from_args(args: &[String]) -> bool {
     if let Some(index) = args.iter().position(|arg| arg == CONFIRM_UPDATE_ARG) {
-        let accepted = args
-            .get(index + 1)
-            .zip(args.get(index + 2))
-            .is_some_and(|(title, version)| ui::confirm_update(title, version).unwrap_or(false));
+        let accepted =
+            args.get(index + 1)
+                .zip(args.get(index + 2))
+                .is_some_and(|(title, version)| {
+                    ui::confirm_update(title, version).unwrap_or_else(|error| {
+                        sabine_runtime::report_error("notice", &error);
+                        ui::emergency_notice("Could not display the update prompt", &error);
+                        false
+                    })
+                });
         std::process::exit(if accepted { 0 } else { 2 });
     }
     if let Some(index) = args.iter().position(|arg| arg == NOTICE_ARG) {
@@ -46,6 +53,7 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
             && let Err(error) = ui::show_notice(title, message)
         {
             sabine_runtime::report_error("startup", error);
+            ui::emergency_notice(title, message);
         }
         return true;
     }
@@ -59,7 +67,7 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
     let (config, register) = match read_bootstrap(path) {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("{error}");
+            show_failure("Sabine setup could not start", &error);
             std::process::exit(1);
         }
     };
@@ -79,9 +87,12 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
     match result {
         Ok(ui::ProgressOutcome::Complete) => true,
         Ok(ui::ProgressOutcome::Cancelled) => std::process::exit(2),
-        Ok(ui::ProgressOutcome::Failed) => std::process::exit(3),
+        Ok(ui::ProgressOutcome::Failed(error)) => {
+            show_failure("Sabine setup failed", &error);
+            std::process::exit(3);
+        }
         Err(error) => {
-            sabine_runtime::report_error("setup", error);
+            show_failure("Sabine setup could not continue", &error);
             std::process::exit(1);
         }
     }

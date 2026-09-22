@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add software-rendered error details, recent log summaries, an Open logs action, keyboard controls,
+  and emergency system notifications when the diagnostic window cannot open.
 - Separate development app registrations, browser profiles, and native data paths from production.
   Source installs launch the configured development server and can coexist with production bundles.
 - Add manual component updates, production bundle installs, and app/system uninstall commands.
