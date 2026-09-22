@@ -1,3 +1,13 @@
+# Unreleased
+
+- Separate development app registrations, browser profiles, and native data paths from production.
+  Source installs launch the configured development server and can coexist with production bundles.
+- Add manual component updates, production bundle installs, and app/system uninstall commands.
+  Force updates bypass soak time while retaining signature, integrity and version checks.
+- Pair Windows host launches with the selected CEF bootstrap to prevent crashes after CEF updates.
+- Show CLI, installed service and running daemon versions with `sabine -V`.
+- Automate release version references, checks, signed commits/tags, and workflow monitoring.
+
 # Sabine 0.28
 
 - Windows shared-texture rendering preserves pixel alignment instead of shrinking the
