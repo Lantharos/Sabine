@@ -46,7 +46,12 @@ def main():
     modes.add_argument("--dry-run", action="store_true", help="show version edits and publishing steps without changing files or remote state")
     modes.add_argument("--prepare", action="store_true", help="write version edits and run checks, without committing, tagging or pushing")
     args = parser.parse_args()
-    version = normalize_version(args.version, current_version(ROOT))
+    current = current_version(ROOT)
+    requested = args.version
+    if requested is None and subprocess.run(
+            ["git", "rev-parse", "--verify", f"refs/tags/v{current}"], cwd=ROOT, capture_output=True).returncode:
+        requested = current
+    version = normalize_version(requested, current)
     changes = prepare_changes(ROOT, version)
     tag = f"v{version}"
     print(f"Sabine {current_version(ROOT)} -> {version}")
