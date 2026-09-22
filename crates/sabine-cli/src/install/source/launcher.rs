@@ -7,7 +7,7 @@ pub(super) fn launcher_script(app: &SourceApp, app_dir: &Path, assets: &StagedAs
         let command = app.command.clone().unwrap_or_else(|| {
             format!(
                 "cargo run --manifest-path \"{}\" --",
-                app.source.join("Cargo.toml").display()
+                super::cargo_manifest(&app.source).display()
             )
         });
         let mut environment = String::new();
@@ -75,7 +75,7 @@ pub(super) fn launcher_script(app: &SourceApp, app_dir: &Path, assets: &StagedAs
             ),
             None => format!(
                 "#!/bin/sh\nset -e\n{exports}\ncd {source}\nexec cargo run --manifest-path {} -- \"$@\"\n",
-                shell_quote(&app.source.join("Cargo.toml").display().to_string())
+                shell_quote(&super::cargo_manifest(&app.source).display().to_string())
             ),
         }
     }

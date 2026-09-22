@@ -10,6 +10,7 @@ mod daemon;
 pub use autostart::{
     install_login_autostart, install_login_autostart_with, uninstall_login_autostart,
 };
+pub(crate) use daemon::stop_daemon;
 pub use daemon::{
     complete_system_update, ensure_daemon_running, is_daemon_running, resolve_service_executable,
     run_daemon, running_daemon_version, start_daemon,

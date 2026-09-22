@@ -12,150 +12,14 @@ mod template;
 mod update;
 mod web_detect;
 
-use std::{path::PathBuf, process::ExitCode};
+use std::process::ExitCode;
 
 use bundle::BundleOptions;
-use clap::{Parser, Subcommand};
+use clap::Parser;
+mod cli;
+use cli::{Cli, Command, RuntimeSubcommand};
 use install::source::InstallOptions;
 use runtime::RuntimeCommand;
-
-#[derive(Debug, Parser)]
-#[command(name = "sabine", version = sabine_service::SABINE_VERSION, about = "Sabine web runtime tooling")]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Debug, Subcommand)]
-enum Command {
-    New {
-        name: String,
-        #[arg(long, default_value = "app")]
-        template: String,
-    },
-    Dev {
-        #[arg(default_value = ".")]
-        source: PathBuf,
-        #[arg(long)]
-        release: bool,
-        #[arg(long)]
-        no_install: bool,
-        #[arg(long)]
-        web_only: bool,
-        #[arg(long)]
-        no_runtime_prepare: bool,
-    },
-    Runtime {
-        #[command(subcommand)]
-        command: RuntimeSubcommand,
-    },
-    Install {
-        #[arg(default_value = ".")]
-        source: PathBuf,
-        #[arg(long)]
-        id: Option<String>,
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long)]
-        command: Option<String>,
-        #[arg(long)]
-        autostart: bool,
-        #[arg(long)]
-        no_desktop: bool,
-    },
-    /// Update Sabine and CEF, or a named component/app.
-    Update {
-        target: Option<String>,
-        #[arg(long, conflicts_with = "target")]
-        all: bool,
-        /// Bypass release soak time, retaining signature and version checks.
-        #[arg(long)]
-        force: bool,
-    },
-    Bundle {
-        #[arg(default_value = ".")]
-        source: PathBuf,
-        #[arg(long, default_value = "linux")]
-        target: String,
-        #[arg(long, default_value = "dist")]
-        out: PathBuf,
-        #[arg(long)]
-        release: bool,
-        #[arg(long)]
-        no_build: bool,
-        #[arg(long)]
-        binary: Option<PathBuf>,
-        #[arg(long)]
-        no_web_build: bool,
-        #[arg(long)]
-        web_build: Option<String>,
-        #[arg(long)]
-        web_root: Option<PathBuf>,
-        #[arg(long)]
-        web_dist: Option<PathBuf>,
-        #[arg(long)]
-        id: Option<String>,
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long)]
-        version: Option<String>,
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        offline: bool,
-    },
-    ReleaseManifest {
-        #[arg(default_value = ".")]
-        source: PathBuf,
-        #[arg(long, default_value = "dist/sabine-update.json")]
-        output: PathBuf,
-        #[arg(long, default_value = "stable")]
-        channel: String,
-        #[arg(long, required = true)]
-        artifact: Vec<String>,
-        #[arg(long)]
-        executable: Vec<String>,
-    },
-    SystemReleaseManifest {
-        #[arg(long)]
-        version: String,
-        #[arg(long)]
-        directory: PathBuf,
-        #[arg(long)]
-        output: PathBuf,
-    },
-    ReleaseKeygen {
-        #[arg(long)]
-        public_output: PathBuf,
-    },
-    ReleasePublicKey,
-    ReleaseInit {
-        #[arg(long)]
-        repository: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum RuntimeSubcommand {
-    Prepare,
-    SandboxProfile,
-    List {
-        #[arg(long)]
-        json: bool,
-    },
-    Install,
-    Remove {
-        version: Option<String>,
-    },
-    Prune {
-        #[arg(long, default_value_t = 2)]
-        keep: usize,
-    },
-    Doctor {
-        #[arg(long)]
-        json: bool,
-    },
-}
 
 fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
@@ -209,24 +73,41 @@ fn main() -> ExitCode {
             RuntimeSubcommand::Doctor { json } => RuntimeCommand::Doctor { json },
         }),
         Command::Install {
+            bundle,
+            env_file,
             source,
             id,
             name,
             command,
             autostart,
             no_desktop,
-        } => match install::source::install(InstallOptions {
-            source,
-            id,
-            name,
-            command,
-            autostart,
-            desktop: !no_desktop,
-        }) {
+        } => match install::run(
+            InstallOptions {
+                source,
+                id,
+                name,
+                command,
+                autostart,
+                desktop: !no_desktop,
+            },
+            bundle,
+            env_file,
+        ) {
             Ok(code) => code,
             Err(error) => {
                 eprintln!("{error}");
                 ExitCode::from(1)
+            }
+        },
+        Command::Uninstall {
+            target,
+            system,
+            purge,
+        } => match install::uninstall::run(target, system, purge) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
             }
         },
         Command::Update { target, all, force } => match update::run(target, all, force) {
@@ -237,6 +118,7 @@ fn main() -> ExitCode {
             }
         },
         Command::Bundle {
+            env_file,
             source,
             target,
             out,
@@ -268,6 +150,7 @@ fn main() -> ExitCode {
             version,
             json,
             offline,
+            env_files: env_file,
         }) {
             Ok(code) => code,
             Err(error) => {

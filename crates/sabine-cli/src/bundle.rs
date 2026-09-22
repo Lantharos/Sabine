@@ -1,4 +1,7 @@
 mod cargo_metadata;
+mod environment;
+mod install;
+pub use install::install_bundle;
 mod config;
 mod linux_package;
 mod metadata;
@@ -34,6 +37,7 @@ pub struct BundleOptions {
     pub version: Option<String>,
     pub json: bool,
     pub offline: bool,
+    pub env_files: Vec<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,49 +115,10 @@ impl BuildTarget {
 }
 
 pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
-    let Some(format) = BundleFormat::parse(&options.target) else {
-        return Err("unknown bundle target; use linux, portable, deb, rpm, appimage, windows, exe, msi, macos, or dmg".to_string());
-    };
-    if options.offline
-        && build_target_for_format(format)
-            .is_some_and(|target| target.as_str() != std::env::consts::OS)
-    {
-        return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
-    }
-    let out = absolute_path(options.out)?;
-    let app = config::resolve_app(
-        &options.source,
-        ConfigOverrides {
-            id: options.id,
-            name: options.name,
-            version: options.version,
-            web_build: options.web_build,
-            web_root: options.web_root,
-            web_dist: options.web_dist,
-        },
-    )?;
-
-    if !options.no_web_build {
-        build_web(&app)?;
-    }
-    if !options.no_build && options.binary.is_none() {
-        build_rust(&app, format, options.release)?;
-    }
-    let binary = options
-        .binary
-        .map(absolute_path)
-        .transpose()?
-        .unwrap_or_else(|| binary_path(&app, format, options.release));
-    if !binary.is_file() {
-        return Err(format!(
-            "built binary was not found at {}; pass --binary to package an existing executable or --no-build only when the default Cargo output already exists",
-            binary.display()
-        ));
-    }
-
-    let staged = stage_bundle(&app, format, &binary, &out, options.offline)?;
+    let json = options.json;
+    let (app, format, staged) = prepare_bundle(options)?;
     let packaged = package_bundle(&app, format, &staged)?;
-    if options.json {
+    if json {
         println!("{}", bundle_json(&app, format, &staged, &packaged));
     } else {
         println!("Bundled {} to {}", app.name, staged.root.display());
@@ -179,7 +144,7 @@ pub(super) fn build_target_for_format(format: BundleFormat) -> Option<BuildTarge
     }
 }
 
-fn build_web(app: &BundleApp) -> Result<(), String> {
+fn build_web(app: &BundleApp, environment: &environment::BuildEnvironment) -> Result<(), String> {
     let Some(web) = &app.web else {
         return Ok(());
     };
@@ -190,7 +155,9 @@ fn build_web(app: &BundleApp) -> Result<(), String> {
         return Ok(());
     };
     println!("Building web assets: {command}");
-    let status = shell_command(command)
+    let mut process = shell_command(command);
+    environment.apply(&mut process);
+    let status = process
         .current_dir(&web.root)
         .stdin(Stdio::null())
         .status()
@@ -207,7 +174,12 @@ fn build_web(app: &BundleApp) -> Result<(), String> {
     Ok(())
 }
 
-fn build_rust(app: &BundleApp, format: BundleFormat, release: bool) -> Result<(), String> {
+fn build_rust(
+    app: &BundleApp,
+    format: BundleFormat,
+    release: bool,
+    environment: &environment::BuildEnvironment,
+) -> Result<PathBuf, String> {
     if !app.cargo_manifest.is_file() {
         return Err(format!(
             "missing Cargo.toml at {}",
@@ -216,8 +188,13 @@ fn build_rust(app: &BundleApp, format: BundleFormat, release: bool) -> Result<()
     }
     let target = build_target_for_format(format);
     let mut command = Command::new("cargo");
+    environment.apply(&mut command);
     command
+        .current_dir(&app.source_dir)
         .arg("build")
+        .arg("--message-format=json-render-diagnostics")
+        .arg("--bin")
+        .arg(&app.cargo_package)
         .arg("--manifest-path")
         .arg(&app.cargo_manifest);
     if release {
@@ -233,17 +210,35 @@ fn build_rust(app: &BundleApp, format: BundleFormat, release: bool) -> Result<()
         "SABINE_BUILD_TARGET",
         target.map(BuildTarget::as_str).unwrap_or("native"),
     );
-    let status = command
-        .status()
+    use std::io::{BufRead, BufReader};
+    let mut child = command
+        .stdout(Stdio::piped())
+        .spawn()
         .map_err(|error| format!("failed to run cargo build: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "cargo build failed for {}",
-            target.map(BuildTarget::as_str).unwrap_or("native")
-        ))
+    let mut executable = None;
+    for line in BufReader::new(child.stdout.take().ok_or("cargo stdout is unavailable")?).lines() {
+        let line = match line {
+            Ok(line) => line,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error.to_string());
+            }
+        };
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if message["reason"] == "compiler-artifact"
+            && message["target"]["name"] == app.cargo_package
+            && let Some(path) = message["executable"].as_str()
+        {
+            executable = Some(PathBuf::from(path));
+        }
     }
+    if !child.wait().map_err(|error| error.to_string())?.success() {
+        return Err("cargo build failed".into());
+    }
+    executable.ok_or_else(|| format!("cargo did not produce the {} executable", app.cargo_package))
 }
 
 fn configure_windows_linking(command: &mut Command) {
@@ -305,4 +300,57 @@ fn bundle_json(
         "notes": packaged.notes,
     })
     .to_string()
+}
+
+fn prepare_bundle(
+    options: BundleOptions,
+) -> Result<(BundleApp, BundleFormat, stage::StagedBundle), String> {
+    let Some(format) = BundleFormat::parse(&options.target) else {
+        return Err("unknown bundle target; use linux, portable, deb, rpm, appimage, windows, exe, msi, macos, or dmg".to_string());
+    };
+    if options.offline
+        && build_target_for_format(format)
+            .is_some_and(|target| target.as_str() != std::env::consts::OS)
+    {
+        return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
+    }
+    let out = absolute_path(options.out)?;
+    let app = config::resolve_app(
+        &options.source,
+        ConfigOverrides {
+            id: options.id,
+            name: options.name,
+            version: options.version,
+            web_build: options.web_build,
+            web_root: options.web_root,
+            web_dist: options.web_dist,
+        },
+    )?;
+
+    let environment =
+        environment::BuildEnvironment::load(&app.source_dir, None, &options.env_files)?;
+    if !options.no_web_build {
+        let web_environment = environment::BuildEnvironment::load(
+            &app.source_dir,
+            app.web.as_ref().map(|web| web.root.as_path()),
+            &options.env_files,
+        )?;
+        build_web(&app, &web_environment)?;
+    }
+    let binary = if let Some(binary) = options.binary {
+        absolute_path(binary)?
+    } else if options.no_build {
+        binary_path(&app, format, options.release)
+    } else {
+        build_rust(&app, format, options.release, &environment)?
+    };
+    if !binary.is_file() {
+        return Err(format!(
+            "built binary was not found at {}; pass --binary to package an existing executable or --no-build only when the default Cargo output already exists",
+            binary.display()
+        ));
+    }
+
+    let staged = stage_bundle(&app, format, &binary, &out, options.offline)?;
+    Ok((app, format, staged))
 }

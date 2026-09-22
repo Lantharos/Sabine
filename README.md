@@ -167,7 +167,12 @@ policy = "automatic"
 ```
 
 ```sh
-sabine install .
+sabine install .                     # development launcher from this checkout
+sabine install --bundle .            # standalone production release build
+sabine uninstall .                  # remove this project’s installed app
+sabine uninstall com.example.app
+sabine uninstall com.example.app --purge
+sabine uninstall --system           # remove shared components and the CLI
 sabine update                         # CLI, service, daemon, host, and CEF
 sabine update --force                 # bypass release soak time
 sabine update cef                     # CEF only
@@ -179,6 +184,28 @@ sabine bundle . --target deb --release
 sabine bundle . --target msi --release
 sabine bundle . --target dmg --release
 ```
+
+`install --bundle` builds the web assets and Rust release executable using the same staging path
+as `bundle`. It installs the runtime manifest, icons, web assets, desktop entry and optional
+`--autostart` entry into the user installation. The app runs independently of its source checkout.
+Reinstalling uses a transaction, preserves user-created files, and refuses a downgrade.
+`update .` rebuilds a local bundle as a production bundle; it does not switch it to a source launcher.
+
+Production builds read `.env`, `.env.local`, `.env.production`, and `.env.production.local` in
+that order. Web builds also read those files in their configured web root. Existing shell variables
+win. Repeat `--env-file path` to supply additional build-time files, relative to the project root.
+These values are passed to build processes; environment files are not installed. Your frontend
+framework controls which public values are embedded in its output. Production manifests omit the
+development URL and server command; `sabine dev` continues to use them.
+
+`uninstall` accepts an app ID or source directory, including `.`. It removes installations created
+by `sabine install`, their desktop/autostart entries, and downloaded app updates. OS package and
+store installations must be removed by their package manager or OS uninstaller. Browser profiles
+and user-created files are kept by default. `--purge` also removes that app's Sabine-managed data
+and browser profile; app-specific databases or credentials stored outside Sabine remain owned by
+the app. `--system` requires registered apps to be uninstalled first, then removes the shared
+service, daemon, host, CEF runtimes and the running CLI. Add `--purge` to clear remaining Sabine
+logs, profiles and installation records too.
 
 Manual updates honor the release soak by default. `--force` selects the newest published stable
 release even before GitHub promotes it to latest, but does not bypass signatures, hashes, failed

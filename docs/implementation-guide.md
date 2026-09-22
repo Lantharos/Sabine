@@ -709,3 +709,22 @@ Windows Installer, suppresses console windows, and passes cancellation to the ap
 setup process is stopped after 30 seconds of cancellation; the entire action has a one-hour deadline.
 Rollback actions complete restoration without accepting a second cancellation. MSI architecture is
 read from the app’s PE header; x86_64 and ARM64 packages use matching action DLLs.
+
+## Local production installation
+
+`sabine install --bundle .` uses the release build and bundle staging pipeline, then installs the
+payload through the service's transactional installer. A generated production `resources/Sabine.toml`
+contains the packaged web entry or production URL. Development-only URL and server settings are
+excluded. Rust and web builds receive production environment values without shipping environment
+files. Cargo's reported executable path is used, including when a custom target directory is set.
+
+Local installations record their source and build-environment file paths for explicit rebuilds.
+They execute installed binaries and resources; launching does not invoke Cargo or need the checkout.
+The CLI owns their desktop integration and removal. Uninstall preserves browser profiles and
+unlisted user files unless `--purge` is requested. Removing the shared Sabine system requires an
+empty app registry and stops the verified daemon before deleting its binaries.
+
+`sabine update` checks published stable releases independently of GitHub's latest-release promotion,
+verifies the signed system manifest, applies the soak policy, updates the CLI and shared components,
+and validates the newest compatible CEF runtime. `--force` skips the soak policy only. Failed-release
+backoff, signatures, checksums and version ordering remain enforced.
