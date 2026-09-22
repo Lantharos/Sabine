@@ -21,6 +21,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+      - run: rustup toolchain install 1.90 --profile minimal
+      - run: rustup override set 1.90
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p sabine-host --example runtime_probe
       - name: Exercise the published host with each runtime
         shell: pwsh
         env:
@@ -28,7 +32,7 @@ jobs:
           SABINE_CHECK_TAG: ${{ inputs.tag }}
           SABINE_CHECK_CEF_VERSIONS: ${{ inputs.cef_versions }}
         run: |
-          ./scripts/windows-runtime-check.ps1 -Tag $env:SABINE_CHECK_TAG -CefVersions ($env:SABINE_CHECK_CEF_VERSIONS.Split(',')) -OutputDirectory "$env:RUNNER_TEMP/runtime-check"
+          ./scripts/windows-runtime-check.ps1 -Tag $env:SABINE_CHECK_TAG -CefVersions ($env:SABINE_CHECK_CEF_VERSIONS.Split(',')) -OutputDirectory "$env:RUNNER_TEMP/runtime-check" -ProbeExecutable "$env:GITHUB_WORKSPACE/target/debug/examples/runtime_probe.exe"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

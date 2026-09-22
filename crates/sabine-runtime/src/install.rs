@@ -341,7 +341,7 @@ impl RuntimeInstallLock {
 }
 
 fn remove_runtime_and_execution_cache(path: &Path) -> std::io::Result<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let cache = crate::runtime_execution_path(path)?;
         if cache.is_dir() {
