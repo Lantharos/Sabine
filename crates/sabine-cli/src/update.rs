@@ -82,11 +82,10 @@ fn update_cef() -> Result<(), String> {
 
 fn update_app(target: &str, force: bool) -> Result<(), String> {
     if Path::new(target).is_dir() {
-        let app =
-            crate::install::source::detect_source_app(Path::new(target), None, None, None, false)?;
-        if let Some(mut install) = crate::install::bundle_install(&app.id)? {
-            install.source = app.source;
-            return crate::install::rebuild_bundle(&app.id, install);
+        let id = crate::install::project_install_id(Path::new(target))?;
+        if let Some(mut install) = crate::install::bundle_install(&id)? {
+            install.source = std::fs::canonicalize(target).map_err(|error| error.to_string())?;
+            return crate::install::rebuild_bundle(&id, install);
         }
         crate::install::source::update(target)?;
         return Ok(());

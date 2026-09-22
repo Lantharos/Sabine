@@ -1,9 +1,7 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
-
 #[derive(Debug, Default)]
 pub struct SourceMetadata {
     pub id: Option<String>,
@@ -12,24 +10,15 @@ pub struct SourceMetadata {
     pub icon: Option<PathBuf>,
     pub mime_types: Vec<String>,
 }
-
 #[derive(Debug, Default)]
 pub struct StagedAssets {
-    pub web_dir: Option<PathBuf>,
-    pub web_entry: Option<PathBuf>,
     pub icon: Option<PathBuf>,
 }
-
-#[derive(Debug, Default)]
-struct WebConfig {
-    root: Option<PathBuf>,
-    dist: Option<PathBuf>,
-    entry: Option<PathBuf>,
-    build: Option<String>,
-    url: Option<String>,
-    dev_url: Option<String>,
+pub fn stage(source: &Path, app_dir: &Path, icon: Option<&Path>) -> Result<StagedAssets, String> {
+    Ok(StagedAssets {
+        icon: stage_icon(source, app_dir, icon)?,
+    })
 }
-
 pub fn metadata(source: &Path) -> SourceMetadata {
     let sabine = source.join("Sabine.toml");
     let mut metadata = SourceMetadata::default();
@@ -40,58 +29,6 @@ pub fn metadata(source: &Path) -> SourceMetadata {
         metadata.icon = detect_icon(source);
     }
     metadata
-}
-
-pub fn stage(
-    source: &Path,
-    app_dir: &Path,
-    configured_icon: Option<&Path>,
-) -> Result<StagedAssets, String> {
-    fs::create_dir_all(app_dir).map_err(|error| error.to_string())?;
-    let web = stage_web(source, app_dir)?;
-    let icon = stage_icon(source, app_dir, configured_icon)?;
-    Ok(StagedAssets {
-        web_dir: web
-            .as_ref()
-            .and_then(|entry| entry.parent().map(Path::to_path_buf)),
-        web_entry: web,
-        icon,
-    })
-}
-
-fn stage_web(source: &Path, app_dir: &Path) -> Result<Option<PathBuf>, String> {
-    let Some(config) = web_config(source) else {
-        return Ok(None);
-    };
-    if let Some(command) = &config.build {
-        println!("Building web assets: {command}");
-        let status = shell_command(command)
-            .current_dir(config.root.clone().unwrap_or_else(|| source.to_path_buf()))
-            .stdin(Stdio::null())
-            .status()
-            .map_err(|error| format!("failed to run web build command `{command}`: {error}"))?;
-        if !status.success() {
-            return Err(format!("web build command failed: {command}"));
-        }
-    }
-
-    let web_source = web_source_path(source, &config)?;
-    let web_dir = app_dir.join("web");
-    if web_dir.exists() {
-        fs::remove_dir_all(&web_dir).map_err(|error| error.to_string())?;
-    }
-    copy_dir_recursive(&web_source, &web_dir).map_err(|error| error.to_string())?;
-    let entry_name = config
-        .entry
-        .as_ref()
-        .and_then(|entry| entry.file_name())
-        .unwrap_or_default();
-    let entry = if entry_name.is_empty() {
-        web_dir.join("index.html")
-    } else {
-        web_dir.join(entry_name)
-    };
-    Ok(entry.is_file().then_some(entry))
 }
 
 fn stage_icon(
@@ -113,86 +50,6 @@ fn stage_icon(
     let destination = icons_dir.join(icon.file_name().unwrap_or_default());
     fs::copy(&icon, &destination).map_err(|error| error.to_string())?;
     Ok(Some(destination))
-}
-
-fn web_config(source: &Path) -> Option<WebConfig> {
-    let mut config = WebConfig::default();
-    read_web_config(source, &source.join("Sabine.toml"), &mut config);
-
-    let has_remote_url = config.url.is_some() || config.dev_url.is_some();
-    if config.root.is_none() && !has_remote_url {
-        config.root = detect_package_root(source);
-    }
-    if config.entry.is_none() && !has_remote_url {
-        config.entry = default_web_entry(source);
-    }
-    let has_web = config.root.is_some() || config.dist.is_some() || config.entry.is_some();
-    if !has_web {
-        return None;
-    }
-    let root = config.root.clone().unwrap_or_else(|| {
-        config
-            .entry
-            .as_ref()
-            .and_then(|entry| entry.parent().map(Path::to_path_buf))
-            .unwrap_or_else(|| source.to_path_buf())
-    });
-    if config.build.is_none() {
-        config.build = detect_web_build_command(&root);
-    }
-    config.root = Some(root);
-    Some(config)
-}
-
-fn web_source_path(source: &Path, config: &WebConfig) -> Result<PathBuf, String> {
-    if let Some(dist) = &config.dist {
-        if dist.exists() {
-            return Ok(dist.clone());
-        }
-        return Err(format!("web dist path does not exist: {}", dist.display()));
-    }
-    let root = config.root.as_deref().unwrap_or(source);
-    for candidate in [root.join("build"), root.join("dist"), root.join("public")] {
-        if candidate.join("index.html").is_file() {
-            return Ok(candidate);
-        }
-    }
-    if let Some(entry) = &config.entry
-        && entry.is_file()
-        && let Some(parent) = entry.parent()
-    {
-        return Ok(parent.to_path_buf());
-    }
-    Err(format!(
-        "could not find built web assets under {}",
-        root.display()
-    ))
-}
-
-fn read_web_config(source: &Path, path: &Path, config: &mut WebConfig) {
-    let Ok(value) = read_toml(path) else {
-        return;
-    };
-    if let Some(web) = value.get("web").and_then(toml::Value::as_table) {
-        config.root = config
-            .root
-            .take()
-            .or_else(|| string_value(web, "root").map(|path| source.join(path)));
-        config.dist = config
-            .dist
-            .take()
-            .or_else(|| string_value(web, "dist").map(|path| source.join(path)));
-        config.entry = config
-            .entry
-            .take()
-            .or_else(|| string_value(web, "entry").map(|path| source.join(path)));
-        config.build = config.build.take().or_else(|| string_value(web, "build"));
-        config.url = config.url.take().or_else(|| string_value(web, "url"));
-        config.dev_url = config
-            .dev_url
-            .take()
-            .or_else(|| string_value(web, "dev_url"));
-    }
 }
 
 fn merge_sabine_metadata(source: &Path, path: &Path, metadata: &mut SourceMetadata) {
@@ -256,22 +113,6 @@ fn string_array(table: &toml::Table, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn detect_package_root(source: &Path) -> Option<PathBuf> {
-    crate::web_detect::detect_package_root(source)
-}
-
-fn default_web_entry(source: &Path) -> Option<PathBuf> {
-    [
-        "ui/index.html",
-        "web/index.html",
-        "frontend/index.html",
-        "index.html",
-    ]
-    .iter()
-    .map(|entry| source.join(entry))
-    .find(|entry| entry.is_file())
-}
-
 fn detect_icon(source: &Path) -> Option<PathBuf> {
     [
         "static/icon.svg",
@@ -289,37 +130,4 @@ fn detect_icon(source: &Path) -> Option<PathBuf> {
     .iter()
     .map(|icon| source.join(icon))
     .find(|icon| icon.is_file())
-}
-
-fn detect_web_build_command(root: &Path) -> Option<String> {
-    crate::web_detect::detect_web_build_command(root)
-}
-
-fn shell_command(command: &str) -> Command {
-    let mut shell = if cfg!(target_os = "windows") {
-        let mut command = Command::new("cmd");
-        command.arg("/C");
-        command
-    } else {
-        let mut command = Command::new("sh");
-        command.arg("-c");
-        command
-    };
-    shell.arg(command);
-    shell
-}
-
-fn copy_dir_recursive(source: &Path, destination: &Path) -> io::Result<()> {
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
-            copy_dir_recursive(&source_path, &destination_path)?;
-        } else {
-            fs::copy(&source_path, &destination_path)?;
-        }
-    }
-    Ok(())
 }

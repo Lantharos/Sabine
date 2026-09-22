@@ -26,6 +26,11 @@ pub(crate) enum Command {
         web_only: bool,
         #[arg(long)]
         no_runtime_prepare: bool,
+        /// Run a custom native command alongside the development server.
+        #[arg(long)]
+        command: Option<String>,
+        #[arg(last = true)]
+        args: Vec<String>,
     },
     Runtime {
         #[command(subcommand)]

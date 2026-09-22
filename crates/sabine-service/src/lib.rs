@@ -1,3 +1,5 @@
+mod environment;
+pub use environment::AppEnvironment;
 mod archive;
 mod http;
 mod install;

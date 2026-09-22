@@ -18,7 +18,8 @@ use crate::launch::{
 use crate::osr;
 
 impl SabineWindow {
-    pub fn launch(self) -> SabineResult<SabineProcess> {
+    pub fn launch(mut self) -> SabineResult<SabineProcess> {
+        self.apply_launch_environment();
         let metrics = LaunchMetrics::new(metrics_label(&self.config));
         metrics.mark("launch.start");
         self.config.validate()?;
@@ -33,6 +34,7 @@ impl SabineWindow {
     /// Resolve entry URL and config for [`SabineProcess::open_window`].
     /// Does not start desktop services or a second process island.
     pub(crate) fn into_open_window_parts(mut self) -> SabineResult<(SabineWindowConfig, String)> {
+        self.apply_launch_environment();
         self.config.validate()?;
         self.ensure_default_bridge_handlers();
         self.allow_configured_url_origins();
@@ -86,7 +88,6 @@ impl SabineWindow {
                     open_urls.take()
                 )))
             });
-            self.apply_dev_env_overrides();
             self.allow_configured_url_origins();
             let mut url = self.entry_url()?;
             if self.config.dev_url.is_some() {
@@ -110,6 +111,26 @@ impl SabineWindow {
             process.start_desktop_event_forwarder(self.config.desktop_services.deep_links.clone());
             metrics.mark("launch.ready");
             Ok(process)
+        }
+    }
+
+    fn apply_launch_environment(&mut self) {
+        self.apply_dev_env_overrides();
+        if self.config.dev_mode() {
+            let environment = crate::AppEnvironment::Development;
+            if let Ok(id) = std::env::var("SABINE_APP_ID") {
+                self.config.app_id = Some(id);
+            }
+            if let Some(id) = &mut self.config.app_id {
+                *id = environment.app_id(id);
+            }
+            if let Some(id) = &mut self.config.desktop_services.single_instance_id {
+                *id = environment.app_id(id);
+            }
+            self.config.app_update = None;
+            self.config.desktop_services.deep_links.clear();
+            self.config.desktop_services.native_messaging_hosts.clear();
+            self.config.desktop_services.autostart.clear();
         }
     }
 

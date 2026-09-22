@@ -728,3 +728,18 @@ empty app registry and stops the verified daemon before deleting its binaries.
 verifies the signed system manifest, applies the soak policy, updates the CLI and shared components,
 and validates the newest compatible CEF runtime. `--force` skips the soak policy only. Failed-release
 backoff, signatures, checksums and version ordering remain enforced.
+
+
+## Development environments
+
+The CLI selects development explicitly with `SABINE_ENV=development`, including optimized
+`dev --release` runs. Source installation creates a development launcher which calls the CLI's
+normal dev runner, so manifest URL selection and server lifetime stay identical to `sabine dev`.
+The runner loads development environment files, reuses an already listening local server, and
+only terminates servers it starts.
+
+Before app registration or desktop initialization, development windows use the `.dev` app
+identity and single-instance ID. Browser storage follows that identity. Production update
+configuration and persistent OS handler registrations are excluded from development launches.
+`AppEnvironment::data_dir` lets native storage share the mode choice while keeping existing
+production data at its original path. App servers remain responsible for their database bindings.

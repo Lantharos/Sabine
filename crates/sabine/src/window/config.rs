@@ -138,6 +138,7 @@ impl SabineWindowConfig {
 
     pub fn dev_mode(&self) -> bool {
         self.dev_url.is_some()
+            || crate::AppEnvironment::current() == crate::AppEnvironment::Development
     }
 
     pub fn effective_remote_devtools_port(&self) -> Option<u16> {
