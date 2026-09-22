@@ -122,6 +122,9 @@ pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<()> {
 }
 
 fn relaunch_managed_update(config: &SabineWindowConfig) {
+    if config.dev_mode() {
+        return;
+    }
     let Some(id) = config.app_id.as_deref() else {
         return;
     };
@@ -149,6 +152,9 @@ fn relaunch_managed_update(config: &SabineWindowConfig) {
 }
 
 fn offer_pending_update(config: &SabineWindowConfig) {
+    if config.dev_mode() {
+        return;
+    }
     let Some(id) = config.app_id.as_deref() else {
         return;
     };

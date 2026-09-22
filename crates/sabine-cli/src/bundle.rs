@@ -1,5 +1,5 @@
 mod cargo_metadata;
-mod environment;
+use crate::environment;
 mod install;
 pub use install::install_bundle;
 mod config;
@@ -327,13 +327,18 @@ fn prepare_bundle(
         },
     )?;
 
-    let environment =
-        environment::BuildEnvironment::load(&app.source_dir, None, &options.env_files)?;
+    let environment = environment::BuildEnvironment::load(
+        &app.source_dir,
+        None,
+        &options.env_files,
+        sabine_service::AppEnvironment::Production,
+    )?;
     if !options.no_web_build {
         let web_environment = environment::BuildEnvironment::load(
             &app.source_dir,
             app.web.as_ref().map(|web| web.root.as_path()),
             &options.env_files,
+            sabine_service::AppEnvironment::Production,
         )?;
         build_web(&app, &web_environment)?;
     }

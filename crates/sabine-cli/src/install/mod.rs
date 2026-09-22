@@ -54,3 +54,13 @@ pub fn run(
         source::install(options)
     }
 }
+
+pub(crate) fn project_install_id(path: &std::path::Path) -> Result<String, String> {
+    let app = source::detect_source_app(path, None, None, None, false)?;
+    let development = sabine_service::AppEnvironment::Development.app_id(&app.id);
+    if source::read_registered_app(&development).is_ok() {
+        Ok(development)
+    } else {
+        Ok(app.id)
+    }
+}

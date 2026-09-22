@@ -1,3 +1,4 @@
+pub use sabine_service::AppEnvironment;
 mod bridge;
 mod desktop;
 mod error;
@@ -18,9 +19,9 @@ pub use window::{
 /// Common imports for app authors.
 pub mod prelude {
     pub use crate::{
-        AppChrome, BridgeCommand, BridgeError, BridgeResponse, BridgeResult, SabineColor,
-        SabineError, SabineLifecyclePolicy, SabineProcess, SabineProcessHandle, SabineResult,
-        SabineWindow, SabineWindowChrome, ShellSurfaceVisibilityRequest,
+        AppChrome, AppEnvironment, BridgeCommand, BridgeError, BridgeResponse, BridgeResult,
+        SabineColor, SabineError, SabineLifecyclePolicy, SabineProcess, SabineProcessHandle,
+        SabineResult, SabineWindow, SabineWindowChrome, ShellSurfaceVisibilityRequest,
         ShellSurfaceVisibilityState, TrayIcon, WindowBackgroundEffect, WindowRegion,
         WindowRegionRect,
     };

@@ -9,6 +9,8 @@ use crate::commands::command_exists;
 
 #[derive(Debug, Clone)]
 pub struct DevProject {
+    pub source: PathBuf,
+    pub app_id: Option<String>,
     pub cargo_manifest: PathBuf,
     pub sabine_manifest: Option<PathBuf>,
     pub frontend: Option<DevFrontend>,
@@ -33,6 +35,7 @@ struct SabineFile {
 
 #[derive(Debug, Default, Deserialize)]
 struct AppSection {
+    id: Option<String>,
     cargo_manifest: Option<String>,
 }
 
@@ -67,6 +70,8 @@ pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
     let web = sabine.as_ref().map(|file| &file.web);
     let frontend = resolve_frontend(&source_dir, web)?;
     Ok(DevProject {
+        source: source_dir,
+        app_id: sabine.as_ref().and_then(|file| file.app.id.clone()),
         cargo_manifest,
         sabine_manifest: sabine_path.is_file().then_some(sabine_path),
         frontend,

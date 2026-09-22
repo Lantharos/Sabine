@@ -22,7 +22,7 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     }
     let target = target.unwrap_or_else(|| ".".into());
     let id = if Path::new(&target).is_dir() {
-        super::source::detect_source_app(Path::new(&target), None, None, None, false)?.id
+        super::project_install_id(Path::new(&target))?
     } else {
         target
     };

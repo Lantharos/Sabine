@@ -191,6 +191,35 @@ as `bundle`. It installs the runtime manifest, icons, web assets, desktop entry 
 Reinstalling uses a transaction, preserves user-created files, and refuses a downgrade.
 `update .` rebuilds a local bundle as a production bundle; it does not switch it to a source launcher.
 
+Development runs (`sabine dev .` and launchers created by `sabine install .`) set
+`SABINE_ENV=development`, start or reuse the configured development server, and use an app ID
+ending in `.dev`. This separates browser cookies, IndexedDB, caches, app registration and
+single-instance routing from the production app. Source installs appear as “App (Development)”.
+They do not apply production app updates or claim production URL/native-messaging registrations.
+A server started by Sabine stops when the app exits; an existing server is left running.
+
+Development reads `.env`, `.env.local`, `.env.development`, and `.env.development.local`.
+Production reads the corresponding `.env.production` files. Neither mode reads the other mode's
+files, and both pass `NODE_ENV` and `SABINE_ENV` to their build processes. The environment is
+independent of Cargo's debug/release optimization setting: `sabine dev --release` is still development.
+
+Native app storage can use the same selection while preserving an existing production location:
+
+```rust
+let data = sabine::AppEnvironment::current().data_dir(existing_production_directory);
+std::fs::create_dir_all(&data)?;
+```
+
+Production uses the supplied path unchanged; development uses its `development` subdirectory.
+For backend data, keep the local server command in `[web].dev_command`, such as `bun run dev`
+with `wrangler dev --local`, and the deployed URL in `[web].url`. Backend connection strings,
+Wrangler bindings and migrations remain owned by the app; Sabine does not redirect databases
+or deploy Workers. Use development-specific environment files for a separate database URL.
+
+Development and production installs can coexist. When both exist, `update .` and `uninstall .`
+select the development install, matching `install .`; use the production app ID to select the
+production installation explicitly. `--purge` for one identity does not remove the other's browser profile.
+
 Production builds read `.env`, `.env.local`, `.env.production`, and `.env.production.local` in
 that order. Web builds also read those files in their configured web root. Existing shell variables
 win. Repeat `--env-file path` to supply additional build-time files, relative to the project root.
@@ -372,3 +401,23 @@ Sabine is dual-licensed under MIT or Apache-2.0. CEF and Chromium keep their own
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 On Linux, runtime preparation places ICU data beside `Release/libcef.so`, where Chromium loads it before browser resource settings apply. This preparation also runs when using a prebuilt Sabine host; it does not require rebuilding CEF or downloading an already complete runtime.
+
+## Publishing Sabine
+
+Run `scripts/publish.sh --dry-run` to preview the next build, or supply a version such as
+`scripts/publish.sh 0.29 --dry-run`. The preview changes neither files nor GitHub state.
+
+`scripts/publish.sh 0.29 --prepare` updates versions and runs local checks without committing,
+tagging or pushing. Review and commit those changes before a subsequent publish invocation.
+
+`scripts/publish.sh` publishes the next build automatically; `scripts/publish.sh 0.29` selects
+an explicit version. Starting from clean, synchronized `main`, it updates workspace dependencies,
+the lockfile, Rust version constants, JavaScript packages, current documentation references and
+the Windows runtime-check default. It turns `# Unreleased` notes into the versioned changelog,
+or derives notes from commits since the current release when no unreleased section exists.
+Historical release notes and the minimum compatible app build are preserved.
+
+After local checks, it signs and pushes the release commit, waits for CI, signs and pushes the
+tag, and monitors the release workflow through artifact publication. Signing and CI failures
+stop publication. Failed preparation leaves changes available for inspection; it never discards
+work. Existing tags are never replaced. GitHub's usual soak and promotion policy still applies.

@@ -37,16 +37,16 @@ pub struct SourceApp {
 }
 
 pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
-    let app = detect_source_app(
+    let mut app = detect_source_app(
         &options.source,
         options.id,
         options.name,
         options.command,
         options.autostart,
     )?;
-    if super::bundle_install(&app.id)?.is_some() {
-        return Err("this app is installed as a production bundle; use install --bundle or uninstall it before installing a source launcher".into());
-    }
+    app.id = sabine_service::AppEnvironment::Development.app_id(&app.id);
+    app.name = format!("{} (Development)", app.name);
+    app.mime_types.clear();
     register_app(&app, options.desktop)?;
     println!("installed {} from {}", app.name, app.source.display());
     Ok(ExitCode::SUCCESS)
@@ -54,7 +54,7 @@ pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
 
 pub fn update(target: &str) -> Result<ExitCode, String> {
     let app = if Path::new(target).exists() {
-        detect_source_app(Path::new(target), None, None, None, false)?
+        read_registered_app(&super::project_install_id(Path::new(target))?)?
     } else {
         read_registered_app(target)?
     };
@@ -63,7 +63,15 @@ pub fn update(target: &str) -> Result<ExitCode, String> {
 }
 
 fn update_registered_app(app: &SourceApp) -> Result<(), String> {
-    let app = detect_source_app(&app.source, Some(app.id.clone()), None, None, app.autostart)?;
+    let mut app = detect_source_app(
+        &app.source,
+        Some(app.id.clone()),
+        None,
+        app.command.clone(),
+        app.autostart,
+    )?;
+    app.name = format!("{} (Development)", app.name);
+    app.mime_types.clear();
     register_app(&app, true)?;
     println!("updated {} from {}", app.name, app.source.display());
     Ok(())
@@ -126,8 +134,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     } else {
         "launch.sh"
     });
-    fs::write(&wrapper, launcher_script(app, &app_dir, &assets))
-        .map_err(|error| error.to_string())?;
+    fs::write(&wrapper, launcher_script(app)?).map_err(|error| error.to_string())?;
     make_executable(&wrapper).map_err(|error| error.to_string())?;
     fs::write(
         app_dir.join("source-install.toml"),
@@ -226,19 +233,9 @@ fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> St
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    let web_dir = assets
-        .web_dir
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
-    let web_entry = assets
-        .web_entry
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
     let mime_types = app.mime_types.join(";");
     format!(
-        "id = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsource = \"{}\"\ncommand = \"{}\"\nwrapper = \"{}\"\nicon = \"{}\"\nstaged_icon = \"{}\"\nweb_dir = \"{}\"\nweb_entry = \"{}\"\nmime_types = \"{}\"\nautostart = \"{}\"\n",
+        "id = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsource = \"{}\"\ncommand = \"{}\"\nwrapper = \"{}\"\nicon = \"{}\"\nstaged_icon = \"{}\"\nmime_types = \"{}\"\nautostart = \"{}\"\n",
         quote_value(&app.id),
         quote_value(&app.name),
         quote_value(&app.version),
@@ -247,8 +244,6 @@ fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> St
         quote_value(&wrapper.display().to_string()),
         quote_value(&icon),
         quote_value(&staged_icon),
-        quote_value(&web_dir),
-        quote_value(&web_entry),
         quote_value(&mime_types),
         app.autostart
     )

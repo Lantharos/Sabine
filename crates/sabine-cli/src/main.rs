@@ -2,6 +2,7 @@ mod bundle;
 mod commands;
 mod desktop_types;
 mod dev;
+mod environment;
 mod icon_assets;
 mod install;
 mod macos_bundle;
@@ -50,12 +51,16 @@ fn main() -> ExitCode {
             no_install,
             web_only,
             no_runtime_prepare,
+            command,
+            args,
         } => match dev::run_dev(dev::DevOptions {
             source,
             release,
             no_install,
             web_only,
             no_runtime_prepare,
+            command,
+            args,
         }) {
             Ok(code) => code,
             Err(error) => {
