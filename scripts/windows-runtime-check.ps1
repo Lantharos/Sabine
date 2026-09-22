@@ -6,13 +6,13 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^v[0-9]+\.[0-9]+$')][string] $Tag,
     [Parameter(Mandatory)][string[]] $CefVersions,
-    [Parameter(Mandatory)][string] $OutputDirectory
+    [Parameter(Mandatory)][string] $OutputDirectory,
+    [Parameter(Mandatory)][string] $ProbeExecutable
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'This check requires Windows' }
 . "$PSScriptRoot/windows-browser-check.ps1"
-. "$PSScriptRoot/windows-crash-capture.ps1"
 $root = [IO.Path]::GetFullPath($OutputDirectory)
 $diagnostics = Join-Path $root 'diagnostics'
 New-Item -ItemType Directory -Force $diagnostics | Out-Null
@@ -76,30 +76,24 @@ try {
         } catch {
             $result.error = $_.ToString()
             Write-Host "FAILED $version`: $_"
-            try {
-                Save-SabineHostCrash -HostDirectory $hostDirectory -RuntimeDirectory $runtime -OutputDirectory (Join-Path $diagnostics $version)
-            } catch {
-                Write-Host "Crash capture failed: $_"
-            }
         }
         $results += [pscustomobject]$result
-        if (-not $result.passed) {
-            Copy-Item (Join-Path $runtime 'Release/bootstrap.exe') (Join-Path $hostDirectory 'sabine-host.exe') -Force
-            Copy-Item (Join-Path $runtime 'Release/chrome_elf.dll') $hostDirectory -Force
+        foreach ($launch in @('prepared', 'cached')) {
             $matched = [ordered]@{
-                mode = 'runtime-bootstrap'
+                mode = $launch
                 cef = $version
-                bootstrap = (Get-Item (Join-Path $hostDirectory 'sabine-host.exe')).VersionInfo.FileVersion
+                bootstrap = (Get-Item (Join-Path $runtime 'Release/bootstrap.exe')).VersionInfo.FileVersion
                 library = $result.library
                 passed = $false
                 error = $null
             }
             try {
-                Test-SabineBrowser -RuntimeDirectory $runtime
+                & $ProbeExecutable (Join-Path $hostDirectory 'sabine-host.exe') $runtime
+                if ($LASTEXITCODE -ne 0) { throw "Prepared Chromium probe failed ($LASTEXITCODE)" }
                 $matched.passed = $true
             } catch {
                 $matched.error = $_.ToString()
-                Write-Host "FAILED matching bootstrap $version`: $_"
+                Write-Host "FAILED $launch launch $version`: $_"
             }
             $results += [pscustomobject]$matched
         }
@@ -107,7 +101,9 @@ try {
     }
     Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | ConvertTo-Json | Set-Content (Join-Path $diagnostics 'windows.json')
     Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion | ConvertTo-Json | Set-Content (Join-Path $diagnostics 'graphics.json')
-    if ($results.Where({ -not $_.passed }).Count) { throw 'A published host/runtime combination failed; see results.json' }
+    if ($results.Where({ $_.mode -ne 'published' -and -not $_.passed }).Count) {
+        throw 'A prepared host/runtime combination failed; see results.json'
+    }
 } finally {
     $env:LOCALAPPDATA = $originalData
     Stop-Transcript

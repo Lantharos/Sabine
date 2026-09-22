@@ -11,11 +11,9 @@ const HOST_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub fn validate_host_protocol(host: &Path, runtime_dir: &Path) -> Result<(), String> {
     #[cfg(windows)]
-    {
-        sabine_runtime::prepare_sandbox_access(host, false)?;
-        sabine_runtime::prepare_sandbox_access(&host.with_extension("dll"), false)?;
-        sabine_runtime::prepare_sandbox_access(&host.with_file_name("chrome_elf.dll"), false)?;
-    }
+    let prepared = crate::prepare_host_execution(host, runtime_dir)?;
+    #[cfg(windows)]
+    let host = prepared.as_path();
     let probe = std::env::temp_dir().join(format!(
         "sabine-host-check-{}-{}",
         std::process::id(),

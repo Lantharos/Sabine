@@ -26,12 +26,14 @@ pub use protocol::{HOST_PROTOCOL_VERSION, validate_host_protocol};
 #[cfg(target_os = "macos")]
 mod macos_execution;
 mod toolchain;
+#[cfg(target_os = "windows")]
+mod windows_execution;
 
 use build_lock::HostBuildLock;
 use sources::write_host_source;
 use toolchain::apply_cmake_generator;
 
-const RUNTIME_PROBE_VERSION: u32 = 5;
+const RUNTIME_PROBE_VERSION: u32 = 6;
 
 pub fn host_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
@@ -158,7 +160,11 @@ pub fn prepare_host_execution(host: &Path, runtime: &Path) -> Result<PathBuf, St
     {
         macos_execution::prepare(host, runtime)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_execution::prepare(host, runtime)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = runtime;
         Ok(host.to_path_buf())

@@ -309,10 +309,17 @@ sabine-service maintain
 `sabine runtime doctor` validates the runtime layout and launches the matching CEF host with a
 headless smoke probe. Its JSON output includes `probe_error` when the host cannot start.
 
+On Windows, each launch pairs the Sabine host DLL with the selected CEF runtime's bootstrap
+and `chrome_elf.dll`. These files are assembled once under `%LOCALAPPDATA%/sabine/executions`
+and reused until the host or runtime changes. Runtime pruning also removes its launch cache.
+The bootstrap shipped with an older Sabine release must not be mixed with a newer CEF library.
+
 The manual **Published Windows runtime checks** workflow compares a released Sabine host against
 specified CEF versions on a Windows runner. It downloads the published binaries without rebuilding
-the host, checks archive hashes, and runs each runtime with a fresh profile. The diagnostic artifact
-contains the results, process errors, and Windows/graphics versions. This checks runtime updates
+the native host, checks archive hashes, and runs each runtime with a fresh profile. It compares the
+unmodified release with launch preparation from the current source, exercising both cache assembly
+and reuse. The prepared launches must pass; the original combination is recorded as a baseline.
+The diagnostic artifact contains results, process errors, and Windows/graphics versions. This checks runtime updates
 against an existing release; it does not publish a release or prove behavior on every Windows PC.
 
 ## Learn more
