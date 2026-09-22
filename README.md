@@ -329,6 +329,18 @@ delay and upgrades the shared system before registration. An app below the syste
 supported build keeps its registration and update eligibility, but gets a native explanation instead
 of launching against an incompatible contract.
 
+Startup and setup errors open a separate, software-rendered diagnostic window without starting
+CEF, the renderer, or the service. It shows the failure and a short, scrollable snapshot of recent
+shared Sabine logs. **Open logs** opens the full files in the system file manager. Tab selects a
+button, Enter or Space activates it, Escape closes the window, and the arrow or Page Up/Down keys
+scroll the details. Text and controls follow the display scale.
+
+If that window cannot start or present, Windows uses a system message box and macOS uses a system
+alert. Linux attempts a desktop notification through `notify-send`. Errors are also written to
+stderr and the diagnostic log; a graphical message requires a working desktop session. Custom app
+entry points must call `dispatch_host_mode_from_args` before initializing application services so
+these diagnostic child processes remain independent of the app.
+
 New system releases are published as immutable, non-latest candidates. After 24 hours an hourly
 promotion job moves the newest eligible candidate to the `latest` channel, protecting older Sabine
 installations that predate client-side soak enforcement. Current installations then apply their

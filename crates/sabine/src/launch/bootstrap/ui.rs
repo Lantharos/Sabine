@@ -13,7 +13,11 @@ use winit::{
 };
 
 mod confirm;
+mod diagnostics;
+mod dialog_paint;
+mod emergency;
 pub(super) use confirm::{confirm_update, show_notice};
+pub(super) use emergency::show as emergency_notice;
 
 const WIDTH: u32 = 480;
 const HEIGHT: u32 = 148;
@@ -37,7 +41,7 @@ pub(super) struct ProgressState {
 pub(super) enum ProgressOutcome {
     Complete,
     Cancelled,
-    Failed,
+    Failed(String),
 }
 
 pub(super) fn run_progress_window(
@@ -73,7 +77,7 @@ pub(super) fn run_progress_window(
     }
     Ok(match &guard.done {
         Some(Ok(())) => ProgressOutcome::Complete,
-        Some(Err(_)) => ProgressOutcome::Failed,
+        Some(Err(error)) => ProgressOutcome::Failed(error.clone()),
         None => ProgressOutcome::Cancelled,
     })
 }
@@ -168,7 +172,7 @@ impl ApplicationHandler for ProgressApp {
         self.context = Some(context);
         self.surface = Some(surface);
         self.window = Some(window);
-        self.paint(true);
+        self.paint(event_loop, true);
     }
 
     fn window_event(
@@ -196,8 +200,8 @@ impl ApplicationHandler for ProgressApp {
             {
                 event_loop.exit()
             }
-            WindowEvent::RedrawRequested => self.paint(false),
-            WindowEvent::SurfaceResized(_) => self.paint(true),
+            WindowEvent::RedrawRequested => self.paint(event_loop, false),
+            WindowEvent::SurfaceResized(_) => self.paint(event_loop, true),
             _ => {}
         }
     }
@@ -209,25 +213,13 @@ impl ApplicationHandler for ProgressApp {
                 event_loop.exit();
                 return;
             }
-            Some(Err(error)) => {
-                if let Some(window) = &self.window {
-                    window.set_title("Sabine setup failed");
-                    let _ = window.request_surface_size(LogicalSize::new(640.0, 360.0).into());
-                }
-                if let Ok(mut state) = self.state.lock() {
-                    state.message = format!(
-                        "{error}\n\nClose this window to finish. Details: {}",
-                        sabine_runtime::diagnostic_path("setup").display()
-                    );
-                    state.fraction = None;
-                    state.dirty = true;
-                }
-                self.paint(true);
+            Some(Err(_)) => {
+                event_loop.exit();
                 return;
             }
             None => {}
         }
-        self.paint(false);
+        self.paint(event_loop, false);
     }
 }
 
@@ -238,12 +230,19 @@ impl ProgressApp {
         }
     }
 
-    fn paint(&mut self, force: bool) {
+    fn paint(&mut self, event_loop: &dyn ActiveEventLoop, force: bool) {
+        if let Err(error) = self.present(force) {
+            self.ui_failed(format!("could not display Sabine setup: {error}"));
+            event_loop.exit();
+        }
+    }
+
+    fn present(&mut self, force: bool) -> Result<(), String> {
         let Some(window) = &self.window else {
-            return;
+            return Ok(());
         };
         let Some(surface) = self.surface.as_mut() else {
-            return;
+            return Ok(());
         };
         let (message, fraction, dirty) = match self.state.lock() {
             Ok(mut guard) => {
@@ -251,10 +250,10 @@ impl ProgressApp {
                 guard.dirty = false;
                 (guard.message.clone(), guard.fraction, dirty)
             }
-            Err(_) => return,
+            Err(error) => return Err(error.to_string()),
         };
         if !force && !dirty {
-            return;
+            return Ok(());
         }
 
         let status = if message.is_empty() {
@@ -267,36 +266,28 @@ impl ProgressApp {
         let width = size.width.max(1);
         let height = size.height.max(1);
         let Ok(width_nz) = NonZeroU32::try_from(width) else {
-            return;
+            return Ok(());
         };
         let Ok(height_nz) = NonZeroU32::try_from(height) else {
-            return;
+            return Ok(());
         };
-        if surface.resize(width_nz, height_nz).is_err() {
-            return;
-        }
-        let Ok(mut buffer) = surface.buffer_mut() else {
-            return;
-        };
+        surface
+            .resize(width_nz, height_nz)
+            .map_err(|error| error.to_string())?;
+        let mut buffer = surface.buffer_mut().map_err(|error| error.to_string())?;
         buffer.fill(BG);
 
         let scale = (width as f32 / WIDTH as f32).max(1.0);
         let pad = (20.0 * scale) as i32;
         let bar_y = (height as i32 * 2) / 3;
-        let failed = self
-            .state
-            .lock()
-            .is_ok_and(|state| matches!(state.done, Some(Err(_))));
         let bar_h = (10.0 * scale).round().max(6.0) as i32;
         let bar_w = width as i32 - pad * 2;
-        if !failed {
-            fill_rect(
-                &mut buffer,
-                (width, height),
-                (pad, bar_y, bar_w, bar_h),
-                TRACK,
-            );
-        }
+        fill_rect(
+            &mut buffer,
+            (width, height),
+            (pad, bar_y, bar_w, bar_h),
+            TRACK,
+        );
         let filled = (fraction.unwrap_or(0.0).clamp(0.0, 1.0) * bar_w as f32).round() as i32;
         if filled > 0 {
             fill_rect(
@@ -326,7 +317,7 @@ impl ProgressApp {
             );
         }
 
-        let _ = buffer.present();
+        buffer.present().map_err(|error| error.to_string())
     }
 }
 
