@@ -25,23 +25,11 @@ use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 
 pub(crate) use config::OsrHostConfig;
-#[cfg(target_os = "linux")]
-pub(crate) use guest_preview::guest_preview_data_url;
 
 use native::OsrNativeHost;
 
 pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
     let config = OsrHostConfig::read(config_path)?;
-    #[cfg(target_os = "linux")]
-    if config.shell_surface.is_some() {
-        return crate::osr::layer::run(config);
-    }
-    #[cfg(not(target_os = "linux"))]
-    if config.shell_surface.is_some() {
-        return Err(
-            "shell surfaces are Linux-only; use a hide-on-blur palette window here".to_string(),
-        );
-    }
     let mut event_loop_builder = EventLoop::builder();
     #[cfg(target_os = "macos")]
     if config.skip_taskbar {

@@ -3,7 +3,6 @@
 mod desktop_background_effect;
 mod desktop_integration;
 mod regions;
-mod shell;
 #[path = "platform/wayland_background_effect.rs"]
 mod wayland_background_effect;
 mod window_options;
@@ -18,10 +17,6 @@ pub use desktop_integration::{
     SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
 };
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
-pub use shell::{
-    ShellSurfaceAnchor, ShellSurfaceKeyboardInteractivity, ShellSurfaceLayer, ShellSurfaceMargin,
-    ShellSurfaceOptions,
-};
 pub use wayland_background_effect::WaylandEffect as WindowEffect;
 pub use window_options::{
     PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
@@ -45,16 +40,4 @@ pub fn request_window_effect(
         let _ = options;
         None
     }
-}
-
-pub fn request_surface_effect<W>(
-    window: &W,
-    options: &WindowOptions,
-    width: i32,
-    height: i32,
-) -> Option<WindowEffect>
-where
-    W: raw_window_handle::HasDisplayHandle + raw_window_handle::HasWindowHandle + ?Sized,
-{
-    wayland_background_effect::request_surface(window, options, width, height)
 }

@@ -101,13 +101,9 @@ pub(crate) fn apply_browser_launch_args(
 
 #[cfg(target_os = "linux")]
 pub(crate) fn linux_ozone_platform() -> &'static str {
-    if [
-        "WAYLAND_DISPLAY",
-        "WAYLAND_SOCKET",
-        crate::osr::wayland_broker::BROKER_FD_ENV,
-    ]
-    .iter()
-    .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
+    if ["WAYLAND_DISPLAY", "WAYLAND_SOCKET"]
+        .iter()
+        .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
     {
         "wayland"
     } else {

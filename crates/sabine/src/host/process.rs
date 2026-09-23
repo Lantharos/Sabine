@@ -4,9 +4,9 @@ use sabine_bridge::{
     ActivityOptions, ActivityRecord, LaunchMetrics, SabineActivityLease,
     SabineLaunchMetricsSnapshot,
 };
-use sabine_platform::{PlatformEvent, ShellSurfaceMargin, SingleInstancePolicy};
+use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
-use crate::bridge::{BridgeEventEmitter, ShellSurfaceVisibilityRequest, platform_event_payload};
+use crate::bridge::{BridgeEventEmitter, platform_event_payload};
 use crate::desktop::{DesktopServiceState, start_desktop_event_forwarder};
 use crate::host::process_tree::ManagedChild;
 use crate::osr::launch::OpenWindowContext;
@@ -205,48 +205,6 @@ impl SabineProcess {
         self.bridge_emitter
             .as_ref()
             .is_some_and(|emitter| emitter.guest_control(control))
-    }
-
-    /// Enqueues a layer-shell visibility change and returns immediately.
-    /// Poll the returned request to observe the compositor-facing commit.
-    pub fn set_shell_surface_visible(
-        &self,
-        visible: bool,
-    ) -> Option<ShellSurfaceVisibilityRequest> {
-        self.bridge_emitter
-            .as_ref()
-            .and_then(|emitter| emitter.set_layer_visible(self.child.id(), visible))
-    }
-
-    /// Atomically updates the compositor-facing presentation of a layer surface.
-    /// The returned request completes after the final mapped state is committed.
-    pub fn set_shell_surface_presentation(
-        &self,
-        visible: bool,
-        alpha: f32,
-        margin: ShellSurfaceMargin,
-    ) -> Option<ShellSurfaceVisibilityRequest> {
-        self.bridge_emitter.as_ref().and_then(|emitter| {
-            emitter.set_layer_presentation(self.child.id(), visible, alpha, margin)
-        })
-    }
-
-    pub fn set_shell_surface_alpha(&self, alpha: f32) -> bool {
-        self.bridge_emitter
-            .as_ref()
-            .is_some_and(|emitter| emitter.set_alpha(alpha))
-    }
-
-    pub fn set_shell_surface_margin(&self, margin: ShellSurfaceMargin) -> bool {
-        self.bridge_emitter
-            .as_ref()
-            .is_some_and(|emitter| emitter.set_margin(margin))
-    }
-
-    pub fn set_shell_surface_size(&self, width: u32, height: u32) -> bool {
-        self.bridge_emitter
-            .as_ref()
-            .is_some_and(|emitter| emitter.set_size(width, height))
     }
 
     pub fn set_visible(&self, visible: bool) -> bool {

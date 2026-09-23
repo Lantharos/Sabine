@@ -3,8 +3,7 @@ use std::time::Duration;
 use sabine_bridge::{BridgeRegistry, ContentSecurity};
 use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    ShellSurfaceOptions, SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegionRect,
-    WindowRegions,
+    SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegionRect, WindowRegions,
 };
 use sabine_runtime::RuntimeConfig;
 use sabine_service::AppUpdateConfig;
@@ -28,7 +27,6 @@ pub(crate) struct SabineWindowConfig {
     pub min_height: u32,
     pub resizable: bool,
     pub visible: bool,
-    pub shell_surface_alpha: f32,
     pub active: bool,
     pub hide_on_blur: bool,
     pub hide_on_close: bool,
@@ -39,7 +37,6 @@ pub(crate) struct SabineWindowConfig {
     pub chrome: SabineWindowChrome,
     pub background_effect: WindowBackgroundEffect,
     pub regions: WindowRegions,
-    pub shell_surface: Option<ShellSurfaceOptions>,
     pub drag_regions: Vec<WindowRegionRect>,
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
     pub control_regions: Vec<SabineWindowControlRegion>,
@@ -68,7 +65,6 @@ impl Default for SabineWindowConfig {
             min_height: 280,
             resizable: true,
             visible: true,
-            shell_surface_alpha: 1.0,
             active: true,
             hide_on_blur: false,
             hide_on_close: false,
@@ -79,7 +75,6 @@ impl Default for SabineWindowConfig {
             chrome: SabineWindowChrome::System,
             background_effect: WindowBackgroundEffect::None,
             regions: WindowRegions::default(),
-            shell_surface: None,
             drag_regions: Vec::new(),
             drag_exclusion_regions: Vec::new(),
             control_regions: Vec::new(),

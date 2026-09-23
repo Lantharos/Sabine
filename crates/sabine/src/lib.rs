@@ -6,7 +6,6 @@ mod host;
 mod launch;
 mod osr;
 mod render;
-mod shell;
 mod window;
 
 pub use error::{SabineError, SabineResult};
@@ -21,14 +20,12 @@ pub mod prelude {
     pub use crate::{
         AppChrome, AppEnvironment, BridgeCommand, BridgeError, BridgeResponse, BridgeResult,
         SabineColor, SabineError, SabineLifecyclePolicy, SabineProcess, SabineProcessHandle,
-        SabineResult, SabineWindow, SabineWindowChrome, ShellSurfaceVisibilityRequest,
-        ShellSurfaceVisibilityState, TrayIcon, WindowBackgroundEffect, WindowRegion,
-        WindowRegionRect,
+        SabineResult, SabineWindow, SabineWindowChrome, TrayIcon, WindowBackgroundEffect,
+        WindowRegion, WindowRegionRect,
     };
 }
 
-pub use bridge::{BridgeEventEmitter, ShellSurfaceVisibilityRequest, ShellSurfaceVisibilityState};
-pub use shell::ShellSurfaceFrameRate;
+pub use bridge::BridgeEventEmitter;
 pub use window::SabineWindowControlRegion;
 
 pub use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
@@ -47,10 +44,6 @@ pub use sabine_platform::{
     WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
-pub use shell::{
-    ShellSurfaceAnchor, ShellSurfaceKeyboardInteractivity, ShellSurfaceLayer, ShellSurfaceMargin,
-    ShellSurfaceOptions,
-};
 
 /// Runs an internal Sabine child mode selected by `args`.
 ///
@@ -61,16 +54,6 @@ pub use shell::{
 /// initializing Sabine.
 pub fn dispatch_host_mode_from_args(args: &[String]) -> bool {
     launch::dispatch_host_mode_from_args(args)
-}
-
-#[cfg(target_os = "linux")]
-pub fn adopt_inherited_wayland_broker() -> std::io::Result<()> {
-    osr::wayland_broker::adopt()
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn adopt_inherited_wayland_broker() -> std::io::Result<()> {
-    Ok(())
 }
 
 pub(crate) use bridge::{

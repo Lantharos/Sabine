@@ -1,11 +1,9 @@
 use std::path::PathBuf;
 
-use sabine_platform::ShellSurfaceOptions;
 use sabine_platform::{WindowBackgroundEffect, WindowRegionRect, WindowRegions};
 
 use crate::osr::protocol::{
     control_regions_from_json, lifecycle_from_json, rects_from_json, regions_from_json,
-    shell_surface_from_json,
 };
 use crate::window::style::Color;
 use crate::{SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlRegion};
@@ -23,8 +21,6 @@ pub(crate) struct OsrHostConfig {
     pub min_height: u32,
     pub resizable: bool,
     pub visible: bool,
-    #[cfg(target_os = "linux")]
-    pub shell_surface_alpha: f32,
     pub active: bool,
     pub hide_on_blur: bool,
     pub hide_on_close: bool,
@@ -33,7 +29,6 @@ pub(crate) struct OsrHostConfig {
     pub always_on_top: bool,
     pub transparent: bool,
     pub background_color: Color,
-    pub shell_surface: Option<ShellSurfaceOptions>,
     pub background_effect: WindowBackgroundEffect,
     pub chrome: SabineWindowChrome,
     pub bridge_policy: serde_json::Value,
@@ -104,12 +99,6 @@ impl OsrHostConfig {
                 .get("visible")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(true),
-            #[cfg(target_os = "linux")]
-            shell_surface_alpha: value
-                .get("shell_surface_alpha")
-                .and_then(serde_json::Value::as_f64)
-                .unwrap_or(1.0)
-                .clamp(0.0, 1.0) as f32,
             active: value
                 .get("active")
                 .and_then(serde_json::Value::as_bool)
@@ -136,7 +125,6 @@ impl OsrHostConfig {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
             background_color: color_value(&value, "background_color")?,
-            shell_surface: shell_surface_from_json(value.get("shell_surface")),
             background_effect: value
                 .get("background_effect")
                 .and_then(serde_json::Value::as_str)
