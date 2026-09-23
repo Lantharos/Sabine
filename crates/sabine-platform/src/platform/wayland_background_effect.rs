@@ -72,19 +72,6 @@ where
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub fn request_surface<W>(
-    _window: &W,
-    _options: &WindowOptions,
-    _width: i32,
-    _height: i32,
-) -> Option<WaylandEffect>
-where
-    W: ?Sized,
-{
-    None
-}
-
 #[derive(Debug)]
 #[cfg(target_os = "linux")]
 pub struct WaylandEffect {

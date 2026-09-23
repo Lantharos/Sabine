@@ -128,16 +128,6 @@ pub(crate) fn buffer_len(width: u32, height: u32) -> usize {
     width as usize * height as usize * 4
 }
 
-#[cfg(target_os = "linux")]
-pub(crate) fn ensure_buffer(buffer: &mut Vec<u8>, byte_len: usize) -> bool {
-    if buffer.len() == byte_len {
-        return false;
-    }
-    buffer.clear();
-    buffer.resize(byte_len, 0);
-    true
-}
-
 pub(crate) fn compose_frame(
     frame: &OsrFrame,
     target: &mut [u8],

@@ -281,27 +281,8 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 | macOS | Unix domain socket | dirty-rect BGRA `OnPaint` → sparse wgpu uploads |
 | Windows | localhost TCP | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
 
-Linux layer-shell surfaces use their dedicated host because layer-shell configuration must happen
-before a regular winit surface is created. Other platforms express palette behavior with a normal
-frameless, always-on-top, hide-on-blur window.
-
-Initially hidden and prewarmed layer surfaces stay detached. With `retain_hidden_frame`, showing a
-surface immediately restores size, anchors, margin, layer, exclusive zone, keyboard mode, alpha, and
-background effect, then attaches the retained released SHM frame without waiting for another CEF
-paint. A busy presentation buffer schedules an immediate retry and wakes again on `wl_buffer.release`.
-`set_shell_surface_visible` queues the change and returns a `ShellSurfaceVisibilityRequest`
-immediately. Poll its state for the asynchronous compositor-facing `Mapped` or `Unmapped`
-acknowledgement. A newer request completes any superseded request with the surface's actual state
-before applying the new target, so rapid toggles never block the shell thread or leave an
-acknowledgement pending forever. Shells that change visibility, alpha, and margin together use
-`set_shell_surface_presentation`; the layer host applies all three before the compositor-facing
-commit, so a remap cannot acknowledge an intermediate hidden geometry. Layer loading uses the
-compact three-line native animation without text so small shell surfaces do not reserve message
-space.
-
-Layer surfaces also accept live size and frame-rate changes through their existing host connection.
-The host reconfigures the current Wayland surface and CEF browser in place, so responsive shell
-content and output refresh changes do not restart or discard a prewarmed browser process.
+Palette and tray windows use the same native host as other desktop windows, with frameless chrome,
+always-on-top placement, and hide-on-blur behavior when configured.
 
 ## Runtime ownership
 
@@ -427,11 +408,9 @@ Keyboard and IME text in the control protocol uses lossless percent decoding, in
 Editable primary and guest content drives the platform input method on demand. CEF reports the
 focused editor's input mode and composition caret bounds; the native host maps those to the system
 IME, positions its candidate window, and forwards preedit selection and committed text back to the
-focused browser. The normal desktop host also supplies bounded surrounding text and applies the
-platform's requested surrounding-text deletions to inputs, text areas, and content-editable regions.
-Ordinary page focus does not keep the input method enabled. Layer-shell surfaces currently support
-IME activation, caret placement, preedit, and commit; surrounding-text deletion remains unavailable
-until the layer-shell event-loop dependency exposes that part of text-input-v3.
+focused browser. The host also supplies bounded surrounding text and applies the platform's
+requested surrounding-text deletions to inputs, text areas, and content-editable regions.
+Ordinary page focus does not keep the input method enabled.
 
 Touch and tablet input is forwarded as CEF touch input instead of being collapsed into mouse events,
 preserving pointer identity, pressure, and touch, pen, or eraser type. CEF's touch event API does not
@@ -446,14 +425,12 @@ including self-drops, are accepted by the native host and emitted to the primary
 `window.fileDrag`. Each event carries its phase, absolute file paths, content coordinates, the
 negotiated copy/move/link action, and whether it originated from the same Sabine window. Apps use
 those coordinates to resolve their own semantic drop targets without exposing renderer internals to
-the native host. This native drag path applies to regular desktop windows. The current layer-shell
-event-loop dependency does not expose Wayland data-device drag-and-drop, so layer surfaces reject an
-outgoing file drag immediately instead of leaving CEF's drag source pending.
+the native host.
 
 CEF's default file chooser remains in place so file inputs use the operating system picker. Browser
 context-menu items are removed; development launches add only an `Inspect element` command, while
 production launches have no browser-style context menu. HTML title tooltips are presented by the
-native compositor after a short delay in both regular and layer-shell hosts.
+native compositor after a short delay.
 
 The web bridge exposes:
 
@@ -481,9 +458,7 @@ GPU compositor, window chrome, and app background configured with
 `.background_color(SabineColor::rgb8(r, g, b))`. The default is `#111113`. The same color seeds CEF
 before the document paints, avoiding a surface-color jump when the native loader disappears. Its
 loading copy rotates every 3.2 seconds from a 70% practical, 20% whimsical, and 10% strange pool
-without repeating consecutively. Layer-shell surfaces use the same delay, app background, copy,
-and scheduled animation while keeping the browser backing buffer separate from the transient loader.
-Live transport loss uses the wake path so a window recovers
+without repeating consecutively. Live transport loss uses the wake path so a window recovers
 instead of remaining frozen.
 
 Memory saver is explicit. `SabineLifecyclePolicy::memory_saver_hidden_window()` or

@@ -1,5 +1,8 @@
 # Unreleased
 
+- Remove the Wayland layer-shell backend, broker, and public shell-surface API to focus Sabine on
+  desktop windows.
+
 - Add software-rendered error details, recent log summaries, an Open logs action, keyboard controls,
   and emergency system notifications when the diagnostic window cannot open.
 - Separate development app registrations, browser profiles, and native data paths from production.
