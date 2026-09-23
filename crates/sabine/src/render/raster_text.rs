@@ -39,27 +39,6 @@ impl RasterText {
         );
     }
 
-    #[cfg(target_os = "linux")]
-    pub(crate) fn draw_centered(
-        &mut self,
-        pixels: &mut [u8],
-        surface: (u32, u32),
-        bounds: (i32, i32, u32, u32),
-        text: &str,
-        size: f32,
-        color: [u8; 4],
-    ) {
-        self.draw_text(
-            pixels,
-            surface,
-            bounds,
-            text,
-            size,
-            color,
-            (Align::Center, Wrap::None),
-        );
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn draw_text(
         &mut self,
@@ -97,13 +76,6 @@ impl RasterText {
                 );
             },
         );
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn fill_bgra(pixels: &mut [u8], color: [u8; 4]) {
-    for pixel in pixels.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[color[2], color[1], color[0], color[3]]);
     }
 }
 

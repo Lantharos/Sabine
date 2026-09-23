@@ -111,21 +111,6 @@ impl MessageQueue {
         self.space_available.notify_all();
         (messages, remaining)
     }
-
-    #[cfg(target_os = "linux")]
-    pub(super) fn requeue_front(&self, messages: VecDeque<OsrMessage>) -> bool {
-        if messages.is_empty() {
-            return false;
-        }
-        let Ok(mut state) = self.state.lock() else {
-            return false;
-        };
-        for message in messages.into_iter().rev() {
-            state.retained_bytes += message_retained_bytes(&message);
-            state.messages.push_front(message);
-        }
-        queue_wake(&mut state)
-    }
 }
 
 fn queue_wake(state: &mut MessageQueueState) -> bool {
