@@ -6,8 +6,8 @@ use sabine_bridge::{
 };
 use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    ShellSurfaceOptions, SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegion,
-    WindowRegionRect, WindowRegions,
+    SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegion, WindowRegionRect,
+    WindowRegions,
 };
 use sabine_runtime::RuntimeConfig;
 
@@ -129,11 +129,6 @@ impl SabineWindow {
         self
     }
 
-    pub fn shell_surface_alpha(mut self, alpha: f32) -> Self {
-        self.config.shell_surface_alpha = alpha.clamp(0.0, 1.0);
-        self
-    }
-
     pub fn hidden(self) -> Self {
         self.visible(false).active(false)
     }
@@ -234,13 +229,6 @@ impl SabineWindow {
 
     pub fn regions(mut self, regions: WindowRegions) -> Self {
         self.config.regions = regions;
-        self
-    }
-
-    pub fn shell_surface(mut self, shell_surface: ShellSurfaceOptions) -> Self {
-        self.config.shell_surface = Some(shell_surface);
-        self.config.chrome = SabineWindowChrome::None;
-        self.config.transparent = true;
         self
     }
 

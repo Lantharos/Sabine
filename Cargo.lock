@@ -820,27 +820,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exwlshellev"
-version = "0.20.0"
-source = "git+https://github.com/Lantharos/exwlshelleventloop.git?rev=12286020d31c6b0b3aab54c9b206ea1a86d144bf#12286020d31c6b0b3aab54c9b206ea1a86d144bf"
-dependencies = [
- "calloop",
- "calloop-wayland-source",
- "log",
- "raw-window-handle",
- "smithay-client-toolkit",
- "tempfile",
- "thiserror 2.0.20",
- "waycrate_xkbkeycode",
- "wayland-backend",
- "wayland-client",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2485,7 +2464,6 @@ dependencies = [
  "ashpd",
  "bytemuck",
  "crossbeam-channel",
- "exwlshellev",
  "futures-util",
  "getrandom 0.4.3",
  "global-hotkey",
@@ -2498,7 +2476,6 @@ dependencies = [
  "objc2-foundation",
  "pollster",
  "raw-window-handle",
- "rustix 1.1.4",
  "sabine-bridge",
  "sabine-host",
  "sabine-platform",
@@ -2507,14 +2484,12 @@ dependencies = [
  "serde",
  "serde_json",
  "shell-words",
- "smithay-client-toolkit",
  "softbuffer",
  "thiserror 2.0.20",
  "tokio",
  "toml",
  "tray-icon",
  "url",
- "wayland-client",
  "wgpu",
  "windows",
  "winit",
@@ -2881,13 +2856,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74dc9ee14b0fdcb535f9556141bacac070c994a977d2240ee455d7438a617f00"
 dependencies = [
  "bitflags",
- "bytemuck",
  "calloop",
  "calloop-wayland-source",
  "cursor-icon",
  "log",
  "memmap2",
- "pkg-config",
  "rustix 1.1.4",
  "thiserror 2.0.20",
  "wayland-client",
@@ -2898,7 +2871,6 @@ dependencies = [
  "wayland-protocols-misc",
  "wayland-protocols-wlr",
  "wayland-scanner",
- "xkbcommon",
  "xkeysym",
 ]
 
@@ -3579,21 +3551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81941cd78d0c92026c33e5e01312845a4cb1e9af3407f9134b100dd03144103e"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "waycrate_xkbkeycode"
-version = "0.20.0"
-source = "git+https://github.com/Lantharos/exwlshelleventloop.git?rev=12286020d31c6b0b3aab54c9b206ea1a86d144bf#12286020d31c6b0b3aab54c9b206ea1a86d144bf"
-dependencies = [
- "calloop",
- "log",
- "memmap2",
- "wayland-backend",
- "wayland-client",
- "winit-common",
- "winit-core",
- "xkbcommon-dl",
 ]
 
 [[package]]
@@ -4424,17 +4381,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 
 [[package]]
-name = "xkbcommon"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d66ca9352cbd4eecbbc40871d8a11b4ac8107cfc528a6e14d7c19c69d0e1ac9"
-dependencies = [
- "libc",
- "memmap2",
- "xkeysym",
-]
-
-[[package]]
 name = "xkbcommon-dl"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4452,9 +4398,6 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
-dependencies = [
- "bytemuck",
-]
 
 [[package]]
 name = "xml-rs"

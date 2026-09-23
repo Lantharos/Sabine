@@ -4,8 +4,7 @@ mod wire;
 
 pub(crate) use config_json::{
     control_regions_from_json, control_regions_to_json, lifecycle_from_json, lifecycle_to_json,
-    rects_from_json, rects_to_json, regions_from_json, regions_to_json, shell_surface_from_json,
-    shell_surface_to_json,
+    rects_from_json, rects_to_json, regions_from_json, regions_to_json,
 };
 pub(crate) use encode::encode_component;
 pub(crate) use wire::read_message;

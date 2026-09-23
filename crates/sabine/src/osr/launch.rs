@@ -25,11 +25,6 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
         eprintln!("missing Sabine OSR host config path");
         std::process::exit(1);
     };
-    #[cfg(target_os = "linux")]
-    if let Err(error) = crate::osr::wayland_broker::adopt() {
-        eprintln!("Sabine OSR host could not adopt its Wayland broker: {error}");
-        std::process::exit(1);
-    }
     if let Err(error) = crate::osr::host::run(config_path) {
         crate::launch::bootstrap::show_failure("The application could not continue", &error);
         std::process::exit(1);
@@ -141,7 +136,6 @@ pub(crate) fn spawn_osr_host_child(
         "min_height": config.min_height,
         "resizable": config.resizable,
         "visible": config.visible,
-        "shell_surface_alpha": config.shell_surface_alpha,
         "active": config.active,
         "hide_on_blur": config.hide_on_blur,
         "hide_on_close": config.hide_on_close,
@@ -149,7 +143,6 @@ pub(crate) fn spawn_osr_host_child(
         "always_on_top": config.always_on_top,
         "transparent": config.transparent,
         "background_color": config.background_color.to_rgba8(),
-        "shell_surface": crate::osr::protocol::shell_surface_to_json(config.shell_surface.as_ref()),
         "background_effect": config.background_effect.as_str(),
         "chrome": config.chrome.as_str(),
         "bridge_policy": {
@@ -188,12 +181,6 @@ pub(crate) fn spawn_osr_host_child(
         .stderr(Stdio::piped());
     prepare_bridge_command(&mut command, &BridgeHandlers::default());
     prepare_child_command(&mut command);
-    #[cfg(target_os = "linux")]
-    crate::osr::wayland_broker::prepare_child(&mut command, true).map_err(|error| {
-        SabineError::CreationFailed {
-            message: format!("failed to acquire Sabine OSR Wayland connection: {error}"),
-        }
-    })?;
     let mut child = command
         .spawn()
         .map_err(|error| SabineError::CreationFailed {
@@ -377,34 +364,16 @@ pub(crate) fn cef_osr_command(
     command.stdin(Stdio::null());
     command.stdout(Stdio::null());
     command.stderr(Stdio::piped());
-    #[cfg(target_os = "linux")]
-    crate::osr::wayland_broker::prepare_child(&mut command, false)
-        .map_err(|error| format!("could not acquire CEF Wayland connection: {error}"))?;
     Ok(command)
 }
 
 fn browser_profile_key(config: &crate::osr::host::OsrHostConfig) -> String {
-    let app_id = config
+    config
         .app_id
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .expect("cef_osr_command requires a non-empty app_id");
-
-    #[cfg(target_os = "linux")]
-    if config.shell_surface.is_some()
-        && let Some(display) = std::env::var_os(crate::osr::wayland_broker::BROKER_KEY_ENV)
-            .filter(|display| !display.is_empty())
-            .or_else(|| std::env::var_os("WAYLAND_DISPLAY").filter(|display| !display.is_empty()))
-    {
-        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").unwrap_or_default();
-        return format!(
-            "{app_id}\0wayland-shell\0{}\0{}",
-            runtime_dir.to_string_lossy(),
-            display.to_string_lossy()
-        );
-    }
-
-    app_id.to_string()
+        .expect("cef_osr_command requires a non-empty app_id")
+        .to_string()
 }
 
 fn osr_instance_key() -> String {
