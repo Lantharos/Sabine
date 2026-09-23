@@ -713,6 +713,12 @@ normal dev runner, so manifest URL selection and server lifetime stay identical 
 The runner loads development environment files, reuses an already listening local server, and
 only terminates servers it starts.
 
+Development builds read `.env`, `.env.local`, `.env.development`, and
+`.env.development.local`. Production builds use the corresponding `.env.production` files;
+existing process variables take precedence. Builds can add files with repeated `--env-file`
+arguments. Environment files are build inputs, not installed resources. Frontend frameworks
+decide which values become public in the generated web assets.
+
 Before app registration or desktop initialization, development windows use the `.dev` app
 identity and single-instance ID. Browser storage follows that identity. Production update
 configuration and persistent OS handler registrations are excluded from development launches.

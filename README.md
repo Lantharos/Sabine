@@ -2,155 +2,36 @@
 
 # Sabine
 
-Sabine is a native application framework built around one shared Chromium runtime.
-Write your UI in the web stack you already use, keep a real desktop window, and share one
-browser engine across every Sabine app on the machine.
+Sabine builds desktop apps with web UIs and native windows. Apps on the same machine share one managed Chromium runtime instead of bundling a browser each. It supports Linux, Windows, and Apple Silicon macOS.
 
-## Install
+Windows, palettes, trays, guest views, and a typed Rust–web bridge are available from one framework. Sabine prepares the shared runtime on first launch and keeps it updated for installed apps.
 
-Building Sabine or an application requires Rust 1.90 or newer. Installed applications do not require Rust.
+## Get started
 
-```toml
-[dependencies]
-sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.28" }
-```
+Building an app requires Rust 1.90 or newer and Bun. The installed app does not need either tool.
 
 ```sh
 cargo install --git https://github.com/Lantharos/Sabine --tag v0.28 sabine-cli
-```
-
-Run `sabine -V` or `sabine --version` to see the CLI version, installed shared service version,
-and running daemon version separately. If the service is missing or the daemon is stopped, the
-output says so. This only reads local state; it does not start the daemon or check for updates.
-`sabine update` updates the CLI, shared service, daemon, native host, and CEF.
-Background service maintenance leaves a separately installed CLI unchanged.
-
-For the TypeScript helpers used by the web UI:
-
-```sh
-bun add github:Lantharos/Sabine#v0.28
-```
-
-## Why Sabine
-
-- One shared Chromium runtime across Linux, Windows, and macOS (Apple Silicon)
-- Native windows with GPU composition, glass materials, trays, and palettes
-- Guests for embedded tabs, previews, auth flows, and untrusted pages
-- Typed Rust ↔ web bridge with explicit command and origin permissions
-- Shared service that owns first-run setup, the Chromium runtime, and future tools
-- Visible progress while the first app prepares the machine for every Sabine app
-- One `Sabine.toml` for app identity, web assets, and packaging
-- Lifecycle controls for background windows, tray apps, and browser-style workloads
-- TypeScript package for invoke, guests, window controls, native file drops, activity, and popups
-
-## Quick start
-
-```sh
 sabine new my-app
 cd my-app
 sabine dev
 ```
 
-Generated apps look like this:
+A Sabine app starts with `SabineWindow`; its web assets and identity live in `Sabine.toml`:
 
 ```rust
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
-use sabine::prelude::*;
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize)]
-struct VersionRequest {}
-
-#[derive(Serialize)]
-struct VersionResponse {
-    version: &'static str,
-}
-
 fn main() {
-    SabineWindow::main(|window| {
-        Ok(window
-            .app()
-            .background_color(SabineColor::rgb8(15, 17, 21))
-            .size(960, 640)
-            .bridge_typed("app.version", |_request: VersionRequest| {
-                Ok(VersionResponse {
-                    version: env!("CARGO_PKG_VERSION"),
-                })
-            }))
-    });
+    sabine::SabineWindow::main(|window| Ok(window.app().title("My App")));
 }
 ```
-
-```js
-import { invoke, guest, appWindow, listen, events } from "@lantharos/sabine";
-
-const { version } = await invoke("app.version");
-listen("tray.click", () => appWindow.show());
-events.fileDrag(({ phase, paths, x, y, action }) => {
-  console.log(phase, paths, x, y, action);
-});
-
-const tab = await guest.create({
-  url: "https://example.com",
-  bounds: { x: 16, y: 64, width: 900, height: 600 },
-  partition: "persist:browser",
-});
-```
-
-On first launch (or `sabine dev`), Sabine prepares and validates the shared Chromium runtime when it
-is missing. App launches register with the shared Sabine service and later runs reuse the verified
-install. `sabine dev` owns the web development process; the app only connects to the configured
-development URL.
-
-## Window recipes
-
-```rust
-// Standard desktop app
-SabineWindow::new().app();
-
-// Transparent palette or launcher
-SabineWindow::new().palette();
-
-// Background tray app
-SabineWindow::new()
-    .tray_app()
-    .tray_icon(/* ... */)
-    .single_instance_id("com.example.my-app");
-
-// Custom titlebar and sidebar glass regions
-SabineWindow::new()
-    .frameless()
-    .glass()
-    .app_chrome(AppChrome::new(38, 260));
-```
-
-Embed another page as a guest surface:
-
-```js
-import { guest } from "@lantharos/sabine";
-
-const surface = await guest.create({
-  url: "https://example.com",
-  bounds: { x: 16, y: 64, width: 900, height: 600 },
-  partition: "persist:browser",
-  allowBridge: false,
-});
-await surface.setBounds({ x: 16, y: 64, width: 1100, height: 700 });
-```
-
-## Configuration
-
-`Sabine.toml` describes the app and its web assets. `SabineWindow::main` loads it automatically;
-the CLI supplies its source location during development and writes a relocated production manifest
-when packaging:
 
 ```toml
 [app]
 id = "com.example.my-app"
 name = "My App"
 version = "1.0.0"
-icon = "assets/icon.png"
 
 [web]
 root = "ui"
@@ -158,279 +39,42 @@ dist = "ui/dist"
 entry = "ui/dist/index.html"
 dev_port = 5173
 build = "bun run build"
+```
 
-[updates]
-provider = "github"
-repository = "your-name/my-app"
-channel = "stable"
-policy = "automatic"
+Generated projects already pin the matching Rust crate and TypeScript helper. For an existing project, add them yourself:
+
+```toml
+[dependencies]
+sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.28" }
 ```
 
 ```sh
-sabine install .                     # development launcher from this checkout
-sabine install --bundle .            # standalone production release build
-sabine uninstall .                  # remove this project’s installed app
-sabine uninstall com.example.app
-sabine uninstall com.example.app --purge
-sabine uninstall --system           # remove shared components and the CLI
-sabine update                         # CLI, service, daemon, host, and CEF
-sabine update --force                 # bypass release soak time
-sabine update cef                     # CEF only
-sabine update com.example.app         # a registered app
-sabine update --all                   # components and registered apps
-sabine update .                       # refresh a source install
+bun add github:Lantharos/Sabine#v0.28
+```
+
+## Install and maintain
+
+```sh
+sabine install .                  # development launcher for this checkout
+sabine install --bundle .         # production app independent of the checkout
 sabine bundle . --target portable --release
-sabine bundle . --target deb --release
-sabine bundle . --target msi --release
-sabine bundle . --target dmg --release
+sabine update                     # CLI, shared components, and CEF
+sabine update --force             # skip the release soak, keep integrity checks
+sabine uninstall .                # remove this project's development install
+sabine uninstall com.example.my-app --purge
+sabine uninstall --system
 ```
 
-`install --bundle` builds the web assets and Rust release executable using the same staging path
-as `bundle`. It installs the runtime manifest, icons, web assets, desktop entry and optional
-`--autostart` entry into the user installation. The app runs independently of its source checkout.
-Reinstalling uses a transaction, preserves user-created files, and refuses a downgrade.
-`update .` rebuilds a local bundle as a production bundle; it does not switch it to a source launcher.
+Development runs use a `.dev` app identity and development environment files, keeping browser and app data separate from production. A production bundle uses its installed assets and production environment at build time; it does not need the source checkout. Uninstall keeps app data unless `--purge` is given. Run `sabine --help` for other commands and bundle targets.
 
-Development runs (`sabine dev .` and launchers created by `sabine install .`) set
-`SABINE_ENV=development`, start or reuse the configured development server, and use an app ID
-ending in `.dev`. This separates browser cookies, IndexedDB, caches, app registration and
-single-instance routing from the production app. Source installs appear as “App (Development)”.
-They do not apply production app updates or claim production URL/native-messaging registrations.
-A server started by Sabine stops when the app exits; an existing server is left running.
+`sabine -V` shows the CLI, installed service, and running daemon versions. If a launch fails, Sabine shows a native diagnostic window with an **Open logs** action.
 
-Development reads `.env`, `.env.local`, `.env.development`, and `.env.development.local`.
-Production reads the corresponding `.env.production` files. Neither mode reads the other mode's
-files, and both pass `NODE_ENV` and `SABINE_ENV` to their build processes. The environment is
-independent of Cargo's debug/release optimization setting: `sabine dev --release` is still development.
+## Documentation
 
-Native app storage can use the same selection while preserving an existing production location:
-
-```rust
-let data = sabine::AppEnvironment::current().data_dir(existing_production_directory);
-std::fs::create_dir_all(&data)?;
-```
-
-Production uses the supplied path unchanged; development uses its `development` subdirectory.
-For backend data, keep the local server command in `[web].dev_command`, such as `bun run dev`
-with `wrangler dev --local`, and the deployed URL in `[web].url`. Backend connection strings,
-Wrangler bindings and migrations remain owned by the app; Sabine does not redirect databases
-or deploy Workers. Use development-specific environment files for a separate database URL.
-
-Development and production installs can coexist. When both exist, `update .` and `uninstall .`
-select the development install, matching `install .`; use the production app ID to select the
-production installation explicitly. `--purge` for one identity does not remove the other's browser profile.
-
-Production builds read `.env`, `.env.local`, `.env.production`, and `.env.production.local` in
-that order. Web builds also read those files in their configured web root. Existing shell variables
-win. Repeat `--env-file path` to supply additional build-time files, relative to the project root.
-These values are passed to build processes; environment files are not installed. Your frontend
-framework controls which public values are embedded in its output. Production manifests omit the
-development URL and server command; `sabine dev` continues to use them.
-
-`uninstall` accepts an app ID or source directory, including `.`. It removes installations created
-by `sabine install`, their desktop/autostart entries, and downloaded app updates. OS package and
-store installations must be removed by their package manager or OS uninstaller. Browser profiles
-and user-created files are kept by default. `--purge` also removes that app's Sabine-managed data
-and browser profile; app-specific databases or credentials stored outside Sabine remain owned by
-the app. `--system` requires registered apps to be uninstalled first, then removes the shared
-service, daemon, host, CEF runtimes and the running CLI. Add `--purge` to clear remaining Sabine
-logs, profiles and installation records too.
-
-Manual updates honor the release soak by default. `--force` selects the newest published stable
-release even before GitHub promotes it to latest, but does not bypass signatures, hashes, failed
-release backoff, or downgrade protection. CEF updates use the latest compatible runtime and must
-pass the Chromium rendering probe. Package-managed app updates are downloaded for approval in
-the app; store-managed apps remain with their store.
-
-## Publishing and updates
-
-Sabine uses one coordinated `vMAJOR.BUILD` GitHub Release for the CLI, service, daemon, and prebuilt CEF
-host. The release workflow builds the complete system bundle for each platform and signs one
-immutable release manifest. Bootstrap verifies the Ed25519 signature and artifact SHA-256 before
-installing the binaries side by side. Customer machines do not compile Sabine or require Rust,
-CMake, or a C++ toolchain. CEF remains a separately managed runtime and apps never select a
-Chromium version.
-
-New apps include a release workflow that calls Sabine's reusable workflow. Run the one-time release
-setup from the app repository; it creates the app's signing key, stores the private seed directly as
-a GitHub Actions secret, enables immutable Releases, and writes the repository and public key to
-`Sabine.toml`:
-
-```sh
-sabine release-init --repository owner/repository
-```
-
-MSI builds require accepting the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/).
-After reviewing its terms, add `accept_wix_eula: true` to the reusable release job's `with` inputs.
-For local MSI builds, run `wix eula accept wix7` once on the build machine.
-
-For each release, set the version in `Sabine.toml`, commit it, and push the matching tag:
-
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The workflow builds MSI, DMG, AppImage, deb, and rpm artifacts, signs `sabine-update.json`, attaches
-the exact platform/package mapping, attests the artifacts, and creates the GitHub Release. The daemon
-downloads routine updates only after they have been live for 24 hours plus a stable per-installation
-rollout offset of up to six hours. Sabine-managed archives activate side by side; their stable
-bootstrap forwards to the current release on the next launch. Native packages are staged silently,
-then offer Install or Later when the app next opens. Later snoozes the prompt for a day. Accepting
-closes the app, requests elevation when needed, installs, and relaunches it. Store installs remain
-owned by the store.
-
-Windows bundles statically link the Microsoft C runtime. MSI packages are x64 and install for the current user under
-`%LOCALAPPDATA%\Programs\<app-id>`. Their wizard prepares the shared runtime before finishing,
-supports repair, and uses the configured app icon for the Start menu shortcut. MSI failures roll
-back packaged files and app registration; uninstall leaves the shared runtime available to other apps. The release workflow
-installs and launches the MSI, verifies the app presents a Chromium frame, and checks that its
-connection remains healthy before publishing it. Windows bundle targets are linked as GUI apps,
-so existing apps do not need source-level linker configuration to avoid a console window.
-Sabine's own service and daemon are also self-contained, and bootstrap tools run without creating
-console windows; the native setup progress window is the only visible first-launch process.
-
-`sabine bundle --target exe` creates a Windows setup wizard with NSIS 3.12. It installs for the
-current user, prepares the shared runtime inside the installer, creates Start Menu shortcuts, and
-registers an uninstaller. Setup shows progress and errors in its details pane and offers Retry when
-preparation fails. Cancel stops setup, and failed upgrades restore the previous installation.
-Rerun the installer to repair an installation; `/S` runs it silently. Uninstalling
-an app retains shared Sabine components and user-created data.
-
-Pass `--offline` to `sabine bundle` to include a working CEF runtime and Sabine system bootstrap.
-The embedded system is adopted into the same versioned installation on first launch, then resumes
-normal background updates. No compiler is needed on the destination machine.
-
-## Runtime and service
-
-Sabine keeps the Chromium runtime under the platform application-data directory. On Linux:
-
-```text
-~/.local/share/sabine/runtimes/cef/
-```
-
-`sabine-service` owns machine setup for every Sabine app. A separate
-`sabine-service-daemon` executable performs background maintenance so Windows never attaches a
-console window to the login process.
-
-1. The first app launches with Sabine bootstrap code and a native progress window.
-2. Bootstrap downloads the signed service, daemon, and prebuilt CEF host system bundle from the
-   latest Sabine GitHub Release, installs it in a versioned directory, then starts it.
-3. The service installs the latest compatible Chromium runtime and validates it with a headless CEF
-   initialization before selecting it, independent of the daemon's graphical-session environment.
-4. The app registers with the service and starts.
-
-Later apps reuse that service and runtime. Updates are atomic: Sabine retains the previous system
-version until the replacement daemon reports healthy. Exactly one daemon is active during handoff;
-the old service binary acts as a short-lived supervisor, rolls back a failed replacement, and backs
-off repeatedly failing releases. If the active installation is damaged, bootstrap silently replaces
-it from signed release metadata. An app built for a newer Sabine build bypasses the routine rollout
-delay and upgrades the shared system before registration. An app below the system's signed minimum
-supported build keeps its registration and update eligibility, but gets a native explanation instead
-of launching against an incompatible contract.
-
-Startup and setup errors open a separate, software-rendered diagnostic window without starting
-CEF, the renderer, or the service. It shows the failure and a short, scrollable snapshot of recent
-shared Sabine logs. **Open logs** opens the full files in the system file manager. Tab selects a
-button, Enter or Space activates it, Escape closes the window, and the arrow or Page Up/Down keys
-scroll the details. Text and controls follow the display scale.
-
-If that window cannot start or present, Windows uses a system message box and macOS uses a system
-alert. Linux attempts a desktop notification through `notify-send`. Errors are also written to
-stderr and the diagnostic log; a graphical message requires a working desktop session. Custom app
-entry points must call `dispatch_host_mode_from_args` before initializing application services so
-these diagnostic child processes remain independent of the app.
-
-New system releases are published as immutable, non-latest candidates. After 24 hours an hourly
-promotion job moves the newest eligible candidate to the `latest` channel, protecting older Sabine
-installations that predate client-side soak enforcement. Current installations then apply their
-stable zero-to-six-hour rollout offset. An app that explicitly requires the candidate build uses its
-signed versioned manifest directly and can upgrade immediately.
-
-Public Sabine versions use `MAJOR.BUILD`, so this source tree is `0.28`. Cargo and npm encode the same
-release as `0.28.0` because their package formats require three components. Build releases remain
-compatible within a major unless signed release metadata explicitly raises the minimum app build;
-fundamental contract breaks increment the major.
-
-Sabine 0.28 requires apps built with Sabine 0.23 or newer. Rebuild and redistribute older apps before
-upgrading their shared system: the document-bound bridge and host protocol cannot be used by older
-app binaries. macOS releases support Apple Silicon only. Rust builds require version 1.90 or newer.
-
-CEF runtimes in active use hold leases so maintenance cannot prune them. A failed CEF initialization
-is quarantined and resolution falls back to the previous runtime. Quarantines are scoped to the
-health-probe version so a corrected probe automatically reconsiders runtimes it previously rejected.
-By default the service also starts at login so the runtime stays warm.
-Prefer on-demand start with `sabine-service prefer-on-demand`.
-
-Service acquisition order:
-
-1. `SABINE_SERVICE_PATH` if set
-2. Active versioned installation under the Sabine data dir
-3. Complete offline bootstrap beside the app, adopted into the versioned installation
-4. Binary on `PATH` for development
-5. The platform system bundle described by
-   `https://github.com/Lantharos/Sabine/releases/latest/download/sabine-release.json`
-
-Override the release metadata URL with `SABINE_RELEASE_MANIFEST_URL` for development or a private
-mirror.
-
-```sh
-sabine runtime doctor
-sabine runtime install
-sabine runtime list
-sabine runtime prune --keep 2
-
-sabine-service install
-sabine-service ensure
-sabine-service list
-sabine-service maintain
-```
-
-`sabine runtime doctor` validates the runtime layout and launches the matching CEF host with a
-headless smoke probe. Its JSON output includes `probe_error` when the host cannot start.
-
-On Windows, each launch pairs the Sabine host DLL with the selected CEF runtime's bootstrap
-and `chrome_elf.dll`. These files are assembled once under `%LOCALAPPDATA%/sabine/executions`
-and reused until the host or runtime changes. Runtime pruning also removes its launch cache.
-The bootstrap shipped with an older Sabine release must not be mixed with a newer CEF library.
-
-The manual **Published Windows runtime checks** workflow compares a released Sabine host against
-specified CEF versions on a Windows runner. It downloads the published binaries without rebuilding
-the native host, checks archive hashes, and runs each runtime with a fresh profile. It compares the
-unmodified release with launch preparation from the current source, exercising both cache assembly
-and reuse. The prepared launches must pass; the original combination is recorded as a baseline.
-The diagnostic artifact contains results, process errors, and Windows/graphics versions. This checks runtime updates
-against an existing release; it does not publish a release or prove behavior on every Windows PC.
-
-## Learn more
-
-- [Implementation guide](docs/implementation-guide.md) — process model, bridge, guests, bundling, and platform notes
-- [`@lantharos/sabine`](packages/sabine) — TypeScript helpers for the page bridge
+- [Implementation guide](docs/implementation-guide.md) — runtime, bridge, windows, packaging, and platform behavior
+- [Publishing guide](docs/publishing.md) — app releases and Sabine releases
+- [TypeScript helpers](packages/sabine) — page bridge API
 
 ## License
 
-Sabine is dual-licensed under MIT or Apache-2.0. CEF and Chromium keep their own licenses; see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-On Linux, runtime preparation places ICU data beside `Release/libcef.so`, where Chromium loads it before browser resource settings apply. This preparation also runs when using a prebuilt Sabine host; it does not require rebuilding CEF or downloading an already complete runtime.
-
-## Publishing Sabine
-
-Run `scripts/publish.sh --dry-run` to preview the next build, or supply a version such as
-`scripts/publish.sh 0.29 --dry-run`. The preview changes neither files nor GitHub state.
-
-`scripts/publish.sh 0.29 --prepare` updates versions and runs local checks without committing,
-tagging or pushing. Review and commit those changes before a subsequent publish invocation.
-
-`scripts/publish.sh` publishes the next build automatically, or resumes the current prepared
-version if it has no tag yet; `scripts/publish.sh 0.29` selects
-an explicit version. Starting from clean, synchronized `main`, it updates workspace dependencies,
-the lockfile, Rust version constants, JavaScript packages, current documentation references and
-the Windows runtime-check default. It turns `# Unreleased` notes into the versioned changelog,
-or derives notes from commits since the current release when no unreleased section exists.
-Historical release notes and the minimum compatible app build are preserved.
-
-After local checks, it signs and pushes the release commit, waits for CI, signs and pushes the
-tag, and monitors the release workflow through artifact publication. Signing and CI failures
-stop publication. Failed preparation leaves changes available for inspection; it never discards
-work. Existing tags are never replaced. GitHub's usual soak and promotion policy still applies.
+MIT or Apache-2.0. Chromium and CEF have their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
