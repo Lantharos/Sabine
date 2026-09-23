@@ -63,7 +63,7 @@ pub(crate) enum OsrMessage {
     Frame(OsrFrame),
     PaintBatch(OsrPaintBatch),
     AccelFrame(OsrAccelFrame),
-    /// Hide the legacy single popup overlay (`__sabine_popup`).
+    /// Hide the built-in popup overlay (`__sabine_popup`).
     PopupHidden,
     /// Hide a guest overlay by id.
     GuestHidden(String),
@@ -169,7 +169,7 @@ impl OsrFrame {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum OsrSurface {
     Main,
-    /// Legacy popup overlay (also addressable as guest id `__sabine_popup`).
+    /// Built-in popup overlay (also addressable as guest id `__sabine_popup`).
     Popup,
     /// Named guest overlay composited above the main surface.
     Guest(String),

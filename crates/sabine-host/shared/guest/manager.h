@@ -9,24 +9,8 @@
 #include "include/cef_browser.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_download_item.h"
-#include "include/cef_version.h"
 
-#if defined(CEF_VERSION_MAJOR)
-#define SABINE_CEF_MAJOR CEF_VERSION_MAJOR
-#elif defined(CHROME_VERSION_MAJOR)
-#define SABINE_CEF_MAJOR CHROME_VERSION_MAJOR
-#else
-#define SABINE_CEF_MAJOR 0
-#endif
-
-// CEF 133 added the |popup_id| parameter to CefLifeSpanHandler::OnBeforePopup.
-#if SABINE_CEF_MAJOR >= 133
-#define SABINE_CEF_POPUP_ID int popup_id,
-#else
-#define SABINE_CEF_POPUP_ID
-#endif
-
-// Guest id reserved for the legacy `sabine.popup` surface.
+// Guest id reserved for the `sabine.popup` surface.
 extern const char kSabinePopupGuestId[];
 
 extern const char kGuestBridgePrefix[];

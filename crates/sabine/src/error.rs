@@ -26,8 +26,6 @@ pub enum SabineError {
     SetupFailed,
     #[error("another instance is already running")]
     InstanceAlreadyRunning,
-    #[error("Sabine currently supports Linux, macOS, and Windows")]
-    MobileUnsupported,
 }
 
 pub type SabineResult<T> = std::result::Result<T, SabineError>;

@@ -8,8 +8,7 @@ mod platform;
 #[path = "windows/mod.rs"]
 mod platform;
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-#[path = "stub.rs"]
-mod platform;
+compile_error!("Sabine supports Linux, macOS, and Windows desktop targets");
 
 pub use platform::{DesktopServiceState, apply_desktop_services, start_desktop_event_forwarder};
 

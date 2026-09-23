@@ -401,7 +401,6 @@ mod tests {
             sabine_platform::PlatformOs::Windows => WindowBackgroundEffect::Acrylic,
             sabine_platform::PlatformOs::Macos => WindowBackgroundEffect::Vibrancy,
             sabine_platform::PlatformOs::Linux => WindowBackgroundEffect::Blur,
-            _ => WindowBackgroundEffect::None,
         };
         assert_eq!(window.config.background_effect, expected);
     }
