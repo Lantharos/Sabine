@@ -16,6 +16,7 @@ mod resize;
 mod socket;
 mod tooltip;
 pub(in crate::osr) mod types;
+mod visibility;
 
 use std::path::PathBuf;
 use std::sync::mpsc;
