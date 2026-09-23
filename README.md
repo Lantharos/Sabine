@@ -2,9 +2,17 @@
 
 # Sabine
 
-Sabine builds desktop apps with web UIs and native windows. Apps on the same machine share one managed Chromium runtime instead of bundling a browser each. It supports Linux, Windows, and Apple Silicon macOS.
+Sabine is a framework for desktop apps with web UIs and native windows. Write the interface with your web stack and the native side in Rust. Apps on the same machine use a managed Chromium runtime instead of each shipping a browser. Sabine supports Linux, Windows, and Apple Silicon macOS.
 
-Windows, palettes, trays, guest views, and a typed Rust–web bridge are available from one framework. Sabine prepares the shared runtime on first launch and keeps it updated for installed apps.
+It provides windows, palettes, trays, guest views, and a typed Rust–web bridge.
+
+## How it works
+
+An app combines a Rust executable, a web UI, and a `Sabine.toml` manifest. The UI can be packaged assets or a production URL. The manifest identifies the app and its web entry; Rust configures the window and registers native commands for the page to call.
+
+When the app starts, Sabine checks the shared service and Chromium runtime. If they are missing, a native setup window prepares them before the app opens. The app then starts a native host process: Chromium renders the page offscreen, while Sabine handles the window, input, and GPU composition. The page calls registered Rust handlers through Sabine's bridge, which restricts commands to allowed origins. Embedded guest pages have no bridge access by default.
+
+The shared service registers installed apps and manages runtime and app updates. It validates new runtimes before using them and keeps a previous working version for recovery. App releases and Sabine releases are separate, so an app can update without bundling Chromium again. See the [implementation guide](docs/implementation-guide.md) for the process model, security boundaries, and platform details.
 
 ## Get started
 
