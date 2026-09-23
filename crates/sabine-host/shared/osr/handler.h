@@ -120,7 +120,7 @@ class SabineOsrHandler : public CefClient,
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
                      CefRefPtr<CefFrame> frame,
-                     SABINE_CEF_POPUP_ID
+                     int popup_id,
                      const CefString& target_url,
                      const CefString& target_frame_name,
                      cef_window_open_disposition_t target_disposition,

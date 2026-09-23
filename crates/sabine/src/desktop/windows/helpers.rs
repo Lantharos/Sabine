@@ -1,8 +1,3 @@
-// Windows desktop integrations: tray, global shortcuts, autostart,
-// deep links, native-messaging manifests, and single-instance routing.
-// Events are queued as `PlatformEvent` values and drained by
-// `SabineProcess::take_desktop_events` / the bridge forwarder.
-
 #![cfg(target_os = "windows")]
 
 use std::{collections::HashMap, path::PathBuf};

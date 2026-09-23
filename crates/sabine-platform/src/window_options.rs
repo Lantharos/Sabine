@@ -1,27 +1,27 @@
 use crate::regions::WindowRegions;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlatformOs {
     Linux,
     Windows,
     Macos,
-    Android,
-    Ios,
-    Web,
-    #[default]
-    Unknown,
 }
 
 pub fn current_desktop_os() -> PlatformOs {
-    if cfg!(target_os = "linux") {
+    #[cfg(target_os = "linux")]
+    {
         PlatformOs::Linux
-    } else if cfg!(target_os = "windows") {
-        PlatformOs::Windows
-    } else if cfg!(target_os = "macos") {
-        PlatformOs::Macos
-    } else {
-        PlatformOs::Unknown
     }
+    #[cfg(target_os = "windows")]
+    {
+        PlatformOs::Windows
+    }
+    #[cfg(target_os = "macos")]
+    {
+        PlatformOs::Macos
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    compile_error!("Sabine supports Linux, macOS, and Windows desktop targets");
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

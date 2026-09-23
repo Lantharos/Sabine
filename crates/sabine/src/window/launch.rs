@@ -47,71 +47,60 @@ impl SabineWindow {
         runtime: RuntimeInfo,
         metrics: LaunchMetrics,
     ) -> SabineResult<SabineProcess> {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            let _ = runtime;
-            return Err(SabineError::MobileUnsupported);
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-            let desktop_services = Some(
-                apply_desktop_services(
-                    self.config.desktop_services.tray_icon.as_ref(),
-                    &self.config.desktop_services.autostart,
-                    &self.config.desktop_services.global_shortcuts,
-                    &self.config.desktop_services.deep_links,
-                    &self.config.desktop_services.native_messaging_hosts,
-                    self.config.desktop_services.single_instance_id.as_deref(),
-                    self.config.desktop_services.single_instance_policy,
-                )
-                .map_err(|message| {
-                    if message == crate::desktop::INSTANCE_ALREADY_RUNNING {
-                        SabineError::InstanceAlreadyRunning
-                    } else {
-                        SabineError::CreationFailed { message }
-                    }
-                })?,
-            );
-            #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-            let desktop_services = None;
-            metrics.mark("desktop_services.ready");
-            self.ensure_default_bridge_handlers();
-            let open_urls = self.config.open_urls.clone();
-            open_urls.receive_arguments(
-                &std::env::args().skip(1).collect::<Vec<_>>(),
-                std::env::current_dir().ok().as_deref(),
+        let desktop_services = Some(
+            apply_desktop_services(
+                self.config.desktop_services.tray_icon.as_ref(),
+                &self.config.desktop_services.autostart,
+                &self.config.desktop_services.global_shortcuts,
                 &self.config.desktop_services.deep_links,
-            );
-            self = self.bridge_handler("app.takeOpenUrls", move |_| {
-                Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(
-                    open_urls.take()
-                )))
-            });
-            self.allow_configured_url_origins();
-            let mut url = self.entry_url()?;
-            if self.config.dev_url.is_some() {
-                match self.wait_for_dev_server(&url) {
-                    Ok(ready_url) => {
-                        url = ready_url;
-                        allow_dev_origins(&mut self.config.security, &url);
-                        metrics.mark("dev_server.ready");
-                    }
-                    Err(error) => return Err(error),
+                &self.config.desktop_services.native_messaging_hosts,
+                self.config.desktop_services.single_instance_id.as_deref(),
+                self.config.desktop_services.single_instance_policy,
+            )
+            .map_err(|message| {
+                if message == crate::desktop::INSTANCE_ALREADY_RUNNING {
+                    SabineError::InstanceAlreadyRunning
+                } else {
+                    SabineError::CreationFailed { message }
                 }
+            })?,
+        );
+        metrics.mark("desktop_services.ready");
+        self.ensure_default_bridge_handlers();
+        let open_urls = self.config.open_urls.clone();
+        open_urls.receive_arguments(
+            &std::env::args().skip(1).collect::<Vec<_>>(),
+            std::env::current_dir().ok().as_deref(),
+            &self.config.desktop_services.deep_links,
+        );
+        self = self.bridge_handler("app.takeOpenUrls", move |_| {
+            Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(
+                open_urls.take()
+            )))
+        });
+        self.allow_configured_url_origins();
+        let mut url = self.entry_url()?;
+        if self.config.dev_url.is_some() {
+            match self.wait_for_dev_server(&url) {
+                Ok(ready_url) => {
+                    url = ready_url;
+                    allow_dev_origins(&mut self.config.security, &url);
+                    metrics.mark("dev_server.ready");
+                }
+                Err(error) => return Err(error),
             }
-            let mut process = osr::launch_process(
-                runtime.location.path(),
-                &self.config,
-                &self.bridge_handlers,
-                &url,
-                metrics.clone(),
-            )?;
-            process.desktop_services = desktop_services;
-            process.start_desktop_event_forwarder(self.config.desktop_services.deep_links.clone());
-            metrics.mark("launch.ready");
-            Ok(process)
         }
+        let mut process = osr::launch_process(
+            runtime.location.path(),
+            &self.config,
+            &self.bridge_handlers,
+            &url,
+            metrics.clone(),
+        )?;
+        process.desktop_services = desktop_services;
+        process.start_desktop_event_forwarder(self.config.desktop_services.deep_links.clone());
+        metrics.mark("launch.ready");
+        Ok(process)
     }
 
     fn apply_launch_environment(&mut self) {

@@ -32,7 +32,7 @@ pub const SET_ZOOM_COMMAND: &str = "sabine.guest.setZoom";
 pub const EXECUTE_JS_COMMAND: &str = "sabine.guest.executeJavaScript";
 pub const DOWNLOAD_ACTION_COMMAND: &str = "sabine.guest.downloadAction";
 
-/// Reserved guest id used by the legacy `sabine.popup` surface.
+/// Reserved guest id used by the `sabine.popup` surface.
 pub const POPUP_GUEST_ID: &str = "__sabine_popup";
 
 const INTERNAL_COMMANDS: [&str; 16] = [

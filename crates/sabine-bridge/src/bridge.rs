@@ -327,7 +327,7 @@ pub fn current_bridge_targets() -> &'static [&'static str] {
     #[cfg(target_os = "macos")]
     return &["desktop", "macos"];
     #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    return &["mobile"];
+    return &[];
 }
 
 #[cfg(test)]
@@ -442,18 +442,18 @@ mod tests {
     #[test]
     fn rejects_wrong_target() {
         let mut handlers = BridgeHandlers::default();
-        handlers.register("mobile.only", |_| {
+        handlers.register("server.only", |_| {
             Ok(BridgeResponse::json(serde_json::json!(true)))
         });
         let mut registry = BridgeRegistry::default();
-        registry.register_descriptor(BridgeCommandDescriptor::new("mobile.only").target("mobile"));
+        registry.register_descriptor(BridgeCommandDescriptor::new("server.only").target("server"));
         let runtime = BridgeRuntime::new(
             handlers,
             registry,
             ContentSecurity::default().allow_origin("file:///tmp/index.html"),
         );
 
-        let error = runtime.dispatch(command("mobile.only")).unwrap_err();
+        let error = runtime.dispatch(command("server.only")).unwrap_err();
         assert!(error.message.contains("unavailable"));
     }
 }

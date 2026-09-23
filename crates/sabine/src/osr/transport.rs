@@ -63,7 +63,7 @@ fn peer_uid(fd: std::os::fd::RawFd) -> io::Result<u32> {
     Ok(unsafe { cred.assume_init() }.uid)
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(target_os = "macos")]
 fn peer_uid(fd: std::os::fd::RawFd) -> io::Result<u32> {
     let mut uid = 0_u32;
     let mut gid = 0_u32;
@@ -72,14 +72,6 @@ fn peer_uid(fd: std::os::fd::RawFd) -> io::Result<u32> {
         return Err(io::Error::last_os_error());
     }
     Ok(uid)
-}
-
-#[cfg(all(
-    unix,
-    not(any(target_os = "linux", target_os = "macos", target_os = "ios"))
-))]
-fn peer_uid(_fd: std::os::fd::RawFd) -> io::Result<u32> {
-    Ok(unsafe { libc::getuid() })
 }
 
 #[cfg(not(unix))]
