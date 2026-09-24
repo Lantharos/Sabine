@@ -171,5 +171,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --notes-file CHANGELOG.md --generate-notes release/*
+          python3 scripts/release_notes.py "$GITHUB_REF_NAME" > "$RUNNER_TEMP/sabine-release-notes.md"
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --notes-file "$RUNNER_TEMP/sabine-release-notes.md" release/*
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false

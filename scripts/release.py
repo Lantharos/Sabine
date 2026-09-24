@@ -83,6 +83,7 @@ def main():
     for name, content in changes.items():
         (ROOT / name).write_text(content)
     check_sources()
+    run("python3", "-B", "scripts/release_notes.py", tag, capture=True)
     run("git", "diff", "--check")
     if args.prepare:
         print(f"Prepared {tag}. Review and commit the changes; no tag or release was created.")
