@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.29
 
 - Remove the Wayland layer-shell backend, broker, and public shell-surface API to focus Sabine on
   desktop windows.
