@@ -6,7 +6,7 @@ on:
       tag:
         description: Published Sabine release tag
         required: true
-        default: v0.28
+        default: v0.29
       cef_versions:
         description: Comma-separated full CEF versions to compare
         required: true
