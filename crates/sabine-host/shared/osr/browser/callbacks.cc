@@ -46,11 +46,12 @@
 using namespace sabine_osr;
 
 bool SabineOsrHandler::OnCursorChange(CefRefPtr<CefBrowser> browser,
-                                    CefCursorHandle cursor,
-                                    cef_cursor_type_t type,
-                                    const CefCursorInfo& custom_cursor_info) {
+                                      CefCursorHandle cursor,
+                                      cef_cursor_type_t type,
+                                      const CefCursorInfo& custom_cursor_info) {
   const std::string name = CursorName(type);
-  SendMessage(kCursor, 0, 0, 0, 0, name.data(), static_cast<uint32_t>(name.size()));
+  SendMessage(kCursor, 0, 0, 0, 0, name.data(),
+              static_cast<uint32_t>(name.size()));
   return true;
 }
 
@@ -159,7 +160,8 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
 bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  if (browser_ && browser_->IsSame(browser)) closing_ = true;
+  if (browser_ && browser_->IsSame(browser))
+    closing_ = true;
   return false;
 }
 
@@ -212,16 +214,17 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
 }
 
 void SabineOsrHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
-                                 CefRefPtr<CefFrame> frame,
-                                 ErrorCode errorCode,
-                                 const CefString& errorText,
-                                 const CefString& failedUrl) {
+                                   CefRefPtr<CefFrame> frame,
+                                   ErrorCode errorCode,
+                                   const CefString& errorText,
+                                   const CefString& failedUrl) {
   CEF_REQUIRE_UI_THREAD();
   if (errorCode == ERR_ABORTED) {
     return;
   }
   if (GuestView* guest = GuestForBrowser(browser)) {
-    std::cerr << "guest " << guest->id << " load failed: " << errorText.ToString()
+    std::cerr << "guest " << guest->id
+              << " load failed: " << errorText.ToString()
               << " url=" << failedUrl.ToString() << std::endl;
     if (guest->id == kSabinePopupGuestId) {
       DestroyGuest(guest->id);
@@ -237,8 +240,8 @@ void SabineOsrHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::OnLoadStart(CefRefPtr<CefBrowser> browser,
-                                 CefRefPtr<CefFrame> frame,
-                                 TransitionType transition_type) {
+                                   CefRefPtr<CefFrame> frame,
+                                   TransitionType transition_type) {
   CEF_REQUIRE_UI_THREAD();
   if (!frame->IsMain()) {
     return;
@@ -251,8 +254,8 @@ void SabineOsrHandler::OnLoadStart(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
-                               CefRefPtr<CefFrame> frame,
-                               int httpStatusCode) {
+                                 CefRefPtr<CefFrame> frame,
+                                 int httpStatusCode) {
   CEF_REQUIRE_UI_THREAD();
   if (!frame->IsMain()) {
     return;
@@ -268,22 +271,22 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
-                                              bool isLoading,
-                                              bool canGoBack,
-                                              bool canGoForward) {
+                                            bool isLoading,
+                                            bool canGoBack,
+                                            bool canGoForward) {
   CEF_REQUIRE_UI_THREAD();
   GuestView* guest = GuestForBrowser(browser);
   if (!guest || guest->loading == isLoading) {
     return;
   }
   guest->loading = isLoading;
-  EmitPrimaryEvent("guest.loading",
-                   "{\"id\":\"" + JsonEscape(guest->id) + "\",\"loading\":" +
-                       (isLoading ? "true" : "false") + "}");
+  EmitPrimaryEvent("guest.loading", "{\"id\":\"" + JsonEscape(guest->id) +
+                                        "\",\"loading\":" +
+                                        (isLoading ? "true" : "false") + "}");
 }
 
 void SabineOsrHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
-                                       const CefString& title) {
+                                     const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
   GuestView* guest = GuestForBrowser(browser);
   if (!guest) {
@@ -296,8 +299,8 @@ void SabineOsrHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::OnAddressChange(CefRefPtr<CefBrowser> browser,
-                                         CefRefPtr<CefFrame> frame,
-                                         const CefString& url) {
+                                       CefRefPtr<CefFrame> frame,
+                                       const CefString& url) {
   CEF_REQUIRE_UI_THREAD();
   if (!frame || !frame->IsMain()) {
     return;
@@ -327,7 +330,7 @@ void SabineOsrHandler::OnFaviconURLChange(
 }
 
 bool SabineOsrHandler::GetScreenInfo(CefRefPtr<CefBrowser> browser,
-                                   CefScreenInfo& screen_info) {
+                                     CefScreenInfo& screen_info) {
   screen_info.device_scale_factor = scale_;
   screen_info.depth = 32;
   screen_info.depth_per_component = 8;
@@ -341,7 +344,8 @@ bool SabineOsrHandler::GetScreenInfo(CefRefPtr<CefBrowser> browser,
   return true;
 }
 
-void SabineOsrHandler::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) {
+void SabineOsrHandler::GetViewRect(CefRefPtr<CefBrowser> browser,
+                                   CefRect& rect) {
   if (const GuestView* guest = GuestForBrowser(browser)) {
     rect = CefRect(0, 0, guest->bounds.width, guest->bounds.height);
     return;
@@ -366,7 +370,7 @@ void SabineOsrHandler::OnPopupShow(CefRefPtr<CefBrowser> browser, bool show) {
 }
 
 void SabineOsrHandler::OnPopupSize(CefRefPtr<CefBrowser> browser,
-                                 const CefRect& rect) {
+                                   const CefRect& rect) {
   if (GuestForBrowser(browser)) {
     if (guest_popup_rect_.x != rect.x || guest_popup_rect_.y != rect.y ||
         guest_popup_rect_.width != rect.width ||

@@ -51,7 +51,7 @@ using namespace sabine_osr;
 class SabineGuestRequestContextHandler : public CefRequestContextHandler {
  public:
   SabineGuestRequestContextHandler(CefRefPtr<SabineOsrHandler> owner,
-                                     std::string partition)
+                                   std::string partition)
       : owner_(std::move(owner)), partition_(std::move(partition)) {}
 
   void OnRequestContextInitialized(
@@ -124,7 +124,7 @@ CefRefPtr<CefRequestContext> SabineOsrHandler::CreateGuestRequestContext(
 }
 
 void SabineOsrHandler::CreateGuest(GuestCreateRequest request,
-                                     GuestCreateCallback callback) {
+                                   GuestCreateCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   if (!IsValidGuestId(request.id)) {
     callback(false, "guest id is not valid");
@@ -193,10 +193,9 @@ void SabineOsrHandler::GuestRequestContextInitialized(
   }
 }
 
-void SabineOsrHandler::ContinueCreateGuest(
-    const GuestCreateRequest& request,
-    CefRefPtr<CefRequestContext> context,
-    GuestCreateCallback callback) {
+void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
+                                           CefRefPtr<CefRequestContext> context,
+                                           GuestCreateCallback callback) {
   CEF_REQUIRE_UI_THREAD();
 
   GuestView guest;
@@ -222,23 +221,26 @@ void SabineOsrHandler::ContinueCreateGuest(
       request.background_color, CefColorSetARGB(0, 0, 0, 0));
 
   CefWindowInfo window_info;
-  window_info.SetAsWindowless(browser_ ? browser_->GetHost()->GetWindowHandle() : kNullWindowHandle);
+  window_info.SetAsWindowless(browser_ ? browser_->GetHost()->GetWindowHandle()
+                                       : kNullWindowHandle);
   sabine_osr::ApplySharedTexture(
       &window_info,
       sabine_osr::PreferSharedTexture(CefCommandLine::GetGlobalCommandLine()));
 
   CefRefPtr<CefDictionaryValue> extra_info = bridge_policy_->Copy(false);
   extra_info->SetBool("enabled", request.allow_bridge);
-  extra_info->SetString("htmlPrefix", HtmlDataUri("<!--" + sabine_bridge::UniqueToken() + "-->"));
-  const std::string initial_url = request.html.empty() ? request.url :
-      sabine_bridge::TrustedHtmlUrl(extra_info, request.html);
+  extra_info->SetString(
+      "htmlPrefix", HtmlDataUri("<!--" + sabine_bridge::UniqueToken() + "-->"));
+  const std::string initial_url =
+      request.html.empty()
+          ? request.url
+          : sabine_bridge::TrustedHtmlUrl(extra_info, request.html);
   guests_.Find(request.id)->url = initial_url;
   guests_.Find(request.id)->bridge_policy = extra_info;
   extra_info->SetString("sabineGuestId", request.id);
 
-  CefRefPtr<CefBrowser> browser =
-      CefBrowserHost::CreateBrowserSync(window_info, this, initial_url, settings,
-                                       extra_info, context);
+  CefRefPtr<CefBrowser> browser = CefBrowserHost::CreateBrowserSync(
+      window_info, this, initial_url, settings, extra_info, context);
   pending_guest_id_.clear();
 
   GuestView* created = guests_.Find(request.id);
@@ -431,12 +433,12 @@ void SabineOsrHandler::NotifyGuestScreenInfo() {
 }
 
 bool SabineOsrHandler::SendGuestPaint(const GuestView& guest,
-                                        const void* buffer,
-                                        int width,
-                                        int height,
-                                        const RectList& dirty_rects) {
-  return SendPaintBatch(PaintSurface::kGuest, guest.id, guest.bounds.x, guest.bounds.y,
-                        buffer, width, height, dirty_rects);
+                                      const void* buffer,
+                                      int width,
+                                      int height,
+                                      const RectList& dirty_rects) {
+  return SendPaintBatch(PaintSurface::kGuest, guest.id, guest.bounds.x,
+                        guest.bounds.y, buffer, width, height, dirty_rects);
 }
 
 void SabineOsrHandler::SendGuestHidden(const GuestView& guest) {
@@ -447,19 +449,20 @@ void SabineOsrHandler::SendGuestHidden(const GuestView& guest) {
   }
 }
 
-bool SabineOsrHandler::OnBeforePopup(CefRefPtr<CefBrowser> browser,
-                                       CefRefPtr<CefFrame> frame,
-                                       int popup_id,
-                                       const CefString& target_url,
-                                       const CefString& target_frame_name,
-                                       cef_window_open_disposition_t target_disposition,
-                                       bool user_gesture,
-                                       const CefPopupFeatures& popup_features,
-                                       CefWindowInfo& window_info,
-                                       CefRefPtr<CefClient>& client,
-                                       CefBrowserSettings& settings,
-                                       CefRefPtr<CefDictionaryValue>& extra_info,
-                                       bool* no_javascript_access) {
+bool SabineOsrHandler::OnBeforePopup(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame,
+    int popup_id,
+    const CefString& target_url,
+    const CefString& target_frame_name,
+    cef_window_open_disposition_t target_disposition,
+    bool user_gesture,
+    const CefPopupFeatures& popup_features,
+    CefWindowInfo& window_info,
+    CefRefPtr<CefClient>& client,
+    CefBrowserSettings& settings,
+    CefRefPtr<CefDictionaryValue>& extra_info,
+    bool* no_javascript_access) {
   CEF_REQUIRE_UI_THREAD();
   GuestView* guest = GuestForBrowser(browser);
   if (!guest) {
@@ -488,12 +491,12 @@ bool SabineOsrHandler::OnBeforePopup(CefRefPtr<CefBrowser> browser,
       request.partition = guest->partition;
       request.allow_downloads = guest->allow_downloads;
       request.popup_policy = guest->popup_policy;
-      CreateGuest(std::move(request),
-                  [](bool success, const std::string& result) {
-                    if (!success) {
-                      std::cerr << "guest popup failed: " << result << std::endl;
-                    }
-                  });
+      CreateGuest(
+          std::move(request), [](bool success, const std::string& result) {
+            if (!success) {
+              std::cerr << "guest popup failed: " << result << std::endl;
+            }
+          });
       return true;
     }
     case GuestPopupPolicy::kDeny:

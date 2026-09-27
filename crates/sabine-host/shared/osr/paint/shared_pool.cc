@@ -26,8 +26,8 @@ int CreateSharedMemory() {
   static uint32_t sequence = 0;
   char name[32];
   for (int attempt = 0; attempt < 16; ++attempt) {
-    std::snprintf(name, sizeof(name), "/sabine-%d-%u", static_cast<int>(getpid()),
-                  sequence++);
+    std::snprintf(name, sizeof(name), "/sabine-%d-%u",
+                  static_cast<int>(getpid()), sequence++);
     const int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
     if (fd >= 0) {
       shm_unlink(name);
@@ -108,7 +108,8 @@ bool SharedPaintPool::Allocate(SharedPaintSlot* slot, size_t bytes) {
     close(fd);
     return false;
   }
-  void* data = mmap(nullptr, capacity, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  void* data =
+      mmap(nullptr, capacity, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (data == MAP_FAILED) {
     close(fd);
     return false;

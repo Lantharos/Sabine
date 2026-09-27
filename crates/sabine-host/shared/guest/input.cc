@@ -96,11 +96,12 @@ std::string GuestShortcutJson(const std::string& id,
   std::ostringstream output;
   output << "{\"id\":\"" << JsonEscape(id) << "\",\"accelerator\":\""
          << JsonEscape(accelerator) << "\",\"key\":\"" << JsonEscape(key)
-         << "\",\"repeat\":" << BoolLiteral(repeat) << ",\"ctrlKey\":"
-         << BoolLiteral((modifiers & kGuestModControl) != 0) << ",\"metaKey\":"
-         << BoolLiteral((modifiers & kGuestModCommand) != 0) << ",\"altKey\":"
-         << BoolLiteral((modifiers & kGuestModAlt) != 0) << ",\"shiftKey\":"
-         << BoolLiteral((modifiers & kGuestModShift) != 0) << "}";
+         << "\",\"repeat\":" << BoolLiteral(repeat)
+         << ",\"ctrlKey\":" << BoolLiteral((modifiers & kGuestModControl) != 0)
+         << ",\"metaKey\":" << BoolLiteral((modifiers & kGuestModCommand) != 0)
+         << ",\"altKey\":" << BoolLiteral((modifiers & kGuestModAlt) != 0)
+         << ",\"shiftKey\":" << BoolLiteral((modifiers & kGuestModShift) != 0)
+         << "}";
   return output.str();
 }
 
@@ -110,11 +111,12 @@ std::string GuestWheelJson(const std::string& id,
                            uint32_t modifiers) {
   std::ostringstream output;
   output << "{\"id\":\"" << JsonEscape(id) << "\",\"deltaX\":" << delta_x
-         << ",\"deltaY\":" << delta_y << ",\"ctrlKey\":"
-         << BoolLiteral((modifiers & kGuestModControl) != 0) << ",\"metaKey\":"
-         << BoolLiteral((modifiers & kGuestModCommand) != 0) << ",\"altKey\":"
-         << BoolLiteral((modifiers & kGuestModAlt) != 0) << ",\"shiftKey\":"
-         << BoolLiteral((modifiers & kGuestModShift) != 0) << "}";
+         << ",\"deltaY\":" << delta_y
+         << ",\"ctrlKey\":" << BoolLiteral((modifiers & kGuestModControl) != 0)
+         << ",\"metaKey\":" << BoolLiteral((modifiers & kGuestModCommand) != 0)
+         << ",\"altKey\":" << BoolLiteral((modifiers & kGuestModAlt) != 0)
+         << ",\"shiftKey\":" << BoolLiteral((modifiers & kGuestModShift) != 0)
+         << "}";
   return output.str();
 }
 
@@ -156,4 +158,3 @@ bool IsPredominantlyHorizontalWheel(double delta_x, double delta_y) {
   const double abs_y = std::fabs(delta_y);
   return abs_x > 0.75 && abs_x >= abs_y * 0.9;
 }
-

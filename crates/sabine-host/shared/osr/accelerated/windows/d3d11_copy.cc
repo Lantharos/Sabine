@@ -85,9 +85,9 @@ uint64_t g_next_token = 1;
 constexpr uint32_t kSlotsPerSurface = 4;
 
 bool EnsureDevice(HANDLE shared_resource) {
-  if (g_d3d11.device && g_d3d11.device1 && g_d3d11.device5 &&
-      g_d3d11.context && g_d3d11.context4 && g_d3d11.fence &&
-      g_d3d11.fence_event && g_d3d11.device12) {
+  if (g_d3d11.device && g_d3d11.device1 && g_d3d11.device5 && g_d3d11.context &&
+      g_d3d11.context4 && g_d3d11.fence && g_d3d11.fence_event &&
+      g_d3d11.device12) {
     return true;
   }
   Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
@@ -101,9 +101,10 @@ bool EnsureDevice(HANDLE shared_resource) {
     hr = factory->EnumAdapterByLuid(luid, IID_PPV_ARGS(&source_adapter));
   }
   if (FAILED(hr)) {
-    std::fprintf(stderr,
-                 "Sabine CEF: could not identify shared texture adapter (hr=0x%08lx)\n",
-                 static_cast<unsigned long>(hr));
+    std::fprintf(
+        stderr,
+        "Sabine CEF: could not identify shared texture adapter (hr=0x%08lx)\n",
+        static_cast<unsigned long>(hr));
     return false;
   }
   D3D_FEATURE_LEVEL feature_levels[] = {
@@ -118,17 +119,21 @@ bool EnsureDevice(HANDLE shared_resource) {
       static_cast<UINT>(sizeof(feature_levels) / sizeof(feature_levels[0])),
       D3D11_SDK_VERSION, &device, &chosen, &context);
   if (hr == E_INVALIDARG) {
-    hr = D3D11CreateDevice(
-        source_adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, 0, &feature_levels[1], 1,
-        D3D11_SDK_VERSION, &device, &chosen, &context);
+    hr = D3D11CreateDevice(source_adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN,
+                           nullptr, 0, &feature_levels[1], 1, D3D11_SDK_VERSION,
+                           &device, &chosen, &context);
   }
   if (FAILED(hr) || !device || !context) {
     std::fprintf(stderr,
-                 "Sabine CEF: D3D11 device creation failed on adapter %ld,%lu (hr=0x%08lx)\n",
-                 static_cast<long>(luid.HighPart), static_cast<unsigned long>(luid.LowPart),
+                 "Sabine CEF: D3D11 device creation failed on adapter %ld,%lu "
+                 "(hr=0x%08lx)\n",
+                 static_cast<long>(luid.HighPart),
+                 static_cast<unsigned long>(luid.LowPart),
                  static_cast<unsigned long>(hr));
-    if (device) device->Release();
-    if (context) context->Release();
+    if (device)
+      device->Release();
+    if (context)
+      context->Release();
     return false;
   }
 
@@ -145,9 +150,9 @@ bool EnsureDevice(HANDLE shared_resource) {
   hr = device->QueryInterface(__uuidof(ID3D11Device5),
                               reinterpret_cast<void**>(&device5));
   if (FAILED(hr) || !device5) {
-    std::fprintf(stderr,
-                 "Sabine CEF: D3D11 fence support is unavailable (hr=0x%08lx)\n",
-                 static_cast<unsigned long>(hr));
+    std::fprintf(
+        stderr, "Sabine CEF: D3D11 fence support is unavailable (hr=0x%08lx)\n",
+        static_cast<unsigned long>(hr));
     device1->Release();
     device->Release();
     context->Release();
@@ -235,8 +240,7 @@ bool WaitForGpu() {
   if (FAILED(hr)) {
     return false;
   }
-  hr = g_d3d11.fence->SetEventOnCompletion(fence_value,
-                                           g_d3d11.fence_event);
+  hr = g_d3d11.fence->SetEventOnCompletion(fence_value, g_d3d11.fence_event);
   if (FAILED(hr)) {
     return false;
   }
@@ -279,22 +283,23 @@ bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
   ID3D12Resource* resource12 = nullptr;
   HRESULT hr = g_d3d11.device12->CreateCommittedResource(
       &heap, D3D12_HEAP_FLAG_SHARED, &desc, D3D12_RESOURCE_STATE_COMMON,
-      nullptr, __uuidof(ID3D12Resource),
-      reinterpret_cast<void**>(&resource12));
+      nullptr, __uuidof(ID3D12Resource), reinterpret_cast<void**>(&resource12));
   if (FAILED(hr) || !resource12) {
     std::fprintf(stderr,
-                 "Sabine CEF: failed to create owned D3D12 shared texture (hr=0x%08lx)\n",
+                 "Sabine CEF: failed to create owned D3D12 shared texture "
+                 "(hr=0x%08lx)\n",
                  static_cast<unsigned long>(hr));
     return false;
   }
 
   HANDLE shared_handle = nullptr;
-  hr = g_d3d11.device12->CreateSharedHandle(
-      resource12, nullptr, GENERIC_ALL, nullptr, &shared_handle);
+  hr = g_d3d11.device12->CreateSharedHandle(resource12, nullptr, GENERIC_ALL,
+                                            nullptr, &shared_handle);
   if (FAILED(hr) || !shared_handle) {
-    std::fprintf(stderr,
-                 "Sabine CEF: failed to export owned D3D11 shared handle (hr=0x%08lx)\n",
-                 static_cast<unsigned long>(hr));
+    std::fprintf(
+        stderr,
+        "Sabine CEF: failed to export owned D3D11 shared handle (hr=0x%08lx)\n",
+        static_cast<unsigned long>(hr));
     resource12->Release();
     return false;
   }
@@ -302,12 +307,13 @@ bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
   ID3D11Texture2D* texture = nullptr;
   // Windows quirk: the D3D12 resource is the exported owner, while this D3D11
   // view exists solely so CopyResource can consume CEF's D3D11 texture.
-  hr = g_d3d11.device1->OpenSharedResource1(
-      shared_handle, __uuidof(ID3D11Texture2D),
-      reinterpret_cast<void**>(&texture));
+  hr = g_d3d11.device1->OpenSharedResource1(shared_handle,
+                                            __uuidof(ID3D11Texture2D),
+                                            reinterpret_cast<void**>(&texture));
   if (FAILED(hr) || !texture) {
     std::fprintf(stderr,
-                 "Sabine CEF: failed to open owned D3D12 texture in D3D11 (hr=0x%08lx)\n",
+                 "Sabine CEF: failed to open owned D3D12 texture in D3D11 "
+                 "(hr=0x%08lx)\n",
                  static_cast<unsigned long>(hr));
     CloseHandle(shared_handle);
     resource12->Release();
@@ -406,8 +412,8 @@ bool CopyAcceleratedD3d11Frame(const std::string& slot_key,
   bool copied = false;
   for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
     const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
-    if (CopyOpenedTexture(source,
-                          slot_key + "#" + std::to_string(slot_index), out)) {
+    if (CopyOpenedTexture(source, slot_key + "#" + std::to_string(slot_index),
+                          out)) {
       copied = true;
       break;
     }
@@ -419,12 +425,16 @@ bool CopyAcceleratedD3d11Frame(const std::string& slot_key,
 void RetireAcceleratedD3d11Browser(int browser_id) {
   const std::string prefix = std::to_string(browser_id) + "/";
   for (auto it = g_slots.begin(); it != g_slots.end();) {
-    if (it->first.rfind(prefix, 0) == 0) it = g_slots.erase(it);
-    else ++it;
+    if (it->first.rfind(prefix, 0) == 0)
+      it = g_slots.erase(it);
+    else
+      ++it;
   }
   for (auto it = g_next_slot.begin(); it != g_next_slot.end();) {
-    if (it->first.rfind(prefix, 0) == 0) it = g_next_slot.erase(it);
-    else ++it;
+    if (it->first.rfind(prefix, 0) == 0)
+      it = g_next_slot.erase(it);
+    else
+      ++it;
   }
 }
 

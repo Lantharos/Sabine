@@ -104,9 +104,12 @@ std::vector<std::string> Split(const std::string& value, char separator) {
 
 std::string DecodeControlComponent(const std::string& value) {
   auto hex_digit = [](char digit) -> int {
-    if (digit >= '0' && digit <= '9') return digit - '0';
-    if (digit >= 'a' && digit <= 'f') return digit - 'a' + 10;
-    if (digit >= 'A' && digit <= 'F') return digit - 'A' + 10;
+    if (digit >= '0' && digit <= '9')
+      return digit - '0';
+    if (digit >= 'a' && digit <= 'f')
+      return digit - 'a' + 10;
+    if (digit >= 'A' && digit <= 'F')
+      return digit - 'A' + 10;
     return -1;
   };
   std::string decoded;
@@ -127,12 +130,11 @@ std::string DecodeControlComponent(const std::string& value) {
 }
 
 std::string DecodeUriComponent(const std::string& value) {
-  return CefURIDecode(
-             value, true,
-             static_cast<cef_uri_unescape_rule_t>(
-                 UU_SPACES | UU_PATH_SEPARATORS |
-                 UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
-                 UU_REPLACE_PLUS_WITH_SPACE))
+  return CefURIDecode(value, true,
+                      static_cast<cef_uri_unescape_rule_t>(
+                          UU_SPACES | UU_PATH_SEPARATORS |
+                          UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
+                          UU_REPLACE_PLUS_WITH_SPACE))
       .ToString();
 }
 
@@ -165,8 +167,8 @@ std::string BridgeRequestId(const std::string& url) {
   }
   const size_t start = prefix.size();
   const size_t end = url.find_first_of("?#", start);
-  return DecodeUriComponent(
-      url.substr(start, end == std::string::npos ? std::string::npos : end - start));
+  return DecodeUriComponent(url.substr(
+      start, end == std::string::npos ? std::string::npos : end - start));
 }
 
 std::string HtmlEscape(const std::string& value) {
@@ -174,12 +176,24 @@ std::string HtmlEscape(const std::string& value) {
   escaped.reserve(value.size());
   for (const char character : value) {
     switch (character) {
-      case '&': escaped += "&amp;"; break;
-      case '<': escaped += "&lt;"; break;
-      case '>': escaped += "&gt;"; break;
-      case '"': escaped += "&quot;"; break;
-      case '\'': escaped += "&#39;"; break;
-      default: escaped += character; break;
+      case '&':
+        escaped += "&amp;";
+        break;
+      case '<':
+        escaped += "&lt;";
+        break;
+      case '>':
+        escaped += "&gt;";
+        break;
+      case '"':
+        escaped += "&quot;";
+        break;
+      case '\'':
+        escaped += "&#39;";
+        break;
+      default:
+        escaped += character;
+        break;
     }
   }
   return escaped;
@@ -267,16 +281,15 @@ bool SendAll(intptr_t fd, const char* bytes, size_t len) {
   while (sent < len) {
     const int result = send(
 #ifdef _WIN32
-                            static_cast<SOCKET>(fd),
+        static_cast<SOCKET>(fd),
 #else
-                            static_cast<int>(fd),
+        static_cast<int>(fd),
 #endif
-                            bytes + sent,
-                            static_cast<int>(len - sent),
+        bytes + sent, static_cast<int>(len - sent),
 #ifdef _WIN32
-                            0
+        0
 #else
-                            MSG_NOSIGNAL
+        MSG_NOSIGNAL
 #endif
     );
     if (result <= 0) {
@@ -306,7 +319,8 @@ std::vector<char> BuildPaintMetadata(const std::string& prefix,
   const size_t entries_start = prefix.size() + slot_len + 4;
   std::vector<char> metadata(entries_start + rects.size() * kBatchEntryLen, 0);
   std::memcpy(metadata.data(), prefix.data(), prefix.size());
-  PutU32(&metadata, prefix.size() + slot_len, static_cast<uint32_t>(rects.size()));
+  PutU32(&metadata, prefix.size() + slot_len,
+         static_cast<uint32_t>(rects.size()));
   for (size_t i = 0; i < rects.size(); ++i) {
     PutPaintEntry(&metadata, entries_start + i * kBatchEntryLen, rects[i]);
   }
@@ -338,12 +352,11 @@ void CopyPaintRect(char* destination,
   const int source_stride = buffer_width * 4;
   const int row_bytes = rect.width * 4;
   for (int row = 0; row < rect.height; ++row) {
-    std::memcpy(destination + rect.offset + static_cast<size_t>(row * row_bytes),
-                source + (rect.y + row) * source_stride + rect.x * 4,
-                row_bytes);
+    std::memcpy(
+        destination + rect.offset + static_cast<size_t>(row * row_bytes),
+        source + (rect.y + row) * source_stride + rect.x * 4, row_bytes);
   }
 }
-
 
 int KeyCodeForName(const std::string& key) {
   if (key.size() == 1) {
@@ -356,24 +369,39 @@ int KeyCodeForName(const std::string& key) {
   if (key.rfind("Key", 0) == 0 && key.size() == 4) {
     return key[3];
   }
-  if (key == "Enter") return 13;
-  if (key == "Backspace") return 8;
-  if (key == "Tab") return 9;
-  if (key == "Escape") return 27;
-  if (key == " " || key == "Space") return 32;
-  if (key == "ArrowLeft") return 37;
-  if (key == "ArrowUp") return 38;
-  if (key == "ArrowRight") return 39;
-  if (key == "ArrowDown") return 40;
-  if (key == "Delete") return 46;
-  if (key == "Home") return 36;
-  if (key == "End") return 35;
-  if (key == "PageUp") return 33;
-  if (key == "PageDown") return 34;
+  if (key == "Enter")
+    return 13;
+  if (key == "Backspace")
+    return 8;
+  if (key == "Tab")
+    return 9;
+  if (key == "Escape")
+    return 27;
+  if (key == " " || key == "Space")
+    return 32;
+  if (key == "ArrowLeft")
+    return 37;
+  if (key == "ArrowUp")
+    return 38;
+  if (key == "ArrowRight")
+    return 39;
+  if (key == "ArrowDown")
+    return 40;
+  if (key == "Delete")
+    return 46;
+  if (key == "Home")
+    return 36;
+  if (key == "End")
+    return 35;
+  if (key == "PageUp")
+    return 33;
+  if (key == "PageDown")
+    return 34;
   if (key.size() >= 2 && key[0] == 'F') {
     const std::string number = key.substr(1);
     if (!number.empty() &&
-        std::all_of(number.begin(), number.end(), [](unsigned char c) { return std::isdigit(c); })) {
+        std::all_of(number.begin(), number.end(),
+                    [](unsigned char c) { return std::isdigit(c); })) {
       const int function_key = std::atoi(number.c_str());
       if (function_key >= 1 && function_key <= 24) {
         return 111 + function_key;
@@ -399,8 +427,8 @@ std::u16string Utf8ToUtf16(const std::string& value) {
       const uint32_t b1 = static_cast<unsigned char>(value[i++]);
       const uint32_t b2 = static_cast<unsigned char>(value[i++]);
       const uint32_t b3 = static_cast<unsigned char>(value[i++]);
-      cp = ((cp & 0x07) << 18) | ((b1 & 0x3f) << 12) |
-           ((b2 & 0x3f) << 6) | (b3 & 0x3f);
+      cp = ((cp & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) |
+           (b3 & 0x3f);
     } else {
       continue;
     }
@@ -416,8 +444,10 @@ std::u16string Utf8ToUtf16(const std::string& value) {
 }
 
 cef_mouse_button_type_t MouseButtonFromString(const std::string& value) {
-  if (value == "right") return MBT_RIGHT;
-  if (value == "middle") return MBT_MIDDLE;
+  if (value == "right")
+    return MBT_RIGHT;
+  if (value == "middle")
+    return MBT_MIDDLE;
   return MBT_LEFT;
 }
 

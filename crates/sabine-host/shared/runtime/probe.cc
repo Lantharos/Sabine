@@ -27,14 +27,23 @@ class RuntimeProbe : public CefClient,
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     browser_ = browser;
     CefRefPtr<RuntimeProbe> self(this);
-    CefPostDelayedTask(TID_UI, CefCreateClosureTask(base::BindOnce(&RuntimeProbe::Timeout, self)), 25000);
+    CefPostDelayedTask(
+        TID_UI,
+        CefCreateClosureTask(base::BindOnce(&RuntimeProbe::Timeout, self)),
+        25000);
   }
 
-  void OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type,
-               const RectList&, const void* buffer, int width, int height) override {
-    if (type != PET_VIEW || width != 64 || height != 64 || closing_) return;
+  void OnPaint(CefRefPtr<CefBrowser> browser,
+               PaintElementType type,
+               const RectList&,
+               const void* buffer,
+               int width,
+               int height) override {
+    if (type != PET_VIEW || width != 64 || height != 64 || closing_)
+      return;
     const auto* pixels = static_cast<const uint32_t*>(buffer);
-    if (pixels[0] != 0xff336699 || pixels[32 * width + 32] != 0xff336699) return;
+    if (pixels[0] != 0xff336699 || pixels[32 * width + 32] != 0xff336699)
+      return;
     result = 0;
     closing_ = true;
     browser->GetHost()->CloseBrowser(true);
@@ -47,8 +56,11 @@ class RuntimeProbe : public CefClient,
 
  private:
   void Timeout() {
-    if (!browser_ || closing_) return;
-    std::cerr << "Chromium did not render its runtime probe page within 25 seconds" << std::endl;
+    if (!browser_ || closing_)
+      return;
+    std::cerr
+        << "Chromium did not render its runtime probe page within 25 seconds"
+        << std::endl;
     closing_ = true;
     browser_->GetHost()->CloseBrowser(true);
   }
@@ -57,19 +69,22 @@ class RuntimeProbe : public CefClient,
   bool closing_ = false;
   IMPLEMENT_REFCOUNTING(RuntimeProbe);
 };
-}
+}  // namespace
 
 void StartRuntimeProbe() {
   CefWindowInfo window;
   window.SetAsWindowless(0);
   CefBrowserSettings settings;
   settings.windowless_frame_rate = 60;
-  if (!CefBrowserHost::CreateBrowser(window, new RuntimeProbe(),
-      "data:text/html,<html style='background:%23336699'></html>", settings,
-      nullptr, nullptr)) {
+  if (!CefBrowserHost::CreateBrowser(
+          window, new RuntimeProbe(),
+          "data:text/html,<html style='background:%23336699'></html>", settings,
+          nullptr, nullptr)) {
     std::cerr << "Chromium could not create an off-screen browser" << std::endl;
     CefQuitMessageLoop();
   }
 }
 
-int RuntimeProbeResult() { return result; }
+int RuntimeProbeResult() {
+  return result;
+}

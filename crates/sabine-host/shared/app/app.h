@@ -8,8 +8,8 @@
 #include "include/cef_v8.h"
 
 class SabineApp : public CefApp,
-                public CefBrowserProcessHandler,
-                public CefRenderProcessHandler {
+                  public CefBrowserProcessHandler,
+                  public CefRenderProcessHandler {
  public:
   explicit SabineApp(bool runtime_smoke_test = false);
 
@@ -30,14 +30,15 @@ class SabineApp : public CefApp,
   void OnContextCreated(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefFrame> frame,
                         CefRefPtr<CefV8Context> context) override;
-  void OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+  void OnContextReleased(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefFrame> frame,
                          CefRefPtr<CefV8Context> context) override;
-  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override;
-  bool OnAlreadyRunningAppRelaunch(
-      CefRefPtr<CefCommandLine> command_line,
-      const CefString& current_directory) override;
+  bool OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine> command_line,
+                                   const CefString& current_directory) override;
   CefRefPtr<CefClient> GetDefaultClient() override;
 
  private:

@@ -47,9 +47,9 @@
 using namespace sabine_osr;
 
 bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
-                                           const std::string& payload,
-                                           std::string* response,
-                                           std::string* error) {
+                                         const std::string& payload,
+                                         std::string* response,
+                                         std::string* error) {
   CEF_REQUIRE_UI_THREAD();
   *response = "{}";
   if (operation == "list") {
@@ -134,7 +134,9 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
       *error = "guest.navigate requires a `url` or `html`";
       return false;
     }
-    guest->url = url.empty() ? sabine_bridge::TrustedHtmlUrl(guest->bridge_policy, html) : url;
+    guest->url = url.empty()
+                     ? sabine_bridge::TrustedHtmlUrl(guest->bridge_policy, html)
+                     : url;
     browser->GetMainFrame()->LoadURL(guest->url);
     return true;
   }
@@ -188,9 +190,9 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
 }
 
 bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
-                                                  const std::string& payload,
-                                                  const std::string& browser_id,
-                                                  const std::string& request_id) {
+                                                const std::string& payload,
+                                                const std::string& browser_id,
+                                                const std::string& request_id) {
   if (command == "sabine.popup.open") {
     GuestCreateRequest request;
     std::string parse_error;
@@ -204,13 +206,13 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
     request.allow_downloads = false;
     request.visible = true;
     CefRefPtr<SabineOsrHandler> self(this);
-    CreateGuest(
-        std::move(request),
-        [self, browser_id, request_id](bool success, const std::string& result) {
-          self->ResolveBridgeResponse(
-              browser_id, request_id, success,
-              success ? "{\"accepted\":true}" : JsonMessage(result));
-        });
+    CreateGuest(std::move(request),
+                [self, browser_id, request_id](bool success,
+                                               const std::string& result) {
+                  self->ResolveBridgeResponse(
+                      browser_id, request_id, success,
+                      success ? "{\"accepted\":true}" : JsonMessage(result));
+                });
     return true;
   }
   if (command == "sabine.popup.close") {
@@ -235,8 +237,8 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
     }
     CefRefPtr<SabineOsrHandler> self(this);
     CreateGuest(
-        std::move(request),
-        [self, browser_id, request_id](bool success, const std::string& result) {
+        std::move(request), [self, browser_id, request_id](
+                                bool success, const std::string& result) {
           self->ResolveBridgeResponse(browser_id, request_id, success,
                                       success ? result : JsonMessage(result));
         });
@@ -278,7 +280,7 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
 }
 
 void SabineOsrHandler::ApplyHostControl(const std::string& command,
-                                          const std::string& value) {
+                                        const std::string& value) {
   CEF_REQUIRE_UI_THREAD();
   const std::string operation =
       GuestOperationName(command, kGuestHostControlPrefix);
@@ -295,11 +297,12 @@ void SabineOsrHandler::ApplyHostControl(const std::string& command,
     if (request.id.empty()) {
       request.id = NextGuestId();
     }
-    CreateGuest(std::move(request), [](bool success, const std::string& result) {
-      if (!success) {
-        std::cerr << "guest.create failed: " << result << std::endl;
-      }
-    });
+    CreateGuest(std::move(request),
+                [](bool success, const std::string& result) {
+                  if (!success) {
+                    std::cerr << "guest.create failed: " << result << std::endl;
+                  }
+                });
     return;
   }
   std::string response;
@@ -308,4 +311,3 @@ void SabineOsrHandler::ApplyHostControl(const std::string& command,
     std::cerr << "guest." << operation << " failed: " << error << std::endl;
   }
 }
-

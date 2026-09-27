@@ -616,12 +616,13 @@ After code changes run:
 
 ```sh
 cargo fmt
+clang-format -i $(git ls-files '*.cc' '*.h' '*.mm')
 cargo build --workspace
 cargo test --workspace
 cargo check --target x86_64-pc-windows-gnu --workspace
 ```
 
-CI enforces formatting, warning-free Clippy, and workspace tests on Linux, then runs the workspace
+CI enforces Rust and C++ formatting, warning-free Clippy, and workspace tests on Linux, then runs the workspace
 tests natively on Windows MSVC and macOS as well.
 
 The Windows cross-check validates Rust cfg coverage. A release still needs a native Windows CEF-host

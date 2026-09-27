@@ -14,7 +14,8 @@ inline std::string UniqueToken() {
   std::random_device random;
   std::ostringstream token;
   for (int index = 0; index < 4; ++index) {
-    token << std::hex << std::setfill('0') << std::setw(8) << static_cast<uint32_t>(random());
+    token << std::hex << std::setfill('0') << std::setw(8)
+          << static_cast<uint32_t>(random());
   }
   return token.str();
 }
@@ -27,71 +28,89 @@ inline std::string TrustedHtmlUrl(CefRefPtr<CefDictionaryValue> policy,
 
 inline std::string DocumentUrl(const std::string& url) {
   CefURLParts parts;
-  if (!CefParseURL(url, parts)) return "";
+  if (!CefParseURL(url, parts))
+    return "";
   const std::string canonical = CefString(&parts.spec);
   return canonical.substr(0, canonical.find_first_of("?#"));
 }
 
 inline std::string Origin(const std::string& url) {
   CefURLParts parts;
-  if (!CefParseURL(url, parts)) return "";
+  if (!CefParseURL(url, parts))
+    return "";
   const std::string scheme = CefString(&parts.scheme);
-  if (scheme != "http" && scheme != "https") return "";
+  if (scheme != "http" && scheme != "https")
+    return "";
   return CefString(&parts.origin);
 }
 
 inline bool MatchesOrigin(const std::string& origin,
                           CefRefPtr<CefListValue> allowed) {
-  if (origin.empty() || !allowed) return false;
+  if (origin.empty() || !allowed)
+    return false;
   for (size_t index = 0; index < allowed->GetSize(); ++index) {
     const std::string candidate = allowed->GetString(index);
-    if (candidate == "*") return true;
+    if (candidate == "*")
+      return true;
     CefURLParts parts;
-    if (!CefParseURL(candidate, parts)) continue;
+    if (!CefParseURL(candidate, parts))
+      continue;
     const std::string path = CefString(&parts.path);
     if ((path.empty() || path == "/") && CefString(&parts.query).empty() &&
-        CefString(&parts.fragment).empty() && CefString(&parts.username).empty() &&
-        CefString(&parts.password).empty() && Origin(candidate) == origin) return true;
+        CefString(&parts.fragment).empty() &&
+        CefString(&parts.username).empty() &&
+        CefString(&parts.password).empty() && Origin(candidate) == origin)
+      return true;
   }
   return false;
 }
 
 inline bool AllowsDocument(CefRefPtr<CefDictionaryValue> policy,
                            const std::string& url) {
-  if (!policy || !policy->GetBool("enabled")) return false;
+  if (!policy || !policy->GetBool("enabled"))
+    return false;
   const std::string prefix = policy->GetString("htmlPrefix");
-  if (!prefix.empty() && url.rfind(prefix, 0) == 0) return true;
+  if (!prefix.empty() && url.rfind(prefix, 0) == 0)
+    return true;
   const std::string document = policy->GetString("document");
-  if (!document.empty() && DocumentUrl(url) == DocumentUrl(document)) return true;
+  if (!document.empty() && DocumentUrl(url) == DocumentUrl(document))
+    return true;
   return MatchesOrigin(Origin(url), policy->GetList("origins"));
 }
 
 inline bool MatchesSecurityOrigin(CefRefPtr<CefDictionaryValue> policy,
-                                   const std::string& url,
-                                   const std::string& security_origin) {
+                                  const std::string& url,
+                                  const std::string& security_origin) {
   const auto origin = Origin(url);
   return origin.empty() ? AllowsDocument(policy, url)
                         : origin == Origin(security_origin);
 }
 
 inline bool AllowsCommand(CefRefPtr<CefDictionaryValue> policy,
-                          const std::string& url, const std::string& command) {
-  if (!policy || !policy->GetBool("enabled")) return false;
-  if (AllowsDocument(policy, url)) return true;
+                          const std::string& url,
+                          const std::string& command) {
+  if (!policy || !policy->GetBool("enabled"))
+    return false;
+  if (AllowsDocument(policy, url))
+    return true;
   auto origins = policy->GetDictionary("commandOrigins");
   return origins && MatchesOrigin(Origin(url), origins->GetList(command));
 }
 
 inline bool ExposesBridge(CefRefPtr<CefDictionaryValue> policy,
                           const std::string& url) {
-  if (!policy || !policy->GetBool("enabled")) return false;
-  if (AllowsDocument(policy, url)) return true;
+  if (!policy || !policy->GetBool("enabled"))
+    return false;
+  if (AllowsDocument(policy, url))
+    return true;
   auto origins = policy->GetDictionary("commandOrigins");
-  if (!origins) return false;
+  if (!origins)
+    return false;
   CefDictionaryValue::KeyList commands;
   origins->GetKeys(commands);
   for (const auto& command : commands) {
-    if (MatchesOrigin(Origin(url), origins->GetList(command))) return true;
+    if (MatchesOrigin(Origin(url), origins->GetList(command)))
+      return true;
   }
   return false;
 }

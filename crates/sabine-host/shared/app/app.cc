@@ -118,12 +118,24 @@ std::string JsString(const std::string& value) {
   std::string output = "\"";
   for (char character : value) {
     switch (character) {
-      case '\\': output += "\\\\"; break;
-      case '"': output += "\\\""; break;
-      case '\n': output += "\\n"; break;
-      case '\r': output += "\\r"; break;
-      case '\t': output += "\\t"; break;
-      default: output += character; break;
+      case '\\':
+        output += "\\\\";
+        break;
+      case '"':
+        output += "\\\"";
+        break;
+      case '\n':
+        output += "\\n";
+        break;
+      case '\r':
+        output += "\\r";
+        break;
+      case '\t':
+        output += "\\t";
+        break;
+      default:
+        output += character;
+        break;
     }
   }
   return output + "\"";
@@ -137,14 +149,14 @@ std::string BridgeInstallScript(const std::vector<std::string>& commands) {
     }
     list += JsString(commands[index]);
   }
-  return "window.__sabineBridgeCommands=" + list + "];" +
-         SABINE_BRIDGE_JS_RAW;
+  return "window.__sabineBridgeCommands=" + list + "];" + SABINE_BRIDGE_JS_RAW;
 }
 
 void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
   if (!CreateSabineOsrBrowser(command_line)) {
     std::fprintf(stderr, "Sabine OSR: browser creation failed\n");
-    if (!sabine_osr::HasRegisteredHandlers()) CefQuitMessageLoop();
+    if (!sabine_osr::HasRegisteredHandlers())
+      CefQuitMessageLoop();
   }
 }
 }  // namespace
@@ -193,11 +205,10 @@ void SabineApp::OnBeforeCommandLineProcessing(
   if (command_line->HasSwitch("sabine-transparent")) {
     command_line->AppendSwitch("enable-transparent-visuals");
     command_line->AppendSwitch("transparent-painting-enabled");
-    command_line->AppendSwitchWithValue("default-background-color", "0x00000000");
+    command_line->AppendSwitchWithValue("default-background-color",
+                                        "0x00000000");
   }
 }
-
-
 
 void SabineApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
@@ -209,39 +220,50 @@ void SabineApp::OnContextInitialized() {
 }
 
 void SabineApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefDictionaryValue> extra_info) {
+                                 CefRefPtr<CefDictionaryValue> extra_info) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (browser) bridge_policies_.push_back({browser, extra_info});
+  if (browser)
+    bridge_policies_.push_back({browser, extra_info});
 }
 
 void SabineApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_RENDERER_THREAD();
   if (browser) {
-    bridge_policies_.erase(std::remove_if(bridge_policies_.begin(), bridge_policies_.end(),
-        [&](const BrowserPolicy& entry) { return entry.browser->IsSame(browser); }),
+    bridge_policies_.erase(
+        std::remove_if(bridge_policies_.begin(), bridge_policies_.end(),
+                       [&](const BrowserPolicy& entry) {
+                         return entry.browser->IsSame(browser);
+                       }),
         bridge_policies_.end());
     sabine_bridge::ReleaseBrowser(browser);
   }
 }
 
-CefRefPtr<CefDictionaryValue> SabineApp::BridgePolicyFor(CefRefPtr<CefBrowser> browser) {
+CefRefPtr<CefDictionaryValue> SabineApp::BridgePolicyFor(
+    CefRefPtr<CefBrowser> browser) {
   for (const auto& entry : bridge_policies_) {
-    if (entry.browser->IsSame(browser)) return entry.policy;
+    if (entry.browser->IsSame(browser))
+      return entry.policy;
   }
   return nullptr;
 }
 
 void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefFrame> frame,
-                                  CefRefPtr<CefV8Context> context) {
+                                 CefRefPtr<CefFrame> frame,
+                                 CefRefPtr<CefV8Context> context) {
   CEF_REQUIRE_RENDERER_THREAD();
-  sabine_bridge::InstallTransport(frame, context, "__sabineImeState", "sabine.ime_state");
+  sabine_bridge::InstallTransport(frame, context, "__sabineImeState",
+                                  "sabine.ime_state");
   frame->ExecuteJavaScript(kImeStateScript, frame->GetURL(), 0);
   const auto policy = BridgePolicyFor(browser);
   const std::string security_origin = sabine_bridge::RememberContext(context);
-  if (!frame->IsMain() || !sabine_bridge::ExposesBridge(policy, frame->GetURL()) ||
-      !sabine_bridge::MatchesSecurityOrigin(policy, frame->GetURL(), security_origin)) return;
-  sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage", "sabine.native");
+  if (!frame->IsMain() ||
+      !sabine_bridge::ExposesBridge(policy, frame->GetURL()) ||
+      !sabine_bridge::MatchesSecurityOrigin(policy, frame->GetURL(),
+                                            security_origin))
+    return;
+  sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage",
+                                  "sabine.native");
   const auto commands = sabine_bridge::Commands(policy);
   frame->ExecuteJavaScript(BridgeInstallScript(commands), frame->GetURL(), 0);
 }
@@ -254,11 +276,12 @@ void SabineApp::OnContextReleased(CefRefPtr<CefBrowser> browser,
 }
 
 bool SabineApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                        CefRefPtr<CefFrame> frame,
-                                        CefProcessId source_process,
-                                        CefRefPtr<CefProcessMessage> message) {
+                                         CefRefPtr<CefFrame> frame,
+                                         CefProcessId source_process,
+                                         CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (source_process != PID_BROWSER || !browser || !frame || !message) return false;
+  if (source_process != PID_BROWSER || !browser || !frame || !message)
+    return false;
   return sabine_bridge::Receive(browser, frame, message,
                                 BridgePolicyFor(browser));
 }

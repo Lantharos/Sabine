@@ -26,7 +26,9 @@ class SharedPaintPool {
   ~SharedPaintPool();
 
   int Acquire(size_t bytes);
-  SharedPaintSlot& Slot(int index) { return slots_[static_cast<size_t>(index)]; }
+  SharedPaintSlot& Slot(int index) {
+    return slots_[static_cast<size_t>(index)];
+  }
   void Release(uint32_t index, uint32_t generation);
 
  private:

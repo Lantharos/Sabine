@@ -105,10 +105,10 @@ cef_drag_operations_mask_t DragOperationFromName(const std::string& operation) {
 }  // namespace
 
 bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
-                                   CefRefPtr<CefDragData> drag_data,
-                                   cef_drag_operations_mask_t allowed_ops,
-                                   int x,
-                                   int y) {
+                                     CefRefPtr<CefDragData> drag_data,
+                                     cef_drag_operations_mask_t allowed_ops,
+                                     int x,
+                                     int y) {
   CEF_REQUIRE_UI_THREAD();
   if (!browser || !drag_data || socket_fd_ < 0) {
     return false;
@@ -143,10 +143,12 @@ bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
     std::string line;
     while (std::getline(stream, line)) {
       std::string trimmed = line;
-      while (!trimmed.empty() && (trimmed.back() == '\r' || trimmed.back() == '\n')) {
+      while (!trimmed.empty() &&
+             (trimmed.back() == '\r' || trimmed.back() == '\n')) {
         trimmed.pop_back();
       }
-      if (trimmed.empty()) continue;
+      if (trimmed.empty())
+        continue;
       paths.push_back(FileUriToPath(trimmed));
     }
   }
@@ -169,15 +171,15 @@ bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::UpdateDragCursor(CefRefPtr<CefBrowser> browser,
-                                      DragOperation operation) {
+                                        DragOperation operation) {
   // No-op: cursor changes are driven by the host's window manager.
   (void)browser;
   (void)operation;
 }
 
 void SabineOsrHandler::FinishNativeFileDrag(int x,
-                                             int y,
-                                             const std::string& operation) {
+                                            int y,
+                                            const std::string& operation) {
   CEF_REQUIRE_UI_THREAD();
   CefRefPtr<CefBrowser> browser = drag_source_browser_;
   drag_source_browser_ = nullptr;

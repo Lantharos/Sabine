@@ -165,7 +165,7 @@ std::string JsonObjectValue(const std::string& payload,
 }
 
 std::vector<std::string> JsonStringArrayValue(const std::string& payload,
-                                               const std::string& name) {
+                                              const std::string& name) {
   const size_t start = FindValueStart(payload, name);
   std::vector<std::string> values;
   if (start == std::string::npos || payload[start] != '[') {
@@ -196,8 +196,10 @@ std::vector<std::string> JsonStringArrayValue(const std::string& payload,
         continue;
       }
       const char escaped = payload[++cursor];
-      value += escaped == 'n' ? '\n' : escaped == 'r' ? '\r' :
-               escaped == 't' ? '\t' : escaped;
+      value += escaped == 'n'   ? '\n'
+               : escaped == 'r' ? '\r'
+               : escaped == 't' ? '\t'
+                                : escaped;
     }
     values.push_back(value);
   }

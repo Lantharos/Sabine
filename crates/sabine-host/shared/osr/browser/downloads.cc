@@ -44,7 +44,7 @@
 using namespace sabine_osr;
 
 bool SabineOsrHandler::RunGuestDownloadAction(const std::string& payload,
-                                                std::string* error) {
+                                              std::string* error) {
   CEF_REQUIRE_UI_THREAD();
   const std::string download_id = JsonStringValue(payload, "downloadId");
   if (download_id.empty()) {
@@ -91,8 +91,9 @@ bool SabineOsrHandler::RunGuestDownloadAction(const std::string& payload,
     }
     return true;
   }
-  *error = "guest.downloadAction `action` must be accept, cancel, pause, or "
-           "resume";
+  *error =
+      "guest.downloadAction `action` must be accept, cancel, pause, or "
+      "resume";
   return false;
 }
 
@@ -107,7 +108,9 @@ bool SabineOsrHandler::OnBeforeDownload(
     return true;
   }
   if (downloads_.size() >= 256) {
-    std::fprintf(stderr, "Sabine: download canceled because this window already has 256 pending or active downloads\n");
+    std::fprintf(stderr,
+                 "Sabine: download canceled because this window already has "
+                 "256 pending or active downloads\n");
     return true;
   }
   const std::string download_id =
@@ -117,11 +120,12 @@ bool SabineOsrHandler::OnBeforeDownload(
   download.filename = suggested_name.ToString();
   download.before_callback = guest ? callback : nullptr;
   downloads_[download_id] = download;
-  EmitPrimaryEvent("guest.download",
-                   GuestDownloadJson(download.guest_id, download_id,
-                                     download_item, "requested",
-                                     download.filename));
-  if (!guest) callback->Continue(CefString(), true);
+  EmitPrimaryEvent(
+      "guest.download",
+      GuestDownloadJson(download.guest_id, download_id, download_item,
+                        "requested", download.filename));
+  if (!guest)
+    callback->Continue(CefString(), true);
   return true;
 }
 
@@ -147,10 +151,10 @@ void SabineOsrHandler::OnDownloadUpdated(
   } else if (!download_item->IsInProgress()) {
     state = "interrupted";
   }
-  EmitPrimaryEvent("guest.download",
-                   GuestDownloadJson(entry->second.guest_id, download_id,
-                                     download_item, state,
-                                     entry->second.filename));
+  EmitPrimaryEvent(
+      "guest.download",
+      GuestDownloadJson(entry->second.guest_id, download_id, download_item,
+                        state, entry->second.filename));
   if (state != "progress") {
     downloads_.erase(entry);
   }
