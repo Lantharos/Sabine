@@ -46,21 +46,21 @@ flate2 = "1.1.10"
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2", "deflate64", "bzip2", "lzma", "xz", "zstd"] }
 tar = { version = "0.4.46", default-features = false }
 bytemuck = { version = "1.25.2", features = ["derive"] }
-cc = "1.4.5"
+cc = "1.5.1"
 crossbeam-channel = "0.5.17"
 ctrlc = "3.5.2"
 dunce = "1.0.5"
 fontconfig = "0.11.0"
-futures-util = "0.3.33"
+futures-util = "0.3.34"
 getrandom = "0.4.3"
 glyphon = "0.12.0"
-icns = { version = "0.4.0", default-features = false, features = ["pngio"] }
+icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
 ksni = { version = "0.3.6", features = ["blocking"] }
 libc = "0.2.189"
 resvg = "0.48.1"
 pollster = "1.0.1"
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSGraphics", "NSResponder", "NSView", "NSVisualEffectView"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSGeometry", "NSObject"] }
@@ -70,23 +70,23 @@ serde_json = "1.0.151"
 semver = "1.0.28"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros"] }
 toml = "1.1.6"
 toml_edit = "0.25.15"
-ureq = "3.4.1"
+ureq = "3.4.2"
 base64 = "0.23.1"
 ed25519-dalek = "3.0.0"
 url = "2.5.8"
 wgpu = "30.0.1"
-winit = { git = "https://github.com/rust-windowing/winit", rev = "42366231b0d92480a933339bd5eaa7fba8106f42" }
+winit = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
 windows = "0.62.2"
 x11rb = "0.14.0"
 
 [patch.crates-io]
-dpi = { git = "https://github.com/rust-windowing/winit", rev = "42366231b0d92480a933339bd5eaa7fba8106f42" }
-winit-common = { git = "https://github.com/rust-windowing/winit", rev = "42366231b0d92480a933339bd5eaa7fba8106f42" }
-winit-core = { git = "https://github.com/rust-windowing/winit", rev = "42366231b0d92480a933339bd5eaa7fba8106f42" }
+dpi = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
+winit-common = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
+winit-core = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
 
 [profile.dev.package.libbz2-rs-sys]
 opt-level = 3
