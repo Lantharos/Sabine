@@ -4,10 +4,10 @@
 // ordering are part of the install transaction. Keep setup after InstallFiles
 // and unregister before RemoveFiles; XML that builds can still fail at install.
 
-use super::config::BundleApp;
+use crate::bundle::config::BundleApp;
 use std::{fs, path::Path};
 
-pub(super) fn wix_source(
+pub(in crate::bundle) fn wix_source(
     app: &BundleApp,
     staged_app_dir: &str,
     executable: &str,

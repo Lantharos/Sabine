@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use crate::host::{runtime_assets_present, runtime_is_valid};
-use crate::paths::{bundled_runtime_path, system_runtime_path, user_runtime_path};
+use crate::discovery::host::{runtime_assets_present, runtime_is_valid};
+use crate::discovery::paths::{bundled_runtime_path, system_runtime_path, user_runtime_path};
+use crate::discovery::version::detect_version;
 use crate::types::{RuntimeConfig, RuntimeInfo, RuntimeLocation};
-use crate::version::detect_version;
 
 #[derive(Clone, Copy)]
 pub(crate) enum RuntimeLocationKind {

@@ -3,13 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) fn stage(root: &Path, architecture: &str) -> Result<PathBuf, String> {
+pub(in crate::bundle) fn stage(root: &Path, architecture: &str) -> Result<PathBuf, String> {
     let directory = root.join("msi-actions");
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let dll = directory.join("sabine-msi.dll");
     fs::write(
         directory.join("actions.cc"),
-        include_str!("../../native/msi_actions.cc"),
+        include_str!("../../../native/msi_actions.cc"),
     )
     .map_err(|error| error.to_string())?;
     fs::write(

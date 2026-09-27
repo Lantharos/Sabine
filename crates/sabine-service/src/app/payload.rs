@@ -6,7 +6,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::registry::RegistryLock;
+use crate::app::registry::RegistryLock;
 use crate::{AppManifest, RegisteredApp, SabineService, ServiceError, ServiceResult};
 
 const INVENTORY: &str = ".sabine-install.json";
@@ -398,7 +398,7 @@ fn write_transaction(journal: &Path, transaction: &Transaction) -> ServiceResult
     file.flush()?;
     file.sync_all()?;
     drop(file);
-    crate::registry::replace_file(&temporary, &journal.join("transaction.json"))?;
+    crate::app::registry::replace_file(&temporary, &journal.join("transaction.json"))?;
     Ok(())
 }
 

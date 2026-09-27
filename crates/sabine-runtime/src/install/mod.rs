@@ -1,3 +1,9 @@
+pub(crate) mod archive;
+pub(crate) mod assets;
+pub(crate) mod directory;
+#[cfg(windows)]
+pub(crate) mod sandbox_windows;
+
 use std::{
     fs::OpenOptions,
     io::Write,
@@ -7,20 +13,20 @@ use std::{
 };
 
 use crate::FileLock;
-use crate::detect::is_runtime_dir;
+use crate::discovery::detect::is_runtime_dir;
+use crate::discovery::host::runtime_is_valid;
+use crate::discovery::paths::user_runtime_path;
+use crate::discovery::resolve::resolve_runtime;
+use crate::discovery::version::{detect_version, runtime_sort_key};
 use crate::download::{
     download_file, extract_archive, first_extracted_runtime_dir, latest_install_plan,
     verify_sha1_with_progress,
 };
 use crate::error::RuntimeError;
-use crate::host::runtime_is_valid;
 use crate::lease::{runtime_is_leased, runtime_mutation_lock};
-use crate::paths::user_runtime_path;
-use crate::resolve::resolve_runtime;
 use crate::types::{
     RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeInstallStep, RuntimeLocation,
 };
-use crate::version::{detect_version, runtime_sort_key};
 
 const INSTALL_LOCK_TIMEOUT: Duration = Duration::from_secs(600);
 const INSTALL_LOCK_WAIT_HEARTBEAT: Duration = Duration::from_secs(3);

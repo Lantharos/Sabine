@@ -4,7 +4,7 @@ use sabine_runtime::{
 };
 use std::path::{Path, PathBuf};
 
-use crate::registry::{RegistryLock, SabineService};
+use crate::app::registry::{RegistryLock, SabineService};
 use crate::types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateStatus,
     MaintenanceReport, PendingAppUpdate, ServiceError, ServiceResult, UpdatePolicy, is_https_url,

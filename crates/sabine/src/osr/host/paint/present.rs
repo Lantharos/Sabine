@@ -4,11 +4,11 @@ use crate::osr::protocol::{MAIN_TEXTURE_ID, POPUP_OVERLAY_ID};
 use crate::render::{DisplayList, ImageCommand, RectCommand, RoundedRectCommand};
 use crate::window::style::Color;
 
-use super::native::OsrNativeHost;
-use super::types::{SurfaceGeometry, overlay_texture_id, uses_sabine_chrome};
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{SurfaceGeometry, overlay_texture_id, uses_sabine_chrome};
 
 impl OsrNativeHost {
-    pub(super) fn present_rendered_surface(&mut self, trace: &str) {
+    pub(in crate::osr::host) fn present_rendered_surface(&mut self, trace: &str) {
         if self.presented {
             return;
         }
@@ -16,7 +16,7 @@ impl OsrNativeHost {
             return;
         };
         self.presented = true;
-        super::trace_host(&self.config, trace);
+        crate::osr::host::trace_host(&self.config, trace);
         // Drop any prior effect before binding a new one; Wayland allows only one
         // `ext_background_effect` resource per surface.
         self.effect = None;
@@ -26,13 +26,13 @@ impl OsrNativeHost {
             window.set_visible(true);
             window.set_minimized(false);
             if self.config.active || self.focused {
-                super::native::present_window(&window);
+                crate::osr::host::native::present_window(&window);
             }
             window.request_redraw();
         }
     }
 
-    pub(super) fn render(&mut self) -> bool {
+    pub(in crate::osr::host) fn render(&mut self) -> bool {
         let scale = self
             .window
             .as_ref()
@@ -50,7 +50,7 @@ impl OsrNativeHost {
         }
         if !self.main_frame_presented && self.main_surface_ready() && self.loading.is_none() {
             self.main_frame_presented = true;
-            super::trace_host(&self.config, "browser.first_paint");
+            crate::osr::host::trace_host(&self.config, "browser.first_paint");
         }
         if self.effect_regions_dirty {
             self.effect_regions_dirty = false;

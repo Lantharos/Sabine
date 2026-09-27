@@ -1,7 +1,7 @@
-use crate::detect::detect_runtime;
+use crate::discovery::detect::detect_runtime;
+use crate::discovery::version::{version_satisfies, version_sort_key};
 use crate::error::RuntimeError;
 use crate::types::{RuntimeConfig, RuntimeInfo, RuntimeLocation, RuntimeMode};
-use crate::version::{version_satisfies, version_sort_key};
 
 pub fn resolve_runtime(config: &RuntimeConfig) -> Result<RuntimeInfo, RuntimeError> {
     let runtimes = detect_runtime(config);

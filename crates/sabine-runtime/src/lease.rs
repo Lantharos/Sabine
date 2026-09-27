@@ -18,7 +18,7 @@ impl RuntimeLease {
             return Ok(Self { path: None });
         }
         let _lock = runtime_mutation_lock()?;
-        if !crate::host::runtime_is_valid(runtime_dir) {
+        if !crate::discovery::host::runtime_is_valid(runtime_dir) {
             return Err(RuntimeError::NotFound(format!(
                 "runtime was removed or became unavailable: {}",
                 runtime_dir.display()

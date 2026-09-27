@@ -1,40 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+
+use std::path::PathBuf;
+
+use super::{
+    SabineVersion, ServiceError, ServiceResult, is_https_url, unix_timestamp, valid_app_id,
 };
-use thiserror::Error;
-
-pub const REGISTRY_VERSION: u32 = 1;
-pub const SABINE_VERSION: &str = "0.29";
-pub const SABINE_MAJOR: u32 = 0;
-pub const SABINE_BUILD: u32 = 29;
-pub const MIN_SUPPORTED_APP_BUILD: u32 = 23;
-pub const UPDATE_SOAK: Duration = Duration::from_secs(24 * 60 * 60);
-pub const UPDATE_ROLLOUT_WINDOW: Duration = Duration::from_secs(6 * 60 * 60);
-
-#[derive(Debug, Error)]
-pub enum ServiceError {
-    #[error("invalid app manifest: {0}")]
-    InvalidManifest(String),
-    #[error("app `{0}` is not registered")]
-    AppNotFound(String),
-    #[error("{message}")]
-    IncompatibleApp { app_id: String, message: String },
-    #[error("runtime operation failed: {0}")]
-    Runtime(#[from] sabine_runtime::RuntimeError),
-    #[error("app update failed: {0}")]
-    Update(String),
-    #[error("could not decode {path}: {source}")]
-    Decode {
-        path: PathBuf,
-        source: serde_json::Error,
-    },
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-pub type ServiceResult<T> = Result<T, ServiceError>;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -163,83 +133,6 @@ impl AppManifest {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SabineVersion {
-    pub major: u32,
-    pub build: u32,
-}
-
-impl SabineVersion {
-    pub const fn current() -> Self {
-        Self {
-            major: SABINE_MAJOR,
-            build: SABINE_BUILD,
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Self> {
-        let parts = value
-            .trim_start_matches('v')
-            .split('.')
-            .map(str::parse::<u32>)
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
-        match parts.as_slice() {
-            [major, build] => Some(Self {
-                major: *major,
-                build: *build,
-            }),
-            [major, 1, build] if *build > 0 => Some(Self {
-                major: *major,
-                build: *build,
-            }),
-            [major, build, 0] => Some(Self {
-                major: *major,
-                build: *build,
-            }),
-            _ => None,
-        }
-    }
-
-    pub fn label(self) -> String {
-        format!("{}.{}", self.major, self.build)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SystemCompatibility {
-    pub major: u32,
-    pub build: u32,
-    pub minimum_app_build: u32,
-}
-
-impl Default for SystemCompatibility {
-    fn default() -> Self {
-        Self {
-            major: SABINE_MAJOR,
-            build: 0,
-            minimum_app_build: 0,
-        }
-    }
-}
-
-impl SystemCompatibility {
-    pub const fn current() -> Self {
-        Self {
-            major: SABINE_MAJOR,
-            build: SABINE_BUILD,
-            minimum_app_build: MIN_SUPPORTED_APP_BUILD,
-        }
-    }
-
-    pub fn accepts(self, app: SabineVersion) -> bool {
-        app.build == 0
-            || (app.major == self.major
-                && app.build >= self.minimum_app_build
-                && app.build <= self.build)
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RegisteredApp {
     #[serde(flatten)]
@@ -263,25 +156,6 @@ pub struct AppReleaseManifest {
     pub artifacts: std::collections::BTreeMap<String, AppArtifact>,
     #[serde(default)]
     pub signature: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SystemReleaseManifest {
-    pub schema: u32,
-    pub version: String,
-    pub published_at: String,
-    #[serde(default)]
-    pub compatibility: SystemCompatibility,
-    pub artifacts: std::collections::BTreeMap<String, SystemReleaseArtifact>,
-    #[serde(default)]
-    pub signature: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SystemReleaseArtifact {
-    pub sha256: String,
-    pub size: u64,
-    pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -386,37 +260,6 @@ fn release_schema() -> u32 {
     1
 }
 
-pub fn service_data_dir() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
-        return PathBuf::from(path).join("Sabine");
-    }
-    #[cfg(target_os = "macos")]
-    if let Some(path) = std::env::var_os("HOME") {
-        return PathBuf::from(path)
-            .join("Library")
-            .join("Application Support")
-            .join("Sabine");
-    }
-    if let Some(path) = std::env::var_os("XDG_DATA_HOME").filter(|path| !path.is_empty()) {
-        return PathBuf::from(path).join("sabine");
-    }
-    let home = std::env::var_os("HOME").unwrap_or_else(|| "/tmp".into());
-    PathBuf::from(home).join(".local/share/sabine")
-}
-
-pub fn default_maintenance_interval() -> Duration {
-    Duration::from_secs(6 * 60 * 60)
-}
-
-pub fn valid_app_id(value: &str) -> bool {
-    !value.is_empty()
-        && !matches!(value, "." | "..")
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        })
-}
-
 fn valid_github_repository(value: &str) -> bool {
     let Some((owner, name)) = value.split_once('/') else {
         return false;
@@ -427,102 +270,4 @@ fn valid_github_repository(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_' | b'/'))
-}
-
-pub(crate) fn is_https_url(value: &str) -> bool {
-    value.starts_with("https://") && value.len() > "https://".len()
-}
-
-pub(crate) fn unix_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-
-pub(crate) fn platform_target() -> &'static str {
-    match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => "linux-x86_64",
-        ("linux", "aarch64") => "linux-aarch64",
-        ("windows", "x86_64") => "windows-x86_64",
-        ("windows", "aarch64") => "windows-aarch64",
-        ("macos", "aarch64") => "macos-aarch64",
-        _ => "unsupported",
-    }
-}
-
-pub(crate) fn update_artifact_target(
-    install_mode: AppInstallMode,
-    kind: Option<AppArtifactKind>,
-) -> String {
-    if install_mode == AppInstallMode::Package
-        && let Some(kind) = kind
-    {
-        return format!("{}-{}", platform_target(), kind.target_suffix());
-    }
-    platform_target().to_string()
-}
-
-pub(crate) fn version_is_newer(candidate: &str, current: &str) -> bool {
-    parse_semver(candidate)
-        .ok()
-        .zip(parse_semver(current).ok())
-        .is_some_and(|(candidate, current)| candidate > current)
-}
-
-fn parse_semver(value: &str) -> Result<semver::Version, semver::Error> {
-    let value = value.trim_start_matches('v');
-    if value.bytes().filter(|byte| *byte == b'.').count() == 1 {
-        semver::Version::parse(&format!("{value}.0"))
-    } else {
-        semver::Version::parse(value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn public_and_internal_versions_resolve_to_the_same_build() {
-        let current = SabineVersion::current();
-        assert_eq!(SabineVersion::parse(SABINE_VERSION), Some(current));
-        assert_eq!(
-            SabineVersion::parse(env!("CARGO_PKG_VERSION")),
-            Some(current)
-        );
-        assert_eq!(
-            SabineVersion::parse("0.1.20"),
-            Some(SabineVersion {
-                major: 0,
-                build: 20
-            })
-        );
-        assert!(version_is_newer("0.21", "0.1.20"));
-    }
-
-    #[test]
-    fn compatibility_rejects_retired_and_future_app_builds() {
-        let system = SystemCompatibility {
-            major: 0,
-            build: 21,
-            minimum_app_build: 18,
-        };
-        assert!(system.accepts(SabineVersion {
-            major: 0,
-            build: 18
-        }));
-        assert!(!system.accepts(SabineVersion {
-            major: 0,
-            build: 17
-        }));
-        assert!(!system.accepts(SabineVersion {
-            major: 0,
-            build: 22
-        }));
-        assert!(!system.accepts(SabineVersion {
-            major: 1,
-            build: 18
-        }));
-    }
 }

@@ -1,10 +1,10 @@
 use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrAccelFrame, OsrSurface};
 
-use super::native::OsrNativeHost;
-use super::types::{OverlayLayer, overlay_texture_id};
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{OverlayLayer, overlay_texture_id};
 
 impl OsrNativeHost {
-    pub(super) fn update_accel_frame(&mut self, frame: OsrAccelFrame) -> bool {
+    pub(in crate::osr::host) fn update_accel_frame(&mut self, frame: OsrAccelFrame) -> bool {
         if !self.try_install_accel_texture(&frame) {
             return false;
         }
@@ -73,7 +73,7 @@ impl OsrNativeHost {
         }
     }
 
-    fn accel_geometry(&self, frame: &OsrAccelFrame) -> super::types::SurfaceGeometry {
+    fn accel_geometry(&self, frame: &OsrAccelFrame) -> crate::osr::host::types::SurfaceGeometry {
         self.surface_geometry(
             (frame.visible_width, frame.visible_height),
             frame.x,

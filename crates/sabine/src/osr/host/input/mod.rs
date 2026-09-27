@@ -11,9 +11,9 @@ use winit::{
     window::WindowId,
 };
 
-use crate::osr::host::chrome::{activate_control, resize_direction_at};
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::LifecycleState;
+use crate::osr::host::ui::chrome::{activate_control, resize_direction_at};
 use winit::cursor::CursorIcon;
 
 impl ApplicationHandler for OsrNativeHost {

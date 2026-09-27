@@ -251,14 +251,14 @@ fn package_msi(
 ) -> Result<(), String> {
     let wxs = staged.root.join("installer.wxs");
     let architecture = super::windows::architecture(&staged.binary)?;
-    let actions = super::windows_msi_actions::stage(&staged.root, architecture)?;
+    let actions = super::windows::msi_actions::stage(&staged.root, architecture)?;
     let artifact = artifact_path(app, staged, BundleFormat::Msi, "msi");
     let source_dir = dunce::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
     let icon = source_dir.join("resources").join("windows-app.ico");
     let icon = icon.is_file().then(|| icon.display().to_string());
     fs::write(
         &wxs,
-        super::windows_msi::wix_source(
+        super::windows::msi::wix_source(
             app,
             &source_dir.display().to_string(),
             &staged.executable,

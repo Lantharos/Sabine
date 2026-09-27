@@ -1,22 +1,13 @@
-mod chrome;
 mod config;
 mod events;
-mod gpu_recovery;
-mod guest_preview;
 mod input;
 mod lifecycle;
-mod loading;
-pub(in crate::osr) mod loading_messages;
 mod native;
 mod paint;
-#[cfg(windows)]
-mod paint_accel;
-mod present;
 mod recovery;
-mod resize;
 mod socket;
-mod tooltip;
 pub(in crate::osr) mod types;
+mod ui;
 mod visibility;
 
 use std::path::PathBuf;

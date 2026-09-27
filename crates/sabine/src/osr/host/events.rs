@@ -365,7 +365,11 @@ impl OsrNativeHost {
             .ok_or_else(|| "guest has no frame to capture".to_string())
             .and_then(|overlay| {
                 let (width, height) = overlay.buffer.size();
-                super::guest_preview::guest_preview_data_url(overlay.buffer.bytes(), width, height)
+                super::paint::guest_preview::guest_preview_data_url(
+                    overlay.buffer.bytes(),
+                    width,
+                    height,
+                )
             });
         let (status, payload) = match result {
             Ok(data_url) => ("ok", serde_json::json!({ "dataUrl": data_url })),

@@ -25,7 +25,7 @@ pub fn info_plist(
     has_icon: bool,
     mime_types: &[String],
 ) -> Result<String, String> {
-    crate::desktop_types::validate(mime_types)?;
+    crate::desktop::types::validate(mime_types)?;
     let version = semver::Version::parse(version).map_err(|error| error.to_string())?;
     let version = format!("{}.{}.{}", version.major, version.minor, version.patch);
     let icon = if has_icon {
@@ -34,7 +34,7 @@ pub fn info_plist(
         ""
     };
     let mut types = String::new();
-    let schemes = crate::desktop_types::schemes(mime_types)
+    let schemes = crate::desktop::types::schemes(mime_types)
         .map(|scheme| format!("<string>{}</string>", xml(scheme)))
         .collect::<String>();
     if !schemes.is_empty() {

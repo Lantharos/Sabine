@@ -1,4 +1,4 @@
-use super::types::LoadingKind;
+use crate::osr::host::types::LoadingKind;
 
 const PLAUSIBLE: &[&str] = &[
     "Getting situated…",

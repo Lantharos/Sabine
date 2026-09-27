@@ -8,10 +8,12 @@ use std::{
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 
+use crate::discovery::paths::runtime_version_path;
+use crate::discovery::version::{
+    cef_platform_key, channel_preference, major_version, version_sort_key,
+};
 use crate::error::RuntimeError;
-use crate::paths::runtime_version_path;
 use crate::types::{RuntimeConfig, RuntimeInstallPlan, RuntimeInstallProgress, RuntimeInstallStep};
-use crate::version::{cef_platform_key, channel_preference, major_version, version_sort_key};
 
 pub(crate) fn download_file(
     url: &str,
@@ -120,7 +122,7 @@ pub(crate) fn verify_sha1_with_progress(
 
 pub(crate) fn extract_archive(archive: &Path, destination: &Path) -> Result<(), RuntimeError> {
     let input = std::fs::File::open(archive)?;
-    crate::archive::extract_tar(bzip2::read::BzDecoder::new(input), destination)?;
+    crate::install::archive::extract_tar(bzip2::read::BzDecoder::new(input), destination)?;
     Ok(())
 }
 

@@ -9,7 +9,7 @@ use crate::commands::command_exists;
 use crate::install::source::SourceApp;
 
 pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
-    let icon = crate::icon_assets::install_user_icon(&app.id, app.icon.as_deref())?;
+    let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
     #[cfg(target_os = "linux")]
     {
         let directory = crate::install::source::data_home()?.join("applications");
@@ -52,7 +52,7 @@ pub fn link_macos_bundle(id: &str, bundle: &Path) -> Result<(), String> {
     }
 }
 #[cfg(target_os = "macos")]
-use crate::macos_bundle::xml;
+use crate::desktop::macos::xml;
 
 #[cfg(target_os = "linux")]
 pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> String {
@@ -173,7 +173,7 @@ pub fn install_macos_app(
     std::fs::create_dir_all(&macos).map_err(|error| error.to_string())?;
     std::fs::write(
         contents.join("Info.plist"),
-        crate::macos_bundle::info_plist(
+        crate::desktop::macos::info_plist(
             &app.id,
             &app.name,
             &app.version,
@@ -186,8 +186,8 @@ pub fn install_macos_app(
     if let Some(icon) = &app.icon {
         let resources = contents.join("Resources");
         let icon_set = resources.join("icons");
-        crate::icon_assets::stage_icon_set(&app.id, icon, &icon_set)?;
-        crate::icon_assets::stage_macos_icon(&app.id, &icon_set, &resources.join("app.icns"))?;
+        crate::desktop::icons::stage_icon_set(&app.id, icon, &icon_set)?;
+        crate::desktop::icons::stage_macos_icon(&app.id, &icon_set, &resources.join("app.icns"))?;
     }
     let launch = macos.join("launch");
     std::fs::write(
