@@ -21,7 +21,7 @@ pub(super) fn details(message: &str) -> String {
         .as_secs()
         .saturating_sub(300);
     let mut entries = Vec::new();
-    for component in ["startup", "setup", "installer", "osr", "cef"] {
+    for component in ["startup", "setup", "installer", "osr"] {
         let Ok(mut file) = File::open(sabine_runtime::diagnostic_path(component)) else {
             continue;
         };

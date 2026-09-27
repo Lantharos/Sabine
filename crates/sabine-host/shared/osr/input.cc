@@ -77,6 +77,12 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     ReleaseAcceleratedD3d11Frame(std::strtoull(parts[1].c_str(), nullptr, 10));
     return;
   }
+#else
+  if (parts.size() == 3 && parts[0] == "paint_release") {
+    ReleaseSharedPaint(static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
+                       static_cast<uint32_t>(std::strtoul(parts[2].c_str(), nullptr, 10)));
+    return;
+  }
 #endif
   if (parts.empty() || !browser_) {
     return;
@@ -300,20 +306,20 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
         host->SendKeyEvent(char_event);
       }
     }
-	  } else if (parts[0] == "focus" && parts.size() >= 2) {
-	    const bool focused = std::atoi(parts[1].c_str()) != 0;
-	    GuestView* guest = guests_.Find(focused_guest_id_);
-	    if (guest && guest->browser) {
-	      guest->browser->GetHost()->SetFocus(focused);
-	    } else {
-	      host->SetFocus(focused);
-	    }
-	  } else if (parts[0] == "lifecycle" && parts.size() >= 3) {
-	    const std::string reason =
-	        parts.size() >= 4 ? DecodeControlComponent(parts[3]) : "";
-	    ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())),
-	                   reason);
-	  } else if (parts[0] == "close") {
+  } else if (parts[0] == "focus" && parts.size() >= 2) {
+    const bool focused = std::atoi(parts[1].c_str()) != 0;
+    GuestView* guest = guests_.Find(focused_guest_id_);
+    if (guest && guest->browser) {
+      guest->browser->GetHost()->SetFocus(focused);
+    } else {
+      host->SetFocus(focused);
+    }
+  } else if (parts[0] == "lifecycle" && parts.size() >= 3) {
+    const std::string reason =
+        parts.size() >= 4 ? DecodeControlComponent(parts[3]) : "";
+    ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())),
+                   reason);
+  } else if (parts[0] == "close") {
     // Close only this browser. CefQuitMessageLoop runs from OnBeforeClose
     // when the last OSR handler is gone so sibling windows stay alive.
     if (close_requested_) {
@@ -321,11 +327,11 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     }
     close_requested_ = true;
     host->CloseBrowser(false);
-	  } else if (parts[0] == "file_drag_ended" && parts.size() >= 4) {
-	    FinishNativeFileDrag(std::atoi(parts[1].c_str()),
-	                         std::atoi(parts[2].c_str()), parts[3]);
-	  }
-	}
+  } else if (parts[0] == "file_drag_ended" && parts.size() >= 4) {
+    FinishNativeFileDrag(std::atoi(parts[1].c_str()),
+                         std::atoi(parts[2].c_str()), parts[3]);
+  }
+}
 
 void SabineOsrHandler::ApplyLifecycle(const std::string& state,
                                         int frame_rate,

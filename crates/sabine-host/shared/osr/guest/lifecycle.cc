@@ -435,7 +435,7 @@ bool SabineOsrHandler::SendGuestPaint(const GuestView& guest,
                                         int width,
                                         int height,
                                         const RectList& dirty_rects) {
-  return SendPaintBatch(kGuestFrame, guest.id, guest.bounds.x, guest.bounds.y,
+  return SendPaintBatch(PaintSurface::kGuest, guest.id, guest.bounds.x, guest.bounds.y,
                         buffer, width, height, dirty_rects);
 }
 

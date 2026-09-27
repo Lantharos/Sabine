@@ -26,7 +26,7 @@ impl OsrNativeHost {
         }
         if self.lifecycle_state != LifecycleState::Active {
             self.lifecycle_state = LifecycleState::Hibernated;
-            self.main_frame = None;
+            self.main_surface = None;
             self.overlays.clear();
             self.main_buffer.release();
             if let Some(renderer) = &mut self.renderer {

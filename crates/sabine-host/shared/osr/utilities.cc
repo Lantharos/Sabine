@@ -24,11 +24,6 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
 #endif
 
 #include "guest/input.h"
@@ -292,30 +287,6 @@ bool SendAll(intptr_t fd, const char* bytes, size_t len) {
   return true;
 }
 
-#ifndef _WIN32
-int CreateMemfd(const char* name) {
-#ifdef SYS_memfd_create
-  return static_cast<int>(syscall(SYS_memfd_create, name, MFD_CLOEXEC));
-#else
-  errno = ENOSYS;
-  return -1;
-#endif
-}
-
-bool WriteAllAt(int fd, const char* bytes, size_t len, off_t offset) {
-  size_t written = 0;
-  while (written < len) {
-    const ssize_t result = pwrite(fd, bytes + written, len - written,
-                                  offset + static_cast<off_t>(written));
-    if (result <= 0) {
-      return false;
-    }
-    written += static_cast<size_t>(result);
-  }
-  return true;
-}
-#endif
-
 void PutPaintEntry(std::vector<char>* payload,
                    size_t offset,
                    const PaintRectBytes& rect) {
@@ -327,7 +298,39 @@ void PutPaintEntry(std::vector<char>* payload,
   PutU32(payload, offset + 24, rect.len);
 }
 
-bool CopyPaintRect(char* destination,
+namespace {
+
+std::vector<char> BuildPaintMetadata(const std::string& prefix,
+                                     const std::vector<PaintRectBytes>& rects,
+                                     size_t slot_len) {
+  const size_t entries_start = prefix.size() + slot_len + 4;
+  std::vector<char> metadata(entries_start + rects.size() * kBatchEntryLen, 0);
+  std::memcpy(metadata.data(), prefix.data(), prefix.size());
+  PutU32(&metadata, prefix.size() + slot_len, static_cast<uint32_t>(rects.size()));
+  for (size_t i = 0; i < rects.size(); ++i) {
+    PutPaintEntry(&metadata, entries_start + i * kBatchEntryLen, rects[i]);
+  }
+  return metadata;
+}
+
+}  // namespace
+
+std::vector<char> PaintMetadata(const std::string& prefix,
+                                const std::vector<PaintRectBytes>& rects) {
+  return BuildPaintMetadata(prefix, rects, 0);
+}
+
+std::vector<char> PaintMetadata(const std::string& prefix,
+                                const std::vector<PaintRectBytes>& rects,
+                                uint32_t slot,
+                                uint32_t generation) {
+  std::vector<char> metadata = BuildPaintMetadata(prefix, rects, 8);
+  PutU32(&metadata, prefix.size(), slot);
+  PutU32(&metadata, prefix.size() + 4, generation);
+  return metadata;
+}
+
+void CopyPaintRect(char* destination,
                    const void* buffer,
                    int buffer_width,
                    const PaintRectBytes& rect) {
@@ -339,28 +342,8 @@ bool CopyPaintRect(char* destination,
                 source + (rect.y + row) * source_stride + rect.x * 4,
                 row_bytes);
   }
-  return true;
 }
 
-#ifndef _WIN32
-bool WritePaintRect(int fd,
-                    const void* buffer,
-                    int buffer_width,
-                    const PaintRectBytes& rect) {
-  const char* source = static_cast<const char*>(buffer);
-  const int source_stride = buffer_width * 4;
-  const int row_bytes = rect.width * 4;
-  for (int row = 0; row < rect.height; ++row) {
-    if (!WriteAllAt(fd,
-                    source + (rect.y + row) * source_stride + rect.x * 4,
-                    row_bytes,
-                    static_cast<off_t>(rect.offset + static_cast<uint64_t>(row * row_bytes)))) {
-      return false;
-    }
-  }
-  return true;
-}
-#endif
 
 int KeyCodeForName(const std::string& key) {
   if (key.size() == 1) {
@@ -438,18 +421,28 @@ cef_mouse_button_type_t MouseButtonFromString(const std::string& value) {
   return MBT_LEFT;
 }
 
-uint32_t BatchKind(uint32_t frame_kind) {
-  if (frame_kind == kGuestFrame) {
-    return kGuestBatch;
+uint32_t BatchKind(PaintSurface surface) {
+  switch (surface) {
+    case PaintSurface::kMain:
+      return kMainBatch;
+    case PaintSurface::kPopup:
+      return kPopupBatch;
+    case PaintSurface::kGuest:
+      return kGuestBatch;
   }
-  return frame_kind == kPopupFrame ? kPopupBatch : kMainBatch;
+  return kMainBatch;
 }
 
-uint32_t SharedBatchKind(uint32_t frame_kind) {
-  if (frame_kind == kGuestFrame) {
-    return kGuestSharedBatch;
+uint32_t SharedBatchKind(PaintSurface surface) {
+  switch (surface) {
+    case PaintSurface::kMain:
+      return kMainSharedBatch;
+    case PaintSurface::kPopup:
+      return kPopupSharedBatch;
+    case PaintSurface::kGuest:
+      return kGuestSharedBatch;
   }
-  return frame_kind == kPopupFrame ? kPopupSharedBatch : kMainSharedBatch;
+  return kMainSharedBatch;
 }
 
 std::string CursorName(cef_cursor_type_t type) {

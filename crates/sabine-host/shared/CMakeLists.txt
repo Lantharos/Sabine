@@ -73,6 +73,8 @@ set(SABINE_HOST_SOURCES
   osr/accelerated/protocol.h
   osr/accelerated/windows/d3d11_copy.cc
   osr/accelerated/windows/d3d11_copy.h
+  osr/paint/shared_pool.cc
+  osr/paint/shared_pool.h
 )
 
 if(OS_MAC)
@@ -83,6 +85,11 @@ if(NOT OS_WINDOWS)
   list(REMOVE_ITEM SABINE_HOST_SOURCES
     osr/accelerated/windows/d3d11_copy.cc
     osr/accelerated/windows/d3d11_copy.h
+  )
+else()
+  list(REMOVE_ITEM SABINE_HOST_SOURCES
+    osr/paint/shared_pool.cc
+    osr/paint/shared_pool.h
   )
 endif()
 

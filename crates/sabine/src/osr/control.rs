@@ -10,7 +10,7 @@ use super::transport::IpcStream;
 const MAX_QUEUED_CONTROLS: usize = 256;
 const MAX_QUEUED_BYTES: usize = 64 * 1024 * 1024;
 
-pub(super) struct ControlWriter {
+pub(crate) struct ControlWriter {
     queue: Arc<ControlQueue>,
     stream: IpcStream,
 }

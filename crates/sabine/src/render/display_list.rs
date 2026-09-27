@@ -4,9 +4,6 @@ use crate::window::style::Color;
 pub struct DisplayList {
     pub background: Color,
     pub commands: Vec<DisplayCommand>,
-    pub hovered_region: Option<String>,
-    pub pressed_region: Option<String>,
-    pub focused_region: Option<String>,
 }
 
 impl DisplayList {
@@ -14,9 +11,6 @@ impl DisplayList {
         Self {
             background,
             commands: Vec::new(),
-            hovered_region: None,
-            pressed_region: None,
-            focused_region: None,
         }
     }
 
@@ -71,7 +65,6 @@ pub struct ImageCommand {
     pub y: f32,
     pub width: f32,
     pub height: f32,
-    pub opacity: f32,
 }
 
 impl From<RectCommand> for DisplayCommand {

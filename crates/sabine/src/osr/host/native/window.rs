@@ -13,8 +13,7 @@ use winit::{
     window::{Window as WinitWindow, WindowAttributes, WindowLevel},
 };
 
-use crate::osr::protocol::MAIN_TEXTURE_ID;
-use crate::render::{GpuRenderer, RendererError};
+use crate::render::GpuRenderer;
 
 use super::OsrNativeHost;
 
@@ -120,7 +119,7 @@ impl OsrNativeHost {
             self.fail(format!("Could not restore window textures: {error}"));
             return;
         }
-        if self.main_frame.is_some() {
+        if self.main_surface.is_some() {
             self.present_rendered_surface("first_paint");
         }
         if self.config.visible
@@ -132,7 +131,7 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn drop_hidden_window(&mut self) {
         self.drop_presented_window();
-        self.main_frame = None;
+        self.main_surface = None;
         self.overlays.clear();
         self.pending_resize_paint = None;
         self.main_buffer.release();
@@ -167,35 +166,6 @@ impl OsrNativeHost {
         self.cursor = CursorIcon::Default;
         self.native_cursor_override = false;
         self.forward_ime(winit::event::Ime::Disabled);
-    }
-
-    pub(in crate::osr::host) fn upload_cached_textures(&mut self) -> Result<(), RendererError> {
-        let Some(renderer) = self.renderer.as_mut() else {
-            return Ok(());
-        };
-        if let Some(frame) = &self.main_frame
-            && !self.main_buffer.bytes().is_empty()
-        {
-            renderer.update_dynamic_bgra_image_region(
-                MAIN_TEXTURE_ID,
-                (frame.width, frame.height),
-                (0, 0),
-                (frame.width, frame.height),
-                self.main_buffer.bytes(),
-            )?;
-        }
-        for (id, overlay) in &self.overlays {
-            if !overlay.buffer.bytes().is_empty() {
-                renderer.update_dynamic_bgra_image_region(
-                    crate::osr::host::types::overlay_texture_id(id),
-                    (overlay.frame.width, overlay.frame.height),
-                    (0, 0),
-                    (overlay.frame.width, overlay.frame.height),
-                    overlay.buffer.bytes(),
-                )?;
-            }
-        }
-        Ok(())
     }
 
     pub(in crate::osr::host) fn update_effect_regions(&self) {

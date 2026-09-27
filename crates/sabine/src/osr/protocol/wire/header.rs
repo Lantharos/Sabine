@@ -5,43 +5,45 @@ use std::os::fd::AsRawFd;
 
 use super::HEADER_LEN;
 
+#[cfg(unix)]
 pub(super) fn read_header(
     reader: &mut IpcStream,
 ) -> io::Result<Option<([u8; HEADER_LEN], ReceivedFd)>> {
     let mut header = [0_u8; HEADER_LEN];
-    let mut filled = 0;
-    let mut fd = None;
-    while filled < HEADER_LEN {
-        if filled == 0 {
-            match recv_header_start(reader, &mut header)? {
-                Some((read, received_fd)) => {
-                    filled = read.min(HEADER_LEN);
-                    fd = received_fd;
-                }
-                None => return Ok(None),
-            }
-        } else {
-            match reader.read_exact(&mut header[filled..]) {
-                Ok(()) => filled = HEADER_LEN,
-                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-                Err(error) => return Err(error),
-            }
-        }
+    let Some((read, fd)) = recv_header_start(reader, &mut header)? else {
+        return Ok(None);
+    };
+    let fd = ReceivedFd(fd);
+    match reader.read_exact(&mut header[read.min(HEADER_LEN)..]) {
+        Ok(()) => Ok(Some((header, fd))),
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Ok(None),
+        Err(error) => Err(error),
     }
-    Ok(Some((header, ReceivedFd(fd))))
 }
 
+#[cfg(not(unix))]
+pub(super) fn read_header(reader: &mut IpcStream) -> io::Result<Option<[u8; HEADER_LEN]>> {
+    let mut header = [0_u8; HEADER_LEN];
+    match reader.read_exact(&mut header) {
+        Ok(()) => Ok(Some(header)),
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(unix)]
 pub(super) struct ReceivedFd(Option<i32>);
 
+#[cfg(unix)]
 impl ReceivedFd {
     pub(super) fn take(&mut self) -> Option<i32> {
         self.0.take()
     }
 }
 
+#[cfg(unix)]
 impl Drop for ReceivedFd {
     fn drop(&mut self) {
-        #[cfg(unix)]
         if let Some(fd) = self.0.take() {
             unsafe {
                 libc::close(fd);
@@ -69,7 +71,11 @@ fn recv_header_start(
         msg_controllen: control.len() as _,
         msg_flags: 0,
     };
-    let result = unsafe { libc::recvmsg(reader.as_raw_fd(), &mut message, 0) };
+    #[cfg(target_os = "linux")]
+    let flags = libc::MSG_CMSG_CLOEXEC;
+    #[cfg(not(target_os = "linux"))]
+    let flags = 0;
+    let result = unsafe { libc::recvmsg(reader.as_raw_fd(), &mut message, flags) };
     if result == 0 {
         return Ok(None);
     }
@@ -78,19 +84,6 @@ fn recv_header_start(
     }
     let fd = unsafe { received_fd(&message) };
     Ok(Some((result as usize, fd)))
-}
-
-#[cfg(not(unix))]
-fn recv_header_start(
-    reader: &IpcStream,
-    header: &mut [u8; HEADER_LEN],
-) -> io::Result<Option<(usize, Option<i32>)>> {
-    let mut reader = reader;
-    match reader.read(header) {
-        Ok(0) => Ok(None),
-        Ok(read) => Ok(Some((read, None))),
-        Err(error) => Err(error),
-    }
 }
 
 #[cfg(unix)]

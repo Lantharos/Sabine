@@ -1,9 +1,9 @@
 use std::{
     collections::{HashSet, VecDeque},
-    sync::{Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex},
 };
 
-use super::protocol::{OsrFrame, OsrMessage, OsrPaintBatch};
+use super::protocol::{FrameBytes, OsrMessage, OsrPaintBatch, PaintRect};
 
 const MAX_QUEUED_MESSAGES: usize = 256;
 const MAX_QUEUED_BYTES: usize = 256 * 1024 * 1024;
@@ -130,7 +130,7 @@ fn merge_paint_batch(
     if queued.surface != incoming.surface
         || queued.width != incoming.width
         || queued.height != incoming.height
-        || queued.frames.len().saturating_add(incoming.frames.len()) > MAX_MERGED_RECTS
+        || queued.rects.len().saturating_add(incoming.rects.len()) > MAX_MERGED_RECTS
         || batch_retained_bytes(queued).saturating_add(batch_retained_bytes(&incoming))
             > available.min(MAX_MERGED_BYTES)
     {
@@ -138,16 +138,16 @@ fn merge_paint_batch(
     }
     queued.x = incoming.x;
     queued.y = incoming.y;
-    for frame in incoming.frames {
+    for rect in incoming.rects {
         queued
-            .frames
-            .retain(|queued_frame| !frame_covers(&frame, queued_frame));
-        queued.frames.push(frame);
+            .rects
+            .retain(|queued_rect| !rect_covers(&rect, queued_rect));
+        queued.rects.push(rect);
     }
     None
 }
 
-fn frame_covers(newer: &OsrFrame, older: &OsrFrame) -> bool {
+fn rect_covers(newer: &PaintRect, older: &PaintRect) -> bool {
     let newer_right = i64::from(newer.x) + i64::from(newer.width);
     let newer_bottom = i64::from(newer.y) + i64::from(newer.height);
     let older_right = i64::from(older.x) + i64::from(older.width);
@@ -159,20 +159,28 @@ fn frame_covers(newer: &OsrFrame, older: &OsrFrame) -> bool {
 }
 
 fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
-    let mut allocations = HashSet::new();
+    let mut inline_sources = HashSet::new();
     batch
-        .frames
+        .rects
         .iter()
-        .map(|frame| frame.bytes.allocation())
-        .filter(|(address, _)| allocations.insert(*address))
-        .map(|(_, bytes)| bytes)
+        .map(|rect| match &rect.bytes {
+            FrameBytes::Inline { source, .. } => {
+                if inline_sources.insert(Arc::as_ptr(source)) {
+                    source.len()
+                } else {
+                    0
+                }
+            }
+            #[cfg(unix)]
+            FrameBytes::Shared { range, .. } => range.len(),
+        })
         .sum()
 }
 
 fn message_retained_bytes(message: &OsrMessage) -> usize {
     match message {
-        OsrMessage::Frame(frame) => frame.bytes.allocation().1,
         OsrMessage::PaintBatch(batch) => batch_retained_bytes(batch),
+        #[cfg(windows)]
         OsrMessage::AccelFrame(frame) => {
             frame.coded_width as usize * frame.coded_height as usize * 4
         }

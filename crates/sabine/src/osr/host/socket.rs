@@ -1,8 +1,8 @@
 // ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
 //
-// Winsock accepts inherit the listener's nonblocking mode. The accepted OSR
-// stream must be switched back to blocking before authentication and frame reads,
-// or WSAEWOULDBLOCK (10035) turns a healthy connection into a browser crash loop.
+// Winsock accepts inherit the listener's nonblocking mode. The listener must stay
+// blocking so the accepted OSR stream is blocking for authentication and frame
+// reads, or WSAEWOULDBLOCK (10035) turns a healthy connection into a browser crash loop.
 
 use std::{
     sync::{
@@ -16,8 +16,11 @@ use std::{
 
 use winit::event_loop::EventLoopProxy;
 
+use crate::osr::control::ControlWriter;
 use crate::osr::message_queue::MessageQueue;
-use crate::osr::protocol::read_message;
+#[cfg(unix)]
+use crate::osr::protocol::PaintSlots;
+use crate::osr::protocol::WireReader;
 use crate::osr::transport::{IpcEndpoint, IpcListener, IpcStream};
 
 use super::types::OsrHostEvent;
@@ -42,6 +45,7 @@ impl Drop for SocketReader {
         {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
+        self.endpoint.wake_listener();
         self.endpoint.unlink();
     }
 }
@@ -73,11 +77,7 @@ pub(super) fn start_socket_reader(
     authentication_token: String,
     sender: mpsc::SyncSender<OsrHostEvent>,
     proxy: EventLoopProxy,
-) -> std::io::Result<SocketReader> {
-    if let Err(error) = listener.set_nonblocking(true) {
-        endpoint.unlink();
-        return Err(error);
-    }
+) -> SocketReader {
     let state = Arc::new(ReaderState {
         stopped: AtomicBool::new(false),
         stream: Mutex::new(None),
@@ -89,16 +89,13 @@ pub(super) fn start_socket_reader(
     };
     thread::spawn(move || {
         let messages = Arc::clone(&state.messages);
-        let mut stream = loop {
+        let stream = loop {
             if state.stopped() {
                 return;
             }
             let mut candidate = match listener.accept() {
                 Ok((candidate, _)) => candidate,
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(20));
-                    continue;
-                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => {
                     endpoint.unlink();
                     state.send(&sender, OsrHostEvent::Disconnected(generation));
@@ -106,10 +103,10 @@ pub(super) fn start_socket_reader(
                     return;
                 }
             };
-            if let Err(error) = candidate
-                .set_nonblocking(false)
-                .and_then(|()| candidate.set_read_timeout(Some(Duration::from_millis(750))))
-            {
+            if state.stopped() {
+                return;
+            }
+            if let Err(error) = candidate.set_read_timeout(Some(Duration::from_millis(750))) {
                 eprintln!("Sabine OSR could not configure authentication socket: {error}");
                 continue;
             }
@@ -127,16 +124,14 @@ pub(super) fn start_socket_reader(
                 }
             }
         };
-        let Ok(writer) = stream.try_clone() else {
-            endpoint.unlink();
-            state.send(&sender, OsrHostEvent::Disconnected(generation));
-            proxy.wake_up();
-            return;
-        };
-        let owned = match stream.try_clone() {
-            Ok(owned) => owned,
+        let connection = stream.try_clone().and_then(|writer| {
+            let control = Arc::new(ControlWriter::start(writer.try_clone()?)?);
+            Ok((writer, control, stream.try_clone()?))
+        });
+        let (writer, control, owned) = match connection {
+            Ok(connection) => connection,
             Err(error) => {
-                eprintln!("Sabine OSR could not own reader socket: {error}");
+                eprintln!("Sabine OSR could not set up the browser connection: {error}");
                 let _ = stream.shutdown(std::net::Shutdown::Both);
                 endpoint.unlink();
                 state.send(&sender, OsrHostEvent::Disconnected(generation));
@@ -147,12 +142,19 @@ pub(super) fn start_socket_reader(
         if let Ok(mut current) = state.stream.lock() {
             *current = Some(owned);
         }
-        if !state.send(&sender, OsrHostEvent::Connected(generation, writer)) {
+        #[cfg(unix)]
+        let mut wire = WireReader::new(stream, PaintSlots::new(Arc::clone(&control)));
+        #[cfg(not(unix))]
+        let mut wire = WireReader::new(stream);
+        if !state.send(
+            &sender,
+            OsrHostEvent::Connected(generation, writer, control),
+        ) {
             return;
         }
         proxy.wake_up();
         while !state.stopped() {
-            match read_message(&mut stream) {
+            match wire.read() {
                 Ok(Some(message)) => {
                     if messages.push(message) {
                         if !state.send(
@@ -179,9 +181,10 @@ pub(super) fn start_socket_reader(
                 }
             }
         }
+        drop(wire);
         endpoint.unlink();
         state.send(&sender, OsrHostEvent::Disconnected(generation));
         proxy.wake_up();
     });
-    Ok(reader)
+    reader
 }

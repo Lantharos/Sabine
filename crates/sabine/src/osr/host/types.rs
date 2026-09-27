@@ -9,8 +9,9 @@ use std::{
 use winit::event::MouseButton;
 
 use crate::SabineWindowChrome;
+use crate::osr::control::ControlWriter;
 use crate::osr::frame_buffer::FrameBuffer;
-use crate::osr::protocol::{OsrFrame, OsrMessage, OsrSurface, POPUP_OVERLAY_ID, POPUP_TEXTURE_ID};
+use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID, POPUP_TEXTURE_ID};
 use crate::osr::transport::IpcStream;
 
 pub(super) const TITLEBAR_HEIGHT: f32 = 38.0;
@@ -39,9 +40,32 @@ pub(super) const EVENTFLAG_COMMAND_DOWN: u32 = 1 << 7;
 pub(super) const EVENTFLAG_IS_REPEAT: u32 = 1 << 13;
 pub(super) const EVENTFLAG_PRECISION_SCROLLING_DELTA: u32 = 1 << 14;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct SurfaceGeometry {
+    pub(super) x: i32,
+    pub(super) y: i32,
+    pub(super) width: u32,
+    pub(super) height: u32,
+}
+
+impl SurfaceGeometry {
+    pub(super) fn size(self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+}
+
 pub(super) struct OverlayLayer {
-    pub(super) frame: OsrFrame,
+    pub(super) geometry: SurfaceGeometry,
     pub(super) buffer: FrameBuffer,
+}
+
+impl OverlayLayer {
+    pub(super) fn new(geometry: SurfaceGeometry) -> Self {
+        Self {
+            geometry,
+            buffer: FrameBuffer::new(),
+        }
+    }
 }
 
 pub(super) fn overlay_texture_id(overlay_id: &str) -> String {
@@ -52,16 +76,12 @@ pub(super) fn overlay_texture_id(overlay_id: &str) -> String {
     }
 }
 
-pub(super) fn overlay_id_for_surface(surface: &OsrSurface) -> Option<String> {
-    surface.overlay_id().map(str::to_string)
-}
-
 pub(super) fn uses_sabine_chrome(chrome: SabineWindowChrome) -> bool {
     matches!(chrome, SabineWindowChrome::Sabine)
 }
 
 pub(super) enum OsrHostEvent {
-    Connected(u64, IpcStream),
+    Connected(u64, IpcStream, Arc<ControlWriter>),
     Message(u64, OsrMessage),
     MessagesReady(u64, Arc<crate::osr::message_queue::MessageQueue>),
     HostControl(HostControl),
@@ -73,7 +93,7 @@ pub(super) enum OsrHostEvent {
 impl OsrHostEvent {
     pub(super) fn connection_generation(&self) -> Option<u64> {
         match self {
-            Self::Connected(generation, _)
+            Self::Connected(generation, ..)
             | Self::Message(generation, _)
             | Self::MessagesReady(generation, _)
             | Self::Disconnected(generation) => Some(*generation),

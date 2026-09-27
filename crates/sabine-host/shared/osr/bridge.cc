@@ -85,7 +85,7 @@ bool SabineOsrHandler::OnProcessMessageReceived(
 }
 
 bool SabineOsrHandler::HandleWindowCommand(CefRefPtr<CefBrowser> browser,
-	                                         const std::string& url) {
+                                           const std::string& url) {
   const std::string prefix = "sabine://window/";
   if (url.rfind(prefix, 0) != 0) {
     return false;

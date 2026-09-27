@@ -175,8 +175,7 @@ private IPC directory under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`, so
 
 OSR authentication uses a first-line token plus same-UID `SO_PEERCRED` checks on Unix. The token
 is written to a `0600` file beside the socket and referenced by `--sabine-osr-token-file=` on the
-CEF command line (path is not secret; this survives process-singleton handoff). `SABINE_OSR_TOKEN`
-remains an optional fallback. Stale-socket cleanup uses a same-UID health-probe line that listeners
+CEF command line (path is not secret; this survives process-singleton handoff). Stale-socket cleanup uses a same-UID health-probe line that listeners
 recognize separately from authenticated CEF connections. Child OSR/CEF processes set
 `PR_SET_PDEATHSIG` on Linux so OSR hosts do not outlive a crashed parent.
 Closing a window stops browser recovery immediately. Transport disconnect forces closure of
@@ -231,10 +230,14 @@ visual without an HWND redirection bitmap, allowing premultiplied OSR pixels to 
 backdrop. Sabine applies Acrylic, blur, Mica, and Mica Alt directly through Win32 composition APIs.
 On macOS, Sabine installs its own semantic `NSVisualEffectView` beneath the Metal content view.
 
-CEF delivers BGRA dirty rectangles on the software path. Inline and shared-memory batches retain one
-immutable byte backing instead of copying every rectangle into a separate allocation. The native
-host patches one backing store per surface and uploads only the changed ranges to an independent GPU
-texture (sparse per-rect uploads when damage is disjoint):
+CEF delivers BGRA dirty rectangles on the software path. Paints of 256 KiB or more are copied into
+one of at most four reusable shared-memory slots per browser; each slot is mapped once by the native
+host and handed back with a release message after its pixels are consumed, so steady-state painting
+needs no per-frame allocation, mapping, or file writes. Smaller paints travel inline, and a paint
+whose slots are all still in use falls back to the inline path. Every rectangle in a batch refers to
+that batch's single byte backing instead of a separate allocation. The native host patches one
+backing store per surface and uploads only the changed ranges to an independent GPU texture (sparse
+per-rect uploads when damage is disjoint):
 
 - main page
 - popup overlay
@@ -262,8 +265,8 @@ process so it cannot consume the application's event loop before launch.
 
 Transport is platform-specific without changing the protocol. On Unix, sockets live under
 `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`) with socket mode `0600`, and each window
-authenticates with a first-line token read from a one-use `0600` token file. The environment is
-only a fallback for launches that do not need Chromium process-singleton handoff.
+authenticates with a first-line token read from a one-use `0600` token file. The native host
+accepts the connection as soon as Chromium dials in; it does not poll the listener.
 
 Paint messages use the versioned `SAB1` wire signature. Surface dimensions, inline payloads, and
 shared mappings are bounded before allocation or mapping. The native host's paint queue limits
@@ -634,8 +637,9 @@ before starting Chromium; the resource-directory setting only controls resource 
 
 ### Startup diagnostics
 
-Startup, setup, OSR host, Chromium host, and maintenance errors are saved as JSON lines
-in the shared Sabine data directory under `logs/`. Each component keeps up to 4 MiB
+Startup, setup, window host, and maintenance errors are saved as JSON lines
+in the shared Sabine data directory under `logs/`. Chromium's output is recorded once, in the
+log of the window host that launched it. Each component keeps up to 4 MiB
 before discarding older entries. On Linux this directory follows `XDG_DATA_HOME`,
 falling back to `~/.local/share/sabine/logs`. Child stderr is also forwarded to the
 launching terminal when one is attached. Diagnostic files may contain application

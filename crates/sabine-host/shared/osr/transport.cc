@@ -24,8 +24,6 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -386,7 +384,7 @@ bool SabineOsrHandler::SendMessageWithFd(uint32_t kind,
 #endif
 }
 
-bool SabineOsrHandler::SendPaintBatch(uint32_t kind,
+bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
                                         const std::string& guest_id,
                                         int32_t origin_x,
                                         int32_t origin_y,
@@ -436,58 +434,47 @@ bool SabineOsrHandler::SendPaintBatch(uint32_t kind,
   }
 
   const std::string prefix =
-      kind == kGuestFrame ? GuestPayloadPrefix(guest_id) : std::string();
-  const size_t metadata_len = prefix.size() + 4 + rects.size() * kBatchEntryLen;
-  if (metadata_len > std::numeric_limits<uint32_t>::max()) {
-    return false;
-  }
-  std::vector<char> metadata(metadata_len, 0);
-  std::memcpy(metadata.data(), prefix.data(), prefix.size());
-  PutU32(&metadata, prefix.size(), static_cast<uint32_t>(rects.size()));
-  for (size_t i = 0; i < rects.size(); ++i) {
-    PutPaintEntry(&metadata, prefix.size() + 4 + i * kBatchEntryLen, rects[i]);
-  }
-
-  const bool use_shared = total_bytes >= kSharedPaintThreshold;
+      surface == PaintSurface::kGuest ? GuestPayloadPrefix(guest_id) : std::string();
 #ifndef _WIN32
-  if (use_shared) {
-    const int fd = CreateMemfd("sabine-osr-paint");
-    if (fd >= 0) {
-      bool ok = ftruncate(fd, static_cast<off_t>(total_bytes)) == 0;
+  if (total_bytes >= kSharedPaintThreshold) {
+    const int index = shared_paint_.Acquire(static_cast<size_t>(total_bytes));
+    if (index >= 0) {
+      SharedPaintSlot& slot = shared_paint_.Slot(index);
       for (const auto& rect : rects) {
-        ok = ok && WritePaintRect(fd, buffer, buffer_width, rect);
+        CopyPaintRect(slot.data, buffer, buffer_width, rect);
       }
-      ok = ok && lseek(fd, 0, SEEK_SET) >= 0;
-      if (ok) {
-        ok = SendMessageWithFd(SharedBatchKind(kind),
-                               static_cast<uint32_t>(buffer_width),
-                               static_cast<uint32_t>(buffer_height),
-                               origin_x,
-                               origin_y,
-                               metadata.data(),
-                               static_cast<uint32_t>(metadata.size()),
-                               fd);
+      std::vector<char> metadata =
+          PaintMetadata(prefix, rects, static_cast<uint32_t>(index), slot.generation);
+      const uint32_t shared_kind = SharedBatchKind(surface);
+      const uint32_t metadata_len = static_cast<uint32_t>(metadata.size());
+      const bool sent =
+          slot.announced
+              ? SendMessage(shared_kind, static_cast<uint32_t>(buffer_width),
+                            static_cast<uint32_t>(buffer_height), origin_x,
+                            origin_y, metadata.data(), metadata_len)
+              : SendMessageWithFd(shared_kind, static_cast<uint32_t>(buffer_width),
+                                  static_cast<uint32_t>(buffer_height), origin_x,
+                                  origin_y, metadata.data(), metadata_len, slot.fd);
+      if (!sent) {
+        shared_paint_.Release(static_cast<uint32_t>(index), slot.generation);
+        return false;
       }
-      close(fd);
-      if (ok) {
-        return true;
-      }
+      slot.announced = true;
+      return true;
     }
   }
-#else
-  (void)use_shared;
 #endif
 
+  std::vector<char> payload = PaintMetadata(prefix, rects);
+  const size_t metadata_len = payload.size();
   if (metadata_len + total_bytes > std::numeric_limits<uint32_t>::max()) {
     return false;
   }
-  std::vector<char> payload(metadata_len + static_cast<size_t>(total_bytes), 0);
-  std::memcpy(payload.data(), metadata.data(), metadata.size());
-  char* data = payload.data() + metadata_len;
+  payload.resize(metadata_len + static_cast<size_t>(total_bytes));
   for (const auto& rect : rects) {
-    CopyPaintRect(data, buffer, buffer_width, rect);
+    CopyPaintRect(payload.data() + metadata_len, buffer, buffer_width, rect);
   }
-  return SendMessage(BatchKind(kind),
+  return SendMessage(BatchKind(surface),
                      static_cast<uint32_t>(buffer_width),
                      static_cast<uint32_t>(buffer_height),
                      origin_x,
@@ -495,3 +482,10 @@ bool SabineOsrHandler::SendPaintBatch(uint32_t kind,
                      payload.data(),
                      static_cast<uint32_t>(payload.size()));
 }
+
+#ifndef _WIN32
+void SabineOsrHandler::ReleaseSharedPaint(uint32_t slot, uint32_t generation) {
+  CEF_REQUIRE_UI_THREAD();
+  shared_paint_.Release(slot, generation);
+}
+#endif

@@ -17,7 +17,7 @@ impl OsrNativeHost {
             self.pending_resize_paint = None;
             return false;
         }
-        if self.main_frame_matches(pending.size) {
+        if self.main_surface_matches(pending.size) {
             self.pending_resize_paint = None;
             return false;
         }
