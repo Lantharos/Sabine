@@ -88,6 +88,7 @@ pub(super) enum OsrHostEvent {
     /// Forward a bridge or guest-control line to the owning CEF handler socket.
     ControlLine(String),
     Disconnected(u64),
+    IncompatibleHost(u64),
 }
 
 impl OsrHostEvent {
@@ -96,7 +97,8 @@ impl OsrHostEvent {
             Self::Connected(generation, ..)
             | Self::Message(generation, _)
             | Self::MessagesReady(generation, _)
-            | Self::Disconnected(generation) => Some(*generation),
+            | Self::Disconnected(generation)
+            | Self::IncompatibleHost(generation) => Some(*generation),
             Self::HostControl(_) | Self::ControlLine(_) => None,
         }
     }

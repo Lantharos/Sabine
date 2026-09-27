@@ -23,8 +23,6 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/uio.h>
 #include <unistd.h>

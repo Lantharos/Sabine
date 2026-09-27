@@ -199,7 +199,12 @@ that job so the shared browser process remains available to sibling windows.
 Sabine uses one paint policy per platform. Apps cannot select a renderer or opt into experimental
 transport branches. The GPU instance is shared within each process across window recreation.
 Hibernation still releases per-window devices, surfaces, and textures; resuming reuses the
-backend connection instead of repeatedly initializing graphics drivers.
+backend connection instead of repeatedly initializing graphics drivers. Linux uses Vulkan and only
+initializes OpenGL when no Vulkan adapter can present to the window.
+
+On Linux and macOS, Chromium is launched before the native window and graphics device are created,
+sized for the monitor the window opens on, so browser startup overlaps GPU initialization. Windows
+waits for the compositor device because Chromium must render on the same adapter.
 
 - **Windows** uses accelerated `OnAcceleratedPaint`. CEF owns and pools the callback texture, so the
   CEF host first opens it on D3D11 and copies it into one of four Sabine-owned D3D12 shared textures
@@ -651,11 +656,11 @@ the app window opens display a separate notice. The windows render Unicode text
 using installed fonts and wrap messages; the log retains text beyond the visible
 window area.
 
-The native host and app must support the same host protocol. The host check allows up to
-30 seconds for cold starts on slower machines and returns as soon as the host responds.
-Sabine checks the host before
-launching Chromium and reports a repair/update error when an older installation cannot enforce
-the app's bridge policy.
+The native host and app must support the same host protocol. Setup and runtime maintenance run
+the host once to confirm its protocol, allowing up to 30 seconds for cold starts on slower
+machines. Window launches do not pay for a separate check: the host announces its protocol as the
+first message on its window connection, and a host that does not match is disconnected before any
+page traffic reaches the app, with a repair/update error in place of the window.
 
 Packaged apps use an installed host and never invoke a compiler on the user's machine. Development
 builds and the packaging CLI can build a host from the CEF SDK. Compatible newer shared hosts are

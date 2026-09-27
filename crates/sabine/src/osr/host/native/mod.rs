@@ -304,11 +304,21 @@ impl OsrNativeHost {
         self.children.push((generation, child));
     }
 
+    #[cfg(not(windows))]
+    pub(super) fn launch_child_before_window(&mut self, event_loop: &dyn ActiveEventLoop) {
+        self.scale_factor = crate::launch::launch_scale_factor(event_loop);
+        self.surface_size = winit::dpi::PhysicalSize::new(
+            (f64::from(self.config.width) * self.scale_factor).round() as u32,
+            (f64::from(self.config.height) * self.scale_factor).round() as u32,
+        );
+        self.launch_child();
+    }
+
     pub(super) fn content_size_for_cef(&self) -> (u32, u32, f64) {
         let scale = self
             .window
             .as_ref()
-            .map_or(1.0, |window| window.scale_factor());
+            .map_or(self.scale_factor, |window| window.scale_factor());
         if !self.config.visible
             && self.window.is_none()
             && self.config.lifecycle.hibernate_after.is_some()

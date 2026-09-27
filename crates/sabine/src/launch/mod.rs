@@ -53,9 +53,7 @@ pub(crate) fn centered_window_position(
     width: u32,
     height: u32,
 ) -> Option<PhysicalPosition<i32>> {
-    let monitor = event_loop
-        .primary_monitor()
-        .or_else(|| event_loop.available_monitors().next())?;
+    let monitor = launch_monitor(event_loop)?;
     let mode = monitor.current_video_mode()?;
     let monitor_size = mode.size();
     let monitor_position = monitor.position()?;
@@ -65,6 +63,17 @@ pub(crate) fn centered_window_position(
     let x = monitor_position.x + (monitor_size.width as i32 - physical_width).max(0) / 2;
     let y = monitor_position.y + (monitor_size.height as i32 - physical_height).max(0) / 2;
     Some(PhysicalPosition::new(x, y))
+}
+
+#[cfg(not(windows))]
+pub(crate) fn launch_scale_factor(event_loop: &dyn ActiveEventLoop) -> f64 {
+    launch_monitor(event_loop).map_or(1.0, |monitor| monitor.scale_factor().max(1.0))
+}
+
+fn launch_monitor(event_loop: &dyn ActiveEventLoop) -> Option<winit::monitor::MonitorHandle> {
+    event_loop
+        .primary_monitor()
+        .or_else(|| event_loop.available_monitors().next())
 }
 
 pub(crate) fn canonical_entry(entry: &str) -> SabineResult<PathBuf> {

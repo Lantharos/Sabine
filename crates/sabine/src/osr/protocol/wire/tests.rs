@@ -4,9 +4,9 @@ use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 
 use super::{
-    HEADER_LEN, KIND_IME_CURSOR_AREA_CHANGED, KIND_IME_STATE_CHANGED, KIND_IME_SURROUNDING_CHANGED,
-    KIND_MAIN_BATCH, KIND_MAIN_LOAD_READY, KIND_MAIN_SHARED_BATCH, KIND_TOOLTIP_CHANGED, MAGIC,
-    PaintSlots, WireReader,
+    HEADER_LEN, KIND_HOST_HELLO, KIND_IME_CURSOR_AREA_CHANGED, KIND_IME_STATE_CHANGED,
+    KIND_IME_SURROUNDING_CHANGED, KIND_MAIN_BATCH, KIND_MAIN_LOAD_READY, KIND_MAIN_SHARED_BATCH,
+    KIND_TOOLTIP_CHANGED, MAGIC, PaintSlots, WireReader,
 };
 use crate::osr::control::ControlWriter;
 use crate::osr::protocol::{OsrMessage, OsrPaintBatch, OsrSurface};
@@ -96,6 +96,24 @@ fn paint(connection: &mut Connection) -> OsrPaintBatch {
         OsrMessage::PaintBatch(batch) => batch,
         other => panic!("expected paint batch, got {other:?}"),
     }
+}
+
+#[test]
+fn host_protocol_must_be_announced_first() {
+    let mut announced = connect();
+    send(&mut announced, KIND_HOST_HELLO, (0, 0), (0, 0), b"4");
+    assert_eq!(
+        announced
+            .wire
+            .read_host_protocol()
+            .expect("hello")
+            .as_deref(),
+        Some("4")
+    );
+
+    let mut silent = connect();
+    send(&mut silent, KIND_MAIN_LOAD_READY, (0, 0), (0, 0), &[]);
+    assert!(silent.wire.read_host_protocol().is_err());
 }
 
 #[test]

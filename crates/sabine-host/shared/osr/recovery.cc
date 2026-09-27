@@ -33,7 +33,7 @@ void SabineOsrHandler::OnRenderProcessTerminated(
   }
   if (!guest) {
     const std::string message = "The page renderer stopped repeatedly. Close the application and try again.";
-    SendMessage(37, 0, 0, 0, 0, message.data(), static_cast<uint32_t>(message.size()));
+    SendMessage(kFatalError, 0, 0, 0, 0, message.data(), static_cast<uint32_t>(message.size()));
   }
   browser->GetHost()->CloseBrowser(true);
 }

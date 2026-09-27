@@ -56,6 +56,8 @@ pub(super) const KIND_IME_SURROUNDING_CHANGED: u32 = 34;
 pub(super) const KIND_MAXIMIZE_REQUESTED: u32 = 35;
 pub(super) const KIND_RESTORE_REQUESTED: u32 = 36;
 pub(super) const KIND_FATAL_ERROR: u32 = 37;
+pub(super) const KIND_HOST_HELLO: u32 = 38;
+const MAX_HELLO_BYTES: usize = 64;
 pub(super) const BATCH_ENTRY_LEN: usize = 28;
 
 pub(crate) struct WireReader {
@@ -73,6 +75,32 @@ impl WireReader {
     #[cfg(not(unix))]
     pub(crate) fn new(stream: IpcStream) -> Self {
         Self { stream }
+    }
+
+    pub(crate) fn read_host_protocol(&mut self) -> io::Result<Option<String>> {
+        #[cfg(unix)]
+        let Some((header, _)) = read_header(&mut self.stream)? else {
+            return Ok(None);
+        };
+        #[cfg(not(unix))]
+        let Some(header) = read_header(&mut self.stream)? else {
+            return Ok(None);
+        };
+        let payload_len = read_u32(&header[24..28]) as usize;
+        if &header[0..4] != MAGIC
+            || read_u32(&header[4..8]) != KIND_HOST_HELLO
+            || payload_len > MAX_HELLO_BYTES
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the browser host did not identify its protocol",
+            ));
+        }
+        let mut payload = vec![0_u8; payload_len];
+        self.stream.read_exact(&mut payload)?;
+        String::from_utf8(payload)
+            .map(Some)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
     pub(crate) fn read(&mut self) -> io::Result<Option<OsrMessage>> {
