@@ -23,8 +23,6 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -100,26 +98,26 @@ bool SabineOsrHandler::HandleWindowCommand(CefRefPtr<CefBrowser> browser,
     // which CloseBrowsers this surface. Do not quit the shared CEF process.
     RequestNativeClose();
   } else if (command == "start-drag" || command == "drag") {
-    SendMessage(6, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kStartDragRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "minimize") {
-    SendMessage(7, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kMinimizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "maximize") {
-    SendMessage(35, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "restore") {
-    SendMessage(36, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kRestoreRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "toggle-maximize") {
-    SendMessage(8, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kToggleMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "fullscreen") {
-    SendMessage(27, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "exit-fullscreen") {
-    SendMessage(28, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kExitFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "show") {
-    SendMessage(9, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kShowRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "hide") {
-    SendMessage(10, 0, 0, 0, 0, nullptr, 0);
+    SendMessage(kHideRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "focus") {
     const std::string activation_token = QueryValue(url, "activationToken");
-    SendMessage(11, 0, 0, 0, 0, activation_token.data(),
+    SendMessage(kFocusRequested, 0, 0, 0, 0, activation_token.data(),
                 static_cast<uint32_t>(activation_token.size()));
   }
   return true;
@@ -178,7 +176,7 @@ bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
 }
 
 void SabineOsrHandler::RequestNativeClose() {
-  SendMessage(5, 0, 0, 0, 0, nullptr, 0);
+  SendMessage(kCloseRequested, 0, 0, 0, 0, nullptr, 0);
 }
 
 void SabineOsrHandler::CloseFromNativeDisconnect() {

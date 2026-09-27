@@ -86,18 +86,11 @@ impl GpuRenderer {
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, RendererError> {
         let size = window.surface_size();
-        let instance = instance::shared();
-        let surface = instance
-            .create_surface(window.clone())
-            .map_err(|error| RendererError::Surface(error.to_string()))?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                compatible_surface: Some(&surface),
-                power_preference: wgpu::PowerPreference::LowPower,
-                ..Default::default()
-            })
-            .await
-            .map_err(|error| RendererError::Adapter(error.to_string()))?;
+        let instance::GpuConnection {
+            instance,
+            surface,
+            adapter,
+        } = instance::connect(window.clone()).await?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("sabine-gpu"),

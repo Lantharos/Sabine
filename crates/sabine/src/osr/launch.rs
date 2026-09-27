@@ -150,7 +150,9 @@ pub(crate) fn spawn_osr_host_child(
             "document": if url.starts_with("file://") { url } else { "" },
             "origins": if config.security.remote_content { config.security.allowed_origins.clone() } else { Vec::new() },
             "commandOrigins": config.bridge.commands().iter().filter_map(|name| {
-                config.bridge.descriptor(name).map(|descriptor| (name.clone(), serde_json::json!(descriptor.allowed_origins)))
+                config.bridge.descriptor(name)
+                    .filter(|descriptor| !descriptor.allowed_origins.is_empty())
+                    .map(|descriptor| (name.clone(), serde_json::json!(descriptor.allowed_origins)))
             }).collect::<serde_json::Map<String, serde_json::Value>>(),
             "commands": sabine_bridge::bridge_commands_with_all_internal(config.bridge.commands()),
         },
@@ -263,7 +265,6 @@ pub(crate) fn cef_osr_command(
         )
     })?;
     sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
-    sabine_host::validate_host_protocol(&host_binary, runtime_dir)?;
     let host_binary = sabine_host::prepare_host_execution(&host_binary, runtime_dir)?;
     let binary_dir = sabine_host::runtime_binary_directory(runtime_dir);
     let profile_key = browser_profile_key(config);

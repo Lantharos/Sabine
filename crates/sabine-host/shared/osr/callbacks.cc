@@ -24,14 +24,13 @@
 #include "osr/accelerated/windows/d3d11_copy.h"
 #else
 #include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
 #include <sys/un.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #endif
 
 #include "guest/input.h"
+#include "sabine_host_protocol.h"
 #include "guest/manager.h"
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
@@ -51,7 +50,7 @@ bool SabineOsrHandler::OnCursorChange(CefRefPtr<CefBrowser> browser,
                                     cef_cursor_type_t type,
                                     const CefCursorInfo& custom_cursor_info) {
   const std::string name = CursorName(type);
-  SendMessage(4, 0, 0, 0, 0, name.data(), static_cast<uint32_t>(name.size()));
+  SendMessage(kCursor, 0, 0, 0, 0, name.data(), static_cast<uint32_t>(name.size()));
   return true;
 }
 
@@ -144,7 +143,9 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
                  host->IsWindowRenderingDisabled() ? 1 : 0);
     std::fflush(stderr);
   }
-  if (!ConnectSocket()) {
+  if (!ConnectSocket() ||
+      !SendMessage(kHostHello, 0, 0, 0, 0, SABINE_HOST_PROTOCOL_VERSION,
+                   sizeof(SABINE_HOST_PROTOCOL_VERSION) - 1)) {
     std::fprintf(stderr, "Sabine OSR: failed to connect native host\n");
     std::fflush(stderr);
     host->CloseBrowser(true);

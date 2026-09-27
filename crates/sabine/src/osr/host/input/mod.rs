@@ -25,6 +25,8 @@ impl ApplicationHandler for OsrNativeHost {
             self.launch_child();
             return;
         }
+        #[cfg(not(windows))]
+        self.launch_child_before_window(event_loop);
         self.create_window(event_loop);
     }
 
