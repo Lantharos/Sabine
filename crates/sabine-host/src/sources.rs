@@ -98,6 +98,14 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "osr/accelerated/windows/d3d11_copy.h",
         include_str!("../shared/osr/accelerated/windows/d3d11_copy.h"),
     ),
+    (
+        "osr/paint/shared_pool.cc",
+        include_str!("../shared/osr/paint/shared_pool.cc"),
+    ),
+    (
+        "osr/paint/shared_pool.h",
+        include_str!("../shared/osr/paint/shared_pool.h"),
+    ),
 ];
 
 pub(crate) fn write_host_source(source_dir: &Path) -> Result<(), String> {

@@ -7,12 +7,15 @@ pub(crate) use config_json::{
     rects_from_json, rects_to_json, regions_from_json, regions_to_json,
 };
 pub(crate) use encode::encode_component;
-pub(crate) use wire::read_message;
+#[cfg(unix)]
+pub(crate) use wire::PaintSlots;
+pub(crate) use wire::WireReader;
 
 use sabine_platform::WindowRegionRect;
 use std::{ops::Range, sync::Arc};
 
-use self::wire::SharedMapping;
+#[cfg(unix)]
+use self::wire::PaintLease;
 
 pub(crate) const MAIN_TEXTURE_ID: &str = "__sabine_main";
 pub(crate) const POPUP_TEXTURE_ID: &str = "__sabine_popup";
@@ -20,48 +23,31 @@ pub(crate) const POPUP_OVERLAY_ID: &str = "__sabine_popup";
 
 #[derive(Clone, Debug)]
 pub(crate) enum FrameBytes {
-    Owned(Vec<u8>),
     Inline {
-        source: Arc<[u8]>,
+        source: Arc<Vec<u8>>,
         range: Range<usize>,
     },
+    #[cfg(unix)]
     Shared {
-        source: Arc<SharedMapping>,
+        source: Arc<PaintLease>,
         range: Range<usize>,
     },
 }
 
 impl FrameBytes {
-    pub(crate) fn allocation(&self) -> (usize, usize) {
-        match self {
-            Self::Owned(bytes) => (bytes.as_ptr() as usize, bytes.capacity()),
-            Self::Inline { source, .. } => (source.as_ptr() as usize, source.len()),
-            Self::Shared { source, .. } => {
-                let bytes = source.as_slice();
-                (bytes.as_ptr() as usize, bytes.len())
-            }
-        }
-    }
-
     pub(crate) fn as_slice(&self) -> &[u8] {
         match self {
-            Self::Owned(bytes) => bytes,
             Self::Inline { source, range } => &source[range.clone()],
+            #[cfg(unix)]
             Self::Shared { source, range } => &source.as_slice()[range.clone()],
         }
     }
 }
 
-impl From<Vec<u8>> for FrameBytes {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self::Owned(bytes)
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum OsrMessage {
-    Frame(OsrFrame),
     PaintBatch(OsrPaintBatch),
+    #[cfg(windows)]
     AccelFrame(OsrAccelFrame),
     /// Hide the built-in popup overlay (`__sabine_popup`).
     PopupHidden,
@@ -121,10 +107,10 @@ pub(crate) struct OsrPaintBatch {
     pub height: u32,
     pub x: i32,
     pub y: i32,
-    pub frames: Vec<OsrFrame>,
+    pub rects: Vec<PaintRect>,
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg(windows)]
 #[derive(Debug)]
 pub(crate) struct OsrAccelFrame {
     pub surface: OsrSurface,
@@ -151,8 +137,7 @@ impl Drop for OsrAccelFrame {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct OsrFrame {
-    pub surface: OsrSurface,
+pub(crate) struct PaintRect {
     pub width: u32,
     pub height: u32,
     pub x: i32,
@@ -160,7 +145,7 @@ pub(crate) struct OsrFrame {
     pub bytes: FrameBytes,
 }
 
-impl OsrFrame {
+impl PaintRect {
     pub(crate) fn bytes(&self) -> &[u8] {
         self.bytes.as_slice()
     }

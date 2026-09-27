@@ -9,8 +9,9 @@ mod loading;
 pub(in crate::osr) mod loading_messages;
 mod native;
 mod paint;
+#[cfg(windows)]
 mod paint_accel;
-mod paint_upload;
+mod present;
 mod recovery;
 mod resize;
 mod socket;

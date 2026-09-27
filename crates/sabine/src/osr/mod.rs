@@ -1,5 +1,6 @@
+#[cfg(windows)]
 pub(crate) mod accel;
-mod control;
+pub(crate) mod control;
 pub(crate) mod frame_buffer;
 pub(crate) mod host;
 pub(crate) mod launch;

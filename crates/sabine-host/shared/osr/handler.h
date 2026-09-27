@@ -14,6 +14,9 @@
 #include <vector>
 
 #include "guest/manager.h"
+#ifndef _WIN32
+#include "osr/paint/shared_pool.h"
+#endif
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
 #include "include/cef_context_menu_handler.h"
@@ -25,15 +28,12 @@
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
 
-constexpr uint32_t kMainFrame = 1;
-constexpr uint32_t kPopupFrame = 2;
 constexpr uint32_t kPopupHidden = 3;
 constexpr uint32_t kMainBatch = 12;
 constexpr uint32_t kPopupBatch = 13;
 constexpr uint32_t kMainSharedBatch = 14;
 constexpr uint32_t kPopupSharedBatch = 15;
 constexpr uint32_t kFileDragRequested = 16;
-constexpr uint32_t kGuestFrame = 17;
 constexpr uint32_t kGuestBatch = 18;
 constexpr uint32_t kGuestSharedBatch = 19;
 constexpr uint32_t kGuestHidden = 20;
@@ -49,6 +49,8 @@ constexpr uint32_t kImeSurroundingChanged = 34;
 
 constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
 
+enum class PaintSurface { kMain, kPopup, kGuest };
+
 class SabineOsrHandler : public CefClient,
                        public CefContextMenuHandler,
                        public CefDisplayHandler,
@@ -61,15 +63,15 @@ class SabineOsrHandler : public CefClient,
                        public CefRequestHandler {
  public:
   SabineOsrHandler(std::string endpoint,
-                 std::string authentication_token,
-                 int width,
-                 int height,
-	                 float scale,
-	                 CefRefPtr<CefDictionaryValue> bridge_policy,
+                   std::string authentication_token,
+                   int width,
+                   int height,
+                   float scale,
+                   CefRefPtr<CefDictionaryValue> bridge_policy,
                    bool dev_mode,
-	                 bool transparent_background,
-	                 int active_frame_rate,
-	                 int background_frame_rate);
+                   bool transparent_background,
+                   int active_frame_rate,
+                   int background_frame_rate);
   ~SabineOsrHandler() override;
 
   static SabineOsrHandler* GetInstance();
@@ -211,6 +213,9 @@ class SabineOsrHandler : public CefClient,
                              const std::string& payload);
   void EmitBridgeEvent(const std::string& name_json,
                        const std::string& payload);
+#ifndef _WIN32
+  void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
+#endif
 
  private:
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
@@ -242,7 +247,7 @@ class SabineOsrHandler : public CefClient,
                          const void* payload,
                          uint32_t payload_len,
                          int fd);
-  bool SendPaintBatch(uint32_t kind,
+  bool SendPaintBatch(PaintSurface surface,
                       const std::string& guest_id,
                       int32_t origin_x,
                       int32_t origin_y,
@@ -255,10 +260,10 @@ class SabineOsrHandler : public CefClient,
                            const std::string& url);
   bool HandleWindowCommand(CefRefPtr<CefBrowser> browser, const std::string& url);
   void RequestNativeClose();
-	  void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
-	  void ApplyLifecycle(const std::string& state, int frame_rate, const std::string& reason);
-	  void DispatchLifecycle(const std::string& state, const std::string& reason);
-	  void StartCommandReader();
+  void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
+  void ApplyLifecycle(const std::string& state, int frame_rate, const std::string& reason);
+  void DispatchLifecycle(const std::string& state, const std::string& reason);
+  void StartCommandReader();
 
   GuestView* GuestForBrowser(const CefRefPtr<CefBrowser>& browser);
   bool HandleGuestBridgeCommand(const std::string& command,
@@ -316,6 +321,9 @@ class SabineOsrHandler : public CefClient,
   bool resize_in_flight_ = false;
   int width_ = 1;
   int height_ = 1;
+#ifndef _WIN32
+  sabine_osr::SharedPaintPool shared_paint_;
+#endif
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
   float scale_ = 1.0f;
@@ -335,21 +343,21 @@ class SabineOsrHandler : public CefClient,
   std::map<std::string, std::vector<PendingGuestCreate>> pending_guest_creates_;
   std::map<std::string, GuestDownload> downloads_;
   int guest_serial_ = 0;
-	  std::set<std::string> bridge_commands_;
+  std::set<std::string> bridge_commands_;
   CefRefPtr<CefDictionaryValue> bridge_policy_;
   CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
-	  bool transparent_background_ = false;
-	  bool suspended_ = false;
-	  // True only when the view is actually taken off-screen (hibernate).
-	  // Blur/occlusion suspend only throttles frame rate — WasHidden there
-	  // blanks OSR and flickers on resume (common after interactive move).
-	  bool view_hidden_ = false;
-	  bool resume_needs_paint_ = false;
-	  bool pending_guest_cover_ = false;
-	  int active_frame_rate_ = 60;
-	  int background_frame_rate_ = 5;
-	  bool closing_ = false;
-	  bool close_requested_ = false;
+  bool transparent_background_ = false;
+  bool suspended_ = false;
+  // True only when the view is actually taken off-screen (hibernate).
+  // Blur/occlusion suspend only throttles frame rate — WasHidden there
+  // blanks OSR and flickers on resume (common after interactive move).
+  bool view_hidden_ = false;
+  bool resume_needs_paint_ = false;
+  bool pending_guest_cover_ = false;
+  int active_frame_rate_ = 60;
+  int background_frame_rate_ = 5;
+  bool closing_ = false;
+  bool close_requested_ = false;
   CefRefPtr<CefBrowser> drag_source_browser_;
   bool dev_mode_ = false;
 

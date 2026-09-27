@@ -74,3 +74,28 @@ pub(super) fn payload_count(payload: &[u8]) -> io::Result<usize> {
     }
     Ok(count)
 }
+
+#[cfg(test)]
+mod tests {
+    use sabine_platform::WindowRegionRect;
+
+    use super::parse_draggable_regions;
+
+    #[test]
+    fn draggable_regions_split_drag_and_exclusion_rects() {
+        let mut payload = 2_u32.to_le_bytes().to_vec();
+        for (x, y, width, height, draggable) in
+            [(0_i32, 0_i32, 600_i32, 38_i32, 1_u32), (520, 0, 80, 38, 0)]
+        {
+            payload.extend_from_slice(&x.to_le_bytes());
+            payload.extend_from_slice(&y.to_le_bytes());
+            payload.extend_from_slice(&width.to_le_bytes());
+            payload.extend_from_slice(&height.to_le_bytes());
+            payload.extend_from_slice(&draggable.to_le_bytes());
+        }
+
+        let (drag, exclusion) = parse_draggable_regions(&payload).expect("regions");
+        assert_eq!(drag, vec![WindowRegionRect::new(0, 0, 600, 38)]);
+        assert_eq!(exclusion, vec![WindowRegionRect::new(520, 0, 80, 38)]);
+    }
+}

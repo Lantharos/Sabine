@@ -10,8 +10,6 @@ pub(crate) type IpcListener = std::net::TcpListener;
 #[cfg(not(unix))]
 pub(crate) type IpcStream = std::net::TcpStream;
 
-pub(crate) const OSR_TOKEN_ENV: &str = "SABINE_OSR_TOKEN";
-
 #[derive(Clone, Debug)]
 pub(crate) enum IpcEndpoint {
     #[cfg(unix)]
@@ -153,6 +151,22 @@ impl IpcEndpoint {
         }
     }
 
+    pub(crate) fn wake_listener(&self) {
+        match self {
+            #[cfg(unix)]
+            Self::Unix(path) => {
+                let _ = std::os::unix::net::UnixStream::connect(path);
+            }
+            #[cfg(not(unix))]
+            Self::Tcp(address) => {
+                let _ = std::net::TcpStream::connect_timeout(
+                    address,
+                    std::time::Duration::from_millis(250),
+                );
+            }
+        }
+    }
+
     pub(crate) fn unlink(&self) {
         #[cfg(unix)]
         {
@@ -192,16 +206,11 @@ pub(crate) fn write_token_file(endpoint: &IpcEndpoint, token: &str) -> io::Resul
 
 fn write_token_bytes(path: &Path, token: &str) -> io::Result<()> {
     use std::io::Write;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-    }
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options.open(path)?;
     file.write_all(token.as_bytes())?;
     file.write_all(b"\n")?;
     file.flush()?;

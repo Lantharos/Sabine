@@ -125,7 +125,7 @@ impl OsrNativeHost {
         self.hibernate_deadline = None;
         self.hibernate_commit_deadline = None;
         if self.socket.is_none() {
-            if self.config.visible && self.main_frame.is_none() {
+            if self.config.visible && self.main_surface.is_none() {
                 self.loading = Some(NativeLoading::new(LoadingKind::Resuming));
             }
             self.launch_child();
@@ -134,7 +134,7 @@ impl OsrNativeHost {
         // Avoid redraw-on-focus after interactive move: Wayland often marks the
         // surface outdated and a bare redraw flashes transparent glass.
         if self.config.visible
-            && self.main_frame.is_none()
+            && self.main_surface.is_none()
             && let Some(window) = &self.window
         {
             window.request_redraw();
@@ -160,19 +160,11 @@ impl OsrNativeHost {
             return;
         }
         self.send_control("close\n");
-        if let Some(socket) = &self.socket
-            && let Ok(socket) = socket.lock()
-        {
-            let _ = socket.shutdown(std::net::Shutdown::Both);
-        }
-        self.socket_reader = None;
-        self.control_writer = None;
-        self.pending_messages = None;
-        self.socket = None;
+        self.drop_connection();
         self.awaiting_connection = false;
         self.connection_deadline = None;
         self.recovery_deadline = None;
-        self.main_frame = None;
+        self.main_surface = None;
         self.overlays.clear();
         self.main_buffer.release();
         if let Some(renderer) = &mut self.renderer {

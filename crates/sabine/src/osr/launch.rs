@@ -342,9 +342,6 @@ pub(crate) fn cef_osr_command(
             crate::launch::browser::linux_ozone_platform()
         ));
     }
-    // Env remains a fallback for non-handoff launches; the token file is what
-    // survives CEF process-singleton relaunch into the primary process.
-    command.env(crate::osr::transport::OSR_TOKEN_ENV, authentication_token);
     command
         .arg(format!(
             "--sabine-background-color={}",
@@ -363,7 +360,7 @@ pub(crate) fn cef_osr_command(
     }
     command.stdin(Stdio::null());
     command.stdout(Stdio::null());
-    command.stderr(Stdio::piped());
+    command.stderr(Stdio::inherit());
     Ok(command)
 }
 

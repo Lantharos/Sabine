@@ -2462,6 +2462,7 @@ name = "sabine"
 version = "0.29.0"
 dependencies = [
  "ashpd",
+ "base64",
  "bytemuck",
  "crossbeam-channel",
  "futures-util",

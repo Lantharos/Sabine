@@ -48,24 +48,24 @@
 using namespace sabine_osr;
 
 SabineOsrHandler::SabineOsrHandler(std::string endpoint,
-                               std::string authentication_token,
-                               int width,
-	                               int height,
-	                               float scale,
-	                               CefRefPtr<CefDictionaryValue> bridge_policy,
+                                   std::string authentication_token,
+                                   int width,
+                                   int height,
+                                   float scale,
+                                   CefRefPtr<CefDictionaryValue> bridge_policy,
                                    bool dev_mode,
-	                               bool transparent_background,
-	                               int active_frame_rate,
-	                               int background_frame_rate)
-	    : endpoint_(std::move(endpoint)),
-	      authentication_token_(std::move(authentication_token)),
-	      width_(std::max(1, width)),
-	      height_(std::max(1, height)),
-	      scale_(std::max(0.25f, scale)),
-	      bridge_policy_(bridge_policy),
-	      transparent_background_(transparent_background),
-	      active_frame_rate_(std::max(1, active_frame_rate)),
-	      background_frame_rate_(std::max(1, background_frame_rate)) {
+                                   bool transparent_background,
+                                   int active_frame_rate,
+                                   int background_frame_rate)
+    : endpoint_(std::move(endpoint)),
+      authentication_token_(std::move(authentication_token)),
+      width_(std::max(1, width)),
+      height_(std::max(1, height)),
+      scale_(std::max(0.25f, scale)),
+      bridge_policy_(bridge_policy),
+      transparent_background_(transparent_background),
+      active_frame_rate_(std::max(1, active_frame_rate)),
+      background_frame_rate_(std::max(1, background_frame_rate)) {
   dev_mode_ = dev_mode;
   const auto commands = sabine_bridge::Commands(bridge_policy);
   bridge_commands_.insert(commands.begin(), commands.end());
@@ -119,58 +119,46 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
   const std::string url_value = command_line->GetSwitchValue("url");
   const std::string url =
       url_value.empty() ? "about:blank" : std::string(url_value);
-	  const int width = std::max(1, SwitchInt(command_line, "sabine-width", 800));
-	  const int height = std::max(1, SwitchInt(command_line, "sabine-height", 600));
-	  const float scale = SwitchFloat(command_line, "sabine-scale", 1.0f);
-	  const int active_frame_rate =
-	      std::max(1, SwitchInt(command_line, "sabine-active-frame-rate", 60));
-	  const int background_frame_rate =
-	      std::max(1, SwitchInt(command_line, "sabine-background-frame-rate", 5));
-	  const std::string endpoint = command_line->GetSwitchValue("sabine-osr-endpoint");
-	  std::string authentication_token;
-	  const std::string token_file =
-	      command_line->GetSwitchValue("sabine-osr-token-file");
-	  if (!token_file.empty()) {
-	    std::ifstream input(token_file.c_str(), std::ios::in | std::ios::binary);
-	    if (input) {
-	      std::getline(input, authentication_token);
-	      // Strip trailing CR from Windows files.
-	      while (!authentication_token.empty() &&
-	             (authentication_token.back() == '\r' ||
-	              authentication_token.back() == '\n')) {
-	        authentication_token.pop_back();
-	      }
-	    }
-	    // Remove after read so the secret does not linger. Handoff still works
-	    // because the secondary process writes a fresh file and the primary
-	    // reads it from the relaunch command line before this unlink.
-	    std::remove(token_file.c_str());
-	  }
-	  if (authentication_token.empty()) {
-	    if (const char* token_env = std::getenv("SABINE_OSR_TOKEN")) {
-	      authentication_token = token_env;
-#if defined(_WIN32)
-	      _putenv_s("SABINE_OSR_TOKEN", "");
-#else
-	      unsetenv("SABINE_OSR_TOKEN");
-#endif
-	    }
-	  }
-	  if (authentication_token.empty()) {
-	    std::cerr << "Sabine OSR: missing authentication token "
-	                 "(expected --sabine-osr-token-file or SABINE_OSR_TOKEN)"
-	              << std::endl;
+  const int width = std::max(1, SwitchInt(command_line, "sabine-width", 800));
+  const int height = std::max(1, SwitchInt(command_line, "sabine-height", 600));
+  const float scale = SwitchFloat(command_line, "sabine-scale", 1.0f);
+  const int active_frame_rate =
+      std::max(1, SwitchInt(command_line, "sabine-active-frame-rate", 60));
+  const int background_frame_rate =
+      std::max(1, SwitchInt(command_line, "sabine-background-frame-rate", 5));
+  const std::string endpoint = command_line->GetSwitchValue("sabine-osr-endpoint");
+  std::string authentication_token;
+  const std::string token_file =
+      command_line->GetSwitchValue("sabine-osr-token-file");
+  if (!token_file.empty()) {
+    std::ifstream input(token_file.c_str(), std::ios::in | std::ios::binary);
+    if (input) {
+      std::getline(input, authentication_token);
+      // Strip trailing CR from Windows files.
+      while (!authentication_token.empty() &&
+             (authentication_token.back() == '\r' ||
+              authentication_token.back() == '\n')) {
+        authentication_token.pop_back();
+      }
+    }
+    // Remove after read so the secret does not linger. Handoff still works
+    // because the secondary process writes a fresh file and the primary
+    // reads it from the relaunch command line before this unlink.
+    std::remove(token_file.c_str());
+  }
+  if (authentication_token.empty()) {
+    std::cerr << "Sabine OSR: missing authentication token file" << std::endl;
       return false;
-	  }
+  }
 
-	  auto policy_value = CefParseJSON(command_line->GetSwitchValue("sabine-bridge-policy"), JSON_PARSER_RFC);
+  auto policy_value = CefParseJSON(command_line->GetSwitchValue("sabine-bridge-policy"), JSON_PARSER_RFC);
   auto policy = policy_value ? policy_value->GetDictionary() : nullptr;
   if (!policy) {
     std::cerr << "Sabine OSR: missing bridge policy" << std::endl;
     return false;
   }
   CefBrowserSettings browser_settings;
-	  browser_settings.windowless_frame_rate = active_frame_rate;
+  browser_settings.windowless_frame_rate = active_frame_rate;
   if (command_line->HasSwitch("sabine-transparent")) {
     browser_settings.background_color = CefColorSetARGB(0, 0, 0, 0);
   } else {
@@ -179,7 +167,7 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
         CefColorSetARGB(255, 17, 17, 19));
   }
 
-	  CefWindowInfo window_info;
+  CefWindowInfo window_info;
   CefWindowHandle parent_window = kNullWindowHandle;
 #if defined(OS_WIN)
   const std::string parent = command_line->GetSwitchValue("sabine-parent-window");
@@ -195,13 +183,13 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
   }
 #endif
   window_info.SetAsWindowless(parent_window);
-	  sabine_osr::ApplySharedTexture(
-	      &window_info, sabine_osr::PreferSharedTexture(command_line));
-	  CefRefPtr<SabineOsrHandler> handler(new SabineOsrHandler(
-	      endpoint, authentication_token, width, height, scale,
-	      policy, command_line->HasSwitch("sabine-dev-mode"),
-	      command_line->HasSwitch("sabine-transparent"), active_frame_rate,
-	      background_frame_rate));
+  sabine_osr::ApplySharedTexture(
+      &window_info, sabine_osr::PreferSharedTexture(command_line));
+  CefRefPtr<SabineOsrHandler> handler(new SabineOsrHandler(
+      endpoint, authentication_token, width, height, scale,
+      policy, command_line->HasSwitch("sabine-dev-mode"),
+      command_line->HasSwitch("sabine-transparent"), active_frame_rate,
+      background_frame_rate));
   return CefBrowserHost::CreateBrowser(window_info, handler, url, browser_settings,
                                        policy, nullptr);
 }

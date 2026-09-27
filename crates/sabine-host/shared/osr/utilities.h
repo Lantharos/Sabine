@@ -7,18 +7,11 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-#include <BaseTsd.h>
-typedef SSIZE_T ssize_t;
-typedef long off_t;
-#else
-#include <sys/types.h>
-#endif
-
 #include "include/cef_command_line.h"
 #include "include/internal/cef_types.h"
 
 class SabineOsrHandler;
+enum class PaintSurface;
 
 namespace sabine_osr {
 
@@ -70,23 +63,21 @@ void PutU32(std::vector<char>* buffer, size_t offset, uint32_t value);
 void PutI32(std::vector<char>* buffer, size_t offset, int32_t value);
 void PutU64(std::vector<char>* buffer, size_t offset, uint64_t value);
 bool SendAll(intptr_t fd, const char* bytes, size_t len);
-#ifndef _WIN32
-int CreateMemfd(const char* name);
-bool WriteAllAt(int fd, const char* bytes, size_t len, off_t offset);
-#endif
 void PutPaintEntry(std::vector<char>* payload,
                    size_t offset,
                    const PaintRectBytes& rect);
-bool CopyPaintRect(char* destination,
+std::vector<char> PaintMetadata(const std::string& prefix,
+                                const std::vector<PaintRectBytes>& rects);
+std::vector<char> PaintMetadata(const std::string& prefix,
+                                const std::vector<PaintRectBytes>& rects,
+                                uint32_t slot,
+                                uint32_t generation);
+void CopyPaintRect(char* destination,
                    const void* buffer,
                    int buffer_width,
                    const PaintRectBytes& rect);
-bool WritePaintRect(int fd,
-                    const void* buffer,
-                    int buffer_width,
-                    const PaintRectBytes& rect);
-uint32_t BatchKind(uint32_t frame_kind);
-uint32_t SharedBatchKind(uint32_t frame_kind);
+uint32_t BatchKind(PaintSurface surface);
+uint32_t SharedBatchKind(PaintSurface surface);
 
 int KeyCodeForName(const std::string& key);
 std::u16string Utf8ToUtf16(const std::string& value);

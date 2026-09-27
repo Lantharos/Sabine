@@ -11,7 +11,6 @@ use crate::render::rect_pipeline::{
 use crate::render::{DisplayCommand, DisplayList};
 
 mod health;
-mod image_rects;
 mod images;
 mod instance;
 #[cfg(windows)]
@@ -70,7 +69,6 @@ pub struct GpuRenderer {
     window: Arc<dyn Window>,
 }
 
-#[derive(Clone)]
 pub(super) struct CachedTexture {
     pub(super) texture: wgpu::Texture,
     pub(super) bind_group: wgpu::BindGroup,

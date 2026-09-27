@@ -12,7 +12,7 @@ use std::{
     io::BufRead,
     path::PathBuf,
     process::Child,
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, mpsc},
     time::Instant,
 };
 
@@ -26,7 +26,7 @@ use winit::{
 
 use crate::osr::control::ControlWriter;
 use crate::osr::frame_buffer::FrameBuffer;
-use crate::osr::protocol::OsrFrame;
+
 use crate::osr::transport::IpcStream;
 use crate::render::GpuRenderer;
 use crate::{SabineWindowChrome, osr};
@@ -36,7 +36,7 @@ use super::config::OsrHostConfig;
 use super::socket::{SocketReader, start_socket_reader};
 use super::types::{
     ClickMemory, LifecycleState, MouseButtons, OsrHostEvent, OverlayLayer, PendingResizePaint,
-    TitlebarControl, uses_sabine_chrome,
+    SurfaceGeometry, TitlebarControl, uses_sabine_chrome,
 };
 
 pub(super) struct OsrNativeHost {
@@ -48,7 +48,7 @@ pub(super) struct OsrNativeHost {
     pub(super) renderer: Option<GpuRenderer>,
     pub(super) effect: Option<WindowEffect>,
     pub(super) children: Vec<(u64, Child)>,
-    pub(super) socket: Option<Arc<Mutex<IpcStream>>>,
+    pub(super) socket: Option<IpcStream>,
     pub(super) socket_reader: Option<SocketReader>,
     pub(super) control_writer: Option<Arc<ControlWriter>>,
     pub(super) pending_messages: Option<(u64, Arc<crate::osr::message_queue::MessageQueue>)>,
@@ -61,7 +61,7 @@ pub(super) struct OsrNativeHost {
     pub(super) failure: Option<String>,
     pub(super) surface_size: winit::dpi::PhysicalSize<u32>,
     pub(super) scale_factor: f64,
-    pub(super) main_frame: Option<OsrFrame>,
+    pub(super) main_surface: Option<SurfaceGeometry>,
     pub(super) main_load_ready: bool,
     pub(super) main_buffer: FrameBuffer,
     pub(super) overlays: BTreeMap<String, OverlayLayer>,
@@ -152,7 +152,7 @@ impl OsrNativeHost {
             failure: None,
             surface_size,
             scale_factor: 1.0,
-            main_frame: None,
+            main_surface: None,
             main_load_ready: false,
             main_buffer: FrameBuffer::new(),
             overlays: BTreeMap::new(),
@@ -284,7 +284,7 @@ impl OsrNativeHost {
                 eprintln!("Sabine GPU: Chromium adapter LUID={luid} ANGLE={angle}");
             }
         }
-        let mut child = match command.spawn() {
+        let child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
                 self.awaiting_connection = false;
@@ -293,22 +293,14 @@ impl OsrNativeHost {
                 return;
             }
         };
-        sabine_runtime::capture_diagnostics(&mut child, "cef");
-        self.socket_reader = match start_socket_reader(
+        self.socket_reader = Some(start_socket_reader(
             generation,
             listener,
             endpoint,
             authentication_token,
             self.sender.clone(),
             self.proxy.clone(),
-        ) {
-            Ok(reader) => Some(reader),
-            Err(error) => {
-                self.fail(format!("Could not start OSR transport: {error}"));
-                self.awaiting_connection = false;
-                None
-            }
-        };
+        ));
         self.children.push((generation, child));
     }
 
@@ -422,16 +414,17 @@ impl OsrNativeHost {
         for (_, child) in &mut self.children {
             let _ = child.try_wait();
         }
-        if let Some(socket) = &self.socket
-            && let Ok(socket) = socket.lock()
-        {
+        self.drop_connection();
+        event_loop.exit();
+    }
+
+    pub(super) fn drop_connection(&mut self) {
+        if let Some(socket) = self.socket.take() {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
         self.socket_reader = None;
         self.control_writer = None;
         self.pending_messages = None;
-        self.socket = None;
-        event_loop.exit();
     }
 }
 
