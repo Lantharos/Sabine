@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
-use super::native::OsrNativeHost;
+use crate::osr::host::native::OsrNativeHost;
 use crate::render::GpuRenderer;
 
 impl OsrNativeHost {
-    pub(super) fn recover_gpu(&mut self) {
+    pub(in crate::osr::host) fn recover_gpu(&mut self) {
         if self.closing_deadline.is_some() || self.failure.is_some() {
             return;
         }

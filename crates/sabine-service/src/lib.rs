@@ -1,19 +1,19 @@
-mod environment;
-pub use environment::AppEnvironment;
+mod app;
 mod archive;
 mod http;
 mod install;
-mod installer_payload;
-pub use installer_payload::remove_app_payload;
 mod lifecycle;
-mod registry;
-mod rollout;
-mod signing;
+mod release;
 mod types;
 mod uninstall;
 mod updates;
+
+pub use app::data::browser_profile_path;
+pub use app::environment::AppEnvironment;
+pub use app::payload::remove_app_payload;
 pub use uninstall::uninstall_system;
 
+pub use app::registry::SabineService;
 pub(crate) use install::{
     StagedSystemUpdate, cached_service_path, find_service_executable, repair_system_installation,
     rollback_system_update, stage_system_update,
@@ -27,10 +27,9 @@ pub use lifecycle::{
     install_login_autostart_with, load_policy, prepare_machine_with_progress,
     resolve_service_executable, run_daemon, running_daemon_version, set_login_autostart,
 };
-pub use registry::SabineService;
-pub(crate) use rollout::release_is_soaked;
-pub use signing::{public_key_from_private, sign_app_release, sign_system_release};
-pub(crate) use signing::{verify_app_release, verify_system_release};
+pub(crate) use release::rollout::release_is_soaked;
+pub use release::signing::{public_key_from_private, sign_app_release, sign_system_release};
+pub(crate) use release::signing::{verify_app_release, verify_system_release};
 pub use types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppManifest, AppReleaseManifest, AppUpdateConfig,
     AppUpdateSource, AppUpdateStatus, SABINE_VERSION, SabineVersion, ServiceError,
@@ -142,6 +141,3 @@ mod tests {
         ));
     }
 }
-
-mod app_data;
-pub use app_data::browser_profile_path;

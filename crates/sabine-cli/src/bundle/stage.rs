@@ -10,7 +10,7 @@ use super::{
     config::BundleApp,
     metadata::{app_run, desktop_entry, runtime_manifest, sanitize_path, windows_manifest},
 };
-use crate::{bundle::build_target_for_format, icon_assets};
+use crate::{bundle::build_target_for_format, desktop::icons};
 use sabine_service::{AppArtifactKind, AppInstallMode};
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub(super) fn stage_bundle(
     offline: bool,
 ) -> Result<StagedBundle, String> {
     if matches!(format, BundleFormat::Macos | BundleFormat::Dmg) {
-        crate::macos_bundle::validate_executable(binary)?;
+        crate::desktop::macos::validate_executable(binary)?;
     }
     if offline {
         offline::validate_platform(format, binary)?;
@@ -150,7 +150,7 @@ fn stage_macos(
     copy_binary(binary, &macos.join(executable))?;
     fs::write(
         contents.join("Info.plist"),
-        crate::macos_bundle::info_plist(
+        crate::desktop::macos::info_plist(
             &app.id,
             &app.name,
             &app.version,
@@ -172,7 +172,7 @@ fn stage_macos(
         (format == BundleFormat::Dmg).then_some(AppArtifactKind::Dmg),
     )?;
     if app.icon.is_some() {
-        icon_assets::stage_macos_icon(
+        icons::stage_macos_icon(
             &app.id,
             &resources.join("icons"),
             &resources.join("app.icns"),
@@ -209,7 +209,7 @@ fn stage_windows(
     };
     stage_resources(app, &resources, install_mode, package_kind)?;
     if let Some(icon) = app.icon.as_ref().filter(|icon| icon.is_file()) {
-        icon_assets::stage_windows_icon(
+        icons::stage_windows_icon(
             &app.id,
             icon,
             &resources.join("icons"),
@@ -359,7 +359,7 @@ fn stage_resources(
     {
         let name = icon.file_name().unwrap_or_default().to_os_string();
         fs::copy(icon, resources.join(name)).map_err(|error| error.to_string())?;
-        icon_assets::stage_icon_set(&app.id, icon, &resources.join("icons"))?;
+        icons::stage_icon_set(&app.id, icon, &resources.join("icons"))?;
     }
     if let Some(web) = &app.web
         && let Some((source, _)) = web.assets()?

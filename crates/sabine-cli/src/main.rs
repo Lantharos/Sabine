@@ -1,17 +1,13 @@
 mod bundle;
 mod commands;
-mod desktop_types;
+mod desktop;
 mod dev;
 mod environment;
-mod icon_assets;
 mod install;
-mod macos_bundle;
-mod process_tree;
 mod release;
 mod runtime;
 mod template;
 mod update;
-mod web_detect;
 
 use std::process::ExitCode;
 

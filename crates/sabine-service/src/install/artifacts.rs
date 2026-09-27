@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     PrepareProgress, PrepareStage, ServiceError, ServiceResult, SystemReleaseManifest,
-    registry::replace_file,
+    app::registry::replace_file,
 };
 
 use super::SERVICE_REPO;

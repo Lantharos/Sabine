@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::registry::replace_file;
+use crate::app::registry::replace_file;
 use crate::types::{AppArtifact, AppArtifactKind, PendingAppUpdate, ServiceError, ServiceResult};
 
 pub(super) fn install_archive(

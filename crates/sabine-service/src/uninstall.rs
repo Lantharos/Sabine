@@ -52,7 +52,7 @@ pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
         remove_path(&path)?;
     }
     if purge {
-        remove_path(&crate::app_data::browser_profiles_root())?;
+        remove_path(&crate::app::data::browser_profiles_root())?;
         for name in [
             "logs",
             "apps",

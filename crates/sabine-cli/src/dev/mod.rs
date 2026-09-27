@@ -1,3 +1,6 @@
+pub(crate) mod process_tree;
+pub(crate) mod web_detect;
+
 use std::{
     net::{TcpStream, ToSocketAddrs},
     path::PathBuf,
@@ -10,9 +13,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::process_tree::ProcessTree;
 use crate::runtime;
-use crate::web_detect::{self, DevProject};
+use process_tree::ProcessTree;
+use web_detect::DevProject;
 
 pub struct DevOptions {
     pub source: PathBuf,

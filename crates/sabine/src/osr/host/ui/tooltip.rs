@@ -3,11 +3,11 @@ use std::time::Instant;
 use crate::render::{DisplayList, RoundedRectCommand, TextCommand};
 use crate::window::style::Color;
 
-use super::native::OsrNativeHost;
-use super::types::NativeTooltip;
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::NativeTooltip;
 
 impl OsrNativeHost {
-    pub(super) fn update_tooltip(&mut self, text: String) -> bool {
+    pub(in crate::osr::host) fn update_tooltip(&mut self, text: String) -> bool {
         let text = text.trim().to_string();
         if text.is_empty() {
             return self.tooltip.take().is_some_and(|tooltip| tooltip.shown);
@@ -17,7 +17,7 @@ impl OsrNativeHost {
         needs_redraw
     }
 
-    pub(super) fn drive_tooltip(&mut self) -> Option<Instant> {
+    pub(in crate::osr::host) fn drive_tooltip(&mut self) -> Option<Instant> {
         let tooltip = self.tooltip.as_mut()?;
         if tooltip.shown {
             return None;
@@ -33,7 +33,12 @@ impl OsrNativeHost {
         None
     }
 
-    pub(super) fn draw_tooltip(&self, list: &mut DisplayList, width: f32, height: f32) {
+    pub(in crate::osr::host) fn draw_tooltip(
+        &self,
+        list: &mut DisplayList,
+        width: f32,
+        height: f32,
+    ) {
         let Some(tooltip) = self.tooltip.as_ref().filter(|tooltip| tooltip.shown) else {
             return;
         };

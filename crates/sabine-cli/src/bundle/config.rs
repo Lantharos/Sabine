@@ -180,7 +180,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         }
     }
     semver::Version::parse(&version).map_err(|error| format!("invalid app version: {error}"))?;
-    crate::desktop_types::validate(&sabine.app.mime_types)?;
+    crate::desktop::types::validate(&sabine.app.mime_types)?;
     Ok(BundleApp {
         id,
         name,
@@ -327,7 +327,7 @@ fn read_sabine_file(source_dir: &Path) -> Result<SabineFile, String> {
 }
 
 fn detect_package_root(source_dir: &Path) -> Option<PathBuf> {
-    crate::web_detect::detect_package_root(source_dir)
+    crate::dev::web_detect::detect_package_root(source_dir)
 }
 
 fn default_web_entry(source_dir: &Path) -> Option<PathBuf> {
@@ -362,7 +362,7 @@ fn detect_icon(source_dir: &Path) -> Option<PathBuf> {
 }
 
 fn detect_web_build_command(root: &Path) -> Option<String> {
-    crate::web_detect::detect_web_build_command(root)
+    crate::dev::web_detect::detect_web_build_command(root)
 }
 
 fn sanitize_id(value: &str) -> String {

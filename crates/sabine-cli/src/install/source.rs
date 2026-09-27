@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    icon_assets,
+    desktop::icons,
     install::{
         assets::{self as source_assets, StagedAssets},
         desktop as source_desktop,
@@ -86,7 +86,7 @@ pub(crate) fn detect_source_app(
 ) -> Result<SourceApp, String> {
     let source = absolute_path(source)?;
     let metadata = source_assets::metadata(&source);
-    crate::desktop_types::validate(&metadata.mime_types)?;
+    crate::desktop::types::validate(&metadata.mime_types)?;
     let manifest = cargo_manifest(&source);
     let package_name = package_name(&manifest);
     let configured: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
@@ -128,7 +128,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     let app_dir = app_dir(&app.id)?;
     fs::create_dir_all(&app_dir).map_err(|error| error.to_string())?;
     let assets = source_assets::stage(&app.source, &app_dir, app.icon.as_deref())?;
-    let desktop_icon = icon_assets::install_user_icon(&app.id, assets.icon.as_deref())?;
+    let desktop_icon = icons::install_user_icon(&app.id, assets.icon.as_deref())?;
     let wrapper = app_dir.join(if cfg!(target_os = "windows") {
         "launch.cmd"
     } else {

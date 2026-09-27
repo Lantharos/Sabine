@@ -1,5 +1,5 @@
 use crate::{
-    SabineVersion, ServiceResult, SystemCompatibility, UPDATE_SOAK, registry::replace_file,
+    SabineVersion, ServiceResult, SystemCompatibility, UPDATE_SOAK, app::registry::replace_file,
     service_data_dir,
 };
 use serde::{Deserialize, Serialize};

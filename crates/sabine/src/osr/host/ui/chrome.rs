@@ -11,11 +11,13 @@ use crate::SabineWindowControlRegion;
 use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextCommand};
 use crate::window::style::Color;
 
-use super::native::OsrNativeHost;
-use super::types::{CONTROL_GAP, CONTROL_SIZE, ControlRect, RESIZE_EDGE, TitlebarControl};
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{
+    CONTROL_GAP, CONTROL_SIZE, ControlRect, RESIZE_EDGE, TitlebarControl,
+};
 
 impl OsrNativeHost {
-    pub(super) fn draw_titlebar(&self, list: &mut DisplayList, width: f32) {
+    pub(in crate::osr::host) fn draw_titlebar(&self, list: &mut DisplayList, width: f32) {
         let titlebar_height = self.titlebar_height();
         if titlebar_height == 0.0 {
             return;
@@ -69,7 +71,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn update_titlebar_hover(&mut self) -> bool {
+    pub(in crate::osr::host) fn update_titlebar_hover(&mut self) -> bool {
         let width = self.logical_width();
         let next = self.control_at(width, self.cursor_x, self.cursor_y);
         if self.hovered_control == next {
@@ -79,7 +81,7 @@ impl OsrNativeHost {
         true
     }
 
-    pub(super) fn set_cursor(&mut self, cursor: CursorIcon) {
+    pub(in crate::osr::host) fn set_cursor(&mut self, cursor: CursorIcon) {
         if self.cursor == cursor {
             return;
         }
@@ -89,17 +91,17 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn set_native_cursor(&mut self, cursor: CursorIcon) {
+    pub(in crate::osr::host) fn set_native_cursor(&mut self, cursor: CursorIcon) {
         self.native_cursor_override = true;
         self.set_cursor(cursor);
     }
 
-    pub(super) fn set_content_cursor(&mut self, cursor: CursorIcon) {
+    pub(in crate::osr::host) fn set_content_cursor(&mut self, cursor: CursorIcon) {
         self.native_cursor_override = false;
         self.set_cursor(cursor);
     }
 
-    pub(super) fn clear_native_cursor(&mut self) {
+    pub(in crate::osr::host) fn clear_native_cursor(&mut self) {
         if !self.native_cursor_override {
             return;
         }
@@ -107,14 +109,19 @@ impl OsrNativeHost {
         self.set_cursor(CursorIcon::Default);
     }
 
-    pub(super) fn control_at(&self, width: f32, x: f32, y: f32) -> Option<TitlebarControl> {
+    pub(in crate::osr::host) fn control_at(
+        &self,
+        width: f32,
+        x: f32,
+        y: f32,
+    ) -> Option<TitlebarControl> {
         if let Some(control) = configured_control_at(&self.config.control_regions, width, x, y) {
             return Some(control);
         }
         titlebar_control_at(width, self.titlebar_height(), x, y)
     }
 
-    pub(super) fn is_drag_region(&self, width: f32, x: f32, y: f32) -> bool {
+    pub(in crate::osr::host) fn is_drag_region(&self, width: f32, x: f32, y: f32) -> bool {
         let page_y = y - self.titlebar_height();
         let page_excluded = page_y >= 0.0
             && configured_region_at(&self.page_drag_exclusion_regions, width, x, page_y);
@@ -130,7 +137,7 @@ impl OsrNativeHost {
     }
 }
 
-pub(super) fn configured_control_at(
+pub(in crate::osr::host) fn configured_control_at(
     controls: &[SabineWindowControlRegion],
     width: f32,
     x: f32,
@@ -145,7 +152,7 @@ pub(super) fn configured_control_at(
     })
 }
 
-pub(super) fn configured_region_at(
+pub(in crate::osr::host) fn configured_region_at(
     regions: &[WindowRegionRect],
     width: f32,
     x: f32,
@@ -176,7 +183,7 @@ fn rect_region_contains(region: &WindowRegionRect, width: f32, x: f32, y: f32) -
     rect_contains(rect, x, y)
 }
 
-pub(super) fn control_rect(
+pub(in crate::osr::host) fn control_rect(
     width: f32,
     titlebar_height: f32,
     control: TitlebarControl,
@@ -196,7 +203,7 @@ pub(super) fn control_rect(
     )
 }
 
-pub(super) fn titlebar_control_at(
+pub(in crate::osr::host) fn titlebar_control_at(
     width: f32,
     titlebar_height: f32,
     x: f32,
@@ -315,7 +322,7 @@ fn rect_contains(rect: ControlRect, x: f32, y: f32) -> bool {
     x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height
 }
 
-pub(super) fn resize_direction_at(
+pub(in crate::osr::host) fn resize_direction_at(
     x: f32,
     y: f32,
     width: f32,
@@ -342,7 +349,7 @@ pub(super) fn resize_direction_at(
     }
 }
 
-pub(super) fn activate_control(
+pub(in crate::osr::host) fn activate_control(
     host: &mut OsrNativeHost,
     event_loop: &dyn ActiveEventLoop,
     window: &Arc<dyn WinitWindow>,

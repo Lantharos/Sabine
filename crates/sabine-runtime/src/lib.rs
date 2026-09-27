@@ -1,50 +1,41 @@
 #[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
 compile_error!("Sabine requires Apple Silicon on macOS");
 
-mod archive;
-mod assets;
-mod detect;
 mod diagnostics;
-mod directory_install;
+mod discovery;
 mod download;
 mod error;
 mod file_lock;
-mod host;
 mod install;
 mod lease;
-mod paths;
 mod process;
-mod resolve;
-#[cfg(windows)]
-mod sandbox_windows;
 mod types;
-mod version;
 #[cfg(windows)]
-pub use sandbox_windows::prepare_sandbox_access;
+pub use install::sandbox_windows::prepare_sandbox_access;
 
 pub(crate) const MIN_CEF_MAJOR: &str = "151";
 
-pub use archive::extract_tar_archive;
-pub use assets::prepare_runtime_assets;
-pub use directory_install::{install_directory, recover_directory_installs};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub use discovery::paths::runtime_execution_path;
+pub use discovery::paths::user_runtime_path;
+pub use discovery::resolve::{ensure_runtime, resolve_runtime};
 pub use download::latest_install_plan;
 pub use download::transfer::download_file as download_file_with_progress;
 pub use error::RuntimeError;
 pub use file_lock::FileLock;
+pub use install::archive::extract_tar_archive;
+pub use install::assets::prepare_runtime_assets;
+pub use install::directory::{install_directory, recover_directory_installs};
 pub use install::{
     install_user_runtime_with_progress, prune_user_runtimes, quarantine_user_runtime,
     remove_user_runtime_version, update_user_runtime_with_progress,
 };
 pub use lease::RuntimeLease;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-pub use paths::runtime_execution_path;
-pub use paths::user_runtime_path;
 pub use process::{background_command, configure_background_command};
-pub use resolve::{ensure_runtime, resolve_runtime};
 pub use types::{RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode};
 
-pub use detect::detect_runtime;
 pub use diagnostics::{capture_diagnostics, diagnostic_path, record_diagnostic, report_error};
+pub use discovery::detect::detect_runtime;
 
 #[cfg(test)]
 mod tests {
@@ -72,11 +63,11 @@ mod tests {
 
     #[test]
     fn version_checks_use_major_version() {
-        assert!(crate::version::version_satisfies(
+        assert!(crate::discovery::version::version_satisfies(
             "147.0.14+gabc+chromium-147.0.7727.138",
             "126"
         ));
-        assert!(!crate::version::version_satisfies(
+        assert!(!crate::discovery::version::version_satisfies(
             "101.0.18+gabc+chromium-101.0.4951.67",
             "126"
         ));

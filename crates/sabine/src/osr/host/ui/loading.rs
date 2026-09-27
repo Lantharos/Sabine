@@ -4,11 +4,16 @@ use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextCommand};
 use crate::window::style::Color;
 
 use super::loading_messages::loading_message;
-use super::native::OsrNativeHost;
-use super::types::{LOADING_ANIMATION_INTERVAL, LOADING_MESSAGE_INTERVAL};
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{LOADING_ANIMATION_INTERVAL, LOADING_MESSAGE_INTERVAL};
 
 impl OsrNativeHost {
-    pub(super) fn draw_loading(&self, list: &mut DisplayList, width: f32, height: f32) {
+    pub(in crate::osr::host) fn draw_loading(
+        &self,
+        list: &mut DisplayList,
+        width: f32,
+        height: f32,
+    ) {
         let Some(loading) = self.loading else {
             return;
         };
@@ -55,7 +60,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn drive_loading(&mut self) -> Option<Instant> {
+    pub(in crate::osr::host) fn drive_loading(&mut self) -> Option<Instant> {
         let mut loading = self.loading?;
         let now = Instant::now();
         if now < loading.reveal_at {

@@ -2,11 +2,14 @@ use std::time::Instant;
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
-use super::native::OsrNativeHost;
-use super::types::LifecycleState;
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::LifecycleState;
 
 impl OsrNativeHost {
-    pub(super) fn drive_resize_paint(&mut self, event_loop: &dyn ActiveEventLoop) -> bool {
+    pub(in crate::osr::host) fn drive_resize_paint(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+    ) -> bool {
         let Some(pending) = self.pending_resize_paint else {
             return false;
         };

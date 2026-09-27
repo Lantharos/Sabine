@@ -4,19 +4,19 @@ use crate::osr::frame_buffer::FrameBuffer;
 use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrPaintBatch, OsrSurface};
 use crate::render::{GpuRenderer, PixelRect, RendererError};
 
-use super::native::OsrNativeHost;
-use super::types::{
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{
     LifecycleState, OverlayLayer, PendingResizePaint, RESIZE_REPAINT_GRACE, RESIZE_REPAINT_RETRY,
     SurfaceGeometry, overlay_texture_id,
 };
 
 impl OsrNativeHost {
-    pub(super) fn send_resize(&self) {
+    pub(in crate::osr::host) fn send_resize(&self) {
         let (width, height, scale) = self.content_size_for_cef();
         self.send_control(&format!("resize\t{width}\t{height}\t{scale:.4}\n"));
     }
 
-    pub(super) fn queue_resize_paint(&mut self) {
+    pub(in crate::osr::host) fn queue_resize_paint(&mut self) {
         let size = self.content_surface_size();
         if self.main_surface_matches(size) {
             // Content size unchanged — do not poke CEF (WasResized/Invalidate
@@ -33,7 +33,7 @@ impl OsrNativeHost {
         self.send_resize();
     }
 
-    pub(super) fn retry_resize_paint(&mut self) {
+    pub(in crate::osr::host) fn retry_resize_paint(&mut self) {
         let Some(mut pending) = self.pending_resize_paint else {
             return;
         };
@@ -50,7 +50,7 @@ impl OsrNativeHost {
         self.pending_resize_paint = Some(pending);
     }
 
-    pub(super) fn clear_pending_resize_paint(&mut self) {
+    pub(in crate::osr::host) fn clear_pending_resize_paint(&mut self) {
         if self
             .pending_resize_paint
             .is_some_and(|pending| self.main_surface_matches(pending.size))
@@ -59,16 +59,16 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn main_surface_matches(&self, size: (u32, u32)) -> bool {
+    pub(in crate::osr::host) fn main_surface_matches(&self, size: (u32, u32)) -> bool {
         self.main_surface
             .is_some_and(|surface| surface.size() == size)
     }
 
-    pub(super) fn main_surface_ready(&self) -> bool {
+    pub(in crate::osr::host) fn main_surface_ready(&self) -> bool {
         self.main_load_ready && self.main_surface.is_some()
     }
 
-    pub(super) fn frame_size_for_view(&self, size: (u32, u32)) -> (u32, u32) {
+    pub(in crate::osr::host) fn frame_size_for_view(&self, size: (u32, u32)) -> (u32, u32) {
         let scale = self
             .window
             .as_ref()
@@ -80,7 +80,7 @@ impl OsrNativeHost {
         )
     }
 
-    pub(super) fn accepts_paint(&self) -> bool {
+    pub(in crate::osr::host) fn accepts_paint(&self) -> bool {
         // Keep compositing while FPS-throttled (blur/occlusion suspend). Only
         // stop accepting paints when the view is actually gone.
         (self.config.visible || self.config.lifecycle.retain_hidden_frame)
@@ -90,7 +90,7 @@ impl OsrNativeHost {
             )
     }
 
-    pub(super) fn surface_geometry(
+    pub(in crate::osr::host) fn surface_geometry(
         &self,
         pixel_size: (u32, u32),
         x: i32,
@@ -105,7 +105,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn update_paint_batch(&mut self, batch: OsrPaintBatch) -> bool {
+    pub(in crate::osr::host) fn update_paint_batch(&mut self, batch: OsrPaintBatch) -> bool {
         if batch.rects.is_empty() {
             return false;
         }
@@ -147,7 +147,7 @@ impl OsrNativeHost {
         true
     }
 
-    pub(super) fn clear_overlay(&mut self, overlay_id: &str) {
+    pub(in crate::osr::host) fn clear_overlay(&mut self, overlay_id: &str) {
         self.overlays.remove(overlay_id);
         if let Some(renderer) = &mut self.renderer {
             renderer.remove_image(&overlay_texture_id(overlay_id));
