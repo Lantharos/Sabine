@@ -50,18 +50,18 @@ set(SABINE_HOST_SOURCES
   osr/handler.cc
   osr/handler.h
   osr/bridge.cc
-  osr/callbacks.cc
-  osr/recovery.cc
-  osr/downloads.cc
-  osr/permissions.cc
-  osr/drag.cc
+  osr/browser/callbacks.cc
+  osr/browser/recovery.cc
+  osr/browser/downloads.cc
+  osr/browser/permissions.cc
+  osr/input/drag.cc
   osr/guest/commands.cc
   osr/guest/lifecycle.cc
-  osr/ime.cc
-  osr/ime.h
-  osr/input.cc
-  osr/screen.cc
-  osr/screen.h
+  osr/input/ime.cc
+  osr/input/ime.h
+  osr/input/input.cc
+  osr/browser/screen.cc
+  osr/browser/screen.h
   osr/tasks.cc
   osr/tasks.h
   osr/transport.cc
