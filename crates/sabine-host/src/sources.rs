@@ -40,7 +40,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "osr/browser/callbacks.cc",
         include_str!("../shared/osr/browser/callbacks.cc"),
     ),
-    ("osr/browser/recovery.cc", include_str!("../shared/osr/browser/recovery.cc")),
+    (
+        "osr/browser/recovery.cc",
+        include_str!("../shared/osr/browser/recovery.cc"),
+    ),
     (
         "osr/browser/downloads.cc",
         include_str!("../shared/osr/browser/downloads.cc"),
@@ -49,7 +52,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "osr/browser/permissions.cc",
         include_str!("../shared/osr/browser/permissions.cc"),
     ),
-    ("osr/input/drag.cc", include_str!("../shared/osr/input/drag.cc")),
+    (
+        "osr/input/drag.cc",
+        include_str!("../shared/osr/input/drag.cc"),
+    ),
     (
         "osr/guest/commands.cc",
         include_str!("../shared/osr/guest/commands.cc"),
@@ -58,11 +64,23 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "osr/guest/lifecycle.cc",
         include_str!("../shared/osr/guest/lifecycle.cc"),
     ),
-    ("osr/input/ime.cc", include_str!("../shared/osr/input/ime.cc")),
+    (
+        "osr/input/ime.cc",
+        include_str!("../shared/osr/input/ime.cc"),
+    ),
     ("osr/input/ime.h", include_str!("../shared/osr/input/ime.h")),
-    ("osr/input/input.cc", include_str!("../shared/osr/input/input.cc")),
-    ("osr/browser/screen.cc", include_str!("../shared/osr/browser/screen.cc")),
-    ("osr/browser/screen.h", include_str!("../shared/osr/browser/screen.h")),
+    (
+        "osr/input/input.cc",
+        include_str!("../shared/osr/input/input.cc"),
+    ),
+    (
+        "osr/browser/screen.cc",
+        include_str!("../shared/osr/browser/screen.cc"),
+    ),
+    (
+        "osr/browser/screen.h",
+        include_str!("../shared/osr/browser/screen.h"),
+    ),
     ("osr/tasks.cc", include_str!("../shared/osr/tasks.cc")),
     ("osr/tasks.h", include_str!("../shared/osr/tasks.h")),
     (
