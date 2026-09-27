@@ -30,6 +30,17 @@ def normalize_version(value, current):
     return version
 
 
+HOST_PROTOCOL = re.compile(r'HOST_PROTOCOL_VERSION: &str = "([^"]+)"')
+HOST_PROTOCOL_FILE = "crates/sabine-host/src/protocol.rs"
+
+
+def host_protocol_changed(root):
+    released = git(root, "describe", "--tags", "--abbrev=0", "--match", "v*")
+    before = HOST_PROTOCOL.search(git(root, "show", f"{released}:{HOST_PROTOCOL_FILE}"))[1]
+    after = HOST_PROTOCOL.search((root / HOST_PROTOCOL_FILE).read_text())[1]
+    return before != after
+
+
 def prepare_changes(root, version):
     current = current_version(root)
     old_package, package = f"{current}.0", f"{version}.0"
@@ -66,12 +77,16 @@ def prepare_changes(root, version):
         old = json.loads(text)["version"]
         add(name, text.replace(f'"version": "{old}"', f'"version": "{package}"', 1))
     major, build = version.split(".")
-    name = "crates/sabine-service/src/types.rs"
+    name = "crates/sabine-service/src/types/mod.rs"
     text = (root / name).read_text()
     for constant, value in [("VERSION", f'"{version}"'), ("MAJOR", major), ("BUILD", build)]:
         text, count = re.subn(rf'(pub const SABINE_{constant}: [^=]+ = )[^;]+;', rf'\g<1>{value};', text)
         if count != 1:
             raise ValueError(f"expected one SABINE_{constant} constant")
+    if host_protocol_changed(root):
+        text, count = re.subn(r'(pub const MIN_SUPPORTED_APP_BUILD: u32 = )\d+;', rf'\g<1>{build};', text)
+        if count != 1:
+            raise ValueError("expected one MIN_SUPPORTED_APP_BUILD constant")
     add(name, text)
     for name in ["README.md", "packages/sabine/README.md", ".github/workflows/windows-runtime-check.yml"]:
         text = (root / name).read_text()
