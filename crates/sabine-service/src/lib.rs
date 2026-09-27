@@ -14,31 +14,31 @@ mod uninstall;
 mod updates;
 pub use uninstall::uninstall_system;
 
-pub use install::{
-    ComponentUpdate, StagedSystemUpdate, cached_service_path, ensure_service_executable,
-    find_service_executable, installed_service_version, repair_system_installation,
-    rollback_system_update, service_daemon_path, stage_system_update, update_components,
+pub(crate) use install::{
+    StagedSystemUpdate, cached_service_path, find_service_executable, repair_system_installation,
+    rollback_system_update, stage_system_update,
 };
+pub use install::{
+    ensure_service_executable, installed_service_version, service_daemon_path, update_components,
+};
+pub(crate) use lifecycle::{PrepareProgress, PrepareStage};
 pub use lifecycle::{
-    PrepareProgress, PrepareStage, ServicePolicy, ServiceReadyReport, adopt, adopt_with_runtime,
-    complete_system_update, ensure_daemon_running, ensure_ready, ensure_ready_with_runtime,
-    install_login_autostart, install_login_autostart_with, is_daemon_running, load_policy,
-    policy_path, prepare_machine_with_progress, resolve_service_executable, run_daemon,
-    running_daemon_version, save_policy, set_login_autostart, start_daemon,
-    uninstall_login_autostart,
+    adopt_with_runtime, complete_system_update, ensure_daemon_running, ensure_ready,
+    install_login_autostart_with, load_policy, prepare_machine_with_progress,
+    resolve_service_executable, run_daemon, running_daemon_version, set_login_autostart,
 };
 pub use registry::SabineService;
 pub(crate) use rollout::release_is_soaked;
-pub use signing::{
-    public_key_from_private, sign_app_release, sign_system_release, verify_app_release,
-    verify_system_release,
-};
+pub use signing::{public_key_from_private, sign_app_release, sign_system_release};
+pub(crate) use signing::{verify_app_release, verify_system_release};
 pub use types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppManifest, AppReleaseManifest, AppUpdateConfig,
-    AppUpdateSource, AppUpdateStatus, MaintenanceReport, PendingAppUpdate, RegisteredApp,
-    SABINE_BUILD, SABINE_MAJOR, SABINE_VERSION, SabineVersion, ServiceError, ServiceResult,
-    SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest, UPDATE_ROLLOUT_WINDOW,
-    UPDATE_SOAK, UpdatePolicy, default_maintenance_interval, service_data_dir, valid_app_id,
+    AppUpdateSource, AppUpdateStatus, SABINE_VERSION, SabineVersion, ServiceError,
+    SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest, UpdatePolicy,
+    service_data_dir, valid_app_id,
+};
+pub(crate) use types::{
+    RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,
 };
 pub use updates::retry_quarantined_runtimes;
 

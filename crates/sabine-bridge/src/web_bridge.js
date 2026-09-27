@@ -1,24 +1,7 @@
-// Sabine bridge script. This is the single source of truth for the
-// `window.sabine` JS surface that lives inside every Sabine page.
-//
-// The CEF host injects this script into every main frame
-// after load. The host is expected to set `window.__sabineBridgeCommands`
-// to a JSON array of allowed bridge command names BEFORE this script runs;
-// the script copies that list into a `Set` used for `invoke()` validation.
-//
-// The host installs `window.__sabineNativePostMessage`, which sends
-// `sabine://bridge/<id>?name=<name>&payload=<payload>` messages without
-// navigating the page. The host dispatches the registered bridge
-// handler, then calls `window.__sabineBridgeResolve(id, ok, payload)` from
-// the host side to resolve the promise returned by `invoke()`.
-//
-// The host injects bridge events by calling
-// `window.__sabineBridgeEmit(name, payload)` from the host side.
-// `window.sabine.window.*` uses the same transport for host controls.
-//
-// This file is included as a `&str` from Rust via `include_str!`, embedded
-// into the C++ CEF host as a generated header at build time, and posted
-// Do not duplicate the body elsewhere; always edit this file.
+// The `window.sabine` page API. The native host embeds this file at build time,
+// defines `window.__sabineBridgeCommands` and `window.__sabineNativePostMessage`
+// before running it, and answers through `__sabineBridgeResolve` and
+// `__sabineBridgeEmit`. Edit only this file; there is no other copy.
 
 (function () {
   if (window.sabine && window.sabine.bridge && window.sabine.bridge.__native) return;

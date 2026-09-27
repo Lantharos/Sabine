@@ -270,10 +270,6 @@ pub fn normalize_guest_id(id: &str) -> Result<String, BridgeError> {
     Ok(trimmed.to_string())
 }
 
-pub fn default_partition_for(id: &str) -> String {
-    format!("guest:{id}")
-}
-
 pub(crate) fn int_field(value: &Value, key: &str) -> Option<i32> {
     value.get(key).and_then(|item| {
         item.as_i64()
