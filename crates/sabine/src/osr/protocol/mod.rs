@@ -47,7 +47,7 @@ impl FrameBytes {
 #[derive(Debug)]
 pub(crate) enum OsrMessage {
     PaintBatch(OsrPaintBatch),
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     AccelFrame(OsrAccelFrame),
     /// Hide the built-in popup overlay (`__sabine_popup`).
     PopupHidden,
@@ -110,7 +110,7 @@ pub(crate) struct OsrPaintBatch {
     pub rects: Vec<PaintRect>,
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 #[derive(Debug)]
 pub(crate) struct OsrAccelFrame {
     pub surface: OsrSurface,
@@ -123,10 +123,12 @@ pub(crate) struct OsrAccelFrame {
     pub x: i32,
     pub y: i32,
     pub format: u32,
-    /// Duplicated Windows NT handle for a Sabine-owned D3D11 texture.
+    /// Windows: duplicated NT handle of a Sabine-owned texture. macOS: shared surface id.
     pub native_handle: u64,
     /// Producer slot released only after the compositor finishes sampling it.
     pub slot_token: u64,
+    #[cfg(target_os = "macos")]
+    pub io_surface: Option<crate::osr::accel::SharedSurface>,
 }
 
 #[cfg(windows)]

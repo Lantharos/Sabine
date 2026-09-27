@@ -77,6 +77,7 @@ pub(super) fn start_socket_reader(
     authentication_token: String,
     sender: mpsc::SyncSender<OsrHostEvent>,
     proxy: EventLoopProxy,
+    #[cfg(target_os = "macos")] surfaces: Arc<crate::osr::accel::SurfaceRegistry>,
 ) -> SocketReader {
     let state = Arc::new(ReaderState {
         stopped: AtomicBool::new(false),
@@ -143,7 +144,12 @@ pub(super) fn start_socket_reader(
             *current = Some(owned);
         }
         #[cfg(unix)]
-        let mut wire = WireReader::new(stream, PaintSlots::new(Arc::clone(&control)));
+        let mut wire = WireReader::new(
+            stream,
+            PaintSlots::new(Arc::clone(&control)),
+            #[cfg(target_os = "macos")]
+            surfaces,
+        );
         #[cfg(not(unix))]
         let mut wire = WireReader::new(stream);
         match wire.read_host_protocol() {

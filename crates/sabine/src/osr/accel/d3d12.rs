@@ -25,8 +25,8 @@ pub(crate) fn adapter_luid(renderer: &GpuRenderer) -> String {
 /// host has already copied the frame, completed a D3D11 fence, and duplicated
 /// the owned handle into this process. Importing the original handle here or
 /// acknowledging the slot while wgpu may still sample it breaks frame lifetime.
-pub(crate) fn try_import_d3d12(
-    renderer: &mut GpuRenderer,
+pub(super) fn try_import_d3d12(
+    renderer: &GpuRenderer,
     frame: &OsrAccelFrame,
 ) -> Result<wgpu::Texture, String> {
     if frame.native_handle == 0 || frame.coded_width == 0 || frame.coded_height == 0 {

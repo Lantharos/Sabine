@@ -27,6 +27,11 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
+#if defined(OS_MAC)
+#include <memory>
+
+#include "osr/accelerated/macos/surface_broker.h"
+#endif
 
 constexpr uint32_t kPopupHidden = 3;
 constexpr uint32_t kCursor = 4;
@@ -235,6 +240,13 @@ class SabineOsrHandler : public CefClient,
 #ifndef _WIN32
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
 #endif
+#if defined(OS_WIN) || defined(OS_MAC)
+  void ReleaseAcceleratedFrame(uint64_t slot_token);
+  void RetireAcceleratedBrowser(int browser_id);
+#endif
+#if defined(OS_MAC)
+  void UseSurfaceService(const std::string& service_name);
+#endif
 
  private:
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
@@ -247,6 +259,23 @@ class SabineOsrHandler : public CefClient,
   };
 
   friend class SabineGuestRequestContextHandler;
+
+#if defined(OS_WIN) || defined(OS_MAC)
+  struct CopiedAccelFrame {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint64_t native_handle = 0;
+    uint64_t slot_token = 0;
+  };
+
+  bool CopyAcceleratedFrame(const std::string& slot_key,
+                            const CefAcceleratedPaintInfo& info,
+                            int width,
+                            int height,
+                            CopiedAccelFrame* out);
+  void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
+  void ReleaseAcceleratedSlot(uint64_t slot_token);
+#endif
 
   bool ConnectSocket();
   bool QueueControl(std::string line);
@@ -345,6 +374,13 @@ class SabineOsrHandler : public CefClient,
   int height_ = 1;
 #ifndef _WIN32
   sabine_osr::SharedPaintPool shared_paint_;
+#endif
+#if defined(OS_WIN) || defined(OS_MAC)
+  std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
+      dropped_accelerated_paints_;
+#endif
+#if defined(OS_MAC)
+  std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
 #endif
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;

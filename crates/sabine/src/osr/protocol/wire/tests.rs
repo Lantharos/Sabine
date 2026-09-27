@@ -22,7 +22,12 @@ fn connect() -> Connection {
     let (control, controls) = UnixStream::pair().expect("control socket pair");
     let control = Arc::new(ControlWriter::start(control).expect("control writer"));
     Connection {
-        wire: WireReader::new(reader, PaintSlots::new(control)),
+        wire: WireReader::new(
+            reader,
+            PaintSlots::new(control),
+            #[cfg(target_os = "macos")]
+            Default::default(),
+        ),
         producer,
         controls,
     }

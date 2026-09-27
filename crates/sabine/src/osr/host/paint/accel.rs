@@ -34,7 +34,7 @@ impl OsrNativeHost {
             .surface
             .overlay_id()
             .map_or_else(|| MAIN_TEXTURE_ID.to_string(), overlay_texture_id);
-        match crate::osr::accel::try_import_d3d12(renderer, frame) {
+        match crate::osr::accel::import_texture(renderer, frame) {
             Ok(texture) => crate::osr::accel::install_imported_texture(
                 renderer,
                 &texture_id,

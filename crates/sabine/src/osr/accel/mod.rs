@@ -1,9 +1,29 @@
-mod import_win;
+#[cfg(windows)]
+mod d3d12;
+#[cfg(target_os = "macos")]
+mod iosurface;
+
+#[cfg(windows)]
+pub(crate) use d3d12::{adapter_luid, close_imported_handle};
+#[cfg(target_os = "macos")]
+pub(crate) use iosurface::{SharedSurface, SurfaceBroker, SurfaceRegistry};
 
 use crate::osr::protocol::OsrAccelFrame;
 use crate::render::GpuRenderer;
 
-pub(crate) use import_win::{adapter_luid, close_imported_handle, try_import_d3d12};
+pub(crate) fn import_texture(
+    renderer: &GpuRenderer,
+    frame: &OsrAccelFrame,
+) -> Result<wgpu::Texture, String> {
+    #[cfg(windows)]
+    {
+        d3d12::try_import_d3d12(renderer, frame)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        iosurface::import_io_surface(renderer, frame)
+    }
+}
 
 pub(crate) fn install_imported_texture(
     renderer: &mut GpuRenderer,

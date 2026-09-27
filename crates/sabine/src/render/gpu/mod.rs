@@ -13,7 +13,7 @@ use crate::render::{DisplayCommand, DisplayList};
 mod health;
 mod images;
 mod instance;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod retirement;
 mod surface;
 mod text;
@@ -58,9 +58,9 @@ pub struct GpuRenderer {
     image_vertex_buffer: DynamicVertexBuffer,
     text: Option<TextRendererState>,
     texture_cache: HashMap<String, CachedTexture>,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     external_texture_releases: HashMap<String, Box<dyn FnOnce() + Send + 'static>>,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     submission_poller: retirement::SubmissionPoller,
     #[cfg(windows)]
     software_adapter: bool,
@@ -101,7 +101,7 @@ impl GpuRenderer {
             .map_err(|error| RendererError::Device(error.to_string()))?;
 
         let health = health::DeviceHealth::watch(&device, wake);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         let submission_poller = retirement::SubmissionPoller::new(&device, &queue, health.clone())?;
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
@@ -230,9 +230,9 @@ impl GpuRenderer {
             image_vertex_buffer: DynamicVertexBuffer::default(),
             text: None,
             texture_cache: HashMap::new(),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             external_texture_releases: HashMap::new(),
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             submission_poller,
             #[cfg(windows)]
             software_adapter: adapter.get_info().device_type == wgpu::DeviceType::Cpu,
@@ -244,17 +244,6 @@ impl GpuRenderer {
 
     pub(crate) fn surface_alpha_is_opaque(&self) -> bool {
         self.surface_alpha_is_opaque
-    }
-
-    pub(crate) fn supports_accelerated_paint(&self) -> bool {
-        #[cfg(windows)]
-        {
-            true
-        }
-        #[cfg(not(windows))]
-        {
-            false
-        }
     }
 
     #[cfg(windows)]
@@ -395,7 +384,7 @@ impl GpuRenderer {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 impl Drop for GpuRenderer {
     fn drop(&mut self) {
         if self.external_texture_releases.is_empty() {
