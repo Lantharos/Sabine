@@ -223,8 +223,16 @@ waits for the compositor device because Chromium must render on the same adapter
   retired guest and popup textures and clears page textures during hibernation.
 - **Linux** uses CEF software `OnPaint` on Wayland and X11, with GPU composition in the native host.
   Launch selects the available display connection without rewriting the session type.
-- **macOS** currently uses software `OnPaint`. An IOSurface path must copy or retain CEF's pooled
-  resource before the callback returns; passing an IOSurface ID asynchronously is not sufficient.
+- **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
+  returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
+  surface and waits for the copy before publishing it. Each owned IOSurface is handed to the native
+  window once, as a mach port sent to a per-connection bootstrap service whose name travels on the
+  browser command line; messages carry the window's socket token and are otherwise discarded. Frames
+  then reference the surface by id, the compositor wraps it as a Metal texture without copying, and
+  the slot is acknowledged only after submitted GPU work stops sampling it. Surfaces are retired
+  when their browser closes. As on Windows, a frame dropped while every slot is in use is requested
+  again once a slot is released. Chromium can deliver software `OnPaint` frames instead, which use the
+  shared-memory path below.
 
 Windows uses wgpu D3D12. Chromium receives the compositor device’s DXGI adapter LUID and uses
 ANGLE D3D11 on that adapter. The copy device is created from the adapter that owns Chromium’s
@@ -286,7 +294,7 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 | Platform | Transport | Paint path |
 | --- | --- | --- |
 | Linux | Unix domain socket | dirty-rect BGRA `OnPaint` → sparse wgpu uploads |
-| macOS | Unix domain socket | dirty-rect BGRA `OnPaint` → sparse wgpu uploads |
+| macOS | Unix domain socket + mach | CEF IOSurface → acknowledged IOSurface slots → wgpu Metal |
 | Windows | localhost TCP | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
 
 Palette and tray windows use the same native host as other desktop windows, with frameless chrome,

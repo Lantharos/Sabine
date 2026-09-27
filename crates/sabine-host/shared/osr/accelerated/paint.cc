@@ -11,6 +11,8 @@
 #if defined(OS_WIN)
 #include "osr/accelerated/windows/d3d11_copy.h"
 #include <windows.h>
+#elif defined(OS_MAC)
+#include "osr/accelerated/macos/iosurface_copy.h"
 #endif
 
 namespace sabine_osr {
@@ -81,11 +83,108 @@ void CloseHandleInParent(uint64_t remote_value) {
 
 using namespace sabine_osr;
 
+#if defined(OS_WIN)
+bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
+                                            const CefAcceleratedPaintInfo& info,
+                                            int width,
+                                            int height,
+                                            CopiedAccelFrame* out) {
+  AccelD3d11CopiedFrame copied{};
+  if (!CopyAcceleratedD3d11Frame(slot_key, info.shared_texture_handle, width,
+                                 height, static_cast<uint32_t>(info.format),
+                                 &copied)) {
+    return false;
+  }
+  const uint64_t remote_handle = DuplicateHandleToParent(copied.shared_handle);
+  if (remote_handle == 0) {
+    ReleaseAcceleratedD3d11Frame(copied.slot_token);
+    EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
+    return false;
+  }
+  *out = {copied.width, copied.height, remote_handle, copied.slot_token};
+  return true;
+}
+
+void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {
+  CloseHandleInParent(frame.native_handle);
+  ReleaseAcceleratedD3d11Frame(frame.slot_token);
+}
+
+void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
+  ReleaseAcceleratedD3d11Frame(slot_token);
+}
+
+void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
+  RetireAcceleratedD3d11Browser(browser_id);
+}
+#elif defined(OS_MAC)
+void SabineOsrHandler::UseSurfaceService(const std::string& service_name) {
+  if (!service_name.empty()) {
+    surface_broker_ =
+        std::make_unique<SurfaceBroker>(service_name, authentication_token_);
+  }
+}
+
+bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
+                                            const CefAcceleratedPaintInfo& info,
+                                            int width,
+                                            int height,
+                                            CopiedAccelFrame* out) {
+  (void)width;
+  (void)height;
+  if (!surface_broker_) {
+    return false;
+  }
+  AccelIOSurfaceCopiedFrame copied{};
+  if (!CopyAcceleratedIOSurfaceFrame(slot_key, info.shared_texture_io_surface,
+                                     &copied)) {
+    return false;
+  }
+  if (copied.replaced_surface_id != 0) {
+    surface_broker_->Retire(copied.replaced_surface_id);
+  }
+  if (!surface_broker_->Announce(copied.surface_id, copied.surface)) {
+    ReleaseAcceleratedIOSurfaceFrame(copied.slot_token);
+    EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
+    return false;
+  }
+  *out = {copied.width, copied.height, copied.surface_id, copied.slot_token};
+  return true;
+}
+
+void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {
+  ReleaseAcceleratedIOSurfaceFrame(frame.slot_token);
+}
+
+void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
+  ReleaseAcceleratedIOSurfaceFrame(slot_token);
+}
+
+void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
+  for (const uint64_t surface_id :
+       RetireAcceleratedIOSurfaceBrowser(browser_id)) {
+    if (surface_broker_) {
+      surface_broker_->Retire(surface_id);
+    }
+  }
+}
+#endif
+
+#if defined(OS_WIN) || defined(OS_MAC)
+void SabineOsrHandler::ReleaseAcceleratedFrame(uint64_t slot_token) {
+  ReleaseAcceleratedSlot(slot_token);
+  for (auto& [browser, type] : dropped_accelerated_paints_) {
+    browser->GetHost()->Invalidate(type);
+  }
+  dropped_accelerated_paints_.clear();
+}
+#endif
+
 void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                           PaintElementType type,
                                           const RectList& dirtyRects,
                                           const CefAcceleratedPaintInfo& info) {
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_MAC)
   (void)browser;
   (void)type;
   (void)dirtyRects;
@@ -110,12 +209,16 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     std::fflush(stderr);
   }
 
-  const bool src_is_bgra = info.format == CEF_COLOR_TYPE_BGRA_8888;
-  if (!src_is_bgra) {
+#if defined(OS_WIN)
+  const bool supported_format = info.format == CEF_COLOR_TYPE_BGRA_8888;
+#else
+  const bool supported_format = info.format == CEF_COLOR_TYPE_BGRA_8888 ||
+                                info.format == CEF_COLOR_TYPE_RGBA_8888;
+#endif
+  if (!supported_format) {
     EmitBridgeEvent("\"osr.accel_unsupported\"", "{}");
     return;
   }
-
   const int width = type == PET_POPUP ? popup_rect_.width : width_;
   const int height = type == PET_POPUP ? popup_rect_.height : height_;
   const int frame_w =
@@ -154,10 +257,9 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                         int32_t x, int32_t y) -> bool {
     const std::string slot_key = std::to_string(browser->GetIdentifier()) +
                                  (type == PET_POPUP ? "/popup" : "/view");
-    AccelD3d11CopiedFrame copied{};
-    if (!CopyAcceleratedD3d11Frame(
-            slot_key, info.shared_texture_handle, frame_w, frame_h,
-            static_cast<uint32_t>(info.format), &copied)) {
+    CopiedAccelFrame copied{};
+    if (!CopyAcceleratedFrame(slot_key, info, frame_w, frame_h, &copied)) {
+      dropped_accelerated_paints_.emplace_back(browser, type);
       EmitBridgeEvent("\"osr.accel_copy_dropped\"", "{}");
       return false;
     }
@@ -182,21 +284,13 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
       std::fflush(stderr);
     }
 
-    const uint64_t remote_handle =
-        DuplicateHandleToParent(copied.shared_handle);
-    if (remote_handle == 0) {
-      ReleaseAcceleratedD3d11Frame(copied.slot_token);
-      EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
-      return false;
-    }
-
     AccelPaintMeta meta;
     meta.format = static_cast<uint32_t>(info.format);
     meta.visible_x = visible.x;
     meta.visible_y = visible.y;
     meta.visible_width = static_cast<uint32_t>(visible.width);
     meta.visible_height = static_cast<uint32_t>(visible.height);
-    meta.native_handle = remote_handle;
+    meta.native_handle = copied.native_handle;
     meta.slot_token = copied.slot_token;
 
     const std::string payload = BuildAccelPayload(guest_id, meta);
@@ -205,8 +299,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
         SendMessage(accel_kind, copied.width, copied.height, x, y,
                     payload.data(), static_cast<uint32_t>(payload.size()));
     if (!sent) {
-      CloseHandleInParent(remote_handle);
-      ReleaseAcceleratedD3d11Frame(copied.slot_token);
+      DiscardAcceleratedFrame(copied);
     }
     return sent;
   };

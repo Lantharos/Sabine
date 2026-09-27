@@ -1,4 +1,4 @@
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod accel;
 mod header;
 mod paint;
@@ -12,9 +12,13 @@ pub(crate) use shared_mem::{PaintLease, PaintSlots};
 use crate::osr::transport::IpcStream;
 use std::io::{self, Read};
 
+#[cfg(target_os = "macos")]
+use crate::osr::accel::SurfaceRegistry;
 use crate::osr::protocol::OsrMessage;
+#[cfg(target_os = "macos")]
+use std::sync::Arc;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
 use header::{read_header, read_i32, read_u32};
 use paint::{BatchHeader, BatchSurface, parse_inline_batch};
@@ -64,12 +68,23 @@ pub(crate) struct WireReader {
     stream: IpcStream,
     #[cfg(unix)]
     slots: PaintSlots,
+    #[cfg(target_os = "macos")]
+    surfaces: Arc<SurfaceRegistry>,
 }
 
 impl WireReader {
     #[cfg(unix)]
-    pub(crate) fn new(stream: IpcStream, slots: PaintSlots) -> Self {
-        Self { stream, slots }
+    pub(crate) fn new(
+        stream: IpcStream,
+        slots: PaintSlots,
+        #[cfg(target_os = "macos")] surfaces: Arc<SurfaceRegistry>,
+    ) -> Self {
+        Self {
+            stream,
+            slots,
+            #[cfg(target_os = "macos")]
+            surfaces,
+        }
     }
 
     #[cfg(not(unix))]
@@ -252,9 +267,15 @@ impl WireReader {
             KIND_BRIDGE_REQUEST => {
                 OsrMessage::BridgeRequest(String::from_utf8(payload).unwrap_or_default())
             }
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {
-                OsrMessage::AccelFrame(parse_accel_frame(kind, width, height, x, y, &payload)?)
+                let frame = parse_accel_frame(kind, width, height, x, y, &payload)?;
+                #[cfg(target_os = "macos")]
+                let frame = crate::osr::protocol::OsrAccelFrame {
+                    io_surface: self.surfaces.surface(frame.native_handle),
+                    ..frame
+                };
+                OsrMessage::AccelFrame(frame)
             }
             _ => {
                 return Err(io::Error::new(
@@ -299,7 +320,7 @@ fn batch_surface(kind: u32) -> BatchSurface {
 }
 
 fn is_paint_kind(kind: u32) -> bool {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     if matches!(kind, KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL) {
         return true;
     }

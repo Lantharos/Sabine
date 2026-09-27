@@ -78,6 +78,15 @@ set(SABINE_HOST_SOURCES
 )
 
 if(OS_MAC)
+  list(APPEND SABINE_HOST_SOURCES
+    osr/accelerated/macos/iosurface_copy.h
+    osr/accelerated/macos/iosurface_copy.mm
+    osr/accelerated/macos/surface_broker.cc
+    osr/accelerated/macos/surface_broker.h
+  )
+endif()
+
+if(OS_MAC)
   list(APPEND SABINE_HOST_SOURCES main_mac.mm)
 endif()
 
@@ -111,7 +120,9 @@ target_include_directories(sabine-host PRIVATE
 )
 add_dependencies(sabine-host libcef_dll_wrapper)
 if(OS_MAC)
-  target_link_libraries(sabine-host libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+  target_link_libraries(sabine-host libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+    "-framework Metal"
+  )
 else()
   ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
   target_link_libraries(sabine-host libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})

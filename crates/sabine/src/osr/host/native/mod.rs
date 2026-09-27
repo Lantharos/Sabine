@@ -104,6 +104,8 @@ pub(super) struct OsrNativeHost {
     pub(super) cef_handed_off: bool,
     /// Deadline for the primary CEF process to connect after exit-24 handoff.
     pub(super) handoff_deadline: Option<Instant>,
+    #[cfg(target_os = "macos")]
+    pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
 }
 
 impl OsrNativeHost {
@@ -193,6 +195,8 @@ impl OsrNativeHost {
             incoming_file_drag: None,
             cef_handed_off: false,
             handoff_deadline: None,
+            #[cfg(target_os = "macos")]
+            surface_broker: None,
         }
     }
 
@@ -228,6 +232,14 @@ impl OsrNativeHost {
                 return;
             }
         };
+        #[cfg(target_os = "macos")]
+        let surface_broker = match crate::osr::accel::SurfaceBroker::start(&authentication_token) {
+            Ok(broker) => broker,
+            Err(error) => {
+                self.fail(format!("Could not share browser surfaces: {error}"));
+                return;
+            }
+        };
         self.socket_reader = None;
         self.connection_generation = self.connection_generation.wrapping_add(1);
         let generation = self.connection_generation;
@@ -256,10 +268,8 @@ impl OsrNativeHost {
                         _ => None,
                     }
                 }),
-                accelerated_paint: self
-                    .renderer
-                    .as_ref()
-                    .is_some_and(|renderer| renderer.supports_accelerated_paint()),
+                accelerated_paint: cfg!(target_os = "macos")
+                    || (cfg!(windows) && self.renderer.is_some()),
             },
         ) {
             Ok(command) => command,
@@ -270,6 +280,11 @@ impl OsrNativeHost {
                 return;
             }
         };
+        #[cfg(target_os = "macos")]
+        command.arg(format!(
+            "--sabine-surface-service={}",
+            surface_broker.service_name()
+        ));
         #[cfg(windows)]
         if let Some(renderer) = &self.renderer {
             let luid = crate::osr::accel::adapter_luid(renderer);
@@ -300,7 +315,13 @@ impl OsrNativeHost {
             authentication_token,
             self.sender.clone(),
             self.proxy.clone(),
+            #[cfg(target_os = "macos")]
+            surface_broker.registry(),
         ));
+        #[cfg(target_os = "macos")]
+        {
+            self.surface_broker = Some(surface_broker);
+        }
         self.children.push((generation, child));
     }
 
@@ -435,6 +456,10 @@ impl OsrNativeHost {
         self.socket_reader = None;
         self.control_writer = None;
         self.pending_messages = None;
+        #[cfg(target_os = "macos")]
+        {
+            self.surface_broker = None;
+        }
     }
 }
 

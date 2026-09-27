@@ -108,7 +108,7 @@ impl OsrNativeHost {
                         needs_initial_present |= paint.initial_present;
                     }
                 }
-                #[cfg(windows)]
+                #[cfg(any(windows, target_os = "macos"))]
                 OsrHostEvent::Message(_, OsrMessage::AccelFrame(frame)) => {
                     if self.accepts_paint() {
                         let paint = self.apply_paint(|host| host.update_accel_frame(frame));

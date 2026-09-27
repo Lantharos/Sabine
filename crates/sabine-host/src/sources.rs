@@ -117,6 +117,22 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/accelerated/windows/d3d11_copy.h"),
     ),
     (
+        "osr/accelerated/macos/iosurface_copy.h",
+        include_str!("../shared/osr/accelerated/macos/iosurface_copy.h"),
+    ),
+    (
+        "osr/accelerated/macos/iosurface_copy.mm",
+        include_str!("../shared/osr/accelerated/macos/iosurface_copy.mm"),
+    ),
+    (
+        "osr/accelerated/macos/surface_broker.cc",
+        include_str!("../shared/osr/accelerated/macos/surface_broker.cc"),
+    ),
+    (
+        "osr/accelerated/macos/surface_broker.h",
+        include_str!("../shared/osr/accelerated/macos/surface_broker.h"),
+    ),
+    (
         "osr/paint/shared_pool.cc",
         include_str!("../shared/osr/paint/shared_pool.cc"),
     ),

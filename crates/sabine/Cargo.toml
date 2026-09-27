@@ -70,5 +70,9 @@ shell-words = "1.1.1"
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSApplication"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSDictionary", "NSString", "NSURL"] }
+objc2-core-foundation.workspace = true
+objc2-io-surface.workspace = true
+objc2-metal.workspace = true
+mach2.workspace = true
 global-hotkey = "0.8.0"
 tray-icon = { version = "0.25.1", default-features = false }

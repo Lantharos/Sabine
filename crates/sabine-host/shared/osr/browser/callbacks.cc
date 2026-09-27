@@ -21,7 +21,6 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include "osr/accelerated/windows/d3d11_copy.h"
 #else
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -167,8 +166,8 @@ bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-#ifdef _WIN32
-  sabine_osr::RetireAcceleratedD3d11Browser(browser->GetIdentifier());
+#if defined(OS_WIN) || defined(OS_MAC)
+  RetireAcceleratedBrowser(browser->GetIdentifier());
 #endif
   renderer_crashes_.erase(browser->GetIdentifier());
   ime_frames_.erase(browser->GetIdentifier());

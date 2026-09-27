@@ -121,6 +121,8 @@ impl OsrNativeHost {
         }
         if self.main_surface.is_some() {
             self.present_rendered_surface("first_paint");
+        } else {
+            self.send_control("repaint\n");
         }
         if self.config.visible
             && let Some(window) = &self.window

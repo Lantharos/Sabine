@@ -193,6 +193,10 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
                            policy, command_line->HasSwitch("sabine-dev-mode"),
                            command_line->HasSwitch("sabine-transparent"),
                            active_frame_rate, background_frame_rate));
+#if defined(OS_MAC)
+  handler->UseSurfaceService(
+      command_line->GetSwitchValue("sabine-surface-service"));
+#endif
   return CefBrowserHost::CreateBrowser(window_info, handler, url,
                                        browser_settings, policy, nullptr);
 }

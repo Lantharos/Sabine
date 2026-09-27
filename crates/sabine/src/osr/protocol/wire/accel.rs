@@ -60,6 +60,8 @@ pub(super) fn parse_accel_frame(
         format,
         native_handle,
         slot_token,
+        #[cfg(target_os = "macos")]
+        io_surface: None,
     };
     if visible_x < 0
         || visible_y < 0

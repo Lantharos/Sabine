@@ -43,7 +43,6 @@
 #include "osr/browser/screen.h"
 #include "osr/utilities.h"
 #if defined(OS_WIN)
-#include "osr/accelerated/windows/d3d11_copy.h"
 #endif
 
 using namespace sabine_osr;
@@ -70,12 +69,13 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     return;
   }
   const auto parts = Split(line, '\t');
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MAC)
   if (parts.size() == 2 && parts[0] == "accel_release") {
-    ReleaseAcceleratedD3d11Frame(std::strtoull(parts[1].c_str(), nullptr, 10));
+    ReleaseAcceleratedFrame(std::strtoull(parts[1].c_str(), nullptr, 10));
     return;
   }
-#else
+#endif
+#ifndef _WIN32
   if (parts.size() == 3 && parts[0] == "paint_release") {
     ReleaseSharedPaint(
         static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
