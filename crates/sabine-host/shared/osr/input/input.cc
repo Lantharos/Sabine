@@ -39,8 +39,8 @@
 #include "include/wrapper/cef_helpers.h"
 #include "common/json.h"
 #include "sabine_bridge_js.h"
-#include "osr/ime.h"
-#include "osr/screen.h"
+#include "osr/input/ime.h"
+#include "osr/browser/screen.h"
 #include "osr/utilities.h"
 #if defined(OS_WIN)
 #include "osr/accelerated/windows/d3d11_copy.h"
