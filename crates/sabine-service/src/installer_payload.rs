@@ -358,6 +358,10 @@ fn copy_file(source: &Path, destination: &Path) -> ServiceResult<()> {
     fs::create_dir_all(destination.parent().unwrap())?;
     fs::copy(source, destination)?;
     #[cfg(windows)]
+    #[expect(
+        clippy::permissions_set_readonly_false,
+        reason = "Windows clears only the read-only attribute"
+    )]
     {
         let mut permissions = fs::metadata(destination)?.permissions();
         permissions.set_readonly(false);

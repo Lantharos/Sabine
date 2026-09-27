@@ -4,14 +4,7 @@
 //! window. The app UI creates and controls them via `sabine.guest.*`
 //! bridge commands.
 
-use serde_json::json;
-
-use crate::bridge::{BridgeResponse, BridgeResult};
-
-pub use crate::guest_create::{
-    GuestBounds, GuestCreateOptions, GuestInfo, GuestPopupPolicy, default_partition_for,
-    normalize_guest_id,
-};
+pub use crate::guest_create::{GuestBounds, GuestCreateOptions, GuestInfo, GuestPopupPolicy};
 pub use crate::guest_download::{GuestDownloadAction, GuestDownloadEvent, GuestDownloadState};
 pub use crate::guest_host_control::GuestHostControl;
 
@@ -31,9 +24,6 @@ pub const GET_COMMAND: &str = "sabine.guest.get";
 pub const SET_ZOOM_COMMAND: &str = "sabine.guest.setZoom";
 pub const EXECUTE_JS_COMMAND: &str = "sabine.guest.executeJavaScript";
 pub const DOWNLOAD_ACTION_COMMAND: &str = "sabine.guest.downloadAction";
-
-/// Reserved guest id used by the `sabine.popup` surface.
-pub const POPUP_GUEST_ID: &str = "__sabine_popup";
 
 const INTERNAL_COMMANDS: [&str; 16] = [
     CREATE_COMMAND,
@@ -62,24 +52,6 @@ pub fn bridge_commands_with_guest(mut commands: Vec<String>) -> Vec<String> {
         }
     }
     commands
-}
-
-pub fn is_guest_command(name: &str) -> bool {
-    INTERNAL_COMMANDS.contains(&name)
-}
-
-pub fn ok_info(info: GuestInfo) -> BridgeResult {
-    Ok(BridgeResponse::json(info.to_json()))
-}
-
-pub fn ok_list(guests: &[GuestInfo]) -> BridgeResult {
-    Ok(BridgeResponse::json(json!({
-        "guests": guests.iter().map(GuestInfo::to_json).collect::<Vec<_>>(),
-    })))
-}
-
-pub fn ok_empty() -> BridgeResult {
-    Ok(BridgeResponse::json(json!({})))
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ mod manual;
 mod payload;
 use payload::{install_system_archive, seed_managed_install};
 mod state;
-pub use manual::{ComponentUpdate, update_components};
+pub use manual::update_components;
 
 use artifacts::{
     copy_directory, download_file, extract_system_archive, fetch_system_manifest,

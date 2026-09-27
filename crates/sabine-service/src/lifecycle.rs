@@ -12,8 +12,8 @@ pub use autostart::{
 };
 pub(crate) use daemon::stop_daemon;
 pub use daemon::{
-    complete_system_update, ensure_daemon_running, is_daemon_running, resolve_service_executable,
-    run_daemon, running_daemon_version, start_daemon,
+    complete_system_update, ensure_daemon_running, resolve_service_executable, run_daemon,
+    running_daemon_version,
 };
 
 const POLICY_FILE: &str = "service-policy.json";
@@ -103,10 +103,6 @@ pub fn ensure_ready_with_runtime(
             .version,
         registered_app,
     })
-}
-
-pub fn adopt(register: Option<AppManifest>) -> ServiceResult<ServiceReadyReport> {
-    adopt_with_runtime(sabine_runtime::RuntimeConfig::default(), register)
 }
 
 pub fn adopt_with_runtime(

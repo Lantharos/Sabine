@@ -35,7 +35,7 @@ use toolchain::apply_cmake_generator;
 
 const RUNTIME_PROBE_VERSION: u32 = 6;
 
-pub fn host_binary_name() -> &'static str {
+fn host_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "sabine-host.exe"
     } else {
@@ -43,7 +43,7 @@ pub fn host_binary_name() -> &'static str {
     }
 }
 
-pub fn host_release_binary(runtime_dir: &Path) -> PathBuf {
+fn host_release_binary(runtime_dir: &Path) -> PathBuf {
     let root = runtime_dir
         .join(".sabine-hosts")
         .join(host_source_fingerprint());
@@ -379,7 +379,7 @@ pub fn apply_runtime_resource_args(command: &mut Command, runtime_dir: &Path) {
     let _ = (command, runtime_dir);
 }
 
-pub fn host_source_fingerprint() -> String {
+fn host_source_fingerprint() -> String {
     sources::host_source_fingerprint()
 }
 
