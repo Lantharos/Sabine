@@ -19,10 +19,10 @@ const char kGuestHostControlPrefix[] = "guest.";
 namespace {
 
 const char* const kGuestOperations[] = {
-    "create",   "destroy", "navigate",         "setBounds",
-    "setVisible", "setCovered", "capturePreview", "focus", "reload", "goBack",
-    "goForward", "list",   "get",              "setZoom",
-    "executeJavaScript",   "downloadAction",
+    "create",     "destroy",    "navigate",          "setBounds",
+    "setVisible", "setCovered", "capturePreview",    "focus",
+    "reload",     "goBack",     "goForward",         "list",
+    "get",        "setZoom",    "executeJavaScript", "downloadAction",
 };
 
 std::string SanitizePartition(const std::string& partition) {
@@ -88,10 +88,9 @@ const char* GuestPopupPolicyName(GuestPopupPolicy policy) {
 
 const char* WindowOpenDispositionName(int disposition) {
   static const char* const kNames[] = {
-      "unknown",        "currentTab",     "singletonTab",
-      "newForegroundTab", "newBackgroundTab", "newPopup",
-      "newWindow",      "saveToDisk",     "offTheRecord",
-      "ignoreAction",   "switchToTab",    "newPictureInPicture",
+      "unknown",          "currentTab",   "singletonTab", "newForegroundTab",
+      "newBackgroundTab", "newPopup",     "newWindow",    "saveToDisk",
+      "offTheRecord",     "ignoreAction", "switchToTab",  "newPictureInPicture",
       "newSplitView",
   };
   const int count = static_cast<int>(sizeof(kNames) / sizeof(kNames[0]));
@@ -222,9 +221,8 @@ bool ParseGuestCreateRequest(const std::string& payload,
   request->html = url.empty() ? html : "";
   request->bounds = ParseGuestBounds(payload, CefRect(0, 0, 1, 1));
   request->partition = JsonStringValue(payload, "partition");
-  request->allow_bridge =
-      JsonBoolValue(payload, "allowBridge",
-                    JsonBoolValue(payload, "allow_bridge", false));
+  request->allow_bridge = JsonBoolValue(
+      payload, "allowBridge", JsonBoolValue(payload, "allow_bridge", false));
   request->allow_downloads =
       JsonBoolValue(payload, "allowDownloads",
                     JsonBoolValue(payload, "allow_downloads", true));
@@ -234,9 +232,9 @@ bool ParseGuestCreateRequest(const std::string& payload,
     request->intercepted_shortcuts =
         JsonStringArrayValue(payload, "intercepted_shortcuts");
   }
-  request->intercept_horizontal_wheel =
-      JsonBoolValue(payload, "interceptHorizontalWheel",
-                    JsonBoolValue(payload, "intercept_horizontal_wheel", false));
+  request->intercept_horizontal_wheel = JsonBoolValue(
+      payload, "interceptHorizontalWheel",
+      JsonBoolValue(payload, "intercept_horizontal_wheel", false));
   request->visible = JsonBoolValue(payload, "visible", true);
   std::string policy = JsonStringValue(payload, "popupPolicy");
   if (policy.empty()) {
@@ -260,10 +258,10 @@ std::string GuestInfoJson(const GuestView& guest) {
   output << "{\"id\":\"" << JsonEscape(guest.id) << "\",\"url\":\""
          << JsonEscape(CurrentUrl(guest)) << "\",\"title\":\""
          << JsonEscape(guest.title) << "\",\"bounds\":{\"x\":" << guest.bounds.x
-         << ",\"y\":" << guest.bounds.y
-         << ",\"width\":" << guest.bounds.width
-         << ",\"height\":" << guest.bounds.height << "},\"x\":" << guest.bounds.x
          << ",\"y\":" << guest.bounds.y << ",\"width\":" << guest.bounds.width
+         << ",\"height\":" << guest.bounds.height
+         << "},\"x\":" << guest.bounds.x << ",\"y\":" << guest.bounds.y
+         << ",\"width\":" << guest.bounds.width
          << ",\"height\":" << guest.bounds.height
          << ",\"visible\":" << BoolLiteral(guest.visible)
          << ",\"loading\":" << BoolLiteral(loading)
@@ -309,9 +307,9 @@ std::string GuestNewWindowJson(const std::string& id,
                                const std::string& url,
                                int disposition) {
   std::ostringstream output;
-  output << "{\"id\":\"" << JsonEscape(id) << "\",\"url\":\""
-         << JsonEscape(url) << "\",\"disposition\":\""
-         << WindowOpenDispositionName(disposition) << "\"}";
+  output << "{\"id\":\"" << JsonEscape(id) << "\",\"url\":\"" << JsonEscape(url)
+         << "\",\"disposition\":\"" << WindowOpenDispositionName(disposition)
+         << "\"}";
   return output.str();
 }
 
@@ -322,17 +320,14 @@ std::string GuestDownloadJson(const std::string& guest_id,
                               const std::string& filename) {
   const bool valid = item && item->IsValid();
   std::ostringstream output;
-  output << "{\"guestId\":\"" << JsonEscape(guest_id)
-         << "\",\"downloadId\":\"" << JsonEscape(download_id)
-         << "\",\"url\":\""
+  output << "{\"guestId\":\"" << JsonEscape(guest_id) << "\",\"downloadId\":\""
+         << JsonEscape(download_id) << "\",\"url\":\""
          << JsonEscape(valid ? item->GetURL().ToString() : std::string())
-         << "\",\"filename\":\"" << JsonEscape(filename)
-         << "\",\"mimeType\":\""
+         << "\",\"filename\":\"" << JsonEscape(filename) << "\",\"mimeType\":\""
          << JsonEscape(valid ? item->GetMimeType().ToString() : std::string())
-         << "\",\"totalBytes\":"
-         << (valid ? item->GetTotalBytes() : 0) << ",\"receivedBytes\":"
-         << (valid ? item->GetReceivedBytes() : 0) << ",\"state\":\"" << state
-         << "\",\"savePath\":\""
+         << "\",\"totalBytes\":" << (valid ? item->GetTotalBytes() : 0)
+         << ",\"receivedBytes\":" << (valid ? item->GetReceivedBytes() : 0)
+         << ",\"state\":\"" << state << "\",\"savePath\":\""
          << JsonEscape(valid ? item->GetFullPath().ToString() : std::string())
          << "\"}";
   return output.str();

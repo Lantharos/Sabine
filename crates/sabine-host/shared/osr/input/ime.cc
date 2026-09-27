@@ -20,8 +20,7 @@ bool TryHandleImeControl(CefRefPtr<CefBrowserHost> host,
     return true;
   }
   if (parts[0] == "ime_finish") {
-    const bool keep_selection =
-        parts.size() >= 2 && parts[1] == "1";
+    const bool keep_selection = parts.size() >= 2 && parts[1] == "1";
     host->ImeFinishComposingText(keep_selection);
     return true;
   }
@@ -36,8 +35,8 @@ bool TryHandleImeControl(CefRefPtr<CefBrowserHost> host,
     const uint32_t length = static_cast<uint32_t>(text.length());
     if (length > 0) {
       cef_composition_underline_t underline = {
-          sizeof(cef_composition_underline_t), CefRange(0, length),
-          0xFF000000, 0, false};
+          sizeof(cef_composition_underline_t), CefRange(0, length), 0xFF000000,
+          0, false};
       underlines.push_back(underline);
     }
     CefRange selection(UINT32_MAX, UINT32_MAX);
@@ -83,9 +82,8 @@ void SabineOsrHandler::OnImeCompositionRangeChanged(
   SendFocusedImeState();
 }
 
-void SabineOsrHandler::OnVirtualKeyboardRequested(
-    CefRefPtr<CefBrowser> browser,
-    TextInputMode input_mode) {
+void SabineOsrHandler::OnVirtualKeyboardRequested(CefRefPtr<CefBrowser> browser,
+                                                  TextInputMode input_mode) {
   CEF_REQUIRE_UI_THREAD();
   if (!browser) {
     return;
@@ -102,8 +100,8 @@ void SabineOsrHandler::SendFocusedImeState() {
   if (!focused_guest_id_.empty()) {
     GuestView* guest = guests_.Find(focused_guest_id_);
     if (!guest || !guest->browser) {
-      SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0,
-                  nullptr, 0);
+      SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0, nullptr,
+                  0);
       return;
     }
     target = guest->browser;

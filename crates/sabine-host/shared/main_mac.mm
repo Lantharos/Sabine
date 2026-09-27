@@ -51,7 +51,8 @@ int main(int argc, char* argv[]) {
   }
   CefScopedLibraryLoader library;
   if (!(subprocess ? library.LoadInHelper() : library.LoadInMain())) {
-    std::cerr << "Could not load the Chromium framework from the launch bundle" << std::endl;
+    std::cerr << "Could not load the Chromium framework from the launch bundle"
+              << std::endl;
     return 1;
   }
 

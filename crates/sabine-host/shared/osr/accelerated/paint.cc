@@ -28,7 +28,8 @@ void ApplySharedTexture(CefWindowInfo* window_info, bool enabled) {
 
 #if defined(OS_WIN)
 HANDLE OpenParentForHandleDuplication() {
-  CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
+  CefRefPtr<CefCommandLine> command_line =
+      CefCommandLine::GetGlobalCommandLine();
   const int parent_pid = SwitchInt(command_line, "sabine-parent-pid", 0);
   if (parent_pid <= 0) {
     return nullptr;
@@ -48,9 +49,8 @@ uint64_t DuplicateHandleToParent(HANDLE shared) {
   // over IPC must be created directly in the compositor process; sending this
   // process's value would intermittently open an unrelated object instead.
   HANDLE remote = nullptr;
-  const BOOL ok =
-      DuplicateHandle(GetCurrentProcess(), shared, parent, &remote, 0, FALSE,
-                      DUPLICATE_SAME_ACCESS);
+  const BOOL ok = DuplicateHandle(GetCurrentProcess(), shared, parent, &remote,
+                                  0, FALSE, DUPLICATE_SAME_ACCESS);
   CloseHandle(parent);
   if (!ok || !remote) {
     return 0;
@@ -81,11 +81,10 @@ void CloseHandleInParent(uint64_t remote_value) {
 
 using namespace sabine_osr;
 
-void SabineOsrHandler::OnAcceleratedPaint(
-    CefRefPtr<CefBrowser> browser,
-    PaintElementType type,
-    const RectList& dirtyRects,
-    const CefAcceleratedPaintInfo& info) {
+void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
+                                          PaintElementType type,
+                                          const RectList& dirtyRects,
+                                          const CefAcceleratedPaintInfo& info) {
 #if !defined(OS_WIN)
   (void)browser;
   (void)type;
@@ -126,14 +125,13 @@ void SabineOsrHandler::OnAcceleratedPaint(
   if (frame_w <= 0 || frame_h <= 0) {
     return;
   }
-  const bool full_content =
-      info.extra.content_rect.x == 0 && info.extra.content_rect.y == 0 &&
-      info.extra.content_rect.width == frame_w &&
-      info.extra.content_rect.height == frame_h;
+  const bool full_content = info.extra.content_rect.x == 0 &&
+                            info.extra.content_rect.y == 0 &&
+                            info.extra.content_rect.width == frame_w &&
+                            info.extra.content_rect.height == frame_h;
   const bool source_matches =
-      !info.extra.has_source_size ||
-      (info.extra.source_size.width == frame_w &&
-       info.extra.source_size.height == frame_h);
+      !info.extra.has_source_size || (info.extra.source_size.width == frame_w &&
+                                      info.extra.source_size.height == frame_h);
   if (!full_content || !source_matches) {
     return;
   }
@@ -152,11 +150,10 @@ void SabineOsrHandler::OnAcceleratedPaint(
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
-  auto send_accel = [&](uint32_t accel_kind,
-                        const std::string& guest_id, int32_t x,
-                        int32_t y) -> bool {
+  auto send_accel = [&](uint32_t accel_kind, const std::string& guest_id,
+                        int32_t x, int32_t y) -> bool {
     const std::string slot_key = std::to_string(browser->GetIdentifier()) +
-        (type == PET_POPUP ? "/popup" : "/view");
+                                 (type == PET_POPUP ? "/popup" : "/view");
     AccelD3d11CopiedFrame copied{};
     if (!CopyAcceleratedD3d11Frame(
             slot_key, info.shared_texture_handle, frame_w, frame_h,
@@ -203,10 +200,10 @@ void SabineOsrHandler::OnAcceleratedPaint(
     meta.slot_token = copied.slot_token;
 
     const std::string payload = BuildAccelPayload(guest_id, meta);
-    const bool sent = !payload.empty() &&
-                      SendMessage(accel_kind, copied.width, copied.height, x,
-                                  y, payload.data(),
-                                  static_cast<uint32_t>(payload.size()));
+    const bool sent =
+        !payload.empty() &&
+        SendMessage(accel_kind, copied.width, copied.height, x, y,
+                    payload.data(), static_cast<uint32_t>(payload.size()));
     if (!sent) {
       CloseHandleInParent(remote_handle);
       ReleaseAcceleratedD3d11Frame(copied.slot_token);
@@ -221,8 +218,7 @@ void SabineOsrHandler::OnAcceleratedPaint(
                  guest->bounds.y + guest_popup_rect_.y);
       return;
     }
-    if (send_accel(kGuestAccel, guest->id, guest->bounds.x,
-                   guest->bounds.y) &&
+    if (send_accel(kGuestAccel, guest->id, guest->bounds.x, guest->bounds.y) &&
         !guest->painted) {
       guest->painted = true;
       if (guest->id == kSabinePopupGuestId) {
@@ -237,8 +233,7 @@ void SabineOsrHandler::OnAcceleratedPaint(
   const uint32_t kind = type == PET_POPUP ? kPopupAccel : kMainAccel;
   const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
   const int32_t y = type == PET_POPUP ? popup_rect_.y : 0;
-  send_accel(kind, std::string(), x,
-             y);
+  send_accel(kind, std::string(), x, y);
   if (type == PET_VIEW) {
     CompleteResizeFrame(reported_visible.width, reported_visible.height);
   }

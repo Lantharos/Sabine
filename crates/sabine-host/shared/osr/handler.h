@@ -66,15 +66,15 @@ constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
 enum class PaintSurface { kMain, kPopup, kGuest };
 
 class SabineOsrHandler : public CefClient,
-                       public CefContextMenuHandler,
-                       public CefDisplayHandler,
-                       public CefDownloadHandler,
-                       public CefDragHandler,
-                       public CefLifeSpanHandler,
-                       public CefLoadHandler,
-                       public CefPermissionHandler,
-                       public CefRenderHandler,
-                       public CefRequestHandler {
+                         public CefContextMenuHandler,
+                         public CefDisplayHandler,
+                         public CefDownloadHandler,
+                         public CefDragHandler,
+                         public CefLifeSpanHandler,
+                         public CefLoadHandler,
+                         public CefPermissionHandler,
+                         public CefRenderHandler,
+                         public CefRequestHandler {
  public:
   SabineOsrHandler(std::string endpoint,
                    std::string authentication_token,
@@ -90,23 +90,29 @@ class SabineOsrHandler : public CefClient,
 
   static SabineOsrHandler* GetInstance();
 
-  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override { return this; }
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
+    return this;
+  }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
-  CefRefPtr<CefPermissionHandler> GetPermissionHandler() override { return this; }
+  CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
+    return this;
+  }
   CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
-  bool OnShowPermissionPrompt(CefRefPtr<CefBrowser> browser,
-                              uint64_t prompt_id,
-                              const CefString& requesting_origin,
-                              uint32_t requested_permissions,
-                              CefRefPtr<CefPermissionPromptCallback> callback) override;
+  bool OnShowPermissionPrompt(
+      CefRefPtr<CefBrowser> browser,
+      uint64_t prompt_id,
+      const CefString& requesting_origin,
+      uint32_t requested_permissions,
+      CefRefPtr<CefPermissionPromptCallback> callback) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
-                                TerminationStatus status, int error_code,
-                                const CefString& error_string) override;
+                                 TerminationStatus status,
+                                 int error_code,
+                                 const CefString& error_string) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
@@ -191,10 +197,9 @@ class SabineOsrHandler : public CefClient,
                           PaintElementType type,
                           const RectList& dirtyRects,
                           const CefAcceleratedPaintInfo& info) override;
-  void OnImeCompositionRangeChanged(
-      CefRefPtr<CefBrowser> browser,
-      const CefRange& selected_range,
-      const RectList& character_bounds) override;
+  void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser,
+                                    const CefRange& selected_range,
+                                    const RectList& character_bounds) override;
   void OnVirtualKeyboardRequested(CefRefPtr<CefBrowser> browser,
                                   TextInputMode input_mode) override;
   bool GetScreenPoint(CefRefPtr<CefBrowser> browser,
@@ -272,10 +277,13 @@ class SabineOsrHandler : public CefClient,
   bool HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
                            CefRefPtr<CefFrame> frame,
                            const std::string& url);
-  bool HandleWindowCommand(CefRefPtr<CefBrowser> browser, const std::string& url);
+  bool HandleWindowCommand(CefRefPtr<CefBrowser> browser,
+                           const std::string& url);
   void RequestNativeClose();
   void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
-  void ApplyLifecycle(const std::string& state, int frame_rate, const std::string& reason);
+  void ApplyLifecycle(const std::string& state,
+                      int frame_rate,
+                      const std::string& reason);
   void DispatchLifecycle(const std::string& state, const std::string& reason);
   void StartCommandReader();
 
@@ -292,9 +300,8 @@ class SabineOsrHandler : public CefClient,
   void ContinueCreateGuest(const GuestCreateRequest& request,
                            CefRefPtr<CefRequestContext> context,
                            GuestCreateCallback callback);
-  void GuestRequestContextInitialized(
-      const std::string& partition,
-      CefRefPtr<CefRequestContext> context);
+  void GuestRequestContextInitialized(const std::string& partition,
+                                      CefRefPtr<CefRequestContext> context);
   bool CancelPendingGuest(const std::string& id);
   bool HasPendingGuest(const std::string& id) const;
   void DestroyGuest(const std::string& id);
@@ -317,7 +324,8 @@ class SabineOsrHandler : public CefClient,
       const std::string& partition);
   std::string NextGuestId();
 
-  std::map<int, std::deque<std::chrono::steady_clock::time_point>> renderer_crashes_;
+  std::map<int, std::deque<std::chrono::steady_clock::time_point>>
+      renderer_crashes_;
   BrowserList browsers_;
   CefRefPtr<CefBrowser> browser_;
   std::string endpoint_;

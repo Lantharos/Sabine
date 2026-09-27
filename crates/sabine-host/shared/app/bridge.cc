@@ -25,11 +25,17 @@ constexpr size_t kMaxMessageBytes = 1024 * 1024;
 
 class NativePostMessageHandler : public CefV8Handler {
  public:
-  NativePostMessageHandler(CefRefPtr<CefFrame> frame, std::string message_name, std::string origin)
-      : frame_(frame), message_name_(std::move(message_name)), origin_(std::move(origin)) {}
+  NativePostMessageHandler(CefRefPtr<CefFrame> frame,
+                           std::string message_name,
+                           std::string origin)
+      : frame_(frame),
+        message_name_(std::move(message_name)),
+        origin_(std::move(origin)) {}
 
-  bool Execute(const CefString& name, CefRefPtr<CefV8Value> object,
-               const CefV8ValueList& arguments, CefRefPtr<CefV8Value>& retval,
+  bool Execute(const CefString& name,
+               CefRefPtr<CefV8Value> object,
+               const CefV8ValueList& arguments,
+               CefRefPtr<CefV8Value>& retval,
                CefString& exception) override {
     if (arguments.size() != 1 || !arguments[0]->IsString()) {
       exception = "Sabine native messages require one string argument";
@@ -41,15 +47,19 @@ class NativePostMessageHandler : public CefV8Handler {
       return true;
     }
     auto context = CefV8Context::GetCurrentContext();
-    if (!context || !context->IsValid() || !frame_->IsValid()) return true;
+    if (!context || !context->IsValid() || !frame_->IsValid())
+      return true;
     auto browser = frame_->GetBrowser();
     const std::string cancel_prefix = "sabine://cancel/";
-    if (message_name_ == "sabine.native" && payload.rfind(cancel_prefix, 0) == 0) {
+    if (message_name_ == "sabine.native" &&
+        payload.rfind(cancel_prefix, 0) == 0) {
       const std::string id = payload.substr(cancel_prefix.size());
       for (auto it = pending.begin(); it != pending.end();) {
         if (it->second.browser->IsSame(browser) && it->second.page_id == id &&
-            it->second.context->IsSame(context)) it = pending.erase(it);
-        else ++it;
+            it->second.context->IsSame(context))
+          it = pending.erase(it);
+        else
+          ++it;
       }
       return true;
     }
@@ -59,7 +69,8 @@ class NativePostMessageHandler : public CefV8Handler {
         exception = "Sabine bridge request capacity is exhausted";
         return true;
       }
-      const std::string native_id = process_token + "-" + std::to_string(++next_request);
+      const std::string native_id =
+          process_token + "-" + std::to_string(++next_request);
       const size_t query = payload.find('?');
       if (query == std::string::npos) {
         exception = "Malformed Sabine bridge request";
@@ -70,51 +81,69 @@ class NativePostMessageHandler : public CefV8Handler {
     }
     auto message = CefProcessMessage::Create(message_name_);
     message->GetArgumentList()->SetString(0, payload);
-    if (message_name_ == "sabine.native") message->GetArgumentList()->SetString(1, origin_);
+    if (message_name_ == "sabine.native")
+      message->GetArgumentList()->SetString(1, origin_);
     frame_->SendProcessMessage(PID_BROWSER, message);
     retval = CefV8Value::CreateUndefined();
     return true;
   }
+
  private:
   CefRefPtr<CefFrame> frame_;
   std::string message_name_;
   std::string origin_;
   IMPLEMENT_REFCOUNTING(NativePostMessageHandler);
 };
-}
+}  // namespace
 
-void InstallTransport(CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context,
-                      const char* name, const char* message) {
-  context->GetGlobal()->SetValue(name,
-      CefV8Value::CreateFunction(name, new NativePostMessageHandler(frame, message, context->GetGlobal()->GetValue("origin")->GetStringValue())),
-      static_cast<CefV8Value::PropertyAttribute>(V8_PROPERTY_ATTRIBUTE_READONLY | V8_PROPERTY_ATTRIBUTE_DONTDELETE));
+void InstallTransport(CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefV8Context> context,
+                      const char* name,
+                      const char* message) {
+  context->GetGlobal()->SetValue(
+      name,
+      CefV8Value::CreateFunction(
+          name,
+          new NativePostMessageHandler(
+              frame, message,
+              context->GetGlobal()->GetValue("origin")->GetStringValue())),
+      static_cast<CefV8Value::PropertyAttribute>(
+          V8_PROPERTY_ATTRIBUTE_READONLY | V8_PROPERTY_ATTRIBUTE_DONTDELETE));
 }
 
 std::string RememberContext(CefRefPtr<CefV8Context> context) {
-  const std::string origin = context->GetGlobal()->GetValue("origin")->GetStringValue();
+  const std::string origin =
+      context->GetGlobal()->GetValue("origin")->GetStringValue();
   contexts.push_back({context, origin});
   return origin;
 }
 
 void ReleaseContext(CefRefPtr<CefV8Context> context) {
   for (auto it = contexts.begin(); it != contexts.end();) {
-    if (it->context->IsSame(context)) it = contexts.erase(it);
-    else ++it;
+    if (it->context->IsSame(context))
+      it = contexts.erase(it);
+    else
+      ++it;
   }
   for (auto it = pending.begin(); it != pending.end();) {
-    if (it->second.context->IsSame(context)) it = pending.erase(it);
-    else ++it;
+    if (it->second.context->IsSame(context))
+      it = pending.erase(it);
+    else
+      ++it;
   }
 }
 
 void ReleaseBrowser(CefRefPtr<CefBrowser> browser) {
   for (auto it = pending.begin(); it != pending.end();) {
-    if (it->second.browser->IsSame(browser)) it = pending.erase(it);
-    else ++it;
+    if (it->second.browser->IsSame(browser))
+      it = pending.erase(it);
+    else
+      ++it;
   }
 }
 
-bool Receive(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+bool Receive(CefRefPtr<CefBrowser> browser,
+             CefRefPtr<CefFrame> frame,
              CefRefPtr<CefProcessMessage> message,
              CefRefPtr<CefDictionaryValue> policy) {
   const std::string name = message->GetName();
@@ -122,30 +151,37 @@ bool Receive(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
   CefRefPtr<CefV8Context> context;
   std::string script;
   if (name == "sabine.response") {
-    if (values->GetSize() != 3) return true;
+    if (values->GetSize() != 3)
+      return true;
     const std::string id = values->GetString(0);
     auto found = pending.find(id);
-    if (found == pending.end() || !found->second.browser->IsSame(browser)) return true;
+    if (found == pending.end() || !found->second.browser->IsSame(browser))
+      return true;
     context = found->second.context;
     const std::string page_id = found->second.page_id;
     pending.erase(found);
     script = "window.__sabineBridgeResolve&&window.__sabineBridgeResolve(" +
-        JsString(page_id) + "," + (values->GetBool(1) ? "true" : "false") + ",JSON.parse(" +
-        JsString(values->GetString(2)) + "));";
+             JsString(page_id) + "," + (values->GetBool(1) ? "true" : "false") +
+             ",JSON.parse(" + JsString(values->GetString(2)) + "));";
   } else if (name == "sabine.event") {
     if (values->GetSize() != 2 || !frame->IsMain() ||
-        !AllowsDocument(policy, frame->GetURL())) return true;
+        !AllowsDocument(policy, frame->GetURL()))
+      return true;
     context = frame->GetV8Context();
-    if (!context || !context->IsValid()) return true;
+    if (!context || !context->IsValid())
+      return true;
     bool authorized = false;
     for (const auto& entry : contexts) {
       if (entry.context->IsSame(context)) {
-        authorized = MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
+        authorized =
+            MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
         break;
       }
     }
-    if (!authorized) return true;
-    script = "window.__sabineBridgeEmit&&window.__sabineBridgeEmit(JSON.parse(" +
+    if (!authorized)
+      return true;
+    script =
+        "window.__sabineBridgeEmit&&window.__sabineBridgeEmit(JSON.parse(" +
         JsString(values->GetString(0)) + "),JSON.parse(" +
         JsString(values->GetString(1)) + "));";
   } else {
@@ -158,4 +194,4 @@ bool Receive(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
   }
   return true;
 }
-}
+}  // namespace sabine_bridge

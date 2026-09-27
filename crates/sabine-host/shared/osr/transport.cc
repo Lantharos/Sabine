@@ -49,17 +49,13 @@ namespace {
 constexpr size_t kMaxControlBytes = 64 * 1024 * 1024;
 constexpr size_t kMaxControlCount = 256;
 
-void PutHeaderU32(std::array<char, 28>* header,
-                  size_t offset,
-                  uint32_t value) {
+void PutHeaderU32(std::array<char, 28>* header, size_t offset, uint32_t value) {
   for (size_t i = 0; i < 4; ++i) {
     (*header)[offset + i] = static_cast<char>((value >> (i * 8)) & 0xff);
   }
 }
 
-void PutHeaderI32(std::array<char, 28>* header,
-                  size_t offset,
-                  int32_t value) {
+void PutHeaderI32(std::array<char, 28>* header, size_t offset, int32_t value) {
   PutHeaderU32(header, offset, static_cast<uint32_t>(value));
 }
 
@@ -86,8 +82,8 @@ bool SabineOsrHandler::ConnectSocket() {
   }
   SOCKET connection = INVALID_SOCKET;
   for (addrinfo* address = addresses; address; address = address->ai_next) {
-    connection = socket(address->ai_family, address->ai_socktype,
-                        address->ai_protocol);
+    connection =
+        socket(address->ai_family, address->ai_socktype, address->ai_protocol);
     if (connection != INVALID_SOCKET &&
         connect(connection, address->ai_addr,
                 static_cast<int>(address->ai_addrlen)) == 0) {
@@ -121,7 +117,8 @@ bool SabineOsrHandler::ConnectSocket() {
     return false;
   }
   std::strncpy(addr.sun_path, endpoint_.c_str(), sizeof(addr.sun_path) - 1);
-  if (connect(socket_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+  if (connect(socket_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) !=
+      0) {
     close(socket_fd_);
     socket_fd_ = -1;
     return false;
@@ -175,7 +172,8 @@ void SabineOsrHandler::StartCommandReader() {
         if (line.rfind("resize\t", 0) == 0) {
           self->QueueResizeControlLine(std::move(line));
         } else {
-          if (!self->QueueControl(std::move(line))) return;
+          if (!self->QueueControl(std::move(line)))
+            return;
         }
       }
       searched = pending.size();
@@ -193,10 +191,12 @@ bool SabineOsrHandler::QueueControl(std::string line) {
   {
     std::unique_lock<std::mutex> lock(control_mutex_);
     control_space_.wait(lock, [&] {
-      return controls_closed_ || (control_count_ < kMaxControlCount &&
-                                  control_bytes_ + line.size() <= kMaxControlBytes);
+      return controls_closed_ ||
+             (control_count_ < kMaxControlCount &&
+              control_bytes_ + line.size() <= kMaxControlBytes);
     });
-    if (controls_closed_) return false;
+    if (controls_closed_)
+      return false;
     ++control_count_;
     control_bytes_ += line.size();
   }
@@ -216,7 +216,8 @@ void SabineOsrHandler::HandleQueuedControl(const std::string& line) {
   CEF_REQUIRE_UI_THREAD();
   {
     std::lock_guard<std::mutex> lock(control_mutex_);
-    if (controls_closed_) return;
+    if (controls_closed_)
+      return;
   }
   HandleControlLine(line);
 }
@@ -227,7 +228,8 @@ void SabineOsrHandler::CloseTransport() {
     controls_closed_ = true;
   }
   control_space_.notify_all();
-  if (socket_fd_ < 0) return;
+  if (socket_fd_ < 0)
+    return;
 #ifdef _WIN32
   shutdown(static_cast<SOCKET>(socket_fd_), SD_BOTH);
 #else
@@ -309,12 +311,12 @@ void SabineOsrHandler::CompleteResizeFrame(int pixel_width, int pixel_height) {
 }
 
 bool SabineOsrHandler::SendMessage(uint32_t kind,
-                                 uint32_t width,
-                                 uint32_t height,
-                                 int32_t x,
-                                 int32_t y,
-                                 const void* payload,
-                                 uint32_t payload_len) {
+                                   uint32_t width,
+                                   uint32_t height,
+                                   int32_t x,
+                                   int32_t y,
+                                   const void* payload,
+                                   uint32_t payload_len) {
   if (socket_fd_ < 0) {
     return false;
   }
@@ -336,13 +338,13 @@ bool SabineOsrHandler::SendMessage(uint32_t kind,
 }
 
 bool SabineOsrHandler::SendMessageWithFd(uint32_t kind,
-                                           uint32_t width,
-                                           uint32_t height,
-                                           int32_t x,
-                                           int32_t y,
-                                           const void* payload,
-                                           uint32_t payload_len,
-                                           int fd) {
+                                         uint32_t width,
+                                         uint32_t height,
+                                         int32_t x,
+                                         int32_t y,
+                                         const void* payload,
+                                         uint32_t payload_len,
+                                         int fd) {
 #ifdef _WIN32
   return false;
 #else
@@ -385,13 +387,13 @@ bool SabineOsrHandler::SendMessageWithFd(uint32_t kind,
 }
 
 bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
-                                        const std::string& guest_id,
-                                        int32_t origin_x,
-                                        int32_t origin_y,
-                                        const void* buffer,
-                                        int buffer_width,
-                                        int buffer_height,
-                                        const RectList& dirty_rects) {
+                                      const std::string& guest_id,
+                                      int32_t origin_x,
+                                      int32_t origin_y,
+                                      const void* buffer,
+                                      int buffer_width,
+                                      int buffer_height,
+                                      const RectList& dirty_rects) {
   if (buffer_width <= 0 || buffer_height <= 0 || !buffer) {
     return false;
   }
@@ -433,8 +435,9 @@ bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
     return true;
   }
 
-  const std::string prefix =
-      surface == PaintSurface::kGuest ? GuestPayloadPrefix(guest_id) : std::string();
+  const std::string prefix = surface == PaintSurface::kGuest
+                                 ? GuestPayloadPrefix(guest_id)
+                                 : std::string();
 #ifndef _WIN32
   if (total_bytes >= kSharedPaintThreshold) {
     const int index = shared_paint_.Acquire(static_cast<size_t>(total_bytes));
@@ -443,8 +446,8 @@ bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
       for (const auto& rect : rects) {
         CopyPaintRect(slot.data, buffer, buffer_width, rect);
       }
-      std::vector<char> metadata =
-          PaintMetadata(prefix, rects, static_cast<uint32_t>(index), slot.generation);
+      std::vector<char> metadata = PaintMetadata(
+          prefix, rects, static_cast<uint32_t>(index), slot.generation);
       const uint32_t shared_kind = SharedBatchKind(surface);
       const uint32_t metadata_len = static_cast<uint32_t>(metadata.size());
       const bool sent =
@@ -452,9 +455,10 @@ bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
               ? SendMessage(shared_kind, static_cast<uint32_t>(buffer_width),
                             static_cast<uint32_t>(buffer_height), origin_x,
                             origin_y, metadata.data(), metadata_len)
-              : SendMessageWithFd(shared_kind, static_cast<uint32_t>(buffer_width),
-                                  static_cast<uint32_t>(buffer_height), origin_x,
-                                  origin_y, metadata.data(), metadata_len, slot.fd);
+              : SendMessageWithFd(
+                    shared_kind, static_cast<uint32_t>(buffer_width),
+                    static_cast<uint32_t>(buffer_height), origin_x, origin_y,
+                    metadata.data(), metadata_len, slot.fd);
       if (!sent) {
         shared_paint_.Release(static_cast<uint32_t>(index), slot.generation);
         return false;
@@ -474,13 +478,9 @@ bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
   for (const auto& rect : rects) {
     CopyPaintRect(payload.data() + metadata_len, buffer, buffer_width, rect);
   }
-  return SendMessage(BatchKind(surface),
-                     static_cast<uint32_t>(buffer_width),
-                     static_cast<uint32_t>(buffer_height),
-                     origin_x,
-                     origin_y,
-                     payload.data(),
-                     static_cast<uint32_t>(payload.size()));
+  return SendMessage(BatchKind(surface), static_cast<uint32_t>(buffer_width),
+                     static_cast<uint32_t>(buffer_height), origin_x, origin_y,
+                     payload.data(), static_cast<uint32_t>(payload.size()));
 }
 
 #ifndef _WIN32

@@ -10,11 +10,15 @@ std::string JsString(const std::string& value);
 std::string JsArray(const std::set<std::string>& values);
 
 bool JsonHasKey(const std::string& payload, const std::string& name);
-std::string JsonStringValue(const std::string& payload, const std::string& name);
-std::string JsonObjectValue(const std::string& payload, const std::string& name);
+std::string JsonStringValue(const std::string& payload,
+                            const std::string& name);
+std::string JsonObjectValue(const std::string& payload,
+                            const std::string& name);
 std::vector<std::string> JsonStringArrayValue(const std::string& payload,
-                                               const std::string& name);
-int JsonIntValue(const std::string& payload, const std::string& name, int fallback);
+                                              const std::string& name);
+int JsonIntValue(const std::string& payload,
+                 const std::string& name,
+                 int fallback);
 double JsonDoubleValue(const std::string& payload,
                        const std::string& name,
                        double fallback);

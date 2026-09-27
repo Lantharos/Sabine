@@ -50,8 +50,8 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     CefProcessId source_process,
     CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
-  if (source_process != PID_RENDERER || !message || !browser || !frame || !frame->IsValid() ||
-      !BridgePolicyFor(browser)) {
+  if (source_process != PID_RENDERER || !message || !browser || !frame ||
+      !frame->IsValid() || !BridgePolicyFor(browser)) {
     return false;
   }
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
@@ -70,15 +70,21 @@ bool SabineOsrHandler::OnProcessMessageReceived(
   if (message->GetName() != "sabine.native") {
     return false;
   }
-  if (!frame->IsMain() || arguments->GetSize() != 2 || arguments->GetType(1) != VTYPE_STRING) return true;
+  if (!frame->IsMain() || arguments->GetSize() != 2 ||
+      arguments->GetType(1) != VTYPE_STRING)
+    return true;
   const auto policy = BridgePolicyFor(browser);
   const std::string url = frame->GetURL();
-  if (!sabine_bridge::MatchesSecurityOrigin(policy, url, arguments->GetString(1))) return true;
+  if (!sabine_bridge::MatchesSecurityOrigin(policy, url,
+                                            arguments->GetString(1)))
+    return true;
   if (payload.rfind("sabine://window/", 0) == 0) {
-    if (sabine_bridge::AllowsDocument(policy, url)) HandleWindowCommand(browser, payload);
+    if (sabine_bridge::AllowsDocument(policy, url))
+      HandleWindowCommand(browser, payload);
     return true;
   }
-  if (!sabine_bridge::AllowsCommand(policy, url, QueryValue(payload, "name"))) return true;
+  if (!sabine_bridge::AllowsCommand(policy, url, QueryValue(payload, "name")))
+    return true;
   return HandleBridgeCommand(browser, frame, payload);
 }
 
@@ -124,8 +130,8 @@ bool SabineOsrHandler::HandleWindowCommand(CefRefPtr<CefBrowser> browser,
 }
 
 bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
-                                         CefRefPtr<CefFrame> frame,
-                                         const std::string& url) {
+                                           CefRefPtr<CefFrame> frame,
+                                           const std::string& url) {
   const std::string prefix = "sabine://bridge/";
   if (url.rfind(prefix, 0) != 0) {
     return false;
@@ -135,8 +141,10 @@ bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
   const std::string payload = QueryValue(url, "payload");
   const std::string browser_id = std::to_string(browser->GetIdentifier());
   std::string origin = sabine_bridge::Origin(frame->GetURL());
-  if (origin.empty()) origin = frame->GetURL();
-  else if (origin.back() == '/') origin.pop_back();
+  if (origin.empty())
+    origin = frame->GetURL();
+  else if (origin.back() == '/')
+    origin.pop_back();
   if (request_id.empty() || command.empty()) {
     ResolveBridgeResponse(browser_id, request_id, false,
                           "{\"message\":\"Malformed Sabine bridge request\"}");
@@ -187,9 +195,12 @@ void SabineOsrHandler::CloseFromNativeDisconnect() {
   }
 }
 
-CefRefPtr<CefDictionaryValue> SabineOsrHandler::BridgePolicyFor(CefRefPtr<CefBrowser> browser) {
-  if (!browser) return nullptr;
-  if (browser_ && browser_->IsSame(browser)) return bridge_policy_;
+CefRefPtr<CefDictionaryValue> SabineOsrHandler::BridgePolicyFor(
+    CefRefPtr<CefBrowser> browser) {
+  if (!browser)
+    return nullptr;
+  if (browser_ && browser_->IsSame(browser))
+    return bridge_policy_;
   const GuestView* guest = GuestForBrowser(browser);
   return guest ? guest->bridge_policy : nullptr;
 }
@@ -200,9 +211,11 @@ void SabineOsrHandler::InstallTransparentBackground(CefRefPtr<CefFrame> frame) {
   }
   frame->ExecuteJavaScript(
       "(function(){"
-      "if(document.documentElement){document.documentElement.style.background='transparent';}"
+      "if(document.documentElement){document.documentElement.style.background='"
+      "transparent';}"
       "if(document.body){document.body.style.background='transparent';}"
-      "if(!document.querySelector('style[data-sabine-transparent-background]')){"
+      "if(!document.querySelector('style[data-sabine-transparent-background]'))"
+      "{"
       "const style=document.createElement('style');"
       "style.setAttribute('data-sabine-transparent-background','');"
       "style.textContent='html,body{background:transparent!important;}';"
@@ -213,9 +226,9 @@ void SabineOsrHandler::InstallTransparentBackground(CefRefPtr<CefFrame> frame) {
 }
 
 void SabineOsrHandler::ResolveBridgeResponse(const std::string& browser_id,
-                                           const std::string& request_id,
-                                           bool ok,
-                                           const std::string& payload) {
+                                             const std::string& request_id,
+                                             bool ok,
+                                             const std::string& payload) {
   CEF_REQUIRE_UI_THREAD();
   const int expected_id = std::atoi(browser_id.c_str());
   CefRefPtr<CefBrowser> target;
@@ -237,10 +250,11 @@ void SabineOsrHandler::ResolveBridgeResponse(const std::string& browser_id,
 }
 
 void SabineOsrHandler::EmitBridgeEvent(const std::string& name_json,
-                                         const std::string& payload) {
+                                       const std::string& payload) {
   CEF_REQUIRE_UI_THREAD();
   for (auto& browser : browsers_) {
-    if (!sabine_bridge::AllowsDocument(BridgePolicyFor(browser), browser->GetMainFrame()->GetURL())) {
+    if (!sabine_bridge::AllowsDocument(BridgePolicyFor(browser),
+                                       browser->GetMainFrame()->GetURL())) {
       continue;
     }
     auto event = CefProcessMessage::Create("sabine.event");
@@ -257,7 +271,8 @@ void SabineOsrHandler::EmitPrimaryEvent(const std::string& name,
     return;
   }
   CefRefPtr<CefFrame> frame = browser_->GetMainFrame();
-  if (!frame || !sabine_bridge::AllowsDocument(BridgePolicyFor(browser_), frame->GetURL())) {
+  if (!frame || !sabine_bridge::AllowsDocument(BridgePolicyFor(browser_),
+                                               frame->GetURL())) {
     return;
   }
   auto event = CefProcessMessage::Create("sabine.event");

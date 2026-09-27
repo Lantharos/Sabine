@@ -77,8 +77,9 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
   }
 #else
   if (parts.size() == 3 && parts[0] == "paint_release") {
-    ReleaseSharedPaint(static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
-                       static_cast<uint32_t>(std::strtoul(parts[2].c_str(), nullptr, 10)));
+    ReleaseSharedPaint(
+        static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
+        static_cast<uint32_t>(std::strtoul(parts[2].c_str(), nullptr, 10)));
     return;
   }
 #endif
@@ -144,9 +145,9 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     const uint32_t end =
         static_cast<uint32_t>(std::strtoul(parts[2].c_str(), nullptr, 10));
     if (start <= end) {
-      const std::string script = "window.__sabineImeDelete&&window.__sabineImeDelete(" +
-                                 std::to_string(start) + "," +
-                                 std::to_string(end) + ");";
+      const std::string script =
+          "window.__sabineImeDelete&&window.__sabineImeDelete(" +
+          std::to_string(start) + "," + std::to_string(end) + ");";
       frame->ExecuteJavaScript(script, frame->GetURL(), 0);
     }
     return;
@@ -191,14 +192,15 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
       const std::string script =
           std::string("(function(){const target=document.elementFromPoint(") +
           std::to_string(event.x) + "," + std::to_string(event.y) +
-          ")||document.body||window;const init={bubbles:true,cancelable:true,button:2,buttons:0,clientX:" +
+          ")||document.body||window;const "
+          "init={bubbles:true,cancelable:true,button:2,buttons:0,clientX:" +
           std::to_string(event.x) + ",clientY:" + std::to_string(event.y) +
-          ",screenX:" + std::to_string(event.x) + ",screenY:" +
-          std::to_string(event.y) + ",ctrlKey:" +
-          ((event.modifiers & (1 << 2)) ? "true" : "false") + ",shiftKey:" +
-          ((event.modifiers & (1 << 1)) ? "true" : "false") + ",altKey:" +
-          ((event.modifiers & (1 << 3)) ? "true" : "false") + ",metaKey:" +
-          ((event.modifiers & (1 << 7)) ? "true" : "false") +
+          ",screenX:" + std::to_string(event.x) +
+          ",screenY:" + std::to_string(event.y) +
+          ",ctrlKey:" + ((event.modifiers & (1 << 2)) ? "true" : "false") +
+          ",shiftKey:" + ((event.modifiers & (1 << 1)) ? "true" : "false") +
+          ",altKey:" + ((event.modifiers & (1 << 3)) ? "true" : "false") +
+          ",metaKey:" + ((event.modifiers & (1 << 7)) ? "true" : "false") +
           "};target.dispatchEvent(new MouseEvent('contextmenu',init));})();";
       target_browser->GetMainFrame()->ExecuteJavaScript(
           script, target_browser->GetMainFrame()->GetURL(), 0);
@@ -211,22 +213,24 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     const int button = std::atoi(parts[3].c_str());
     const uint32_t modifiers = std::strtoul(parts[4].c_str(), nullptr, 10);
     const std::string script =
-        std::string("(function(){const target=document.elementFromPoint(") + std::to_string(x) +
-        "," + std::to_string(y) + ")||window;const init={bubbles:true,cancelable:true,button:" +
+        std::string("(function(){const target=document.elementFromPoint(") +
+        std::to_string(x) + "," + std::to_string(y) +
+        ")||window;const init={bubbles:true,cancelable:true,button:" +
         std::to_string(button) + ",buttons:0,clientX:" + std::to_string(x) +
         ",clientY:" + std::to_string(y) + ",screenX:" + std::to_string(x) +
-        ",screenY:" + std::to_string(y) + ",ctrlKey:" +
-        ((modifiers & (1 << 2)) ? "true" : "false") + ",shiftKey:" +
-        ((modifiers & (1 << 1)) ? "true" : "false") + ",altKey:" +
-        ((modifiers & (1 << 3)) ? "true" : "false") + ",metaKey:" +
-        ((modifiers & (1 << 7)) ? "true" : "false") +
-        "};const up=new MouseEvent('mouseup',init);const aux=new MouseEvent('auxclick',init);"
-        "const canceled=(target.dispatchEvent(up)===false)||up.defaultPrevented||"
+        ",screenY:" + std::to_string(y) +
+        ",ctrlKey:" + ((modifiers & (1 << 2)) ? "true" : "false") +
+        ",shiftKey:" + ((modifiers & (1 << 1)) ? "true" : "false") +
+        ",altKey:" + ((modifiers & (1 << 3)) ? "true" : "false") +
+        ",metaKey:" + ((modifiers & (1 << 7)) ? "true" : "false") +
+        "};const up=new MouseEvent('mouseup',init);const aux=new "
+        "MouseEvent('auxclick',init);"
+        "const "
+        "canceled=(target.dispatchEvent(up)===false)||up.defaultPrevented||"
         "(target.dispatchEvent(aux)===false)||aux.defaultPrevented;"
         "if(!canceled){if(" +
-        std::to_string(button) +
-        "===3)history.back();else if(" + std::to_string(button) +
-        "===4)history.forward();}})();";
+        std::to_string(button) + "===3)history.back();else if(" +
+        std::to_string(button) + "===4)history.forward();}})();";
     target_browser->GetMainFrame()->ExecuteJavaScript(
         script, target_browser->GetMainFrame()->GetURL(), 0);
   } else if (parts[0] == "mouse_wheel" && parts.size() >= 6) {
@@ -235,9 +239,8 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     const uint32_t modifiers = std::strtoul(parts[5].c_str(), nullptr, 10);
     if (pointer_guest && pointer_guest->intercept_horizontal_wheel &&
         IsPredominantlyHorizontalWheel(dx, dy)) {
-      EmitPrimaryEvent(
-          "guest.wheel",
-          GuestWheelJson(pointer_guest->id, dx, dy, modifiers));
+      EmitPrimaryEvent("guest.wheel",
+                       GuestWheelJson(pointer_guest->id, dx, dy, modifiers));
       return;
     }
     CefMouseEvent event;
@@ -255,9 +258,9 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     event.type = phase == "pressed"    ? CEF_TET_PRESSED
                  : phase == "moved"    ? CEF_TET_MOVED
                  : phase == "released" ? CEF_TET_RELEASED
-                                         : CEF_TET_CANCELLED;
-    event.pressure = std::clamp(
-        static_cast<float>(std::atof(parts[5].c_str())), 0.0f, 1.0f);
+                                       : CEF_TET_CANCELLED;
+    event.pressure =
+        std::clamp(static_cast<float>(std::atof(parts[5].c_str())), 0.0f, 1.0f);
     const std::string& pointer_type = parts[6];
     event.pointer_type = pointer_type == "pen"       ? CEF_POINTER_TYPE_PEN
                          : pointer_type == "eraser"  ? CEF_POINTER_TYPE_ERASER
@@ -315,8 +318,7 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
   } else if (parts[0] == "lifecycle" && parts.size() >= 3) {
     const std::string reason =
         parts.size() >= 4 ? DecodeControlComponent(parts[3]) : "";
-    ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())),
-                   reason);
+    ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())), reason);
   } else if (parts[0] == "close") {
     // Close only this browser. CefQuitMessageLoop runs from OnBeforeClose
     // when the last OSR handler is gone so sibling windows stay alive.
@@ -332,8 +334,8 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
 }
 
 void SabineOsrHandler::ApplyLifecycle(const std::string& state,
-                                        int frame_rate,
-                                        const std::string& reason) {
+                                      int frame_rate,
+                                      const std::string& reason) {
   CEF_REQUIRE_UI_THREAD();
   if (!browser_) {
     return;
@@ -377,7 +379,7 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
 }
 
 void SabineOsrHandler::DispatchLifecycle(const std::string& state,
-                                           const std::string& reason) {
+                                         const std::string& reason) {
   CEF_REQUIRE_UI_THREAD();
   const std::string script =
       "window.__sabineLifecycleSet&&window.__sabineLifecycleSet(" +

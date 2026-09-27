@@ -42,7 +42,10 @@ int XIOErrorHandlerImpl(Display* display) {
 #if defined(OS_LINUX)
 NO_STACK_PROTECTOR
 #endif
-int RunSabineHost(CefMainArgs main_args, int argc, char* argv[], void* sandbox_info) {
+int RunSabineHost(CefMainArgs main_args,
+                  int argc,
+                  char* argv[],
+                  void* sandbox_info) {
   CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
 #if defined(OS_WIN) || defined(_WIN32)
   command_line->InitFromString(::GetCommandLineW());
