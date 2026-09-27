@@ -95,10 +95,13 @@ impl OsrNativeHost {
         else {
             return;
         };
-        let Ok(paths) = value.try_as_file_paths() else {
+        let Ok(uris) = value.try_as_uris() else {
             return;
         };
-        drag.paths = paths;
+        drag.paths = uris
+            .iter()
+            .filter_map(|uri| url::Url::parse(uri).ok()?.to_file_path().ok())
+            .collect();
         if drag.paths.is_empty() {
             self.incoming_file_drag = None;
             return;
@@ -212,7 +215,12 @@ impl OsrNativeHost {
 
         let transfer = DataTransferSendBuilder::new(paths)
             .with_type(TypeHint::UriList, |paths, _| {
-                SendData::from_file_paths(paths.iter())
+                paths
+                    .iter()
+                    .map(|path| url::Url::from_file_path(path).map(String::from))
+                    .collect::<Result<Vec<_>, _>>()
+                    .ok()
+                    .map(SendData::Uris)
             })
             .build();
 

@@ -37,7 +37,6 @@ impl OsrNativeHost {
                 before_bytes,
                 after_bytes,
             } => self.delete_ime_surrounding(before_bytes, after_bytes),
-            _ => {}
         }
     }
 
