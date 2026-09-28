@@ -121,6 +121,7 @@ impl GpuRenderer {
         }
     }
 
+    #[cfg(windows)]
     pub(crate) fn device(&self) -> &wgpu::Device {
         &self.device
     }
