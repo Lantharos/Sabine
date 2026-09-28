@@ -109,7 +109,9 @@ installations remain owned by the store.
 
 CEF installation is a separate release stream. The daemon downloads the newest compatible Standard
 runtime into a side-by-side directory, initializes it with the installed host using a headless health
-probe, and only then leaves it selectable. Failed runtimes receive an unusable marker and resolution
+probe, and only then leaves it selectable. The probe uses a throwaway profile with Chromium's mock keychain on
+macOS and basic password store on Linux, so validating a runtime never asks for the user's keychain
+or keyring. Failed runtimes receive an unusable marker and resolution
 returns to the previous runtime. Markers are scoped to the probe version so a fixed probe retries a
 runtime automatically. Each running host owns a process lease; pruning keeps the newest two runtimes
 and never removes a leased directory. Offline bundles include a real runtime and the complete system
