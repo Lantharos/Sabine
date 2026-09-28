@@ -3,12 +3,16 @@
 // The Windows host runs through Chromium's sandbox bootstrap and receives its
 // sandbox_info in RunWinMain. A plain executable entry point is not equivalent;
 // keep the sandbox bootstrap contract intact when changing host startup.
+// libcef.dll stays with the runtime rather than beside the staged bootstrap,
+// and sandboxed children cannot find it through PATH, so every process loads
+// it by path before its first CEF call.
 
 #include "app/app.h"
 #include "runtime/probe.h"
 
 #if defined(OS_WIN) || defined(_WIN32)
 #include <windows.h>
+#include <shellapi.h>
 #include "include/cef_sandbox_win.h"
 #include "include/cef_version_info.h"
 #endif
@@ -107,6 +111,27 @@ int RunSabineHost(CefMainArgs main_args,
 }
 
 #if defined(OS_WIN) || defined(_WIN32)
+namespace {
+void LoadRuntimeCefLibrary() {
+  int count = 0;
+  LPWSTR* arguments = ::CommandLineToArgvW(::GetCommandLineW(), &count);
+  if (!arguments) {
+    return;
+  }
+  const std::wstring prefix = L"--sabine-cef-dir=";
+  for (int index = 1; index < count; ++index) {
+    const std::wstring argument = arguments[index];
+    if (argument.rfind(prefix, 0) == 0) {
+      const std::wstring library =
+          argument.substr(prefix.size()) + L"\\libcef.dll";
+      ::LoadLibraryExW(library.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+      break;
+    }
+  }
+  ::LocalFree(arguments);
+}
+}  // namespace
+
 CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance,
                                     LPWSTR command_line,
                                     int show,
@@ -119,6 +144,7 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance,
     std::cerr << "Sabine requires the Chromium sandbox bootstrap" << std::endl;
     return 1;
   }
+  LoadRuntimeCefLibrary();
   CefMainArgs main_args(instance);
   return RunSabineHost(main_args, __argc, __argv, sandbox_info);
 }

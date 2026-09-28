@@ -378,6 +378,11 @@ pub fn apply_runtime_resource_args(command: &mut Command, runtime_dir: &Path) {
                 resources.join("locales").display()
             ));
     }
+    #[cfg(target_os = "windows")]
+    command.arg(format!(
+        "--sabine-cef-dir={}",
+        runtime_binary_directory(runtime_dir).display()
+    ));
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let _ = (command, runtime_dir);
 }

@@ -48,6 +48,7 @@ function Test-SabineBrowser([string] $RuntimeDirectory = (Join-Path $env:LOCALAP
     $start.Environment['PATH'] = "$binaryDirectory;$env:PATH"
     foreach ($argument in @(
         '--sabine-runtime-smoke-test',
+        "--sabine-cef-dir=$binaryDirectory",
         "--sabine-resources-dir-path=$resources",
         "--sabine-locales-dir-path=$(Join-Path $resources 'locales')",
         "--root-cache-path=$profile"
