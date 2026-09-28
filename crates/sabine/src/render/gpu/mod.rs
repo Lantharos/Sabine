@@ -369,6 +369,7 @@ impl GpuRenderer {
         }
 
         self.queue.submit(Some(encoder.finish()));
+        self.window.pre_present_notify();
         self.queue.present(frame);
         if let Some(text) = &mut self.text {
             text.trim();
