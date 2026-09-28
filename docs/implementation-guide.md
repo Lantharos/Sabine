@@ -217,8 +217,10 @@ to benchmark the GPU in the background.
 - **Windows** uses accelerated `OnAcceleratedPaint`. CEF owns and pools the callback texture, so the
   CEF host first opens it on D3D11 and copies it into one of four Sabine-owned D3D12 shared textures
   before returning. Each destination is opened on the producer's D3D11 device for the copy and on
-  wgpu's D3D12 device for composition. The host waits for its GPU copy before publishing the frame;
-  the compositor samples the imported texture directly and sends a release acknowledgement only
+  wgpu's D3D12 device for composition. The host waits for its GPU copy before publishing the frame.
+  Each destination's handle is duplicated into the window once, with the first frame that uses it,
+  and the window keeps it until the host retires that texture on resize or browser close. The
+  compositor imports each slot's texture once, samples it directly, and sends a release acknowledgement only
   after submitted GPU work stops using it. A bounded notification channel wakes a completion
   worker so the last frame also retires while the window is idle or closing. The worker keeps
   the queue alive through cleanup and sleeps when there is no retirement work. A five-second
@@ -236,9 +238,9 @@ to benchmark the GPU in the background.
   surface and waits for the copy before publishing it. Each owned IOSurface is handed to the native
   window once, as a mach port sent to a per-connection bootstrap service whose name travels on the
   browser command line; messages carry the window's socket token and are otherwise discarded. Frames
-  then reference the surface by id, the compositor wraps it as a Metal texture without copying, and
-  the slot is acknowledged only after submitted GPU work stops sampling it. Surfaces are retired
-  when their browser closes. As on Windows, a frame dropped while every slot is in use is requested
+  then reference the surface by id, the compositor wraps each slot's surface as a Metal texture once
+  and reuses it without copying, and the slot is acknowledged only after submitted GPU work stops
+  sampling it. Surfaces are retired when they are replaced on resize or their browser closes. As on Windows, a frame dropped while every slot is in use is requested
   again once a slot is released. Chromium can deliver software `OnPaint` frames instead, which use the
   shared-memory path below.
 

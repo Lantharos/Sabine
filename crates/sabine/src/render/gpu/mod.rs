@@ -10,6 +10,8 @@ use crate::render::rect_pipeline::{
 };
 use crate::render::{DisplayCommand, DisplayList};
 
+#[cfg(any(windows, target_os = "macos"))]
+mod external;
 mod health;
 mod images;
 mod instance;
@@ -18,6 +20,9 @@ mod retirement;
 mod surface;
 mod text;
 mod vertex_buffer;
+
+#[cfg(any(windows, target_os = "macos"))]
+pub(crate) use external::ExternalSlot;
 
 use surface::select_surface_alpha_mode;
 use text::TextRendererState;
@@ -60,6 +65,8 @@ pub struct GpuRenderer {
     texture_cache: HashMap<String, CachedTexture>,
     #[cfg(any(windows, target_os = "macos"))]
     external_texture_releases: HashMap<String, Box<dyn FnOnce() + Send + 'static>>,
+    #[cfg(any(windows, target_os = "macos"))]
+    external_imports: HashMap<String, Vec<external::ImportedTexture>>,
     #[cfg(any(windows, target_os = "macos"))]
     submission_poller: retirement::SubmissionPoller,
     #[cfg(windows)]
@@ -232,6 +239,8 @@ impl GpuRenderer {
             texture_cache: HashMap::new(),
             #[cfg(any(windows, target_os = "macos"))]
             external_texture_releases: HashMap::new(),
+            #[cfg(any(windows, target_os = "macos"))]
+            external_imports: HashMap::new(),
             #[cfg(any(windows, target_os = "macos"))]
             submission_poller,
             #[cfg(windows)]

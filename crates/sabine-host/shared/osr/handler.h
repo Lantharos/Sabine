@@ -264,7 +264,9 @@ class SabineOsrHandler : public CefClient,
   struct CopiedAccelFrame {
     uint32_t width = 0;
     uint32_t height = 0;
-    uint64_t native_handle = 0;
+    uint64_t resource_id = 0;
+    uint32_t resource_slot = 0;
+    uint64_t shared_handle = 0;
     uint64_t slot_token = 0;
   };
 
@@ -275,6 +277,7 @@ class SabineOsrHandler : public CefClient,
                             CopiedAccelFrame* out);
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);
+  void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
 #endif
 
   bool ConnectSocket();
@@ -379,7 +382,9 @@ class SabineOsrHandler : public CefClient,
   std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
       dropped_accelerated_paints_;
 #endif
-#if defined(OS_MAC)
+#if defined(OS_WIN)
+  std::set<uint64_t> announced_accelerated_resources_;
+#elif defined(OS_MAC)
   std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
 #endif
   int last_main_paint_width_ = 0;

@@ -90,23 +90,33 @@ bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
                                             int height,
                                             CopiedAccelFrame* out) {
   AccelD3d11CopiedFrame copied{};
-  if (!CopyAcceleratedD3d11Frame(slot_key, info.shared_texture_handle, width,
-                                 height, static_cast<uint32_t>(info.format),
-                                 &copied)) {
+  const bool copied_frame = CopyAcceleratedD3d11Frame(
+      slot_key, info.shared_texture_handle, width, height,
+      static_cast<uint32_t>(info.format), &copied);
+  RetireAcceleratedResources(copied.retired_resource_ids);
+  if (!copied_frame) {
     return false;
   }
-  const uint64_t remote_handle = DuplicateHandleToParent(copied.shared_handle);
-  if (remote_handle == 0) {
-    ReleaseAcceleratedD3d11Frame(copied.slot_token);
-    EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
-    return false;
+  uint64_t shared_handle = 0;
+  if (!announced_accelerated_resources_.count(copied.resource_id)) {
+    shared_handle = DuplicateHandleToParent(copied.shared_handle);
+    if (shared_handle == 0) {
+      ReleaseAcceleratedD3d11Frame(copied.slot_token);
+      EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
+      return false;
+    }
+    announced_accelerated_resources_.insert(copied.resource_id);
   }
-  *out = {copied.width, copied.height, remote_handle, copied.slot_token};
+  *out = {copied.width,      copied.height, copied.resource_id,
+          copied.slot_index, shared_handle, copied.slot_token};
   return true;
 }
 
 void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {
-  CloseHandleInParent(frame.native_handle);
+  if (frame.shared_handle != 0) {
+    announced_accelerated_resources_.erase(frame.resource_id);
+    CloseHandleInParent(frame.shared_handle);
+  }
   ReleaseAcceleratedD3d11Frame(frame.slot_token);
 }
 
@@ -114,8 +124,24 @@ void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
   ReleaseAcceleratedD3d11Frame(slot_token);
 }
 
+void SabineOsrHandler::RetireAcceleratedResources(
+    const std::vector<uint64_t>& resource_ids) {
+  std::vector<uint64_t> announced;
+  for (const uint64_t resource_id : resource_ids) {
+    if (announced_accelerated_resources_.erase(resource_id)) {
+      announced.push_back(resource_id);
+    }
+  }
+  if (announced.empty()) {
+    return;
+  }
+  const std::string payload = BuildAccelRetirePayload(announced);
+  SendMessage(kAccelRetire, 0, 0, 0, 0, payload.data(),
+              static_cast<uint32_t>(payload.size()));
+}
+
 void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
-  RetireAcceleratedD3d11Browser(browser_id);
+  RetireAcceleratedResources(RetireAcceleratedD3d11Browser(browser_id));
 }
 #elif defined(OS_MAC)
 void SabineOsrHandler::UseSurfaceService(const std::string& service_name) {
@@ -136,19 +162,20 @@ bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
     return false;
   }
   AccelIOSurfaceCopiedFrame copied{};
-  if (!CopyAcceleratedIOSurfaceFrame(slot_key, info.shared_texture_io_surface,
-                                     &copied)) {
+  const bool copied_frame = CopyAcceleratedIOSurfaceFrame(
+      slot_key, info.shared_texture_io_surface, &copied);
+  RetireAcceleratedResources(copied.retired_surface_ids);
+  if (!copied_frame) {
     return false;
-  }
-  if (copied.replaced_surface_id != 0) {
-    surface_broker_->Retire(copied.replaced_surface_id);
   }
   if (!surface_broker_->Announce(copied.surface_id, copied.surface)) {
     ReleaseAcceleratedIOSurfaceFrame(copied.slot_token);
     EmitBridgeEvent("\"osr.accel_handle_failed\"", "{}");
     return false;
   }
-  *out = {copied.width, copied.height, copied.surface_id, copied.slot_token};
+  *out = {
+      copied.width,     copied.height, copied.surface_id, copied.slot_index, 0,
+      copied.slot_token};
   return true;
 }
 
@@ -160,13 +187,18 @@ void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
   ReleaseAcceleratedIOSurfaceFrame(slot_token);
 }
 
-void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
-  for (const uint64_t surface_id :
-       RetireAcceleratedIOSurfaceBrowser(browser_id)) {
-    if (surface_broker_) {
-      surface_broker_->Retire(surface_id);
-    }
+void SabineOsrHandler::RetireAcceleratedResources(
+    const std::vector<uint64_t>& resource_ids) {
+  if (!surface_broker_) {
+    return;
   }
+  for (const uint64_t surface_id : resource_ids) {
+    surface_broker_->Retire(surface_id);
+  }
+}
+
+void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
+  RetireAcceleratedResources(RetireAcceleratedIOSurfaceBrowser(browser_id));
 }
 #endif
 
@@ -290,7 +322,9 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     meta.visible_y = visible.y;
     meta.visible_width = static_cast<uint32_t>(visible.width);
     meta.visible_height = static_cast<uint32_t>(visible.height);
-    meta.native_handle = copied.native_handle;
+    meta.resource_id = copied.resource_id;
+    meta.resource_slot = copied.resource_slot;
+    meta.shared_handle = copied.shared_handle;
     meta.slot_token = copied.slot_token;
 
     const std::string payload = BuildAccelPayload(guest_id, meta);

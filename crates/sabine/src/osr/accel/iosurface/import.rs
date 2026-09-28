@@ -5,17 +5,16 @@ use objc2_metal::{
 use wgpu::hal::api::Metal;
 
 use crate::osr::protocol::OsrAccelFrame;
-use crate::render::GpuRenderer;
 
 const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
 const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
 
 pub(crate) fn import_io_surface(
-    renderer: &GpuRenderer,
+    device: &wgpu::Device,
     frame: &OsrAccelFrame,
 ) -> Result<wgpu::Texture, String> {
     let surface = frame
-        .io_surface
+        .resource
         .as_ref()
         .ok_or("the browser host did not share this frame's surface")?;
     let (format, pixel_format) = match frame.format {
@@ -44,8 +43,7 @@ pub(crate) fn import_io_surface(
         view_formats: &[],
     };
     let hal_texture = {
-        let device =
-            unsafe { renderer.device().as_hal::<Metal>() }.ok_or("wgpu device is not Metal")?;
+        let hal_device = unsafe { device.as_hal::<Metal>() }.ok_or("wgpu device is not Metal")?;
         let descriptor = unsafe {
             MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
                 pixel_format,
@@ -56,7 +54,7 @@ pub(crate) fn import_io_surface(
         };
         descriptor.setUsage(MTLTextureUsage::ShaderRead);
         descriptor.setStorageMode(MTLStorageMode::Shared);
-        let texture = device
+        let texture = hal_device
             .raw_device()
             .newTextureWithDescriptor_iosurface_plane(&descriptor, surface, 0)
             .ok_or("Metal could not wrap the shared surface")?;
@@ -77,10 +75,6 @@ pub(crate) fn import_io_surface(
         }
     };
     Ok(unsafe {
-        renderer.device().create_texture_from_hal::<Metal>(
-            hal_texture,
-            &desc,
-            wgpu::TextureUses::empty(),
-        )
+        device.create_texture_from_hal::<Metal>(hal_texture, &desc, wgpu::TextureUses::empty())
     })
 }

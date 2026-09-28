@@ -1,4 +1,5 @@
 use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrAccelFrame, OsrSurface};
+use crate::render::ExternalSlot;
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{OverlayLayer, overlay_texture_id};
@@ -34,21 +35,22 @@ impl OsrNativeHost {
             .surface
             .overlay_id()
             .map_or_else(|| MAIN_TEXTURE_ID.to_string(), overlay_texture_id);
-        match crate::osr::accel::import_texture(renderer, frame) {
-            Ok(texture) => crate::osr::accel::install_imported_texture(
-                renderer,
-                &texture_id,
-                frame,
-                texture,
-                release_slot,
-            )
-            .is_ok(),
-            Err(error) => {
-                eprintln!("Sabine OSR: accelerated texture import failed: {error}");
-                release_slot();
-                false
-            }
+        let slot = ExternalSlot {
+            index: frame.resource_slot,
+            resource_id: frame.resource_id,
+        };
+        let installed = renderer.set_external_bgra_texture(
+            &texture_id,
+            slot,
+            |device| crate::osr::accel::import_texture(device, frame),
+            (frame.visible_x, frame.visible_y),
+            (frame.visible_width, frame.visible_height),
+            release_slot,
+        );
+        if let Err(error) = &installed {
+            eprintln!("Sabine OSR: accelerated texture import failed: {error}");
         }
+        installed.is_ok()
     }
 
     fn note_accel_surface(&mut self, frame: &OsrAccelFrame) {

@@ -29,7 +29,7 @@ std::string BuildAccelPayload(const std::string& guest_id,
     return {};
   }
   const std::string prefix = GuestPrefix(guest_id);
-  const size_t meta_len = prefix.size() + 4 + 4 + 4 + 4 + 4 + 8 + 8;
+  const size_t meta_len = prefix.size() + 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
   if (meta_len > std::numeric_limits<uint32_t>::max()) {
     return {};
   }
@@ -47,9 +47,21 @@ std::string BuildAccelPayload(const std::string& guest_id,
   at += 4;
   PutU32(&payload, at, meta.visible_height);
   at += 4;
-  PutU64(&payload, at, meta.native_handle);
+  PutU64(&payload, at, meta.resource_id);
+  at += 8;
+  PutU32(&payload, at, meta.resource_slot);
+  at += 4;
+  PutU64(&payload, at, meta.shared_handle);
   at += 8;
   PutU64(&payload, at, meta.slot_token);
+  return std::string(payload.begin(), payload.end());
+}
+
+std::string BuildAccelRetirePayload(const std::vector<uint64_t>& resource_ids) {
+  std::vector<char> payload(resource_ids.size() * 8, 0);
+  for (size_t index = 0; index < resource_ids.size(); ++index) {
+    PutU64(&payload, index * 8, resource_ids[index]);
+  }
   return std::string(payload.begin(), payload.end());
 }
 
