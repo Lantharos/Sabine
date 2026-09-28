@@ -103,10 +103,18 @@ impl Drop for WindowsInhibitor {
     }
 }
 
+fn hook_log(line: String) {
+    use std::io::Write;
+    let path = std::env::temp_dir().join("sabine-hook.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 unsafe extern "system" fn diagnostic_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
     let foreground = unsafe { GetForegroundWindow() };
-    eprintln!("SABINE_DIAG vk={:#x} msg={:#x} foreground={:?}", info.vkCode, wparam.0, foreground.0);
+    hook_log(format!("DIAG vk={:#x} msg={:#x} foreground={:?}", info.vkCode, wparam.0, foreground.0));
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
@@ -114,7 +122,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
     if code == HC_ACTION as i32 {
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let now = unsafe { windows::Win32::System::SystemInformation::GetTickCount() };
-        eprintln!("SABINE_HOOK vk={:#x} msg={:#x} flags={:#x} latency={}ms", info.vkCode, wparam.0, info.flags.0, now.wrapping_sub(info.time));
+        hook_log(format!("HOOK vk={:#x} msg={:#x} flags={:#x} latency={}ms", info.vkCode, wparam.0, info.flags.0, now.wrapping_sub(info.time)));
         let captured = HOOK.with_borrow_mut(|hook| {
             hook.as_mut()
                 .is_some_and(|hook| hook.capture(wparam.0 as u32, info))
@@ -145,6 +153,7 @@ impl Hook {
         } else {
             0
         };
+        hook_log(format!("CAPTURED {key} pressed={pressed}"));
         (self.on_key)(SystemKey {
             key,
             scan_code: (info.scanCode & 0xFF) | extended,

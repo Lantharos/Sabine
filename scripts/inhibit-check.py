@@ -134,6 +134,8 @@ try:
         trace.append(f"page keys {evaluate('JSON.stringify(keys.splice(0))')}")
     report["trace"] = trace
     report["external"] = external
+    hook_log = Path(os.environ["TEMP"]) / "sabine-hook.log"
+    report["hook_log"] = hook_log.read_text().splitlines() if hook_log.exists() else "missing"
     report["keys"] = evaluate("keys.splice(0)")
     report["text"] = evaluate('document.getElementById("t").value')
     report["disable"] = evaluate('window.sabine.window.inhibitShortcuts(false).then(() => "ok", e => "error: " + e.message)')
