@@ -217,7 +217,7 @@ def main():
     elif abs(first_x - second_x) < 4:
         failures.append("The animated square stopped moving, so new frames are not reaching the screen")
     else:
-        report.append(f"Square moved {abs(first_x - second_x):.0f} px in one second")
+        report.append(f"Square moved {abs(first_x - second_x):.0f} px between screenshots")
 
     (output / "report.txt").write_text("\n".join(report + failures) + "\n")
     print("\n".join(report))
