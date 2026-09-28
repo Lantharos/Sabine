@@ -187,6 +187,7 @@ export interface SabineApi {
 }
 
 export declare function isAvailable(): boolean;
+export declare function fileUrl(path: string): string;
 export declare function sabine(): SabineApi;
 export declare function invoke<T = unknown>(
   name: string,
@@ -281,6 +282,7 @@ declare global {
 
 declare const api: {
   isAvailable: typeof isAvailable;
+  fileUrl: typeof fileUrl;
   sabine: typeof sabine;
   invoke: typeof invoke;
   listen: typeof listen;

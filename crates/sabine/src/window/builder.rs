@@ -383,6 +383,14 @@ impl SabineWindow {
         self
     }
 
+    /// Lets the page load any file the user can read through
+    /// `sabine://file/<absolute path>`. Local pages cannot reach other files
+    /// unless this is enabled.
+    pub fn local_files(mut self, enabled: bool) -> Self {
+        self.config.local_files = enabled;
+        self
+    }
+
     pub fn allowed_origin(mut self, origin: impl Into<String>) -> Self {
         allow_origin(&mut self.config.security, origin.into());
         self

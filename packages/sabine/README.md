@@ -125,6 +125,20 @@ await openPending();
 `unsubscribe()` when disposing the listener. URLs remain application input: validate their scheme
 and contents before acting on them.
 
+## Local files
+
+Pages load from the app's own directory and cannot read other files by default. An app that needs
+them, such as a file manager showing thumbnails, sets `local_files = true` under `[web]` in
+`Sabine.toml` (or `.local_files(true)` in Rust), then builds URLs with `fileUrl`:
+
+```js
+import { fileUrl } from "@lantharos/sabine";
+
+image.src = fileUrl("/home/me/Pictures/photo.png");
+```
+
+These URLs work only inside the app's own pages.
+
 ## Availability
 
 ```js

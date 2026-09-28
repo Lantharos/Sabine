@@ -39,6 +39,9 @@ pub(super) fn runtime_manifest(
                 .join(", ");
             manifest.push_str(&format!("allowed_origins = [{origins}]\n"));
         }
+        if web.local_files {
+            manifest.push_str("local_files = true\n");
+        }
     }
     if let Some(updates) = &app.updates {
         manifest.push_str("\n[updates]\n");

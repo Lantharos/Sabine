@@ -129,6 +129,7 @@ pub(crate) fn spawn_osr_host_child(
         "host_binary": host_binary,
         "url": url,
         "web_root": config.web_root()?,
+        "local_files": config.local_files,
         "app_id": config.app_id,
         "title": config.title,
         "width": config.width,
@@ -319,6 +320,9 @@ pub(crate) fn cef_osr_command(
         let mut argument = std::ffi::OsString::from("--sabine-app-root=");
         argument.push(root);
         command.arg(argument);
+    }
+    if config.local_files {
+        command.arg("--sabine-local-files");
     }
     crate::host::prepare_detachable_child_command(&mut command);
     command.current_dir(&binary_dir);

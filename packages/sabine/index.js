@@ -41,6 +41,17 @@ export function isAvailable() {
   return Boolean(globalThis.window?.sabine?.bridge?.__native);
 }
 
+/**
+ * URL for a local file in an app that enables local file access.
+ * @param {string} path Absolute path to the file.
+ * @returns {string}
+ */
+export function fileUrl(path) {
+  const normalized = path.replaceAll("\\", "/");
+  const absolute = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  return `sabine://file${absolute.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 /** @returns {SabineApi} */
 export function sabine() {
   return requireApi();
@@ -351,6 +362,7 @@ export const popup = {
 
 export default {
   isAvailable,
+  fileUrl,
   sabine,
   invoke,
   listen,

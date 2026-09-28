@@ -403,7 +403,9 @@ The host rejects unknown commands, invalid targets, and origins outside the conf
 
 A local entry is served from its directory at `sabine://app/`, a secure origin that only that
 directory's files can use, so the page cannot read other local files and remote pages cannot embed
-it. Every page under `sabine://app/` is trusted automatically. File URLs, opaque documents, and
+it. Apps that opt into `local_files` can also load any file the user can read at
+`sabine://file/<absolute path>`; only `sabine://app/` pages can use those URLs. Every page under
+`sabine://app/` is trusted automatically. File URLs, opaque documents, and
 developer tools pages receive no implicit bridge access. App files support byte ranges, so media
 can seek.
 Remote documents must have a matching document security origin, so a CSP sandbox cannot inherit
