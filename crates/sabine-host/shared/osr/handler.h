@@ -306,11 +306,13 @@ class SabineOsrHandler : public CefClient,
                       int buffer_width,
                       int buffer_height,
                       const RectList& dirty_rects);
-  bool HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
+  void HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
                            CefRefPtr<CefFrame> frame,
-                           const std::string& url);
-  bool HandleWindowCommand(CefRefPtr<CefBrowser> browser,
-                           const std::string& url);
+                           const std::string& request_id,
+                           const std::string& command,
+                           const std::string& payload);
+  void HandleWindowCommand(const std::string& command,
+                           const std::string& value);
   void RequestNativeClose();
   void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
   void ApplyLifecycle(const std::string& state,

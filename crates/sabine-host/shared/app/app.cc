@@ -2,6 +2,7 @@
 #include "runtime/probe.h"
 #include "app/bridge.h"
 #include "common/bridge_policy.h"
+#include "common/json.h"
 
 #include <sstream>
 #include <algorithm>
@@ -113,33 +114,6 @@ const char kImeStateScript[] = R"JS(
   queue();
 })();
 )JS";
-
-std::string JsString(const std::string& value) {
-  std::string output = "\"";
-  for (char character : value) {
-    switch (character) {
-      case '\\':
-        output += "\\\\";
-        break;
-      case '"':
-        output += "\\\"";
-        break;
-      case '\n':
-        output += "\\n";
-        break;
-      case '\r':
-        output += "\\r";
-        break;
-      case '\t':
-        output += "\\t";
-        break;
-      default:
-        output += character;
-        break;
-    }
-  }
-  return output + "\"";
-}
 
 std::string BridgeInstallScript(const std::vector<std::string>& commands) {
   std::string list = "[";

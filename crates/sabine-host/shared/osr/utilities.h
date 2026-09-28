@@ -43,9 +43,6 @@ float SwitchFloat(CefRefPtr<CefCommandLine> command_line,
                   float fallback);
 std::vector<std::string> Split(const std::string& value, char separator);
 std::string DecodeControlComponent(const std::string& value);
-std::string DecodeUriComponent(const std::string& value);
-std::string QueryValue(const std::string& url, const std::string& name);
-std::string BridgeRequestId(const std::string& url);
 std::string HtmlEscape(const std::string& value);
 bool ParseBridgeResponse(const std::string& line,
                          std::string* browser_id,
