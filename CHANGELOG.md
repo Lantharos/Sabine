@@ -1,3 +1,31 @@
+# Unreleased
+
+Apps built before this release must be rebuilt: the host protocol changed, so the minimum
+supported app build rises to this release. Local pages now load from `sabine://app/`, so data a page
+kept in browser storage under its old `file://` origin does not carry over.
+
+- Serve local app files from `sabine://app/`, a secure origin limited to the entry's directory.
+  Pages can no longer read other files on disk, byte ranges are supported for media, and every page
+  under the app origin keeps bridge access, including multi-page apps and client-side routes.
+- Let apps opt into local file access with `local_files = true` under `[web]` or
+  `.local_files(true)`, and build file URLs with `fileUrl` from `@lantharos/sabine`.
+- Add accelerated painting on macOS through shared IOSurfaces, with no copy through system memory.
+- Import each accelerated paint slot once on macOS and Windows instead of on every frame; Windows
+  shares each texture handle once rather than duplicating it per frame.
+- Show the first frame about 25% sooner on Linux by no longer triggering Chromium's Vulkan driver
+  probe, and stop Chromium's background on-device AI benchmark.
+- Start Chromium alongside graphics setup and verify the host when it connects.
+- Pass bridge requests and responses as structured values: large payloads return about twice as
+  fast, and non-ASCII payloads can use the full 1 MiB limit.
+- Rework the software paint transport around reusable shared memory, lowering Chromium CPU use, and
+  fix HiDPI surface sizing.
+- Fix Windows page renderers exiting at startup when `libcef.dll` could not be found; every
+  Chromium process now loads it from the runtime by path.
+- Stop macOS from asking for the login keychain password: Chromium uses its mock keychain, and the
+  runtime probe never touches the user's credential store.
+- Check accelerated painting on macOS and Windows runners with the manual Paint check workflow,
+  and run Clippy on the macOS and Windows CI jobs.
+
 # Sabine 0.29
 
 - Remove the Wayland layer-shell backend, broker, and public shell-surface API to focus Sabine on
