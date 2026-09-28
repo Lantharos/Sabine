@@ -35,13 +35,41 @@ impl ApplicationHandler for OsrNativeHost {
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let started = Instant::now();
+        self.proxy_wake_up_inner(event_loop);
+        slow("proxy_wake_up", started);
+    }
+
+    fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        let started = Instant::now();
+        let name = format!("{event:?}").chars().take(40).collect::<String>();
+        self.window_event_inner(event_loop, id, event);
+        slow(&name, started);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let started = Instant::now();
+        self.about_to_wait_inner(event_loop);
+        slow("about_to_wait", started);
+    }
+}
+
+fn slow(name: &str, started: Instant) {
+    let elapsed = started.elapsed();
+    if elapsed > Duration::from_millis(20) {
+        eprintln!("SABINE_SLOW {name} {}ms", elapsed.as_millis());
+    }
+}
+
+impl OsrNativeHost {
+    fn proxy_wake_up_inner(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.recover_gpu();
         #[cfg(windows)]
         self.forward_system_keys();
         self.process_osr_events(event_loop);
     }
 
-    fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event_inner(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         self.recover_gpu();
         let Some(window) = self.window.clone() else {
             return;
@@ -345,7 +373,7 @@ impl ApplicationHandler for OsrNativeHost {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+    fn about_to_wait_inner(&mut self, event_loop: &dyn ActiveEventLoop) {
         event_loop.set_control_flow(ControlFlow::Wait);
         let mut handoff = false;
         let mut exited = Vec::new();
