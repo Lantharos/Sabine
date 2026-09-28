@@ -397,15 +397,15 @@ int KeyCodeForCharacter(unsigned char c) {
 }
 
 constexpr std::pair<std::string_view, int> kNamedKeyCodes[] = {
-    {"Backspace", 0x08},   {"Tab", 0x09},        {"Enter", 0x0D},
-    {"Shift", 0x10},       {"Control", 0x11},    {"Alt", 0x12},
-    {"Pause", 0x13},       {"CapsLock", 0x14},   {"Escape", 0x1B},
-    {"Space", 0x20},       {"PageUp", 0x21},     {"PageDown", 0x22},
-    {"End", 0x23},         {"Home", 0x24},       {"ArrowLeft", 0x25},
-    {"ArrowUp", 0x26},     {"ArrowRight", 0x27}, {"ArrowDown", 0x28},
-    {"PrintScreen", 0x2C}, {"Insert", 0x2D},     {"Delete", 0x2E},
-    {"Meta", 0x5B},        {"Super", 0x5B},      {"ContextMenu", 0x5D},
-    {"NumLock", 0x90},     {"ScrollLock", 0x91}, {"AltGraph", 0xE1},
+    {"Backspace", 0x08},   {"Tab", 0x09},         {"Enter", 0x0D},
+    {"Shift", 0x10},       {"Control", 0x11},     {"Alt", 0x12},
+    {"Pause", 0x13},       {"CapsLock", 0x14},    {"Escape", 0x1B},
+    {"Space", 0x20},       {"PageUp", 0x21},      {"PageDown", 0x22},
+    {"End", 0x23},         {"Home", 0x24},        {"ArrowLeft", 0x25},
+    {"ArrowUp", 0x26},     {"ArrowRight", 0x27},  {"ArrowDown", 0x28},
+    {"PrintScreen", 0x2C}, {"Insert", 0x2D},      {"Delete", 0x2E},
+    {"Meta", 0x5B},        {"ContextMenu", 0x5D}, {"NumLock", 0x90},
+    {"ScrollLock", 0x91},  {"AltGraph", 0xE1},
 };
 
 }  // namespace
