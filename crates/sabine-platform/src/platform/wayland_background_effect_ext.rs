@@ -1,10 +1,15 @@
 use std::{
-    ffi::{c_char, c_uint, c_void},
+    ffi::{c_uint, c_void},
     ptr,
 };
 
 use super::WaylandEffect;
 use super::wayland_background_effect_protocol::*;
+use crate::wayland_client::{
+    DESTROY_FLAG, Globals, WL_COMPOSITOR_INTERFACE, WL_REGION_INTERFACE, WlDisplay, WlProxy,
+    wl_display_flush, wl_display_roundtrip, wl_proxy_add_listener, wl_proxy_destroy,
+    wl_proxy_get_version, wl_proxy_marshal_flags,
+};
 use crate::{WindowBackgroundEffect, WindowOptions, WindowRegion};
 
 #[cfg(target_os = "linux")]
@@ -25,109 +30,42 @@ impl ExtBackgroundEffect {
             return None;
         }
 
-        let registry = unsafe {
-            wl_proxy_marshal_flags(
-                display.cast(),
-                DISPLAY_GET_REGISTRY,
-                &WL_REGISTRY_INTERFACE,
-                wl_proxy_get_version(display.cast()),
-                0,
-                ptr::null::<c_void>(),
-            )
-        };
-        if registry.is_null() {
-            debug("failed to create wl_registry");
-            return None;
-        }
-
-        let mut state = RegistryState::default();
-        let add_listener = unsafe {
-            wl_proxy_add_listener(
-                registry.cast(),
-                &REGISTRY_LISTENER as *const RegistryListener as *mut _,
-                &mut state as *mut RegistryState as *mut c_void,
-            )
-        };
-        if add_listener != 0 {
-            debug("failed to add wl_registry listener");
-            unsafe { wl_proxy_destroy(registry.cast()) };
-            return None;
-        }
-
-        unsafe {
-            wl_display_roundtrip(display);
-            wl_display_roundtrip(display);
-        }
-
-        let Some(compositor_name) = state.compositor_name else {
-            debug("wl_compositor was not advertised");
-            unsafe { wl_proxy_destroy(registry.cast()) };
-            return None;
-        };
-
-        let compositor = unsafe {
-            wl_proxy_marshal_flags(
-                registry.cast(),
-                REGISTRY_BIND,
-                &WL_COMPOSITOR_INTERFACE,
-                1,
-                0,
-                compositor_name,
-                WL_COMPOSITOR_INTERFACE.name,
-                1_u32,
-                ptr::null::<c_void>(),
-            )
-        };
-        if compositor.is_null() {
+        let globals = unsafe { Globals::discover(display) }?;
+        let Some(compositor) = (unsafe { globals.bind(&WL_COMPOSITOR_INTERFACE, 1) }) else {
             debug("failed to bind wl_compositor");
-            unsafe { wl_proxy_destroy(registry.cast()) };
             return None;
-        }
+        };
 
         let mut manager_state = Box::<ManagerState>::default();
         let mut manager = ptr::null_mut();
         let mut effect_proxy = ptr::null_mut();
         if wants_blur {
-            let Some(manager_name) = state.manager_name else {
+            if !globals.contains(&EXT_BACKGROUND_EFFECT_MANAGER_V1_INTERFACE) {
                 debug("ext_background_effect_manager_v1 was not advertised");
-                unsafe { wl_proxy_destroy(registry.cast()) };
-                unsafe { wl_proxy_destroy(compositor.cast()) };
-                return None;
-            };
-            debug("binding ext_background_effect_manager_v1");
-            manager = unsafe {
-                wl_proxy_marshal_flags(
-                    registry.cast(),
-                    REGISTRY_BIND,
-                    &EXT_BACKGROUND_EFFECT_MANAGER_V1_INTERFACE,
-                    1,
-                    0,
-                    manager_name,
-                    EXT_BACKGROUND_EFFECT_MANAGER_V1_INTERFACE.name,
-                    1_u32,
-                    ptr::null::<c_void>(),
-                )
-            };
-            if manager.is_null() {
-                debug("failed to bind ext_background_effect_manager_v1");
-                unsafe { wl_proxy_destroy(registry.cast()) };
-                unsafe { wl_proxy_destroy(compositor.cast()) };
+                unsafe { wl_proxy_destroy(compositor) };
                 return None;
             }
+            let Some(bound) =
+                (unsafe { globals.bind(&EXT_BACKGROUND_EFFECT_MANAGER_V1_INTERFACE, 1) })
+            else {
+                debug("failed to bind ext_background_effect_manager_v1");
+                unsafe { wl_proxy_destroy(compositor) };
+                return None;
+            };
+            manager = bound;
             debug("bound ext_background_effect_manager_v1");
 
             let add_manager_listener = unsafe {
                 wl_proxy_add_listener(
-                    manager.cast(),
+                    manager,
                     &MANAGER_LISTENER as *const ManagerListener as *mut _,
                     manager_state.as_mut() as *mut ManagerState as *mut c_void,
                 )
             };
             if add_manager_listener != 0 {
                 debug("failed to add ext_background_effect_manager_v1 listener");
-                unsafe { wl_proxy_destroy(registry.cast()) };
-                unsafe { wl_proxy_destroy(compositor.cast()) };
-                unsafe { wl_proxy_destroy(manager.cast()) };
+                unsafe { wl_proxy_destroy(compositor) };
+                unsafe { wl_proxy_destroy(manager) };
                 return None;
             }
             unsafe {
@@ -135,15 +73,14 @@ impl ExtBackgroundEffect {
             }
             if !manager_state.supports_blur() {
                 debug("ext_background_effect_manager_v1 does not advertise blur capability");
-                unsafe { wl_proxy_destroy(registry.cast()) };
-                unsafe { wl_proxy_destroy(compositor.cast()) };
-                unsafe { wl_proxy_destroy(manager.cast()) };
+                unsafe { wl_proxy_destroy(compositor) };
+                unsafe { wl_proxy_destroy(manager) };
                 return None;
             }
 
             effect_proxy = unsafe {
                 wl_proxy_marshal_flags(
-                    manager.cast(),
+                    manager,
                     MANAGER_GET_BACKGROUND_EFFECT,
                     &EXT_BACKGROUND_EFFECT_SURFACE_V1_INTERFACE,
                     1,
@@ -154,14 +91,13 @@ impl ExtBackgroundEffect {
             };
             if effect_proxy.is_null() {
                 debug("failed to create ext_background_effect_surface_v1");
-                unsafe { wl_proxy_destroy(registry.cast()) };
-                unsafe { wl_proxy_destroy(compositor.cast()) };
-                unsafe { wl_proxy_destroy(manager.cast()) };
+                unsafe { wl_proxy_destroy(compositor) };
+                unsafe { wl_proxy_destroy(manager) };
                 return None;
             }
             debug("created ext_background_effect_surface_v1");
         }
-        unsafe { wl_proxy_destroy(registry.cast()) };
+        drop(globals);
 
         unsafe {
             apply_surface_regions(
@@ -308,13 +244,6 @@ fn debug(message: &str) {
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Default)]
-struct RegistryState {
-    manager_name: Option<u32>,
-    compositor_name: Option<u32>,
-}
-
-#[cfg(target_os = "linux")]
 #[derive(Debug, Default)]
 pub struct ManagerState {
     capabilities: u32,
@@ -326,50 +255,6 @@ impl ManagerState {
         self.capabilities & MANAGER_CAPABILITY_BLUR != 0
     }
 }
-
-#[cfg(target_os = "linux")]
-unsafe extern "C" fn registry_global(
-    data: *mut c_void,
-    _registry: *mut WlRegistry,
-    name: u32,
-    interface: *const c_char,
-    _version: u32,
-) {
-    if data.is_null() || interface.is_null() {
-        return;
-    }
-    let state = unsafe { &mut *(data.cast::<RegistryState>()) };
-    let interface = unsafe { std::ffi::CStr::from_ptr(interface) };
-    if interface.to_bytes() == MANAGER_INTERFACE_NAME {
-        state.manager_name = Some(name);
-    } else if interface.to_bytes() == COMPOSITOR_INTERFACE_NAME {
-        state.compositor_name = Some(name);
-    }
-}
-
-#[cfg(target_os = "linux")]
-unsafe extern "C" fn registry_global_remove(
-    _data: *mut c_void,
-    _registry: *mut WlRegistry,
-    _name: u32,
-) {
-}
-
-#[cfg(target_os = "linux")]
-#[repr(C)]
-struct RegistryListener {
-    global: unsafe extern "C" fn(*mut c_void, *mut WlRegistry, u32, *const c_char, u32),
-    global_remove: unsafe extern "C" fn(*mut c_void, *mut WlRegistry, u32),
-}
-
-#[cfg(target_os = "linux")]
-static REGISTRY_LISTENER: RegistryListener = RegistryListener {
-    global: registry_global,
-    global_remove: registry_global_remove,
-};
-
-#[cfg(target_os = "linux")]
-unsafe impl Sync for RegistryListener {}
 
 #[cfg(target_os = "linux")]
 unsafe extern "C" fn manager_capabilities(

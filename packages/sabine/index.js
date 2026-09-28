@@ -156,6 +156,10 @@ export const appWindow = {
   startDrag() {
     requireApi().window.startDrag();
   },
+  /** @returns {Promise<void>} */
+  async inhibitShortcuts(enabled) {
+    await invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
+  },
 };
 
 /**

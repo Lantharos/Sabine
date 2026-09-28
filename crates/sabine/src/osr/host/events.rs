@@ -215,7 +215,7 @@ impl OsrNativeHost {
                     self.activate_window(event_loop, token);
                 }
                 OsrHostEvent::Message(_, OsrMessage::BridgeRequest(line)) => {
-                    if !line.is_empty() {
+                    if !line.is_empty() && !self.answer_window_bridge_request(&line) {
                         let mut output = std::io::stdout();
                         use std::io::Write;
                         let _ = writeln!(output, "{line}");
@@ -371,8 +371,21 @@ impl OsrNativeHost {
                     height,
                 )
             });
+        self.send_bridge_response(
+            browser_id,
+            request_id,
+            result.map(|data_url| serde_json::json!({ "dataUrl": data_url })),
+        );
+    }
+
+    pub(super) fn send_bridge_response(
+        &self,
+        browser_id: &str,
+        request_id: &str,
+        result: Result<serde_json::Value, String>,
+    ) {
         let (status, payload) = match result {
-            Ok(data_url) => ("ok", serde_json::json!({ "dataUrl": data_url })),
+            Ok(payload) => ("ok", payload),
             Err(message) => ("error", serde_json::json!({ "message": message })),
         };
         self.send_control(&format!(

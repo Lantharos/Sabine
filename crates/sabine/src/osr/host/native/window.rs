@@ -113,6 +113,10 @@ impl OsrNativeHost {
         self.renderer = Some(renderer);
         self.window = Some(window.clone());
         self.restore_ime_state();
+        #[cfg(not(target_os = "macos"))]
+        if let Err(error) = self.restore_shortcut_inhibitor() {
+            eprintln!("Sabine could not inhibit desktop shortcuts: {error}");
+        }
         self.send_screen_origin();
         self.launch_child();
         if let Err(error) = self.upload_cached_textures() {
@@ -159,6 +163,8 @@ impl OsrNativeHost {
                 .round()
                 .max(f64::from(self.config.min_height)) as u32;
         }
+        #[cfg(not(target_os = "macos"))]
+        self.release_shortcut_inhibitor();
         self.window = None;
         self.renderer = None;
         self.effect = None;

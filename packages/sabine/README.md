@@ -64,6 +64,19 @@ appWindow.toggleMaximize();
 appWindow.startDrag();
 ```
 
+A settings page that records keyboard shortcuts can ask the desktop to hand over every key while
+the window is focused, including combinations the desktop normally keeps for itself:
+
+```js
+await appWindow.inhibitShortcuts(true);
+// record the shortcut
+await appWindow.inhibitShortcuts(false);
+```
+
+This works on Wayland compositors that support keyboard shortcut inhibiting, on X11, and on
+Windows, where Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS.
+Some compositors ask the user before they allow it.
+
 ## Guests
 
 ```js

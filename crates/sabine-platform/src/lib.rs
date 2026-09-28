@@ -3,8 +3,14 @@
 mod desktop_background_effect;
 mod desktop_integration;
 mod regions;
+#[cfg(not(target_os = "macos"))]
+#[path = "platform/shortcut_inhibit/mod.rs"]
+mod shortcut_inhibit;
 #[path = "platform/wayland_background_effect.rs"]
 mod wayland_background_effect;
+#[cfg(target_os = "linux")]
+#[path = "platform/wayland_client.rs"]
+mod wayland_client;
 mod window_options;
 
 use std::sync::Arc;
@@ -17,6 +23,10 @@ pub use desktop_integration::{
     SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
 };
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+#[cfg(not(target_os = "macos"))]
+pub use shortcut_inhibit::ShortcutInhibitor;
+#[cfg(target_os = "windows")]
+pub use shortcut_inhibit::SystemKey;
 pub use wayland_background_effect::WaylandEffect as WindowEffect;
 pub use window_options::{
     PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
