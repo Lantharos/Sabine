@@ -16,7 +16,9 @@ namespace {
 namespace fs = std::filesystem;
 
 constexpr char kScheme[] = "sabine";
-constexpr char kHost[] = "app";
+constexpr char kAppHost[] = "app";
+constexpr char kFileHost[] = "file";
+constexpr char kAppOrigin[] = "sabine://app";
 
 struct ByteRange {
   uint64_t start = 0;
@@ -43,17 +45,8 @@ bool Contains(const fs::path& root, const fs::path& path) {
              .first == root.end();
 }
 
-std::optional<fs::path> ResolveFile(const fs::path& root,
-                                    const std::string& url) {
-  CefURLParts parts;
-  if (!CefParseURL(url, parts) || CefString(&parts.host).ToString() != kHost) {
-    return std::nullopt;
-  }
-  const std::string path =
-      CefURIDecode(CefString(&parts.path), true,
-                   static_cast<cef_uri_unescape_rule_t>(
-                       UU_SPACES | UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS))
-          .ToString();
+std::optional<fs::path> ResolveAppFile(const fs::path& root,
+                                       const std::string& path) {
   const std::u8string relative(path.begin() + std::min<size_t>(path.size(), 1),
                                path.end());
   std::error_code error;
@@ -68,6 +61,34 @@ std::optional<fs::path> ResolveFile(const fs::path& root,
     return std::nullopt;
   }
   return file;
+}
+
+std::optional<fs::path> ResolveLocalFile(const std::string& path) {
+#if defined(OS_WIN)
+  const size_t drive = std::min<size_t>(path.size(), 1);
+#else
+  const size_t drive = 0;
+#endif
+  const fs::path file(std::u8string(path.begin() + drive, path.end()));
+  std::error_code error;
+  if (!file.is_absolute() || !fs::is_regular_file(file, error)) {
+    return std::nullopt;
+  }
+  return file;
+}
+
+std::optional<fs::path> ResolveFile(const std::optional<fs::path>& root,
+                                    const std::string& url) {
+  CefURLParts parts;
+  if (!CefParseURL(url, parts)) {
+    return std::nullopt;
+  }
+  const std::string path =
+      CefURIDecode(CefString(&parts.path), true,
+                   static_cast<cef_uri_unescape_rule_t>(
+                       UU_SPACES | UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS))
+          .ToString();
+  return root ? ResolveAppFile(*root, path) : ResolveLocalFile(path);
 }
 
 std::optional<ByteRange> RequestedRange(const std::string& header,
@@ -122,10 +143,10 @@ std::string MimeType(const fs::path& file) {
   return mime.empty() ? "application/octet-stream" : mime;
 }
 
-class AppFileHandler : public CefResourceHandler {
+class FileHandler : public CefResourceHandler {
  public:
-  explicit AppFileHandler(const fs::path& root) : root_(root) {}
-  ~AppFileHandler() override {
+  explicit FileHandler(const std::optional<fs::path>& root) : root_(root) {}
+  ~FileHandler() override {
     if (file_) {
       std::fclose(file_);
     }
@@ -175,6 +196,9 @@ class AppFileHandler : public CefResourceHandler {
     } else if (status_ == 416) {
       headers.emplace("Content-Range", "bytes */" + std::to_string(size_));
     }
+    if (!root_) {
+      headers.emplace("Access-Control-Allow-Origin", kAppOrigin);
+    }
     response->SetHeaderMap(headers);
     response->SetMimeType(file_ ? mime_type_ : "text/plain");
     response_length = file_ ? static_cast<int64_t>(range_.length) : 0;
@@ -203,30 +227,31 @@ class AppFileHandler : public CefResourceHandler {
   void Cancel() override {}
 
  private:
-  const fs::path root_;
+  const std::optional<fs::path> root_;
   FILE* file_ = nullptr;
   int status_ = 404;
   uint64_t size_ = 0;
   ByteRange range_;
   uint64_t remaining_ = 0;
   std::string mime_type_;
-  IMPLEMENT_REFCOUNTING(AppFileHandler);
+  IMPLEMENT_REFCOUNTING(FileHandler);
 };
 
-class AppSchemeHandlerFactory : public CefSchemeHandlerFactory {
+class FileSchemeHandlerFactory : public CefSchemeHandlerFactory {
  public:
-  explicit AppSchemeHandlerFactory(fs::path root) : root_(std::move(root)) {}
+  explicit FileSchemeHandlerFactory(std::optional<fs::path> root)
+      : root_(std::move(root)) {}
 
   CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
                                        CefRefPtr<CefFrame> frame,
                                        const CefString& scheme_name,
                                        CefRefPtr<CefRequest> request) override {
-    return new AppFileHandler(root_);
+    return new FileHandler(root_);
   }
 
  private:
-  const fs::path root_;
-  IMPLEMENT_REFCOUNTING(AppSchemeHandlerFactory);
+  const std::optional<fs::path> root_;
+  IMPLEMENT_REFCOUNTING(FileSchemeHandlerFactory);
 };
 
 }  // namespace
@@ -248,8 +273,13 @@ void ServeAppFiles(const std::string& root) {
                  root.c_str());
     return;
   }
-  CefRegisterSchemeHandlerFactory(kScheme, kHost,
-                                  new AppSchemeHandlerFactory(canonical));
+  CefRegisterSchemeHandlerFactory(kScheme, kAppHost,
+                                  new FileSchemeHandlerFactory(canonical));
+}
+
+void ServeLocalFiles() {
+  CefRegisterSchemeHandlerFactory(kScheme, kFileHost,
+                                  new FileSchemeHandlerFactory(std::nullopt));
 }
 
 }  // namespace sabine_app

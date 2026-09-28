@@ -156,6 +156,9 @@ void SabineApp::OnContextInitialized() {
   if (!app_root.empty()) {
     sabine_app::ServeAppFiles(app_root);
   }
+  if (command_line->HasSwitch("sabine-local-files")) {
+    sabine_app::ServeLocalFiles();
+  }
   CreateBrowser(command_line);
 }
 

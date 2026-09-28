@@ -32,6 +32,7 @@ pub(super) struct WebBundle {
     pub has_local_assets: bool,
     pub url: Option<String>,
     pub allowed_origins: Vec<String>,
+    pub local_files: bool,
 }
 
 impl WebBundle {
@@ -101,6 +102,8 @@ struct WebSection {
     dev_url: Option<String>,
     #[serde(default)]
     allowed_origins: Vec<String>,
+    #[serde(default)]
+    local_files: bool,
 }
 
 pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<BundleApp, String> {
@@ -314,6 +317,7 @@ fn resolve_web(
         has_local_assets,
         url,
         allowed_origins,
+        local_files: config.local_files,
     }))
 }
 

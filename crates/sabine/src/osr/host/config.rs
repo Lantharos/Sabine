@@ -14,6 +14,7 @@ pub(crate) struct OsrHostConfig {
     pub host_binary: PathBuf,
     pub url: String,
     pub web_root: Option<PathBuf>,
+    pub local_files: bool,
     pub app_id: Option<String>,
     pub title: String,
     pub width: u32,
@@ -69,6 +70,10 @@ impl OsrHostConfig {
                 .get("web_root")
                 .and_then(serde_json::Value::as_str)
                 .map(PathBuf::from),
+            local_files: value
+                .get("local_files")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             app_id: value
                 .get("app_id")
                 .and_then(serde_json::Value::as_str)

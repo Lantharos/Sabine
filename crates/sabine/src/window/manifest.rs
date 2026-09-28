@@ -36,6 +36,8 @@ struct WebSection {
     url: Option<String>,
     #[serde(default)]
     allowed_origins: Vec<String>,
+    #[serde(default)]
+    local_files: bool,
 }
 
 impl SabineWindow {
@@ -106,6 +108,7 @@ impl SabineWindow {
             self = self.url(url);
         }
 
+        self = self.local_files(file.web.local_files);
         for origin in file.web.allowed_origins {
             self = self.allowed_origin(origin);
         }

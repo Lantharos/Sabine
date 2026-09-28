@@ -46,6 +46,7 @@ pub(crate) struct SabineWindowConfig {
     pub runtime: RuntimeConfig,
     pub bridge: BridgeRegistry,
     pub security: ContentSecurity,
+    pub local_files: bool,
     pub browser: BrowserOptions,
 }
 
@@ -84,6 +85,7 @@ impl Default for SabineWindowConfig {
             runtime: RuntimeConfig::default(),
             bridge: BridgeRegistry::default(),
             security: ContentSecurity::default(),
+            local_files: false,
             browser: BrowserOptions::default(),
         }
     }
