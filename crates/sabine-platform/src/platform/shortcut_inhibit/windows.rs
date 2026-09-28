@@ -100,6 +100,8 @@ impl Drop for WindowsInhibitor {
 unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+        let now = unsafe { windows::Win32::System::SystemInformation::GetTickCount() };
+        eprintln!("SABINE_HOOK vk={:#x} msg={:#x} flags={:#x} latency={}ms", info.vkCode, wparam.0, info.flags.0, now.wrapping_sub(info.time));
         let captured = HOOK.with_borrow_mut(|hook| {
             hook.as_mut()
                 .is_some_and(|hook| hook.capture(wparam.0 as u32, info))
