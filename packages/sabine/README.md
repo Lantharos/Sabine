@@ -6,7 +6,7 @@ Typed helpers for pages running inside a Sabine window. Prefer these exports ove
 ## Install
 
 ```sh
-bun add github:Lantharos/Sabine#v0.29
+bun add github:Lantharos/Sabine#v0.30
 ```
 
 ## Bridge commands

@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.30
 
 Apps built before this release must be rebuilt: the host protocol changed, so the minimum
 supported app build rises to this release. Local pages now load from `sabine://app/`, so data a page
