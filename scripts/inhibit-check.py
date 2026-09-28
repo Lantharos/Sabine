@@ -60,12 +60,24 @@ KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP = 0x1, 0x2
 VK = {"LWin": 0x5B, "Alt": 0xA4, "Ctrl": 0xA2, "Tab": 0x09, "Esc": 0x1B, "R": 0x52, "A": 0x41, "X": 0x58}
 EXTENDED = {"LWin"}
 
+trace = []
+
+def describe(hwnd):
+    title = ctypes.create_unicode_buffer(256)
+    cls = ctypes.create_unicode_buffer(256)
+    user32.GetWindowTextW(hwnd, title, 256)
+    user32.GetClassNameW(hwnd, cls, 256)
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return f"{hwnd} {title.value!r} {cls.value!r} pid={pid.value}"
+
 def key(name, up=False):
     vk = VK[name]
     scan = user32.MapVirtualKeyW(vk, 0)
     flags = (KEYEVENTF_EXTENDEDKEY if name in EXTENDED else 0) | (KEYEVENTF_KEYUP if up else 0)
     user32.keybd_event(vk, scan, flags, 0)
     time.sleep(0.08)
+    trace.append(f"{name} {'up' if up else 'down'} -> {describe(user32.GetForegroundWindow())}")
 
 def combo(text):
     names = text.split("+")
@@ -87,11 +99,19 @@ try:
     user32.SetForegroundWindow(hwnd)
     time.sleep(0.5)
     report["foreground_before"] = user32.GetForegroundWindow() == hwnd
+    report["app_pid"] = app.pid
+    report["window"] = describe(hwnd)
     report["enable"] = evaluate('window.sabine.window.inhibitShortcuts(true).then(() => "ok", e => "error: " + e.message)')
+    time.sleep(0.5)
+    report["foreground_after_enable"] = describe(user32.GetForegroundWindow())
     evaluate("keys.length = 0")
     for text in ["LWin", "Alt+Tab", "Ctrl+Esc", "LWin+R", "Ctrl+A", "X"]:
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.3)
+        trace.append(f"== {text} from {describe(user32.GetForegroundWindow())}")
         combo(text)
-        report[f"foreground_after_{text}"] = user32.GetForegroundWindow() == hwnd
+        trace.append(f"page keys {evaluate('JSON.stringify(keys.splice(0))')}")
+    report["trace"] = trace
     report["keys"] = evaluate("keys.splice(0)")
     report["text"] = evaluate('document.getElementById("t").value')
     report["disable"] = evaluate('window.sabine.window.inhibitShortcuts(false).then(() => "ok", e => "error: " + e.message)')
