@@ -205,11 +205,14 @@ pub fn smoke_test_runtime(host: &Path, runtime_dir: &Path) -> Result<(), String>
         .stdout(Stdio::null())
         .stderr(stderr);
     apply_runtime_resource_args(&mut command, runtime_dir);
+    #[cfg(target_os = "macos")]
+    command.arg("--use-mock-keychain");
     #[cfg(target_os = "linux")]
     {
         command
             .arg("--headless")
-            .arg("--sabine-ozone-platform=headless");
+            .arg("--sabine-ozone-platform=headless")
+            .arg("--password-store=basic");
         let release = binary_dir.to_string_lossy();
         let existing = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
         command.env(
