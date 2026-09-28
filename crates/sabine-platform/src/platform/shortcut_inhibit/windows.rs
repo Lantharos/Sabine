@@ -63,6 +63,12 @@ impl WindowsInhibitor {
             SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook), Some(module.into()), 0)
         }
         .map_err(|error| format!("Could not install the keyboard hook: {error}"))?;
+        std::thread::spawn(|| unsafe {
+            let module = GetModuleHandleW(None).unwrap();
+            SetWindowsHookExW(WH_KEYBOARD_LL, Some(diagnostic_hook), Some(module.into()), 0).unwrap();
+            let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
+            while windows::Win32::UI::WindowsAndMessaging::GetMessageW(&mut msg, None, 0, 0).as_bool() {}
+        });
         HOOK.set(Some(Hook {
             handle,
             window,
@@ -95,6 +101,13 @@ impl Drop for WindowsInhibitor {
             let _ = unsafe { SetKeyboardState(&state) };
         }
     }
+}
+
+unsafe extern "system" fn diagnostic_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+    let foreground = unsafe { GetForegroundWindow() };
+    eprintln!("SABINE_DIAG vk={:#x} msg={:#x} foreground={:?}", info.vkCode, wparam.0, foreground.0);
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
 unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

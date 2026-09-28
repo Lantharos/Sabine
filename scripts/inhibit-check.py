@@ -120,5 +120,5 @@ try:
 finally:
     subprocess.run(["taskkill", "/PID", str(app.pid), "/T", "/F"], capture_output=True)
     (output / "report.json").write_text(json.dumps(report, indent=1))
-    print("\n".join(line for line in log_path.read_text(errors="replace").splitlines() if "SABINE_HOOK" in line or "SABINE_SLOW" in line or "trace" in line[:40]))
+    print("\n".join(line for line in log_path.read_text(errors="replace").splitlines() if "SABINE_HOOK" in line or "SABINE_DIAG" in line or "SABINE_SLOW" in line or "trace" in line[:40]))
     print(json.dumps(report, indent=1))
