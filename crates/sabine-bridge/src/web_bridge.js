@@ -54,6 +54,9 @@
     setFullscreen(enabled) { windowCommand(enabled ? "fullscreen" : "exit-fullscreen"); },
     restore() { windowCommand("restore"); },
     startDrag() { windowCommand("start-drag"); },
+    async inhibitShortcuts(enabled) {
+      await window.sabine.bridge.invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
+    },
   });
 
   window.sabine.bridge = {

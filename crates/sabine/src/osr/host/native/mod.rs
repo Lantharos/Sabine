@@ -99,6 +99,8 @@ pub(super) struct OsrNativeHost {
     pub(super) pending_activation_token: Option<ActivationToken>,
     pub(super) active_file_drag: Option<DataTransferId>,
     pub(super) incoming_file_drag: Option<IncomingFileDrag>,
+    #[cfg(not(target_os = "macos"))]
+    pub(super) shortcuts: super::input::ShortcutInhibition,
     /// CEF exited with process-singleton handoff (code 24). The existing
     /// browser process owns this window's OSR endpoint; keep listening.
     pub(super) cef_handed_off: bool,
@@ -197,6 +199,8 @@ impl OsrNativeHost {
             pending_activation_token: None,
             active_file_drag: None,
             incoming_file_drag: None,
+            #[cfg(not(target_os = "macos"))]
+            shortcuts: Default::default(),
             cef_handed_off: false,
             handoff_deadline: None,
             #[cfg(target_os = "macos")]
