@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.31
 
 - Fix typing punctuation in pages: characters such as `.`, `-`, `$`, `#`, `%` and `'` were sent to
   Chromium as the Delete, Insert, Home, End and arrow keys, deleting text or moving the caret. Keys
