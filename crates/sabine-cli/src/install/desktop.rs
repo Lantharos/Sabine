@@ -88,11 +88,11 @@ pub fn install_autostart(
     {
         let directory = crate::install::source::autostart_dir()?;
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        return std::fs::write(
+        std::fs::write(
             directory.join(format!("{}.desktop", app.id)),
             entry(app, wrapper, _desktop_icon),
         )
-        .map_err(|error| error.to_string());
+        .map_err(|error| error.to_string())
     }
     #[cfg(target_os = "windows")]
     {
@@ -110,10 +110,10 @@ pub fn install_autostart(
             ])
             .status()
             .map_err(|error| error.to_string())?;
-        return status
+        status
             .success()
             .then_some(())
-            .ok_or_else(|| "failed to register Windows autostart entry".to_string());
+            .ok_or_else(|| "failed to register Windows autostart entry".to_string())
     }
     #[cfg(target_os = "macos")]
     {
@@ -122,16 +122,14 @@ pub fn install_autostart(
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         let label = xml(&app.id);
         let executable = xml(&wrapper.display().to_string());
-        return std::fs::write(
+        std::fs::write(
             directory.join(format!("{}.plist", app.id)),
             format!(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{label}</string><key>ProgramArguments</key><array><string>{executable}</string></array><key>RunAtLoad</key><true/></dict></plist>\n"
             ),
         )
-        .map_err(|error| error.to_string());
+        .map_err(|error| error.to_string())
     }
-    #[allow(unreachable_code)]
-    Err("autostart is unsupported on this platform".to_string())
 }
 
 #[cfg(target_os = "windows")]

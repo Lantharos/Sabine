@@ -321,13 +321,17 @@ fn origin_matches(origin: &str, allowed: &[String]) -> bool {
 /// uses it to filter commands that have an explicit target list.
 pub fn current_bridge_targets() -> &'static [&'static str] {
     #[cfg(target_os = "linux")]
-    return &["desktop", "linux"];
+    {
+        &["desktop", "linux"]
+    }
     #[cfg(target_os = "windows")]
-    return &["desktop", "windows"];
+    {
+        &["desktop", "windows"]
+    }
     #[cfg(target_os = "macos")]
-    return &["desktop", "macos"];
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    return &[];
+    {
+        &["desktop", "macos"]
+    }
 }
 
 #[cfg(test)]

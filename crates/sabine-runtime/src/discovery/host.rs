@@ -15,34 +15,40 @@ fn runtime_resources_present(runtime_dir: &Path) -> bool {
 fn has_libcef_binary(runtime_dir: &Path) -> bool {
     let release = runtime_dir.join("Release");
     #[cfg(target_os = "linux")]
-    return release.join("libcef.so").is_file();
+    {
+        release.join("libcef.so").is_file()
+    }
     #[cfg(target_os = "windows")]
-    return release.join("libcef.dll").is_file();
+    {
+        release.join("libcef.dll").is_file()
+    }
     #[cfg(target_os = "macos")]
-    return [runtime_dir.to_path_buf(), release]
-        .into_iter()
-        .any(|root| {
-            root.join("Chromium Embedded Framework.framework")
-                .join("Chromium Embedded Framework")
-                .is_file()
-        });
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    false
+    {
+        [runtime_dir.to_path_buf(), release]
+            .into_iter()
+            .any(|root| {
+                root.join("Chromium Embedded Framework.framework")
+                    .join("Chromium Embedded Framework")
+                    .is_file()
+            })
+    }
 }
 
 fn resource_roots(runtime_dir: &Path) -> Vec<PathBuf> {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    return vec![runtime_dir.join("Resources"), runtime_dir.join("Release")];
+    {
+        vec![runtime_dir.join("Resources"), runtime_dir.join("Release")]
+    }
     #[cfg(target_os = "macos")]
-    return [runtime_dir.to_path_buf(), runtime_dir.join("Release")]
-        .into_iter()
-        .map(|root| {
-            root.join("Chromium Embedded Framework.framework")
-                .join("Resources")
-        })
-        .collect();
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    Vec::new()
+    {
+        [runtime_dir.to_path_buf(), runtime_dir.join("Release")]
+            .into_iter()
+            .map(|root| {
+                root.join("Chromium Embedded Framework.framework")
+                    .join("Resources")
+            })
+            .collect()
+    }
 }
 
 fn locales_present(resource_root: &Path) -> bool {

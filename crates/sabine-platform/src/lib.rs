@@ -34,10 +34,4 @@ pub fn request_window_effect(
     {
         desktop_background_effect::request(window, options)
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    {
-        let _ = window;
-        let _ = options;
-        None
-    }
 }
