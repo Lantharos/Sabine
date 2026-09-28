@@ -85,8 +85,9 @@ before this policy existed; hourly automation promotes the newest eligible immut
 A newer app that declares a newer Sabine build bypasses both gates by fetching that build's signed
 versioned manifest: its bundled bootstrap stages the required system, hands off the daemon, and only
 then registers the app. System release metadata declares its current build and the oldest app build
-it accepts. Apps older than that floor are removed from shared registration and receive a native
-incompatibility notice. Legacy registrations without compatibility metadata remain accepted until
+it accepts. Apps older than that floor are not registered again and receive a native incompatibility
+notice. The service fetches their newest release right away instead of waiting for the soak period,
+and an app offers a downloaded update before showing that notice. Legacy registrations without compatibility metadata remain accepted until
 they next register with a current Sabine build.
 
 App releases are separate from Sabine releases. `[updates]` in `Sabine.toml` identifies a GitHub

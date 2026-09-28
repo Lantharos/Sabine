@@ -2,8 +2,14 @@
 
 - Fix typing punctuation in pages: characters such as `.`, `-`, `$`, `#`, `%` and `'` were sent to
   Chromium as the Delete, Insert, Home, End and arrow keys, deleting text or moving the caret. Keys
-  now report the same key codes as browsers, and Shift, Control, Alt, Meta, Caps Lock, Insert and
-  other named keys reach pages instead of arriving as unidentified keys.
+  now report the same `key`, `code` and `keyCode` values as browsers.
+- Fix Enter in text areas and editable content, which inserted nothing and could not submit forms.
+- Report `event.code` for every key, and include Shift, Control, Alt, Meta, Caps Lock, Insert and
+  other named keys that pages previously received as unidentified keys. Modifier keys now report
+  their own modifier state the way browsers do.
+- Apps that the installed Sabine no longer supports fetch their newest release right away instead of
+  waiting for the soak period, and offer a downloaded update before showing the incompatibility
+  notice.
 
 # Sabine 0.30
 
