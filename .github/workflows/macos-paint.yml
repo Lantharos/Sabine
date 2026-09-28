@@ -20,8 +20,12 @@ jobs:
           cache-on-failure: true
       - name: Describe the GPU
         run: system_profiler SPDisplaysDataType
-      - name: Allow Chromium's keychain item without a password prompt
-        run: security add-generic-password -U -A -a Chromium -s "Chromium Safe Storage" -w "$(uuidgen)"
+      - name: Give Chromium a fresh default keychain
+        run: |
+          security create-keychain -p sabine sabine-paint.keychain
+          security set-keychain-settings sabine-paint.keychain
+          security unlock-keychain -p sabine sabine-paint.keychain
+          security default-keychain -s sabine-paint.keychain
       - name: Paint an animated page through the native window
         run: python3 scripts/macos-paint-check.py
       - uses: actions/upload-artifact@v7
