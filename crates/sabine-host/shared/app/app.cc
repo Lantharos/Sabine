@@ -162,6 +162,17 @@ void SabineApp::OnContextInitialized() {
   CreateBrowser(command_line);
 }
 
+#if defined(OS_WIN)
+void SabineApp::OnBeforeChildProcessLaunch(
+    CefRefPtr<CefCommandLine> command_line) {
+  const CefString cef_dir =
+      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("sabine-cef-dir");
+  if (!cef_dir.empty()) {
+    command_line->AppendSwitchWithValue("sabine-cef-dir", cef_dir);
+  }
+}
+#endif
+
 void SabineApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDictionaryValue> extra_info) {
   CEF_REQUIRE_RENDERER_THREAD();
