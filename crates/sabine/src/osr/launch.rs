@@ -336,28 +336,14 @@ pub(crate) fn cef_osr_command(
             },
         );
     }
-    #[cfg(target_os = "linux")]
-    {
-        command.arg(format!(
-            "--sabine-ozone-platform={}",
-            crate::launch::browser::linux_ozone_platform()
-        ));
-    }
-    command
-        .arg(format!(
-            "--sabine-background-color={}",
-            config.background_color.to_opaque_argb_hex()
-        ))
-        .arg(format!(
-            "--default-background-color={}",
-            config.background_color.to_opaque_argb_hex()
-        ));
+    let background_color = config.background_color.to_opaque_argb_hex();
+    command.arg(format!("--sabine-background-color={background_color}"));
     if config.transparent {
         command
             .arg("--sabine-transparent")
-            .arg("--enable-transparent-visuals")
-            .arg("--transparent-painting-enabled")
             .arg("--default-background-color=0x00000000");
+    } else {
+        command.arg(format!("--default-background-color={background_color}"));
     }
     command.stdin(Stdio::null());
     command.stdout(Stdio::null());

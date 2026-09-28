@@ -211,7 +211,7 @@ pub fn smoke_test_runtime(host: &Path, runtime_dir: &Path) -> Result<(), String>
     {
         command
             .arg("--headless")
-            .arg("--sabine-ozone-platform=headless")
+            .arg("--ozone-platform=headless")
             .arg("--password-store=basic");
         let release = binary_dir.to_string_lossy();
         let existing = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
