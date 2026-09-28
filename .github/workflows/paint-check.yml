@@ -1,0 +1,42 @@
+name: Paint check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paint:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            python: python3
+          - os: windows-latest
+            python: python
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install 1.90 --profile minimal
+      - run: rustup override set 1.90
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: paint-${{ matrix.os }}
+          cache-on-failure: true
+      - name: Describe the GPU
+        if: runner.os == 'macOS'
+        run: system_profiler SPDisplaysDataType
+      - name: Describe the GPU
+        if: runner.os == 'Windows'
+        run: Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, AdapterCompatibility
+      - name: Paint an animated page through the native window
+        run: ${{ matrix.python }} scripts/paint-check.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: paint-check-${{ runner.os }}
+          path: paint-check/
+          if-no-files-found: ignore

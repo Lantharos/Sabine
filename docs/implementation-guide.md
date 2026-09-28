@@ -634,11 +634,12 @@ the platform runtime checks too. The probe fails if Chromium cannot render its p
 on stderr output. On macOS, the workflow also verifies that the signed host bundle remains
 unmodified while Chromium runs from the private launch bundle.
 
-The manual `macOS paint check` workflow opens an animated page in a native window on a macOS
-runner, reports whether Chromium painted through shared IOSurfaces, measures CPU use, and checks
-screenshots for the page and for continued animation. On any Apple Silicon Mac,
-`python3 scripts/macos-paint-check.py` runs the same check and writes its log, report, and
-screenshots to `macos-paint/`.
+The manual `Paint check` workflow opens an animated page in a native window on macOS and Windows
+runners, reports whether Chromium painted through shared IOSurfaces or D3D12 textures, measures CPU
+use, and checks screenshots for the page and for continued animation. Windows runners have no GPU,
+so that job exercises the same path on the WARP software adapter. On any Apple Silicon Mac or
+Windows PC, `python3 scripts/paint-check.py` runs the same check and writes its log, report, and
+screenshots to `paint-check/`.
 
 After code changes run:
 
