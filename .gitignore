@@ -1,4 +1,5 @@
 /target/
+/macos-paint/
 **/dist/
 **/node_modules/
 .env

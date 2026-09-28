@@ -1,0 +1,30 @@
+name: macOS paint check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paint:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install 1.90 --profile minimal
+      - run: rustup override set 1.90
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-paint
+          cache-on-failure: true
+      - name: Describe the GPU
+        run: system_profiler SPDisplaysDataType
+      - name: Paint an animated page through the native window
+        run: python3 scripts/macos-paint-check.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: macos-paint
+          path: macos-paint/
+          if-no-files-found: ignore
