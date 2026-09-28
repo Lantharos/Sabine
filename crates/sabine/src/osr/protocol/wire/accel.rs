@@ -6,8 +6,10 @@ use std::io;
 pub(super) const KIND_MAIN_ACCEL: u32 = 24;
 pub(super) const KIND_POPUP_ACCEL: u32 = 25;
 pub(super) const KIND_GUEST_ACCEL: u32 = 26;
+#[cfg(windows)]
+pub(super) const KIND_ACCEL_RETIRE: u32 = 39;
 
-const META_LEN: usize = 4 + 4 + 4 + 4 + 4 + 8 + 8;
+const META_LEN: usize = 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
 
 pub(super) fn parse_accel_frame(
     kind: u32,
@@ -16,7 +18,7 @@ pub(super) fn parse_accel_frame(
     x: i32,
     y: i32,
     payload: &[u8],
-) -> io::Result<OsrAccelFrame> {
+) -> io::Result<(OsrAccelFrame, u64)> {
     let (surface, rest_start) = match kind {
         KIND_GUEST_ACCEL => {
             let (guest_id, rest) = split_guest_payload(payload)?;
@@ -45,8 +47,10 @@ pub(super) fn parse_accel_frame(
     let visible_y = read_i32(&rest[8..12]);
     let visible_width = read_u32(&rest[12..16]);
     let visible_height = read_u32(&rest[16..20]);
-    let native_handle = read_u64(&rest[20..28]);
-    let slot_token = read_u64(&rest[28..36]);
+    let resource_id = read_u64(&rest[20..28]);
+    let resource_slot = read_u32(&rest[28..32]);
+    let shared_handle = read_u64(&rest[32..40]);
+    let slot_token = read_u64(&rest[40..48]);
     let frame = OsrAccelFrame {
         surface,
         coded_width,
@@ -58,10 +62,10 @@ pub(super) fn parse_accel_frame(
         x,
         y,
         format,
-        native_handle,
+        resource_id,
+        resource_slot,
         slot_token,
-        #[cfg(target_os = "macos")]
-        io_surface: None,
+        resource: None,
     };
     if visible_x < 0
         || visible_y < 0
@@ -76,5 +80,16 @@ pub(super) fn parse_accel_frame(
         ));
     }
 
-    Ok(frame)
+    Ok((frame, shared_handle))
+}
+
+#[cfg(windows)]
+pub(super) fn parse_retired_resources(payload: &[u8]) -> io::Result<Vec<u64>> {
+    if !payload.len().is_multiple_of(8) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid accelerated resource retirement",
+        ));
+    }
+    Ok(payload.chunks_exact(8).map(read_u64).collect())
 }

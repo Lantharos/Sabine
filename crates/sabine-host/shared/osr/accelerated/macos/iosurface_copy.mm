@@ -108,7 +108,7 @@ id<MTLTexture> WrapSurface(IOSurfaceRef surface, MTLPixelFormat format) {
 bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
                      IOSurfaceRef source,
                      MTLPixelFormat format,
-                     uint64_t* replaced_surface_id) {
+                     std::vector<uint64_t>* retired) {
   const size_t width = IOSurfaceGetWidth(source);
   const size_t height = IOSurfaceGetHeight(source);
   const OSType pixel_format = IOSurfaceGetPixelFormat(source);
@@ -117,7 +117,9 @@ bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
       IOSurfaceGetPixelFormat(slot->surface) == pixel_format) {
     return true;
   }
-  *replaced_surface_id = slot->surface_id;
+  if (slot->surface_id != 0) {
+    retired->push_back(slot->surface_id);
+  }
   slot->Reset();
   IOSurfaceRef surface = CreateSurface(width, height, pixel_format);
   if (!surface) {
@@ -141,9 +143,8 @@ bool CopyIntoSlot(id<MTLTexture> source,
                   const std::string& slot_key,
                   AccelIOSurfaceCopiedFrame* out) {
   OwnedSurfaceSlot& slot = g_slots[slot_key];
-  uint64_t replaced_surface_id = 0;
-  if (slot.in_use ||
-      !EnsureOwnedSlot(&slot, source_surface, format, &replaced_surface_id)) {
+  if (slot.in_use || !EnsureOwnedSlot(&slot, source_surface, format,
+                                      &out->retired_surface_ids)) {
     return false;
   }
   id<MTLCommandBuffer> commands = [g_queue commandBuffer];
@@ -160,7 +161,6 @@ bool CopyIntoSlot(id<MTLTexture> source,
   slot.token = g_next_token++;
   out->surface = slot.surface;
   out->surface_id = slot.surface_id;
-  out->replaced_surface_id = replaced_surface_id;
   out->slot_token = slot.token;
   out->width = static_cast<uint32_t>(IOSurfaceGetWidth(slot.surface));
   out->height = static_cast<uint32_t>(IOSurfaceGetHeight(slot.surface));
@@ -192,6 +192,9 @@ bool CopyAcceleratedIOSurfaceFrame(const std::string& slot_key,
       const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
       copied = CopyIntoSlot(source, source_surface, format,
                             slot_key + "#" + std::to_string(slot_index), out);
+      if (copied) {
+        out->slot_index = slot_index;
+      }
     }
     [source release];
     return copied;

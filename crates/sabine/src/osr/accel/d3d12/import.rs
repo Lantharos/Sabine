@@ -8,16 +8,8 @@ use wgpu::hal::api::Dx12;
 use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 
 use crate::osr::protocol::OsrAccelFrame;
-use crate::render::GpuRenderer;
 
 const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
-
-pub(crate) fn adapter_luid(renderer: &GpuRenderer) -> String {
-    let device =
-        unsafe { renderer.device().as_hal::<Dx12>() }.expect("Windows OSR uses a D3D12 device");
-    let luid = unsafe { device.raw_device().GetAdapterLuid() };
-    format!("{},{}", luid.HighPart, luid.LowPart)
-}
 
 /// Open the Sabine-owned D3D12 resource on wgpu's D3D12 device.
 ///
@@ -25,11 +17,15 @@ pub(crate) fn adapter_luid(renderer: &GpuRenderer) -> String {
 /// host has already copied the frame, completed a D3D11 fence, and duplicated
 /// the owned handle into this process. Importing the original handle here or
 /// acknowledging the slot while wgpu may still sample it breaks frame lifetime.
-pub(super) fn try_import_d3d12(
-    renderer: &GpuRenderer,
+pub(crate) fn import_d3d12(
+    device: &wgpu::Device,
     frame: &OsrAccelFrame,
 ) -> Result<wgpu::Texture, String> {
-    if frame.native_handle == 0 || frame.coded_width == 0 || frame.coded_height == 0 {
+    let handle = frame
+        .resource
+        .as_ref()
+        .ok_or("the browser host did not share this frame's texture")?;
+    if frame.coded_width == 0 || frame.coded_height == 0 {
         return Err("invalid d3d11 shared handle frame".into());
     }
     if frame.format != CEF_COLOR_TYPE_BGRA_8888 {
@@ -50,16 +46,15 @@ pub(super) fn try_import_d3d12(
         view_formats: &[],
     };
 
-    let handle = windows::Win32::Foundation::HANDLE(frame.native_handle as *mut std::ffi::c_void);
     let hal_texture = {
-        let Some(hal_device) = (unsafe { renderer.device().as_hal::<Dx12>() }) else {
+        let Some(hal_device) = (unsafe { device.as_hal::<Dx12>() }) else {
             return Err("wgpu device is not D3D12".into());
         };
         let mut resource = None::<ID3D12Resource>;
         unsafe {
             hal_device
                 .raw_device()
-                .OpenSharedHandle(handle, &mut resource)
+                .OpenSharedHandle(handle.raw(), &mut resource)
         }
         .map_err(|error| format!("ID3D12Device::OpenSharedHandle: {error}"))?;
         let resource = resource.ok_or_else(|| "D3D12 shared resource was null".to_string())?;
@@ -76,20 +71,6 @@ pub(super) fn try_import_d3d12(
     };
 
     Ok(unsafe {
-        renderer.device().create_texture_from_hal::<Dx12>(
-            hal_texture,
-            &desc,
-            wgpu::TextureUses::empty(),
-        )
+        device.create_texture_from_hal::<Dx12>(hal_texture, &desc, wgpu::TextureUses::empty())
     })
-}
-
-pub(crate) fn close_imported_handle(raw: u64) {
-    if raw == 0 {
-        return;
-    }
-    let handle = windows::Win32::Foundation::HANDLE(raw as *mut std::ffi::c_void);
-    unsafe {
-        let _ = windows::Win32::Foundation::CloseHandle(handle);
-    }
 }

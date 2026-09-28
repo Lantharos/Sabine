@@ -19,7 +19,10 @@ pub(super) struct ImageDraw {
 impl GpuRenderer {
     pub(crate) fn remove_image(&mut self, id: &str) {
         #[cfg(any(windows, target_os = "macos"))]
-        self.retire_external_texture(id);
+        {
+            self.retire_external_texture(id);
+            self.external_imports.remove(id);
+        }
         self.texture_cache.remove(id);
     }
 
@@ -29,6 +32,8 @@ impl GpuRenderer {
             self.queue.on_submitted_work_done(completed);
             self.submission_poller.notify();
         }
+        #[cfg(any(windows, target_os = "macos"))]
+        self.external_imports.clear();
         self.texture_cache.clear();
     }
 
@@ -130,87 +135,6 @@ impl GpuRenderer {
         (draws, vertices)
     }
 
-    #[cfg(any(windows, target_os = "macos"))]
-    pub fn set_external_bgra_texture(
-        &mut self,
-        id: impl Into<String>,
-        texture: wgpu::Texture,
-        source_origin: (u32, u32),
-        size: (u32, u32),
-        completed: impl FnOnce() + Send + 'static,
-    ) -> Result<(), RendererError> {
-        self.check_device()?;
-        let id = id.into();
-        let (width, height) = size;
-        if width == 0 || height == 0 {
-            completed();
-            return Err(RendererError::Texture(
-                "external image has empty size".to_string(),
-            ));
-        }
-        let source_width = texture.width();
-        let source_height = texture.height();
-        if source_origin.0.saturating_add(width) > source_width
-            || source_origin.1.saturating_add(height) > source_height
-        {
-            completed();
-            return Err(RendererError::Texture(format!(
-                "external image region {},{} {width}x{height} exceeds {source_width}x{source_height}",
-                source_origin.0, source_origin.1
-            )));
-        }
-        self.retire_external_texture(&id);
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(&id),
-            layout: &self.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&self.image_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        });
-        self.texture_cache.insert(
-            id.clone(),
-            CachedTexture {
-                texture,
-                bind_group,
-                width,
-                height,
-                uv_origin: [
-                    source_origin.0 as f32 / source_width as f32,
-                    source_origin.1 as f32 / source_height as f32,
-                ],
-                uv_size: [
-                    width as f32 / source_width as f32,
-                    height as f32 / source_height as f32,
-                ],
-                external: true,
-            },
-        );
-        self.external_texture_releases
-            .insert(id, Box::new(completed));
-        Ok(())
-    }
-
-    #[cfg(any(windows, target_os = "macos"))]
-    fn retire_external_texture(&mut self, id: &str) {
-        if let Some(completed) = self.external_texture_releases.remove(id) {
-            self.queue.on_submitted_work_done(completed);
-            self.submission_poller.notify();
-        }
-    }
-
-    #[cfg(any(windows, target_os = "macos"))]
-    pub(crate) fn device(&self) -> &wgpu::Device {
-        &self.device
-    }
-
     pub(super) fn create_dynamic_bgra_image(&mut self, id: String, width: u32, height: u32) {
         #[cfg(any(windows, target_os = "macos"))]
         self.retire_external_texture(&id);
@@ -228,21 +152,7 @@ impl GpuRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(&id),
-            layout: &self.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&self.image_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        });
+        let bind_group = self.image_bind_group(&id, &texture);
         self.texture_cache.insert(
             id,
             CachedTexture {
@@ -255,5 +165,23 @@ impl GpuRenderer {
                 external: false,
             },
         );
+    }
+
+    pub(super) fn image_bind_group(&self, label: &str, texture: &wgpu::Texture) -> wgpu::BindGroup {
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &self.image_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&self.image_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+            ],
+        })
     }
 }

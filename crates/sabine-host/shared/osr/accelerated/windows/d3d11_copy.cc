@@ -54,6 +54,7 @@ struct OwnedSharedSlot {
   int width = 0;
   int height = 0;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+  uint64_t resource_id = 0;
   bool in_use = false;
   uint64_t token = 0;
 
@@ -73,6 +74,7 @@ struct OwnedSharedSlot {
     width = 0;
     height = 0;
     format = DXGI_FORMAT_UNKNOWN;
+    resource_id = 0;
     in_use = false;
     token = 0;
   }
@@ -82,6 +84,7 @@ D3d11Context g_d3d11;
 std::map<std::string, OwnedSharedSlot> g_slots;
 std::map<std::string, uint32_t> g_next_slot;
 uint64_t g_next_token = 1;
+uint64_t g_next_resource_id = 1;
 constexpr uint32_t kSlotsPerSurface = 4;
 
 bool EnsureDevice(HANDLE shared_resource) {
@@ -252,13 +255,17 @@ bool WaitForGpu() {
 bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
                            int width,
                            int height,
-                           DXGI_FORMAT format) {
+                           DXGI_FORMAT format,
+                           std::vector<uint64_t>* retired) {
   if (!slot || width <= 0 || height <= 0 || format == DXGI_FORMAT_UNKNOWN) {
     return false;
   }
   if (slot->texture && slot->shared_handle && slot->width == width &&
       slot->height == height && slot->format == format) {
     return true;
+  }
+  if (slot->resource_id != 0) {
+    retired->push_back(slot->resource_id);
   }
   slot->Reset();
 
@@ -326,6 +333,7 @@ bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
   slot->width = width;
   slot->height = height;
   slot->format = format;
+  slot->resource_id = g_next_resource_id++;
   return true;
 }
 
@@ -367,7 +375,7 @@ bool CopyOpenedTexture(ID3D11Texture2D* source,
   }
   if (!EnsureOwnedSharedSlot(&slot, static_cast<int>(source_desc.Width),
                              static_cast<int>(source_desc.Height),
-                             source_desc.Format)) {
+                             source_desc.Format, &out->retired_resource_ids)) {
     return false;
   }
 
@@ -377,6 +385,7 @@ bool CopyOpenedTexture(ID3D11Texture2D* source,
   }
 
   out->shared_handle = slot.shared_handle;
+  out->resource_id = slot.resource_id;
   slot.in_use = true;
   slot.token = g_next_token++;
   if (slot.token == 0) {
@@ -414,6 +423,7 @@ bool CopyAcceleratedD3d11Frame(const std::string& slot_key,
     const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
     if (CopyOpenedTexture(source, slot_key + "#" + std::to_string(slot_index),
                           out)) {
+      out->slot_index = slot_index;
       copied = true;
       break;
     }
@@ -422,13 +432,18 @@ bool CopyAcceleratedD3d11Frame(const std::string& slot_key,
   return copied;
 }
 
-void RetireAcceleratedD3d11Browser(int browser_id) {
+std::vector<uint64_t> RetireAcceleratedD3d11Browser(int browser_id) {
   const std::string prefix = std::to_string(browser_id) + "/";
+  std::vector<uint64_t> retired;
   for (auto it = g_slots.begin(); it != g_slots.end();) {
-    if (it->first.rfind(prefix, 0) == 0)
+    if (it->first.rfind(prefix, 0) == 0) {
+      if (it->second.resource_id != 0) {
+        retired.push_back(it->second.resource_id);
+      }
       it = g_slots.erase(it);
-    else
+    } else {
       ++it;
+    }
   }
   for (auto it = g_next_slot.begin(); it != g_next_slot.end();) {
     if (it->first.rfind(prefix, 0) == 0)
@@ -436,6 +451,7 @@ void RetireAcceleratedD3d11Browser(int browser_id) {
     else
       ++it;
   }
+  return retired;
 }
 
 void ReleaseAcceleratedD3d11Frame(uint64_t slot_token) {

@@ -3,15 +3,20 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <windows.h>
 
 namespace sabine_osr {
 
 struct AccelD3d11CopiedFrame {
   HANDLE shared_handle = nullptr;
+  uint64_t resource_id = 0;
+  uint32_t slot_index = 0;
   uint64_t slot_token = 0;
   uint32_t width = 0;
   uint32_t height = 0;
+  /// Resources this call replaced, whose compositor handles can be closed.
+  std::vector<uint64_t> retired_resource_ids;
 };
 
 /// Copy CEF's pooled shared texture into a Sabine-owned shared texture before
@@ -27,7 +32,7 @@ bool CopyAcceleratedD3d11Frame(const std::string& slot_key,
 /// Allow a copied texture slot to be reused after the compositor stops sampling
 /// it.
 void ReleaseAcceleratedD3d11Frame(uint64_t slot_token);
-void RetireAcceleratedD3d11Browser(int browser_id);
+std::vector<uint64_t> RetireAcceleratedD3d11Browser(int browser_id);
 
 }  // namespace sabine_osr
 

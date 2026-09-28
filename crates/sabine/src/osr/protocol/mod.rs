@@ -123,19 +123,13 @@ pub(crate) struct OsrAccelFrame {
     pub x: i32,
     pub y: i32,
     pub format: u32,
-    /// Windows: duplicated NT handle of a Sabine-owned texture. macOS: shared surface id.
-    pub native_handle: u64,
+    /// Stable identity of the Sabine-owned texture this frame was copied into.
+    pub resource_id: u64,
+    /// Producer slot holding that texture; imports are kept per slot.
+    pub resource_slot: u32,
     /// Producer slot released only after the compositor finishes sampling it.
     pub slot_token: u64,
-    #[cfg(target_os = "macos")]
-    pub io_surface: Option<crate::osr::accel::SharedSurface>,
-}
-
-#[cfg(windows)]
-impl Drop for OsrAccelFrame {
-    fn drop(&mut self) {
-        crate::osr::accel::close_imported_handle(self.native_handle);
-    }
+    pub resource: Option<crate::osr::accel::SharedResource>,
 }
 
 #[derive(Clone, Debug)]

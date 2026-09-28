@@ -18,6 +18,8 @@ use crate::osr::protocol::OsrMessage;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
+#[cfg(windows)]
+use accel::{KIND_ACCEL_RETIRE, parse_retired_resources};
 #[cfg(any(windows, target_os = "macos"))]
 use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
 use header::{read_header, read_i32, read_u32};
@@ -70,6 +72,8 @@ pub(crate) struct WireReader {
     slots: PaintSlots,
     #[cfg(target_os = "macos")]
     surfaces: Arc<SurfaceRegistry>,
+    #[cfg(windows)]
+    shared_handles: crate::osr::accel::SharedHandles,
 }
 
 impl WireReader {
@@ -89,7 +93,10 @@ impl WireReader {
 
     #[cfg(not(unix))]
     pub(crate) fn new(stream: IpcStream) -> Self {
-        Self { stream }
+        Self {
+            stream,
+            shared_handles: Default::default(),
+        }
     }
 
     pub(crate) fn read_host_protocol(&mut self) -> io::Result<Option<String>> {
@@ -116,6 +123,24 @@ impl WireReader {
         String::from_utf8(payload)
             .map(Some)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
+
+    #[cfg(windows)]
+    fn shared_resource(
+        &mut self,
+        resource_id: u64,
+        shared_handle: u64,
+    ) -> Option<crate::osr::accel::SharedResource> {
+        self.shared_handles.resolve(resource_id, shared_handle)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn shared_resource(
+        &mut self,
+        resource_id: u64,
+        _shared_handle: u64,
+    ) -> Option<crate::osr::accel::SharedResource> {
+        self.surfaces.surface(resource_id)
     }
 
     pub(crate) fn read(&mut self) -> io::Result<Option<OsrMessage>> {
@@ -269,13 +294,18 @@ impl WireReader {
             }
             #[cfg(any(windows, target_os = "macos"))]
             KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {
-                let frame = parse_accel_frame(kind, width, height, x, y, &payload)?;
-                #[cfg(target_os = "macos")]
-                let frame = crate::osr::protocol::OsrAccelFrame {
-                    io_surface: self.surfaces.surface(frame.native_handle),
+                let (frame, shared_handle) =
+                    parse_accel_frame(kind, width, height, x, y, &payload)?;
+                OsrMessage::AccelFrame(crate::osr::protocol::OsrAccelFrame {
+                    resource: self.shared_resource(frame.resource_id, shared_handle),
                     ..frame
-                };
-                OsrMessage::AccelFrame(frame)
+                })
+            }
+            #[cfg(windows)]
+            KIND_ACCEL_RETIRE => {
+                self.shared_handles
+                    .retire(parse_retired_resources(&payload)?);
+                return self.read();
             }
             _ => {
                 return Err(io::Error::new(
