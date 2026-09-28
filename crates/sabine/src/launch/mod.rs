@@ -7,7 +7,7 @@ use crate::error::{SabineError, SabineResult};
 use crate::osr;
 use crate::window::config::SabineWindowConfig;
 use sabine_bridge::ContentSecurity;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,7 +76,34 @@ fn launch_monitor(event_loop: &dyn ActiveEventLoop) -> Option<winit::monitor::Mo
         .or_else(|| event_loop.available_monitors().next())
 }
 
-pub(crate) fn canonical_entry(entry: &str) -> SabineResult<PathBuf> {
+pub(crate) const APP_URL_PREFIX: &str = "sabine://app/";
+
+/// A local web entry, served to Chromium from its directory at `sabine://app/`.
+pub(crate) struct LocalEntry {
+    pub(crate) root: PathBuf,
+    pub(crate) url: String,
+}
+
+pub(crate) fn local_entry(entry: &str) -> SabineResult<LocalEntry> {
+    let (entry_path, suffix) = split_entry_suffix(entry);
+    let path = canonical_entry(entry_path)?;
+    let (Some(root), Some(file)) = (path.parent(), path.file_name()) else {
+        return Err(SabineError::CreationFailed {
+            message: format!("CEF entry is not a file: {}", path.display()),
+        });
+    };
+    let mut url = url::Url::parse(APP_URL_PREFIX).expect("the app URL prefix is valid");
+    url.path_segments_mut()
+        .expect("the app URL has a path")
+        .pop_if_empty()
+        .push(&file.to_string_lossy());
+    Ok(LocalEntry {
+        root: root.to_path_buf(),
+        url: format!("{url}{suffix}"),
+    })
+}
+
+fn canonical_entry(entry: &str) -> SabineResult<PathBuf> {
     if entry.trim().is_empty() {
         return Err(SabineError::CreationFailed {
             message: "CEF entry path is empty".to_string(),
@@ -98,18 +125,7 @@ pub(crate) fn canonical_entry(entry: &str) -> SabineResult<PathBuf> {
         })
 }
 
-pub(crate) fn file_url(path: &Path) -> SabineResult<String> {
-    url::Url::from_file_path(path)
-        .map(String::from)
-        .map_err(|()| SabineError::CreationFailed {
-            message: format!(
-                "failed to convert CEF entry to a file URL: {}",
-                path.display()
-            ),
-        })
-}
-
-pub(crate) fn split_entry_suffix(entry: &str) -> (&str, &str) {
+fn split_entry_suffix(entry: &str) -> (&str, &str) {
     let split = [entry.find('?'), entry.find('#')]
         .into_iter()
         .flatten()

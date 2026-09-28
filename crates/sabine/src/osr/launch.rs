@@ -128,6 +128,7 @@ pub(crate) fn spawn_osr_host_child(
         "runtime_dir": runtime_dir,
         "host_binary": host_binary,
         "url": url,
+        "web_root": config.web_root()?,
         "app_id": config.app_id,
         "title": config.title,
         "width": config.width,
@@ -147,7 +148,7 @@ pub(crate) fn spawn_osr_host_child(
         "chrome": config.chrome.as_str(),
         "bridge_policy": {
             "enabled": true,
-            "document": if url.starts_with("file://") { url } else { "" },
+            "documentPrefix": if url.starts_with(crate::launch::APP_URL_PREFIX) { crate::launch::APP_URL_PREFIX } else { "" },
             "origins": if config.security.remote_content { config.security.allowed_origins.clone() } else { Vec::new() },
             "commandOrigins": config.bridge.commands().iter().filter_map(|name| {
                 config.bridge.descriptor(name)
@@ -314,8 +315,10 @@ pub(crate) fn cef_osr_command(
     if config.dev_mode {
         command.arg("--sabine-dev-mode");
     }
-    if config.url.starts_with("file://") {
-        command.arg("--allow-file-access-from-files");
+    if let Some(root) = &config.web_root {
+        let mut argument = std::ffi::OsString::from("--sabine-app-root=");
+        argument.push(root);
+        command.arg(argument);
     }
     crate::host::prepare_detachable_child_command(&mut command);
     command.current_dir(&binary_dir);

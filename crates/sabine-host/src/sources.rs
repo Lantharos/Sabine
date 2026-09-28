@@ -20,6 +20,8 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ("app/app.h", include_str!("../shared/app/app.h")),
     ("app/bridge.cc", include_str!("../shared/app/bridge.cc")),
     ("app/bridge.h", include_str!("../shared/app/bridge.h")),
+    ("app/scheme.cc", include_str!("../shared/app/scheme.cc")),
+    ("app/scheme.h", include_str!("../shared/app/scheme.h")),
     ("common/json.cc", include_str!("../shared/common/json.cc")),
     ("common/json.h", include_str!("../shared/common/json.h")),
     (

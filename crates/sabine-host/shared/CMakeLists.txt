@@ -40,6 +40,8 @@ set(SABINE_HOST_SOURCES
   app/app.h
   app/bridge.cc
   app/bridge.h
+  app/scheme.cc
+  app/scheme.h
   common/json.cc
   common/json.h
   common/bridge_policy.h

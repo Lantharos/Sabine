@@ -131,6 +131,17 @@ impl SabineWindowConfig {
         Ok(())
     }
 
+    /// Directory served at `sabine://app/` when the window shows a local entry.
+    pub(crate) fn web_root(&self) -> SabineResult<Option<std::path::PathBuf>> {
+        if self.dev_url.is_some() || self.url.is_some() {
+            return Ok(None);
+        }
+        self.entry
+            .as_deref()
+            .map(|entry| crate::launch::local_entry(entry).map(|entry| entry.root))
+            .transpose()
+    }
+
     pub fn dev_mode(&self) -> bool {
         self.dev_url.is_some()
             || crate::AppEnvironment::current() == crate::AppEnvironment::Development
