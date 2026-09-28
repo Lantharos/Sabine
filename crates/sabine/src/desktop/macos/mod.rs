@@ -2,8 +2,6 @@
 //! autostart, URL-scheme deep links, native-messaging manifests, and
 //! single-instance routing via a Unix lock + socket.
 
-#![cfg(target_os = "macos")]
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -18,6 +16,8 @@ use sabine_platform::{
 use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent, menu::MenuEvent};
 
 pub(super) type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
+pub(super) type MenuActions = HashMap<String, (String, String, Option<String>)>;
+pub(super) type ShortcutActions = HashMap<u32, (String, String)>;
 
 mod helpers;
 mod instance;
@@ -34,8 +34,8 @@ pub struct DesktopServiceState {
     pending_tray: Option<TrayIcon>,
     pending_shortcuts: Vec<GlobalShortcutRegistration>,
     _single_instance: Option<SingleInstanceGuard>,
-    menu_actions: Arc<Mutex<HashMap<String, (String, String, Option<String>)>>>,
-    shortcut_actions: Arc<Mutex<HashMap<u32, (String, String)>>>,
+    menu_actions: Arc<Mutex<MenuActions>>,
+    shortcut_actions: Arc<Mutex<ShortcutActions>>,
     tray_id: Option<String>,
 }
 

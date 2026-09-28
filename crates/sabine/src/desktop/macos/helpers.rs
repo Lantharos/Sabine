@@ -19,17 +19,9 @@ use tray_icon::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
 };
 
-pub(super) use super::{HotkeyRuntime, TrayRuntime};
+pub(super) use super::{HotkeyRuntime, MenuActions, ShortcutActions, TrayRuntime};
 
-pub(super) fn spawn_tray_icon(
-    icon: &TrayIcon,
-) -> Result<
-    (
-        TrayRuntime,
-        HashMap<String, (String, String, Option<String>)>,
-    ),
-    String,
-> {
+pub(super) fn spawn_tray_icon(icon: &TrayIcon) -> Result<(TrayRuntime, MenuActions), String> {
     let menu = Menu::new();
     let mut actions = HashMap::new();
     for item in &icon.menu {
@@ -78,7 +70,7 @@ pub(super) fn load_tray_icon(icon: &TrayIcon) -> Result<Icon, String> {
 
 pub(super) fn spawn_global_shortcuts(
     registrations: &[GlobalShortcutRegistration],
-) -> Result<(HotkeyRuntime, HashMap<u32, (String, String)>), String> {
+) -> Result<(HotkeyRuntime, ShortcutActions), String> {
     let manager = GlobalHotKeyManager::new().map_err(|error| error.to_string())?;
     let mut actions = HashMap::new();
     let mut keys = Vec::new();
