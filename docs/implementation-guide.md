@@ -9,8 +9,8 @@ daemon releases the lock automatically so the next launch can replace stale meta
 ## Generated applications
 
 `sabine new` creates a Vite app with TypeScript checking in `bun run build` and a separate
-`bun run check`. Production asset URLs are relative so the same output loads from a packaged
-local file. Rust and JavaScript dependencies reference the CLI’s Sabine release tag; generated
+`bun run check`. Production asset URLs are relative so the same output loads from the packaged
+app directory. Rust and JavaScript dependencies reference the CLI’s Sabine release tag; generated
 projects do not depend on a checkout on the machine that built the CLI.
 
 ## Graphics device recovery
@@ -401,8 +401,11 @@ pending for an unavailable prompt. Sabine does not currently expose a browser pe
 Bridge commands must be registered before launch. Each command can constrain targets and origins.
 The host rejects unknown commands, invalid targets, and origins outside the configured allowlist.
 
-Only the configured local entry document is trusted automatically; its query and fragment may change.
-Other local files, opaque documents, and developer tools pages receive no implicit bridge access.
+A local entry is served from its directory at `sabine://app/`, a secure origin that only that
+directory's files can use, so the page cannot read other local files and remote pages cannot embed
+it. Every page under `sabine://app/` is trusted automatically. File URLs, opaque documents, and
+developer tools pages receive no implicit bridge access. App files support byte ranges, so media
+can seek.
 Remote documents must have a matching document security origin, so a CSP sandbox cannot inherit
 privileges merely by retaining an allowed URL.
 Calling `.url(...)` adds that URL's exact origin; development URLs add loopback variants needed by

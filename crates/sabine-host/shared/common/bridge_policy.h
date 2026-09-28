@@ -26,14 +26,6 @@ inline std::string TrustedHtmlUrl(CefRefPtr<CefDictionaryValue> policy,
          CefBase64Encode(html.data(), html.size()).ToString();
 }
 
-inline std::string DocumentUrl(const std::string& url) {
-  CefURLParts parts;
-  if (!CefParseURL(url, parts))
-    return "";
-  const std::string canonical = CefString(&parts.spec);
-  return canonical.substr(0, canonical.find_first_of("?#"));
-}
-
 inline std::string Origin(const std::string& url) {
   CefURLParts parts;
   if (!CefParseURL(url, parts))
@@ -69,12 +61,11 @@ inline bool AllowsDocument(CefRefPtr<CefDictionaryValue> policy,
                            const std::string& url) {
   if (!policy || !policy->GetBool("enabled"))
     return false;
-  const std::string prefix = policy->GetString("htmlPrefix");
-  if (!prefix.empty() && url.rfind(prefix, 0) == 0)
-    return true;
-  const std::string document = policy->GetString("document");
-  if (!document.empty() && DocumentUrl(url) == DocumentUrl(document))
-    return true;
+  for (const char* key : {"htmlPrefix", "documentPrefix"}) {
+    const std::string prefix = policy->GetString(key);
+    if (!prefix.empty() && url.rfind(prefix, 0) == 0)
+      return true;
+  }
   return MatchesOrigin(Origin(url), policy->GetList("origins"));
 }
 

@@ -1,6 +1,7 @@
 #include "app/app.h"
 #include "runtime/probe.h"
 #include "app/bridge.h"
+#include "app/scheme.h"
 #include "common/bridge_policy.h"
 #include "common/json.h"
 
@@ -138,13 +139,24 @@ void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
 SabineApp::SabineApp(bool runtime_smoke_test)
     : runtime_smoke_test_(runtime_smoke_test) {}
 
+void SabineApp::OnRegisterCustomSchemes(
+    CefRawPtr<CefSchemeRegistrar> registrar) {
+  sabine_app::RegisterAppScheme(registrar);
+}
+
 void SabineApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
   if (runtime_smoke_test_) {
     StartRuntimeProbe();
     return;
   }
-  CreateBrowser(CefCommandLine::GetGlobalCommandLine());
+  CefRefPtr<CefCommandLine> command_line =
+      CefCommandLine::GetGlobalCommandLine();
+  const std::string app_root = command_line->GetSwitchValue("sabine-app-root");
+  if (!app_root.empty()) {
+    sabine_app::ServeAppFiles(app_root);
+  }
+  CreateBrowser(command_line);
 }
 
 void SabineApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser,

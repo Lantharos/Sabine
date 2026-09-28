@@ -20,6 +20,8 @@ class SabineApp : public CefApp,
     return this;
   }
 
+  void OnRegisterCustomSchemes(
+      CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
   void OnBrowserCreated(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefDictionaryValue> extra_info) override;

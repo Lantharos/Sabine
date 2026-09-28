@@ -12,8 +12,8 @@ use crate::desktop::apply_desktop_services;
 use crate::error::{SabineError, SabineResult};
 use crate::host::SabineProcess;
 use crate::launch::{
-    allow_dev_origins, allow_url_origin, bootstrap, canonical_entry, dev_server_candidates,
-    metrics_label, split_entry_suffix,
+    allow_dev_origins, allow_url_origin, bootstrap, dev_server_candidates, local_entry,
+    metrics_label,
 };
 use crate::osr;
 
@@ -179,9 +179,7 @@ impl SabineWindow {
                 message: "CEF window has no entry, URL, or dev URL".to_string(),
             });
         };
-        let (entry_path, suffix) = split_entry_suffix(entry);
-        let path = canonical_entry(entry_path)?;
-        Ok(format!("{}{}", crate::launch::file_url(&path)?, suffix))
+        Ok(local_entry(entry)?.url)
     }
 
     fn ensure_default_bridge_handlers(&mut self) {
