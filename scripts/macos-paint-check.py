@@ -163,6 +163,7 @@ def main():
     write_app(root)
     log_path = output / "app.log"
     environment = dict(os.environ, SABINE_TRACE="1", SABINE_HOST_PATH=host)
+    started = time.strftime("%Y-%m-%d %H:%M:%S")
     with log_path.open("w") as log:
         app = subprocess.Popen(
             [repository / "target/release/sabine-notes", "--system"],
@@ -190,6 +191,15 @@ def main():
             app.wait(timeout=15)
         except subprocess.TimeoutExpired:
             os.killpg(app.pid, signal.SIGKILL)
+
+    security_log = subprocess.run(
+        ["log", "show", "--start", started, "--style", "compact",
+         "--predicate", 'process == "securityd"'],
+        capture_output=True, text=True,
+    ).stdout
+    (output / "securityd.log").write_text(security_log)
+    if "displaying keychain prompt" in security_log:
+        failures.append("macOS asked for the login keychain password while the app ran")
 
     log = log_path.read_text()
     accelerated = "first accelerated paint" in log

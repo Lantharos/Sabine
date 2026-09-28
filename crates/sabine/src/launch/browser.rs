@@ -67,7 +67,6 @@ pub(crate) fn apply_browser_launch_args(
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = options;
             Vec::new()
         }
     };
@@ -94,6 +93,8 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--metrics-recording-only")
         .arg("--no-default-browser-check")
         .arg("--no-first-run");
+    #[cfg(target_os = "macos")]
+    command.arg("--use-mock-keychain");
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
         command.arg(format!("--remote-debugging-port={port}"));
     }

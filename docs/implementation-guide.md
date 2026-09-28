@@ -358,8 +358,12 @@ The user systemd unit follows `XDG_CONFIG_HOME` and preserves custom data, confi
 Executable paths containing spaces or systemd specifier characters are quoted.
 
 Browser profiles live under the native per-user cache location: `LOCALAPPDATA` on Windows,
-`~/Library/Caches` on macOS, and `XDG_CACHE_HOME` on Linux. Sabine lets Chromium select the platform
-credential store. Remote DevTools remains opt-in and uses Chromium's origin restrictions.
+`~/Library/Caches` on macOS, and `XDG_CACHE_HOME` on Linux. Chromium protects its cookie and password key
+with DPAPI on Windows and the desktop keyring on Linux. On macOS it uses a fixed key instead of the
+login keychain: the launch bundle assembled on each Mac is signed ad hoc, so its code identity
+changes with every runtime or host update, and the keychain would ask for the login password each
+time. Chromium never encrypts web storage such as localStorage; apps that need secrets protected
+from other software running as the same user should keep them in native storage. Remote DevTools remains opt-in and uses Chromium's origin restrictions.
 
 ## Public API
 
