@@ -6,11 +6,9 @@ on:
       tag:
         description: Published Sabine release tag
         required: true
-        default: v0.29
       cef_versions:
         description: Comma-separated full CEF versions to compare
         required: true
-        default: 152.0.7+g83ffcba+chromium-152.0.7977.83,152.0.8+g1ce985c+chromium-152.0.7977.134
 
 permissions:
   contents: read

@@ -27,7 +27,8 @@ On macOS, every Chromium helper initializes the sandbox from the selected runtim
 `Libraries/libcef_sandbox.dylib` before loading the Chromium framework. Sandbox initialization
 failure stops the helper. The shared host bundle stays unchanged, including its signature.
 Windows runs CEF’s GUI bootstrap executable with the Sabine client DLL and matching
-`chrome_elf.dll`. The installer keeps these files together and grants restricted application processes read/execute access to the host files
+`chrome_elf.dll`. These run from a staged copy while `libcef.dll` stays with the runtime, so every
+Chromium process loads it by path instead of searching `PATH`, which sandboxed processes cannot use. The installer keeps these files together and grants restricted application processes read/execute access to the host files
 and CEF runtime using Windows ACLs. Existing permissions are inspected before updating them; no
 console process is needed. Linux uses Chromium’s namespace and seccomp sandbox. Sabine does not
 disable it when host policy prevents namespace creation.
