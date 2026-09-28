@@ -31,36 +31,22 @@
     window.dispatchEvent(new CustomEvent("sabine:" + String(name), { detail: payload }));
   };
 
-  const encodeQuery = function (params) {
-    const entries = [];
-    for (const key of Object.keys(params || {})) {
-      const value = params[key];
-      if (value === undefined || value === null) continue;
-      entries.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(value)));
-    }
-    return entries.length ? "?" + entries.join("&") : "";
-  };
-
-  const postNative = function (message) {
+  const postNative = function (...message) {
     if (typeof window.__sabineNativePostMessage !== "function") {
       throw new Error("Sabine native transport is unavailable");
     }
-    window.__sabineNativePostMessage(message);
+    window.__sabineNativePostMessage(...message);
   };
 
-  const windowCommand = function (action, params) {
-    const url =
-      "sabine://window/" +
-      action +
-      encodeQuery(Object.assign({ at: Date.now() + "-" + Math.random() }, params || {}));
-    postNative(url);
+  const windowCommand = function (action, value) {
+    postNative("window", action, value == null ? "" : String(value));
   };
 
   window.sabine = window.sabine || {};
   window.sabine.window = Object.assign(window.sabine.window || {}, {
     show() { windowCommand("show"); },
     hide() { windowCommand("hide"); },
-    focus(activationToken) { windowCommand("focus", { activationToken }); },
+    focus(activationToken) { windowCommand("focus", activationToken); },
     close() { windowCommand("close"); },
     minimize() { windowCommand("minimize"); },
     maximize() { windowCommand("maximize"); },
@@ -96,12 +82,7 @@
         throw new Error("Sabine bridge request capacity is exhausted");
       }
       const id = String(nextId++);
-      const payload = encodeURIComponent(JSON.stringify(params));
-      const url =
-        "sabine://bridge/" +
-        encodeURIComponent(id) +
-        "?name=" + encodeURIComponent(name) +
-        "&payload=" + payload;
+      const payload = JSON.stringify(params);
       return new Promise((resolve, reject) => {
         const cleanup = () => {
           pending.delete(id);
@@ -110,7 +91,7 @@
         };
         const cancel = (reason) => {
           cleanup();
-          try { postNative("sabine://cancel/" + id); } catch {}
+          try { postNative("cancel", id); } catch {}
           reject(reason);
         };
         const abort = () => cancel(signal.reason);
@@ -120,7 +101,7 @@
         pending.set(id, { resolve, reject, cleanup, cancel });
         signal?.addEventListener("abort", abort, { once: true });
         try {
-          postNative(url);
+          postNative("bridge", id, name, payload);
         } catch (error) {
           cleanup();
           reject(error);

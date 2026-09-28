@@ -1,8 +1,9 @@
 #include "app/bridge.h"
+#include <functional>
 #include <map>
 #include <utility>
+#include <vector>
 #include "common/bridge_policy.h"
-#include "common/json.h"
 #include "osr/utilities.h"
 
 namespace sabine_bridge {
@@ -37,63 +38,110 @@ class NativePostMessageHandler : public CefV8Handler {
                const CefV8ValueList& arguments,
                CefRefPtr<CefV8Value>& retval,
                CefString& exception) override {
-    if (arguments.size() != 1 || !arguments[0]->IsString()) {
-      exception = "Sabine native messages require one string argument";
+    std::vector<std::string> values;
+    size_t bytes = 0;
+    for (const auto& argument : arguments) {
+      if (!argument->IsString()) {
+        exception = "Sabine native messages take string arguments";
+        return true;
+      }
+      values.push_back(argument->GetStringValue());
+      bytes += values.back().size();
+    }
+    if (values.empty()) {
+      exception = "Sabine native messages need at least one argument";
       return true;
     }
-    std::string payload = arguments[0]->GetStringValue();
-    if (payload.size() > kMaxMessageBytes) {
+    if (bytes > kMaxMessageBytes) {
       exception = "Sabine native message exceeds 1 MiB";
       return true;
     }
     auto context = CefV8Context::GetCurrentContext();
     if (!context || !context->IsValid() || !frame_->IsValid())
       return true;
-    auto browser = frame_->GetBrowser();
-    const std::string cancel_prefix = "sabine://cancel/";
-    if (message_name_ == "sabine.native" &&
-        payload.rfind(cancel_prefix, 0) == 0) {
-      const std::string id = payload.substr(cancel_prefix.size());
-      for (auto it = pending.begin(); it != pending.end();) {
-        if (it->second.browser->IsSame(browser) && it->second.page_id == id &&
-            it->second.context->IsSame(context))
-          it = pending.erase(it);
-        else
-          ++it;
-      }
+    const bool native = message_name_ == "sabine.native";
+    if (native && !TrackRequest(context, &values, exception))
       return true;
-    }
-    const std::string id = sabine_osr::BridgeRequestId(payload);
-    if (message_name_ == "sabine.native" && !id.empty()) {
-      if (pending.size() >= kMaxPendingRequests) {
-        exception = "Sabine bridge request capacity is exhausted";
-        return true;
-      }
-      const std::string native_id =
-          process_token + "-" + std::to_string(++next_request);
-      const size_t query = payload.find('?');
-      if (query == std::string::npos) {
-        exception = "Malformed Sabine bridge request";
-        return true;
-      }
-      pending.emplace(native_id, PendingRequest{context, id, browser});
-      payload = "sabine://bridge/" + native_id + payload.substr(query);
-    }
     auto message = CefProcessMessage::Create(message_name_);
-    message->GetArgumentList()->SetString(0, payload);
-    if (message_name_ == "sabine.native")
-      message->GetArgumentList()->SetString(1, origin_);
+    auto list = message->GetArgumentList();
+    size_t index = 0;
+    if (native)
+      list->SetString(index++, origin_);
+    for (const auto& value : values)
+      list->SetString(index++, value);
     frame_->SendProcessMessage(PID_BROWSER, message);
     retval = CefV8Value::CreateUndefined();
     return true;
   }
 
  private:
+  bool TrackRequest(CefRefPtr<CefV8Context> context,
+                    std::vector<std::string>* values,
+                    CefString& exception) {
+    const std::string& kind = values->front();
+    auto browser = frame_->GetBrowser();
+    if (kind == "cancel") {
+      if (values->size() == 2)
+        CancelRequest(browser, context, (*values)[1]);
+      return false;
+    }
+    if (kind != "bridge")
+      return true;
+    if (values->size() != 4) {
+      exception = "Malformed Sabine bridge request";
+      return false;
+    }
+    if (pending.size() >= kMaxPendingRequests) {
+      exception = "Sabine bridge request capacity is exhausted";
+      return false;
+    }
+    const std::string native_id =
+        process_token + "-" + std::to_string(++next_request);
+    pending.emplace(native_id, PendingRequest{context, (*values)[1], browser});
+    (*values)[1] = native_id;
+    return true;
+  }
+
+  static void CancelRequest(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefV8Context> context,
+                            const std::string& page_id) {
+    for (auto it = pending.begin(); it != pending.end();) {
+      if (it->second.browser->IsSame(browser) &&
+          it->second.page_id == page_id && it->second.context->IsSame(context))
+        it = pending.erase(it);
+      else
+        ++it;
+    }
+  }
+
   CefRefPtr<CefFrame> frame_;
   std::string message_name_;
   std::string origin_;
   IMPLEMENT_REFCOUNTING(NativePostMessageHandler);
 };
+
+CefRefPtr<CefV8Value> ParseJson(CefRefPtr<CefV8Value> global,
+                                const std::string& text) {
+  auto json = global->GetValue("JSON");
+  auto parse = json ? json->GetValue("parse") : nullptr;
+  if (!parse || !parse->IsFunction())
+    return CefV8Value::CreateNull();
+  auto value = parse->ExecuteFunction(json, {CefV8Value::CreateString(text)});
+  return value ? value : CefV8Value::CreateNull();
+}
+
+void CallPage(
+    CefRefPtr<CefV8Context> context,
+    const char* function_name,
+    const std::function<CefV8ValueList(CefRefPtr<CefV8Value>)>& arguments) {
+  if (!context || !context->IsValid() || !context->Enter())
+    return;
+  auto global = context->GetGlobal();
+  auto function = global->GetValue(function_name);
+  if (function && function->IsFunction())
+    function->ExecuteFunction(nullptr, arguments(global));
+  context->Exit();
+}
 }  // namespace
 
 void InstallTransport(CefRefPtr<CefFrame> frame,
@@ -148,50 +196,46 @@ bool Receive(CefRefPtr<CefBrowser> browser,
              CefRefPtr<CefDictionaryValue> policy) {
   const std::string name = message->GetName();
   auto values = message->GetArgumentList();
-  CefRefPtr<CefV8Context> context;
-  std::string script;
   if (name == "sabine.response") {
     if (values->GetSize() != 3)
       return true;
-    const std::string id = values->GetString(0);
-    auto found = pending.find(id);
+    auto found = pending.find(values->GetString(0));
     if (found == pending.end() || !found->second.browser->IsSame(browser))
       return true;
-    context = found->second.context;
-    const std::string page_id = found->second.page_id;
+    const PendingRequest request = found->second;
     pending.erase(found);
-    script = "window.__sabineBridgeResolve&&window.__sabineBridgeResolve(" +
-             JsString(page_id) + "," + (values->GetBool(1) ? "true" : "false") +
-             ",JSON.parse(" + JsString(values->GetString(2)) + "));";
-  } else if (name == "sabine.event") {
-    if (values->GetSize() != 2 || !frame->IsMain() ||
-        !AllowsDocument(policy, frame->GetURL()))
-      return true;
-    context = frame->GetV8Context();
-    if (!context || !context->IsValid())
-      return true;
-    bool authorized = false;
-    for (const auto& entry : contexts) {
-      if (entry.context->IsSame(context)) {
-        authorized =
-            MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
-        break;
-      }
-    }
-    if (!authorized)
-      return true;
-    script =
-        "window.__sabineBridgeEmit&&window.__sabineBridgeEmit(JSON.parse(" +
-        JsString(values->GetString(0)) + "),JSON.parse(" +
-        JsString(values->GetString(1)) + "));";
-  } else {
+    const bool ok = values->GetBool(1);
+    const std::string payload = values->GetString(2);
+    CallPage(request.context, "__sabineBridgeResolve",
+             [&](CefRefPtr<CefV8Value> global) -> CefV8ValueList {
+               return {CefV8Value::CreateString(request.page_id),
+                       CefV8Value::CreateBool(ok), ParseJson(global, payload)};
+             });
+    return true;
+  }
+  if (name != "sabine.event")
     return false;
+  if (values->GetSize() != 2 || !frame->IsMain() ||
+      !AllowsDocument(policy, frame->GetURL()))
+    return true;
+  auto context = frame->GetV8Context();
+  if (!context || !context->IsValid())
+    return true;
+  bool authorized = false;
+  for (const auto& entry : contexts) {
+    if (entry.context->IsSame(context)) {
+      authorized = MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
+      break;
+    }
   }
-  if (context && context->IsValid()) {
-    CefRefPtr<CefV8Value> result;
-    CefRefPtr<CefV8Exception> exception;
-    context->Eval(script, "", 0, result, exception);
-  }
+  if (!authorized)
+    return true;
+  const std::string event_name = values->GetString(0);
+  const std::string payload = values->GetString(1);
+  CallPage(context, "__sabineBridgeEmit",
+           [&](CefRefPtr<CefV8Value> global) -> CefV8ValueList {
+             return {ParseJson(global, event_name), ParseJson(global, payload)};
+           });
   return true;
 }
 }  // namespace sabine_bridge

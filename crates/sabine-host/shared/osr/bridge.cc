@@ -32,14 +32,12 @@
 #include "guest/manager.h"
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
-#include "include/cef_parser.h"
 #include "include/cef_request_context_handler.h"
 #include "include/cef_task.h"
 #include "include/internal/cef_types.h"
 #include "include/wrapper/cef_helpers.h"
 #include "common/json.h"
 #include "common/bridge_policy.h"
-#include "sabine_bridge_js.h"
 #include "osr/utilities.h"
 
 using namespace sabine_osr;
@@ -55,14 +53,17 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     return false;
   }
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
-  if (!arguments || arguments->GetSize() < 1 ||
-      arguments->GetType(0) != VTYPE_STRING) {
+  if (!arguments || arguments->GetSize() < 1) {
     return true;
   }
-  const std::string payload = arguments->GetString(0);
+  for (size_t index = 0; index < arguments->GetSize(); ++index) {
+    if (arguments->GetType(index) != VTYPE_STRING) {
+      return true;
+    }
+  }
   if (message->GetName() == "sabine.ime_state") {
     const int browser_id = browser->GetIdentifier();
-    ime_surrounding_state_[browser_id] = payload;
+    ime_surrounding_state_[browser_id] = arguments->GetString(0);
     ime_frames_[browser_id] = frame;
     SendFocusedImeState();
     return true;
@@ -70,35 +71,31 @@ bool SabineOsrHandler::OnProcessMessageReceived(
   if (message->GetName() != "sabine.native") {
     return false;
   }
-  if (!frame->IsMain() || arguments->GetSize() != 2 ||
-      arguments->GetType(1) != VTYPE_STRING)
+  if (!frame->IsMain() || arguments->GetSize() < 3)
     return true;
   const auto policy = BridgePolicyFor(browser);
   const std::string url = frame->GetURL();
   if (!sabine_bridge::MatchesSecurityOrigin(policy, url,
-                                            arguments->GetString(1)))
+                                            arguments->GetString(0)))
     return true;
-  if (payload.rfind("sabine://window/", 0) == 0) {
-    if (sabine_bridge::AllowsDocument(policy, url))
-      HandleWindowCommand(browser, payload);
+  const std::string kind = arguments->GetString(1);
+  if (kind == "window") {
+    if (arguments->GetSize() == 4 && sabine_bridge::AllowsDocument(policy, url))
+      HandleWindowCommand(arguments->GetString(2), arguments->GetString(3));
     return true;
   }
-  if (!sabine_bridge::AllowsCommand(policy, url, QueryValue(payload, "name")))
+  if (kind != "bridge" || arguments->GetSize() != 5)
     return true;
-  return HandleBridgeCommand(browser, frame, payload);
+  const std::string command = arguments->GetString(3);
+  if (!sabine_bridge::AllowsCommand(policy, url, command))
+    return true;
+  HandleBridgeCommand(browser, frame, arguments->GetString(2), command,
+                      arguments->GetString(4));
+  return true;
 }
 
-bool SabineOsrHandler::HandleWindowCommand(CefRefPtr<CefBrowser> browser,
-                                           const std::string& url) {
-  const std::string prefix = "sabine://window/";
-  if (url.rfind(prefix, 0) != 0) {
-    return false;
-  }
-  std::string command = url.substr(prefix.size());
-  const size_t query = command.find_first_of("?#");
-  if (query != std::string::npos) {
-    command = command.substr(0, query);
-  }
+void SabineOsrHandler::HandleWindowCommand(const std::string& command,
+                                           const std::string& value) {
   if (command == "close") {
     // Ask the native host to tear down its window; it replies with "close\n"
     // which CloseBrowsers this surface. Do not quit the shared CEF process.
@@ -122,23 +119,16 @@ bool SabineOsrHandler::HandleWindowCommand(CefRefPtr<CefBrowser> browser,
   } else if (command == "hide") {
     SendMessage(kHideRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "focus") {
-    const std::string activation_token = QueryValue(url, "activationToken");
-    SendMessage(kFocusRequested, 0, 0, 0, 0, activation_token.data(),
-                static_cast<uint32_t>(activation_token.size()));
+    SendMessage(kFocusRequested, 0, 0, 0, 0, value.data(),
+                static_cast<uint32_t>(value.size()));
   }
-  return true;
 }
 
-bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
+void SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
                                            CefRefPtr<CefFrame> frame,
-                                           const std::string& url) {
-  const std::string prefix = "sabine://bridge/";
-  if (url.rfind(prefix, 0) != 0) {
-    return false;
-  }
-  const std::string request_id = BridgeRequestId(url);
-  const std::string command = QueryValue(url, "name");
-  const std::string payload = QueryValue(url, "payload");
+                                           const std::string& request_id,
+                                           const std::string& command,
+                                           const std::string& payload) {
   const std::string browser_id = std::to_string(browser->GetIdentifier());
   std::string origin = sabine_bridge::Origin(frame->GetURL());
   if (origin.empty())
@@ -148,14 +138,14 @@ bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
   if (request_id.empty() || command.empty()) {
     ResolveBridgeResponse(browser_id, request_id, false,
                           "{\"message\":\"Malformed Sabine bridge request\"}");
-    return true;
+    return;
   }
   const GuestView* guest = GuestForBrowser(browser);
   if (guest && !guest->allow_bridge) {
     ResolveBridgeResponse(
         browser_id, request_id, false,
         "{\"message\":\"Sabine bridge is unavailable inside guest views\"}");
-    return true;
+    return;
   }
   if (guest) {
     if (IsGuestBridgeCommand(command) || command == "sabine.popup.open" ||
@@ -163,24 +153,23 @@ bool SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
       ResolveBridgeResponse(browser_id, request_id, false,
                             "{\"message\":\"Guest views cannot manage other "
                             "guest views\"}");
-      return true;
+      return;
     }
   } else if (HandleGuestBridgeCommand(command, payload, browser_id,
                                       request_id)) {
-    return true;
+    return;
   }
   if (bridge_commands_.find(command) == bridge_commands_.end()) {
     ResolveBridgeResponse(
         browser_id, request_id, false,
         "{\"message\":\"Sabine bridge command is not allowlisted\"}");
-    return true;
+    return;
   }
   const std::string request_line =
       "SABINE_BRIDGE_REQUEST\t" + browser_id + "\t" + request_id + "\t" +
       origin + "\t" + command + "\t" + (payload.empty() ? "{}" : payload);
   SendMessage(kBridgeRequest, 0, 0, 0, 0, request_line.data(),
               static_cast<uint32_t>(request_line.size()));
-  return true;
 }
 
 void SabineOsrHandler::RequestNativeClose() {

@@ -30,7 +30,6 @@
 #include "guest/manager.h"
 #include "include/cef_app.h"
 #include "include/cef_browser.h"
-#include "include/cef_parser.h"
 #include "include/cef_request_context_handler.h"
 #include "include/cef_task.h"
 #include "include/internal/cef_types.h"
@@ -127,48 +126,6 @@ std::string DecodeControlComponent(const std::string& value) {
     decoded.push_back(value[index]);
   }
   return decoded;
-}
-
-std::string DecodeUriComponent(const std::string& value) {
-  return CefURIDecode(value, true,
-                      static_cast<cef_uri_unescape_rule_t>(
-                          UU_SPACES | UU_PATH_SEPARATORS |
-                          UU_URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS |
-                          UU_REPLACE_PLUS_WITH_SPACE))
-      .ToString();
-}
-
-std::string QueryValue(const std::string& url, const std::string& name) {
-  const size_t query_start = url.find('?');
-  if (query_start == std::string::npos) {
-    return "";
-  }
-  const std::string needle = name + "=";
-  size_t cursor = query_start + 1;
-  while (cursor < url.size()) {
-    const size_t next = url.find('&', cursor);
-    const size_t end = next == std::string::npos ? url.size() : next;
-    const std::string part = url.substr(cursor, end - cursor);
-    if (part.rfind(needle, 0) == 0) {
-      return DecodeUriComponent(part.substr(needle.size()));
-    }
-    if (next == std::string::npos) {
-      break;
-    }
-    cursor = next + 1;
-  }
-  return "";
-}
-
-std::string BridgeRequestId(const std::string& url) {
-  const std::string prefix = "sabine://bridge/";
-  if (url.rfind(prefix, 0) != 0) {
-    return "";
-  }
-  const size_t start = prefix.size();
-  const size_t end = url.find_first_of("?#", start);
-  return DecodeUriComponent(url.substr(
-      start, end == std::string::npos ? std::string::npos : end - start));
 }
 
 std::string HtmlEscape(const std::string& value) {
