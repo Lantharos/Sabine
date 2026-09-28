@@ -60,7 +60,7 @@ $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-$bitmap.Save($args[0], [System.Drawing.Imaging.ImageFormat]::Bmp)
+$bitmap.Save($env:PAINT_CHECK_SCREENSHOT, [System.Drawing.Imaging.ImageFormat]::Bmp)
 """
 
 
@@ -69,10 +69,11 @@ def run(*command, **options):
     return subprocess.run(command, cwd=repository, check=True, **options)
 
 
-def powershell(script, *arguments):
+def powershell(script, **environment):
     return subprocess.run(
-        ["powershell", "-NoProfile", "-Command", script, *arguments],
+        ["powershell", "-NoProfile", "-Command", script],
         capture_output=True, text=True, check=True,
+        env=dict(os.environ, **environment),
     ).stdout
 
 
@@ -153,7 +154,7 @@ def cpu_usage(pids, seconds):
 def screenshot(name):
     bmp = output / f"{name}.bmp"
     if WINDOWS:
-        powershell(WINDOWS_SCREENSHOT, str(bmp))
+        powershell(WINDOWS_SCREENSHOT, PAINT_CHECK_SCREENSHOT=str(bmp))
     else:
         png = output / f"{name}.png"
         subprocess.run(["screencapture", "-x", str(png)], check=True)
