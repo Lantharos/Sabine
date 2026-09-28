@@ -78,7 +78,7 @@ def powershell(script, *arguments):
 
 def prepare_host():
     run("cargo", "build", "-p", "sabine-cli")
-    run("cargo", "build", "--release", "-p", "sabine-notes")
+    run("cargo", "build", "--release", "-p", "sabine-notes", "-p", "sabine-service")
     prepared = run(
         repository / f"target/debug/sabine{executable_suffix}", "runtime", "prepare",
         capture_output=True, text=True,
