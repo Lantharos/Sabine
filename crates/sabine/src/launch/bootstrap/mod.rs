@@ -106,6 +106,8 @@ pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<()> {
             match sabine_service::adopt_with_runtime(config.runtime.clone(), register.clone()) {
                 Ok(report) => report,
                 Err(error @ sabine_service::ServiceError::IncompatibleApp { .. }) => {
+                    relaunch_managed_update(config);
+                    offer_pending_update(config);
                     let message = error.to_string();
                     return Err(SabineError::CreationFailed { message });
                 }

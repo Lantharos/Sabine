@@ -49,7 +49,12 @@ impl SabineService {
             if update.policy != UpdatePolicy::Automatic {
                 continue;
             }
-            match self.update_app_routine(&app.manifest.id) {
+            let result = if incompatible_apps.contains(&app.manifest.id) {
+                self.update_app(&app.manifest.id)
+            } else {
+                self.update_app_routine(&app.manifest.id)
+            };
+            match result {
                 Ok(AppUpdateStatus::Installed { .. }) => updated_apps.push(app.manifest.id.clone()),
                 Ok(AppUpdateStatus::PendingApproval(_)) => {
                     pending_apps.push(app.manifest.id.clone())
