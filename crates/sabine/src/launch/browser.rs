@@ -11,6 +11,8 @@ const DISABLED_CEF_FEATURES: &str = concat!(
     "InterestFeedContentSuggestions"
 );
 
+const ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS: u8 = 8;
+
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
 
 /// Browser-process launch options (devtools, hardware decode, and related flags).
@@ -59,7 +61,6 @@ pub(crate) fn apply_browser_launch_args(
         {
             let mut features = vec!["UseOzonePlatform"];
             command.arg(format!("--ozone-platform={}", linux_ozone_platform()));
-            command.arg("--disable-vulkan");
             if options.vaapi_hardware_decode {
                 features.push("VaapiVideoDecoder");
             }
@@ -80,6 +81,9 @@ pub(crate) fn apply_browser_launch_args(
     };
     command
         .arg(format!("--disable-features={disabled_features}"))
+        .arg(format!(
+            "--optimization-guide-performance-class={ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS}"
+        ))
         .arg("--disable-background-networking")
         .arg("--disable-component-update")
         .arg("--disable-component-extensions-with-background-pages")
@@ -87,9 +91,7 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--disable-domain-reliability")
         .arg("--disable-extensions")
         .arg("--disable-sync")
-        .arg("--disable-translate")
         .arg("--disable-breakpad")
-        .arg("--disable-crash-reporter")
         .arg("--metrics-recording-only")
         .arg("--no-default-browser-check")
         .arg("--no-first-run");
@@ -101,7 +103,7 @@ pub(crate) fn apply_browser_launch_args(
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn linux_ozone_platform() -> &'static str {
+fn linux_ozone_platform() -> &'static str {
     if ["WAYLAND_DISPLAY", "WAYLAND_SOCKET"]
         .iter()
         .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))

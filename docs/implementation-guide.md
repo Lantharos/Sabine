@@ -208,6 +208,12 @@ On Linux and macOS, Chromium is launched before the native window and graphics d
 sized for the monitor the window opens on, so browser startup overlaps GPU initialization. Windows
 waits for the compositor device because Chromium must render on the same adapter.
 
+Chromium's GPU process is on the path to the first frame, so Sabine leaves its graphics features at
+their defaults: overriding any of the Vulkan features makes ANGLE probe every installed Vulkan
+driver before the GPU process can answer, which delayed the first frame by about 200 ms on Linux.
+The on-device AI performance class is fixed at launch, so Chromium never starts its model service
+to benchmark the GPU in the background.
+
 - **Windows** uses accelerated `OnAcceleratedPaint`. CEF owns and pools the callback texture, so the
   CEF host first opens it on D3D11 and copies it into one of four Sabine-owned D3D12 shared textures
   before returning. Each destination is opened on the producer's D3D11 device for the copy and on

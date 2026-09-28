@@ -164,52 +164,6 @@ void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
 SabineApp::SabineApp(bool runtime_smoke_test)
     : runtime_smoke_test_(runtime_smoke_test) {}
 
-void SabineApp::OnBeforeCommandLineProcessing(
-    const CefString& process_type,
-    CefRefPtr<CefCommandLine> command_line) {
-  const std::string ozone_platform =
-      command_line->GetSwitchValue("sabine-ozone-platform");
-#if defined(OS_LINUX)
-  const bool disable_vulkan = true;
-#else
-  const bool disable_vulkan = false;
-#endif
-  if (disable_vulkan) {
-    command_line->AppendSwitch("disable-vulkan");
-  }
-  if (!ozone_platform.empty()) {
-    command_line->AppendSwitchWithValue("ozone-platform", ozone_platform);
-    command_line->AppendSwitchWithValue("ozone-platform-hint", ozone_platform);
-  }
-
-  // Merge into any disable-features already set on the argv (do not replace).
-  std::string disabled =
-      command_line->GetSwitchValue("disable-features").ToString();
-  auto ends_with_comma_or_empty = [&disabled]() {
-    return disabled.empty() || disabled.back() == ',';
-  };
-  auto append_csv = [&disabled, &ends_with_comma_or_empty](const char* csv) {
-    if (!ends_with_comma_or_empty()) {
-      disabled += ",";
-    }
-    disabled += csv;
-  };
-  if (disabled.find("OptimizationGuideOnDeviceModel") == std::string::npos) {
-    append_csv("OptimizationGuideOnDeviceModel");
-  }
-  if (disable_vulkan) {
-    append_csv("Vulkan,DefaultANGLEVulkan,VulkanFromANGLE");
-  }
-  command_line->AppendSwitchWithValue("disable-features", disabled);
-
-  if (command_line->HasSwitch("sabine-transparent")) {
-    command_line->AppendSwitch("enable-transparent-visuals");
-    command_line->AppendSwitch("transparent-painting-enabled");
-    command_line->AppendSwitchWithValue("default-background-color",
-                                        "0x00000000");
-  }
-}
-
 void SabineApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
   if (runtime_smoke_test_) {

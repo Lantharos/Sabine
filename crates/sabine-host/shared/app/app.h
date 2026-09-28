@@ -20,9 +20,6 @@ class SabineApp : public CefApp,
     return this;
   }
 
-  void OnBeforeCommandLineProcessing(
-      const CefString& process_type,
-      CefRefPtr<CefCommandLine> command_line) override;
   void OnContextInitialized() override;
   void OnBrowserCreated(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefDictionaryValue> extra_info) override;
