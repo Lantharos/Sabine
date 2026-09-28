@@ -85,6 +85,27 @@ def combo(text):
     for name in reversed(names): key(name, up=True)
     time.sleep(0.4)
 
+external = []
+HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+user32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+user32.CallNextHookEx.restype = ctypes.c_ssize_t
+user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+user32.SetWindowsHookExW.restype = wintypes.HHOOK
+
+@HOOKPROC
+def external_hook(code, wparam, lparam):
+    vk = ctypes.cast(lparam, ctypes.POINTER(wintypes.DWORD))[0]
+    external.append(f"EXTERNAL vk={vk:#x} msg={wparam:#x} fg={user32.GetForegroundWindow()}")
+    return user32.CallNextHookEx(None, code, wparam, lparam)
+
+import threading
+def hook_thread():
+    user32.SetWindowsHookExW(13, external_hook, None, 0)
+    msg = wintypes.MSG()
+    while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+        pass
+threading.Thread(target=hook_thread, daemon=True).start()
+
 report = {}
 try:
     deadline = time.monotonic() + 240
@@ -112,6 +133,7 @@ try:
         combo(text)
         trace.append(f"page keys {evaluate('JSON.stringify(keys.splice(0))')}")
     report["trace"] = trace
+    report["external"] = external
     report["keys"] = evaluate("keys.splice(0)")
     report["text"] = evaluate('document.getElementById("t").value')
     report["disable"] = evaluate('window.sabine.window.inhibitShortcuts(false).then(() => "ok", e => "error: " + e.message)')
