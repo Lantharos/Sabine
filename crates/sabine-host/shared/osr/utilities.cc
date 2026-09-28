@@ -15,6 +15,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -315,45 +316,112 @@ void CopyPaintRect(char* destination,
   }
 }
 
+namespace {
+
+constexpr int kKeyCodeSemicolon = 0xBA;
+constexpr int kKeyCodeEquals = 0xBB;
+constexpr int kKeyCodeComma = 0xBC;
+constexpr int kKeyCodeMinus = 0xBD;
+constexpr int kKeyCodePeriod = 0xBE;
+constexpr int kKeyCodeSlash = 0xBF;
+constexpr int kKeyCodeBacktick = 0xC0;
+constexpr int kKeyCodeOpenBracket = 0xDB;
+constexpr int kKeyCodeBackslash = 0xDC;
+constexpr int kKeyCodeCloseBracket = 0xDD;
+constexpr int kKeyCodeQuote = 0xDE;
+
+int KeyCodeForCharacter(unsigned char c) {
+  if (c >= 'a' && c <= 'z') {
+    return c - 'a' + 'A';
+  }
+  if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ') {
+    return c;
+  }
+  switch (c) {
+    case ')':
+      return '0';
+    case '!':
+      return '1';
+    case '@':
+      return '2';
+    case '#':
+      return '3';
+    case '$':
+      return '4';
+    case '%':
+      return '5';
+    case '^':
+      return '6';
+    case '&':
+      return '7';
+    case '*':
+      return '8';
+    case '(':
+      return '9';
+    case ';':
+    case ':':
+      return kKeyCodeSemicolon;
+    case '=':
+    case '+':
+      return kKeyCodeEquals;
+    case ',':
+    case '<':
+      return kKeyCodeComma;
+    case '-':
+    case '_':
+      return kKeyCodeMinus;
+    case '.':
+    case '>':
+      return kKeyCodePeriod;
+    case '/':
+    case '?':
+      return kKeyCodeSlash;
+    case '`':
+    case '~':
+      return kKeyCodeBacktick;
+    case '[':
+    case '{':
+      return kKeyCodeOpenBracket;
+    case '\\':
+    case '|':
+      return kKeyCodeBackslash;
+    case ']':
+    case '}':
+      return kKeyCodeCloseBracket;
+    case '\'':
+    case '"':
+      return kKeyCodeQuote;
+    default:
+      return 0;
+  }
+}
+
+constexpr std::pair<std::string_view, int> kNamedKeyCodes[] = {
+    {"Backspace", 0x08},   {"Tab", 0x09},        {"Enter", 0x0D},
+    {"Shift", 0x10},       {"Control", 0x11},    {"Alt", 0x12},
+    {"Pause", 0x13},       {"CapsLock", 0x14},   {"Escape", 0x1B},
+    {"Space", 0x20},       {"PageUp", 0x21},     {"PageDown", 0x22},
+    {"End", 0x23},         {"Home", 0x24},       {"ArrowLeft", 0x25},
+    {"ArrowUp", 0x26},     {"ArrowRight", 0x27}, {"ArrowDown", 0x28},
+    {"PrintScreen", 0x2C}, {"Insert", 0x2D},     {"Delete", 0x2E},
+    {"Meta", 0x5B},        {"Super", 0x5B},      {"ContextMenu", 0x5D},
+    {"NumLock", 0x90},     {"ScrollLock", 0x91}, {"AltGraph", 0xE1},
+};
+
+}  // namespace
+
 int KeyCodeForName(const std::string& key) {
   if (key.size() == 1) {
-    unsigned char c = key[0];
-    if (c >= 'a' && c <= 'z') {
-      return c - 'a' + 'A';
-    }
-    return c;
+    return KeyCodeForCharacter(static_cast<unsigned char>(key[0]));
   }
   if (key.rfind("Key", 0) == 0 && key.size() == 4) {
     return key[3];
   }
-  if (key == "Enter")
-    return 13;
-  if (key == "Backspace")
-    return 8;
-  if (key == "Tab")
-    return 9;
-  if (key == "Escape")
-    return 27;
-  if (key == " " || key == "Space")
-    return 32;
-  if (key == "ArrowLeft")
-    return 37;
-  if (key == "ArrowUp")
-    return 38;
-  if (key == "ArrowRight")
-    return 39;
-  if (key == "ArrowDown")
-    return 40;
-  if (key == "Delete")
-    return 46;
-  if (key == "Home")
-    return 36;
-  if (key == "End")
-    return 35;
-  if (key == "PageUp")
-    return 33;
-  if (key == "PageDown")
-    return 34;
+  for (const auto& [name, code] : kNamedKeyCodes) {
+    if (key == name) {
+      return code;
+    }
+  }
   if (key.size() >= 2 && key[0] == 'F') {
     const std::string number = key.substr(1);
     if (!number.empty() &&

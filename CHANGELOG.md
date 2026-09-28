@@ -1,3 +1,10 @@
+# Unreleased
+
+- Fix typing punctuation in pages: characters such as `.`, `-`, `$`, `#`, `%` and `'` were sent to
+  Chromium as the Delete, Insert, Home, End and arrow keys, deleting text or moving the caret. Keys
+  now report the same key codes as browsers, and Shift, Control, Alt, Meta, Caps Lock, Insert and
+  other named keys reach pages instead of arriving as unidentified keys.
+
 # Sabine 0.30
 
 Apps built before this release must be rebuilt: the host protocol changed, so the minimum
