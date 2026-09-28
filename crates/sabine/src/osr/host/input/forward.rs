@@ -354,14 +354,57 @@ impl OsrNativeHost {
         } else {
             self.input_modifiers() & !modifier
         };
+        self.send_key(
+            pressed,
+            &key_name(event),
+            text,
+            modifiers,
+            event.repeat,
+            native_key_code(event),
+        );
+    }
+
+    #[cfg(windows)]
+    pub(in crate::osr::host) fn send_system_key(&self, key: sabine_platform::SystemKey) {
+        let held = [
+            (key.modifiers.shift, EVENTFLAG_SHIFT_DOWN),
+            (key.modifiers.ctrl, EVENTFLAG_CONTROL_DOWN),
+            (key.modifiers.alt, EVENTFLAG_ALT_DOWN),
+            (key.modifiers.meta, EVENTFLAG_COMMAND_DOWN),
+        ];
+        let modifiers = held
+            .into_iter()
+            .filter(|(down, _)| *down)
+            .fold(self.mouse_modifiers(), |modifiers, (_, flag)| {
+                modifiers | flag
+            });
+        self.send_key(
+            key.pressed,
+            key.key,
+            "",
+            modifiers,
+            key.repeat,
+            key.scan_code,
+        );
+    }
+
+    fn send_key(
+        &self,
+        pressed: bool,
+        name: &str,
+        text: &str,
+        modifiers: u32,
+        repeat: bool,
+        native_key_code: u32,
+    ) {
         self.send_control(&format!(
             "key\t{}\t{}\t{}\t{}\t{}\t{}\n",
             i32::from(pressed),
-            encode_component(&key_name(event)),
+            encode_component(name),
             encode_component(text),
-            modifiers | if event.repeat { EVENTFLAG_IS_REPEAT } else { 0 },
-            i32::from(event.repeat),
-            native_key_code(event)
+            modifiers | if repeat { EVENTFLAG_IS_REPEAT } else { 0 },
+            i32::from(repeat),
+            native_key_code
         ));
     }
 
@@ -379,6 +422,11 @@ impl OsrNativeHost {
         if self.modifiers.meta_key() {
             modifiers |= EVENTFLAG_COMMAND_DOWN;
         }
+        modifiers | self.mouse_modifiers()
+    }
+
+    fn mouse_modifiers(&self) -> u32 {
+        let mut modifiers = 0;
         if self.mouse.left {
             modifiers |= EVENTFLAG_LEFT_MOUSE_BUTTON;
         }

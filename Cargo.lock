@@ -2602,6 +2602,7 @@ dependencies = [
  "raw-window-handle",
  "windows",
  "winit",
+ "x11-dl",
 ]
 
 [[package]]

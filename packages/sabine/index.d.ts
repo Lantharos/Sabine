@@ -30,6 +30,12 @@ export interface SabineWindowApi {
   setFullscreen(enabled: boolean): void;
   restore(): void;
   startDrag(): void;
+  /**
+   * While enabled and the window is focused, the desktop's own keyboard
+   * shortcuts reach the page instead. Rejects on macOS and on desktops that
+   * do not allow it.
+   */
+  inhibitShortcuts(enabled: boolean): Promise<void>;
 }
 
 export interface WindowFileDragEvent {

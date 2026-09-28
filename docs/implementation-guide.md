@@ -282,6 +282,16 @@ selection. Launch metrics start before configuration validation and include shar
 and runtime resolution. Window `maximize()` is idempotent; `toggleMaximize()` toggles maximization,
 and `restore()` leaves fullscreen, maximization, and minimization.
 
+`inhibitShortcuts(true)` hands the desktop's own keyboard shortcuts to the page while the window is
+focused, and the native window host answers it without involving the app. Wayland uses a
+`zwp_keyboard_shortcuts_inhibitor_v1` on the window surface, so the compositor decides when it
+applies and may ask the user first. X11 holds an active keyboard grab only while the window is
+focused. Windows installs a low-level keyboard hook that takes Ctrl, Alt and the Windows keys from
+the OS while the window is in the foreground, forwards them to the page itself and writes their
+state into the thread's keyboard state, so every other key still arrives with the right modifiers
+and text. macOS rejects the request. The inhibitor is released when disabled or when the native
+window is dropped, and is recreated with the window.
+
 On Windows and macOS, `SabineProcess::wait()` runs the parent process's native event loop. Tray
 icons and global shortcuts are created on that thread after the loop starts; process exits and
 window commands wake it without polling. Use `SabineWindow::main` or call `wait()` on the main

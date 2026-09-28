@@ -10,7 +10,13 @@ use winit::window::Window;
 use std::ptr;
 
 #[cfg(target_os = "linux")]
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
+#[cfg(target_os = "linux")]
+use crate::wayland_client::{
+    DESTROY_FLAG, WlDisplay, WlProxy, wayland_display, wayland_surface, wl_proxy_destroy,
+    wl_proxy_marshal_flags,
+};
 
 #[cfg(target_os = "linux")]
 #[path = "wayland_background_effect_protocol.rs"]
@@ -135,28 +141,6 @@ impl WaylandEffect {
             return false;
         }
         unsafe { self.apply_surface_regions(options, width, height, transparent_holes) }
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub(super) fn wayland_display<W>(window: &W) -> Option<*mut WlDisplay>
-where
-    W: HasDisplayHandle + ?Sized,
-{
-    match window.display_handle().ok()?.as_raw() {
-        RawDisplayHandle::Wayland(display) => Some(display.display.as_ptr().cast()),
-        _ => None,
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub(super) fn wayland_surface<W>(window: &W) -> Option<*mut WlProxy>
-where
-    W: HasWindowHandle + ?Sized,
-{
-    match window.window_handle().ok()?.as_raw() {
-        RawWindowHandle::Wayland(surface) => Some(surface.surface.as_ptr().cast()),
-        _ => None,
     }
 }
 

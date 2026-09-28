@@ -1,6 +1,10 @@
 mod forward;
 mod ime;
+mod shortcuts;
 mod touch;
+
+#[cfg(not(target_os = "macos"))]
+pub(super) use shortcuts::ShortcutInhibition;
 
 use std::time::{Duration, Instant};
 
@@ -32,6 +36,8 @@ impl ApplicationHandler for OsrNativeHost {
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.recover_gpu();
+        #[cfg(windows)]
+        self.forward_system_keys();
         self.process_osr_events(event_loop);
     }
 
@@ -93,6 +99,8 @@ impl ApplicationHandler for OsrNativeHost {
                 self.sync_active_frame_rate();
                 let focused = focused && self.config.visible;
                 self.focused = focused;
+                #[cfg(target_os = "linux")]
+                self.sync_shortcut_inhibitor_focus();
                 self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });
                 if !focused && self.config.hide_on_blur && self.config.visible {
                     self.hide_window("blur");
