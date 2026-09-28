@@ -222,6 +222,16 @@ def stop(app):
         os.killpg(app.pid, signal.SIGKILL)
 
 
+def save_chromium_log():
+    cache = Path(os.environ["LOCALAPPDATA"]) if WINDOWS else Path.home() / "Library/Caches"
+    logs = sorted(
+        (cache / "sabine/profiles").glob("*/profile/chrome_debug.log"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if logs:
+        shutil.copyfile(logs[-1], output / "chrome_debug.log")
+
+
 def keychain_prompted(started):
     security_log = subprocess.run(
         ["log", "show", "--start", started, "--style", "compact",
@@ -260,6 +270,7 @@ def main():
         second = screenshot("second")
     finally:
         stop(app)
+        save_chromium_log()
 
     if MACOS and keychain_prompted(started):
         failures.append("macOS asked for the login keychain password while the app ran")
