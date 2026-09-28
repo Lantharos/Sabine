@@ -276,6 +276,8 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     const bool repeat =
         (parts.size() >= 6 && std::atoi(parts[5].c_str()) != 0) ||
         (modifiers & kGuestModRepeat) != 0;
+    const int native_key_code =
+        parts.size() >= 7 ? std::atoi(parts[6].c_str()) : 0;
     GuestView* focused_guest =
         focused_guest_id_.empty() ? nullptr : guests_.Find(focused_guest_id_);
     if (focused_guest && !focused_guest->intercepted_shortcuts.empty()) {
@@ -294,14 +296,20 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
     event.type = pressed ? KEYEVENT_RAWKEYDOWN : KEYEVENT_KEYUP;
     event.modifiers = modifiers;
     event.windows_key_code = key_code;
+    event.native_key_code = native_key_code;
+    const std::u16string characters = Utf8ToUtf16(text);
+    if (characters.size() == 1) {
+      event.character = characters.front();
+      event.unmodified_character = characters.front();
+    }
     host->SendKeyEvent(event);
-    if (pressed && !text.empty()) {
-      for (char16_t ch : Utf8ToUtf16(text)) {
+    if (pressed) {
+      for (char16_t ch : characters) {
         CefKeyEvent char_event;
         char_event.type = KEYEVENT_CHAR;
         char_event.modifiers = modifiers;
         char_event.windows_key_code = ch;
-        char_event.native_key_code = ch;
+        char_event.native_key_code = native_key_code;
         char_event.character = ch;
         char_event.unmodified_character = ch;
         host->SendKeyEvent(char_event);

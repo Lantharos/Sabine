@@ -7,7 +7,8 @@ use winit::{
     data_transfer::{DataTransferSendBuilder, SendData, TypeHint},
     event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta},
     event_loop::{ActiveEventLoop, DndAction},
-    keyboard::Key,
+    keyboard::{Key, NamedKey},
+    platform::scancode::PhysicalKeyExtScancode,
 };
 
 use crate::osr::host::native::{IncomingFileDrag, OsrNativeHost};
@@ -17,6 +18,8 @@ use crate::osr::host::types::{
     EVENTFLAG_PRECISION_SCROLLING_DELTA, EVENTFLAG_RIGHT_MOUSE_BUTTON, EVENTFLAG_SHIFT_DOWN,
 };
 use crate::osr::protocol::{FileDragRequest, encode_component};
+
+const XKB_KEYCODE_OFFSET: u32 = 8;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn begin_incoming_file_drag(
@@ -345,13 +348,20 @@ impl OsrNativeHost {
         } else {
             ""
         };
+        let modifier = modifier_flag(&event.logical_key);
+        let modifiers = if pressed {
+            self.input_modifiers() | modifier
+        } else {
+            self.input_modifiers() & !modifier
+        };
         self.send_control(&format!(
-            "key\t{}\t{}\t{}\t{}\t{}\n",
+            "key\t{}\t{}\t{}\t{}\t{}\t{}\n",
             i32::from(pressed),
             encode_component(&key_name(event)),
             encode_component(text),
-            self.input_modifiers() | if event.repeat { EVENTFLAG_IS_REPEAT } else { 0 },
-            i32::from(event.repeat)
+            modifiers | if event.repeat { EVENTFLAG_IS_REPEAT } else { 0 },
+            i32::from(event.repeat),
+            native_key_code(event)
         ));
     }
 
@@ -450,5 +460,26 @@ fn key_name(event: &KeyEvent) -> String {
 }
 
 fn should_send_char_text(text: &str) -> bool {
-    !text.chars().any(char::is_control)
+    text == "\r" || !text.chars().any(char::is_control)
+}
+
+fn modifier_flag(key: &Key) -> u32 {
+    match key {
+        Key::Named(NamedKey::Shift) => EVENTFLAG_SHIFT_DOWN,
+        Key::Named(NamedKey::Control) => EVENTFLAG_CONTROL_DOWN,
+        Key::Named(NamedKey::Alt) => EVENTFLAG_ALT_DOWN,
+        Key::Named(NamedKey::Meta) => EVENTFLAG_COMMAND_DOWN,
+        _ => 0,
+    }
+}
+
+fn native_key_code(event: &KeyEvent) -> u32 {
+    let Some(scancode) = event.physical_key.to_scancode() else {
+        return 0;
+    };
+    if cfg!(target_os = "linux") {
+        scancode + XKB_KEYCODE_OFFSET
+    } else {
+        scancode
+    }
 }
