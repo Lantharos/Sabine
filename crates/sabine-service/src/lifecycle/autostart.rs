@@ -128,13 +128,6 @@ pub fn install_login_autostart_with(executable: &Path) -> ServiceResult<()> {
         run_checked(Command::new("launchctl").args(["enable", &service]))?;
         run_checked(Command::new("launchctl").args(["kickstart", "-k", &service]))?;
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-    {
-        let _ = daemon;
-        return Err(ServiceError::Update(
-            "login autostart is unsupported on this platform".to_string(),
-        ));
-    }
     Ok(())
 }
 

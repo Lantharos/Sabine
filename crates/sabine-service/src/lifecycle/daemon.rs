@@ -385,13 +385,6 @@ fn terminate_process(pid: u32) -> ServiceResult<()> {
     result.map_err(|error| ServiceError::Update(error.to_string()))
 }
 
-#[cfg(not(any(unix, windows)))]
-fn terminate_process(_pid: u32) -> ServiceResult<()> {
-    Err(ServiceError::Update(
-        "stopping a stale Sabine service is unsupported on this platform".to_string(),
-    ))
-}
-
 fn wait_for_daemon_version(version: &str, timeout: Duration) -> bool {
     let started = std::time::Instant::now();
     let mut matching_since = None;
