@@ -1,3 +1,10 @@
+# Unreleased
+
+- Keep windows responsive while they are not being shown: presenting now waits for the compositor
+  to ask for a frame instead of blocking the window until the display catches up. Bridge calls from
+  animating pages return within a millisecond instead of one display frame, and out-of-view windows
+  no longer stall for up to a second on every paint.
+
 # Sabine 0.31
 
 - Fix typing punctuation in pages: characters such as `.`, `-`, `$`, `#`, `%` and `'` were sent to
