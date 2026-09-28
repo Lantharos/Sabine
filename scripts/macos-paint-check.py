@@ -20,7 +20,7 @@ tolerance = 40
 PAGE = """<!doctype html>
 <html>
 <body style="margin:0;overflow:hidden;background:#336699">
-<div id="square" style="position:fixed;top:120px;left:0;width:120px;height:120px;background:#ff9900"></div>
+<div id="square" style="position:fixed;top:420px;left:0;width:120px;height:120px;background:#ff9900"></div>
 <script>
 const square = document.getElementById("square");
 const start = performance.now();
@@ -42,7 +42,8 @@ def run(*command, **options):
 
 
 def prepare_host():
-    run("cargo", "build", "-p", "sabine-cli", "-p", "sabine-notes")
+    run("cargo", "build", "-p", "sabine-cli")
+    run("cargo", "build", "--release", "-p", "sabine-notes")
     prepared = run(
         repository / "target/debug/sabine", "runtime", "prepare",
         capture_output=True, text=True,
@@ -164,7 +165,7 @@ def main():
     environment = dict(os.environ, SABINE_TRACE="1", SABINE_HOST_PATH=host)
     with log_path.open("w") as log:
         app = subprocess.Popen(
-            [repository / "target/debug/sabine-notes", "--system"],
+            [repository / "target/release/sabine-notes", "--system"],
             cwd=root, env=environment, stdout=log, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
@@ -211,7 +212,7 @@ def main():
     report.append(f"Square pixels: {first_count} then {second_count}")
     if page_pixels < 50_000:
         failures.append("The page color is missing from the screen")
-    if not first_x or not second_x:
+    if min(first_count, second_count) < 5_000:
         failures.append("The animated square is missing from the screen")
     elif abs(first_x - second_x) < 4:
         failures.append("The animated square stopped moving, so new frames are not reaching the screen")
