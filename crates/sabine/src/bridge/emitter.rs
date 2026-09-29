@@ -182,7 +182,7 @@ fn event_line(name: &str, payload: &serde_json::Value) -> String {
     format!("SABINE_BRIDGE_EVENT\t{name}\t{payload}")
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::io::BufRead;
     use std::process::{Child, Command, Stdio};
@@ -207,7 +207,6 @@ mod tests {
         line
     }
 
-    #[cfg(unix)]
     #[test]
     fn events_reach_only_the_window_they_are_sent_to() {
         let (mut first, first_writer) = window();
@@ -224,7 +223,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn detached_windows_receive_nothing() {
         let (mut child, writer) = window();
