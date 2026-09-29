@@ -572,6 +572,23 @@ The bundler includes these declarations in Linux desktop entries and macOS `CFBu
 `CFBundleDocumentTypes`, and preserves them in the installed runtime manifest. URL schemes start
 with a letter and contain lowercase letters, digits, `+`, `.` or `-`.
 
+Describe how launchers list and find the app with `generic_name`, `categories` and `keywords`:
+
+```toml
+[app]
+name = "Tern"
+generic_name = "Terminal"
+categories = ["System", "TerminalEmulator"]
+keywords = ["console", "shell", "command line"]
+```
+
+Linux desktop entries write them as `GenericName`, `Categories` and `Keywords`, so searching for
+"console" finds Tern. Categories follow the freedesktop menu specification and need at least one
+main category, such as `Utility`, `System`, `Development`, `Graphics`, `AudioVideo`, `Network` or
+`Office`; without the field, apps are listed under `Utility`. macOS bundles map the first main
+category to their application category, and Windows Start menu shortcuts use the generic name as
+their description.
+
 Windows registers schemes for the current user. Linux creates a hidden desktop handler pointing to
 the running executable before updating `mimeapps.list`; unrelated associations are preserved and
 Sabine registrations are serialized. On macOS, URL schemes must be declared in the application

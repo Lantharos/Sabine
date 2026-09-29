@@ -157,6 +157,7 @@ fn stage_macos(
             executable,
             app.icon.is_some(),
             &app.mime_types,
+            &app.listing,
         )?,
     )
     .map_err(|error| error.to_string())?;

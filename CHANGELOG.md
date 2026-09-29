@@ -6,6 +6,8 @@
 - Play H.264, HEVC, AAC and other media Chromium cannot decode through `NativeVideo` on Linux. Video
   is decoded in hardware where available and shown on a native surface beneath the page, with the
   page's own controls, subtitles, audio tracks and fullscreen.
+- Let launchers find apps by other names: `generic_name`, `categories` and `keywords` under `[app]`
+  in `Sabine.toml` go into desktop entries, with `categories` replacing the fixed `Utility`.
 - Keep windows responsive while they are not being shown: presenting now waits for the compositor
   to ask for a frame instead of blocking the window until the display catches up. Bridge calls from
   animating pages return within a millisecond instead of one display frame, and out-of-view windows

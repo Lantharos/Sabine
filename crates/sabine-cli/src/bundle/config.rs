@@ -6,6 +6,8 @@ use std::{
 use sabine_service::{AppInstallMode, AppUpdateConfig, AppUpdateSource, UpdatePolicy};
 use serde::Deserialize;
 
+use crate::desktop::entry::Listing;
+
 #[derive(Debug)]
 pub(super) struct BundleApp {
     pub id: String,
@@ -16,6 +18,7 @@ pub(super) struct BundleApp {
     pub license: Option<String>,
     pub icon: Option<PathBuf>,
     pub mime_types: Vec<String>,
+    pub listing: Listing,
     pub cargo_manifest: PathBuf,
     pub source_dir: PathBuf,
     pub cargo_package: String,
@@ -89,6 +92,8 @@ struct AppSection {
     icon: Option<String>,
     #[serde(default)]
     mime_types: Vec<String>,
+    #[serde(flatten)]
+    listing: Listing,
     cargo_manifest: Option<String>,
 }
 
@@ -184,6 +189,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
     }
     semver::Version::parse(&version).map_err(|error| format!("invalid app version: {error}"))?;
     crate::desktop::types::validate(&sabine.app.mime_types)?;
+    sabine.app.listing.validate()?;
     Ok(BundleApp {
         id,
         name,
@@ -193,6 +199,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         license,
         icon,
         mime_types: sabine.app.mime_types,
+        listing: sabine.app.listing,
         cargo_manifest,
         source_dir,
         cargo_package,
