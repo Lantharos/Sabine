@@ -423,6 +423,9 @@ login keychain: the launch bundle assembled on each Mac is signed ad hoc, so its
 changes with every runtime or host update, and the keychain would ask for the login password each
 time. Chromium never encrypts web storage such as localStorage; apps that need secrets protected
 from other software running as the same user should keep them in native storage. Remote DevTools remains opt-in and uses Chromium's origin restrictions.
+Development runs listen on port 9222 unless the app sets another; `SABINE_DEVTOOLS_PORT` overrides
+both, so several apps can be debugged at once, and `0` lets Chromium choose a free port, which it
+prints as `DevTools listening on ws://…`.
 
 ## Public API
 

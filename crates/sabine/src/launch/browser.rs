@@ -14,6 +14,7 @@ const DISABLED_CEF_FEATURES: &str = concat!(
 const ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS: u8 = 8;
 
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
+const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
 
 /// Browser-process launch options (devtools, hardware decode, and related flags).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -26,17 +27,18 @@ pub(crate) struct BrowserOptions {
 }
 
 impl BrowserOptions {
+    /// Development runs take their port from `SABINE_DEVTOOLS_PORT` first, so
+    /// several apps can be debugged at once; `0` lets Chromium pick a free one.
     pub fn effective_remote_devtools_port(&self, dev_mode: bool) -> Option<u16> {
         if self.remote_devtools_disabled {
             return None;
         }
-        if let Some(port) = self.remote_devtools_port {
-            return Some(port);
-        }
-        if dev_mode {
-            return Some(DEFAULT_REMOTE_DEVTOOLS_PORT);
-        }
-        None
+        let from_environment = dev_mode
+            .then(|| std::env::var(DEVTOOLS_PORT_ENV).ok()?.trim().parse().ok())
+            .flatten();
+        from_environment
+            .or(self.remote_devtools_port)
+            .or(dev_mode.then_some(DEFAULT_REMOTE_DEVTOOLS_PORT))
     }
 
     pub fn hardware_decode_enabled(&self) -> bool {

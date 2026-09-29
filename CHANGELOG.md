@@ -18,6 +18,8 @@
   middle-clicking uses the primary selection. The app's own pages can read the clipboard without
   a prompt. `clipboard.read()` and `clipboard.write()` in `@lantharos/sabine` take any MIME type,
   such as a file manager's copied files.
+- Choose the DevTools port of development runs with `SABINE_DEVTOOLS_PORT`, so several apps in
+  development no longer collide on 9222. `0` picks a free port.
 - Add `appWindow.inhibitShortcuts(enabled)` so pages that record keyboard shortcuts receive keys the
   desktop normally keeps for itself, such as the Super key or Alt+Tab. It works on Wayland, X11 and
   Windows and rejects on macOS.

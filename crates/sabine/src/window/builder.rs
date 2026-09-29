@@ -52,8 +52,9 @@ impl SabineWindow {
 
     /// Enables Chrome remote debugging on the given port.
     ///
-    /// When `dev_url` is configured, remote DevTools are enabled automatically on port 9222.
-    /// Attach from Chrome at `chrome://inspect` or open `http://127.0.0.1:9222`.
+    /// When `dev_url` is configured, remote DevTools are enabled automatically on port 9222,
+    /// or on `SABINE_DEVTOOLS_PORT` when it is set. Attach from Chrome at `chrome://inspect` or
+    /// open `http://127.0.0.1:9222`.
     pub fn debug(mut self, port: u16) -> Self {
         self.config.browser.remote_devtools_port = Some(port);
         self.config.browser.remote_devtools_disabled = false;
