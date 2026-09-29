@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.32
 
 - Fix Linux pages rendering without Chromium's built-in styles, which showed the contents of
   `<head>` as text: renderers could not find `resources.pak` and `chrome_100_percent.pak` beside
