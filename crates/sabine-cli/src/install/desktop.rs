@@ -56,16 +56,15 @@ use crate::desktop::macos::xml;
 
 #[cfg(target_os = "linux")]
 pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> String {
-    let icon = desktop_icon.unwrap_or(&app.id);
-    let mime_types = mime_type_line(&app.mime_types);
-    format!(
-        "[Desktop Entry]\nType=Application\nName={}\nExec={} %U\nIcon={}\n{}Terminal=false\nCategories=Utility;\nStartupNotify=true\nStartupWMClass={}\n",
-        desktop_value(&app.name),
-        desktop_exec(wrapper),
-        desktop_value(icon),
-        mime_types,
-        desktop_value(&app.id)
-    )
+    crate::desktop::entry::Entry {
+        id: &app.id,
+        name: &app.name,
+        exec: &wrapper.to_string_lossy(),
+        icon: Some(desktop_icon.unwrap_or(&app.id)),
+        mime_types: &app.mime_types,
+        listing: &app.listing,
+    }
+    .render()
 }
 
 #[cfg(target_os = "linux")]
@@ -143,8 +142,14 @@ pub fn install_windows_shortcut(
     let icon = _desktop_icon
         .map(|icon| format!("$shortcut.IconLocation='{}';", powershell_string(icon)))
         .unwrap_or_default();
+    let description = app
+        .listing
+        .generic_name
+        .as_deref()
+        .map(|name| format!("$shortcut.Description='{}';", powershell_string(name)))
+        .unwrap_or_default();
     let script = format!(
-        "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}$shortcut.Save()"
+        "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}{description}$shortcut.Save()"
     );
     let status = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
@@ -178,6 +183,7 @@ pub fn install_macos_app(
             "launch",
             app.icon.is_some(),
             &app.mime_types,
+            &app.listing,
         )?,
     )
     .map_err(|error| error.to_string())?;
@@ -202,40 +208,6 @@ pub fn install_macos_app(
         .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(launch, permissions).map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "linux")]
-fn mime_type_line(mime_types: &[String]) -> String {
-    if mime_types.is_empty() {
-        return String::new();
-    }
-    let values = mime_types
-        .iter()
-        .map(|mime_type| mime_type.trim())
-        .filter(|mime_type| !mime_type.is_empty())
-        .collect::<Vec<_>>();
-    if values.is_empty() {
-        String::new()
-    } else {
-        format!("MimeType={};\n", values.join(";"))
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn desktop_value(value: &str) -> String {
-    value.replace(['\n', '\r'], " ")
-}
-
-#[cfg(target_os = "linux")]
-fn desktop_exec(path: &Path) -> String {
-    let escaped = path
-        .to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('`', "\\`")
-        .replace('$', "\\$")
-        .replace('%', "%%");
-    format!("\"{}\"", escaped.replace('\\', "\\\\"))
 }
 
 #[cfg(target_os = "windows")]

@@ -24,6 +24,7 @@ pub fn info_plist(
     executable: &str,
     has_icon: bool,
     mime_types: &[String],
+    listing: &crate::desktop::entry::Listing,
 ) -> Result<String, String> {
     crate::desktop::types::validate(mime_types)?;
     let version = semver::Version::parse(version).map_err(|error| error.to_string())?;
@@ -33,6 +34,14 @@ pub fn info_plist(
     } else {
         ""
     };
+    let category = listing
+        .apple_category()
+        .map(|category| {
+            format!(
+                "<key>LSApplicationCategoryType</key><string>public.app-category.{category}</string>"
+            )
+        })
+        .unwrap_or_default();
     let mut types = String::new();
     let schemes = crate::desktop::types::schemes(mime_types)
         .map(|scheme| format!("<string>{}</string>", xml(scheme)))
@@ -60,6 +69,7 @@ pub fn info_plist(
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 <key>LSMinimumSystemVersion</key><string>12.0</string>
 {icon}
+{category}
 {types}
 </dict></plist>
 "#,

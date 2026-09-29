@@ -77,18 +77,15 @@ pub(super) fn runtime_manifest(
 }
 
 pub(super) fn desktop_entry(app: &BundleApp, executable: &str, icon: Option<&str>) -> String {
-    let icon = icon
-        .map(|icon| format!("Icon={}\n", desktop_value(icon)))
-        .unwrap_or_default();
-    let mime_types = mime_type_line(&app.mime_types);
-    format!(
-        "[Desktop Entry]\nType=Application\nName={}\nExec={} %U\n{}{}Terminal=false\nCategories=Utility;\nStartupNotify=true\nStartupWMClass={}\n",
-        desktop_value(&app.name),
-        desktop_exec(executable),
+    crate::desktop::entry::Entry {
+        id: &app.id,
+        name: &app.name,
+        exec: executable,
         icon,
-        mime_types,
-        desktop_value(&app.id)
-    )
+        mime_types: &app.mime_types,
+        listing: &app.listing,
+    }
+    .render()
 }
 
 pub(super) fn app_run(executable: &str) -> String {
@@ -140,36 +137,6 @@ fn xml(value: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-fn desktop_value(value: &str) -> String {
-    value.replace(['\n', '\r'], " ")
-}
-
-fn mime_type_line(mime_types: &[String]) -> String {
-    if mime_types.is_empty() {
-        return String::new();
-    }
-    let values = mime_types
-        .iter()
-        .map(|mime_type| mime_type.trim())
-        .filter(|mime_type| !mime_type.is_empty())
-        .collect::<Vec<_>>();
-    if values.is_empty() {
-        String::new()
-    } else {
-        format!("MimeType={};\n", values.join(";"))
-    }
-}
-
-fn desktop_exec(value: &str) -> String {
-    let escaped = value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('`', "\\`")
-        .replace('$', "\\$")
-        .replace('%', "%%");
-    format!("\"{}\"", escaped.replace('\\', "\\\\"))
 }
 
 fn windows_version(version: &str) -> String {

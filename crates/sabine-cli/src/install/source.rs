@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    desktop::icons,
+    desktop::{entry::Listing, icons},
     install::{
         assets::{self as source_assets, StagedAssets},
         desktop as source_desktop,
@@ -33,6 +33,7 @@ pub struct SourceApp {
     pub command: Option<String>,
     pub icon: Option<PathBuf>,
     pub mime_types: Vec<String>,
+    pub listing: Listing,
     pub autostart: bool,
 }
 
@@ -93,6 +94,14 @@ pub(crate) fn detect_source_app(
         .ok()
         .and_then(|text| toml::from_str(&text).ok())
         .unwrap_or_default();
+    let listing = configured
+        .get("app")
+        .cloned()
+        .map(toml::Value::try_into::<Listing>)
+        .transpose()
+        .map_err(|error| format!("invalid [app] in Sabine.toml: {error}"))?
+        .unwrap_or_default();
+    listing.validate()?;
     let version = configured
         .get("app")
         .and_then(|app| app.get("version"))
@@ -118,6 +127,7 @@ pub(crate) fn detect_source_app(
         command: command.or(metadata.command),
         icon: metadata.icon,
         mime_types: metadata.mime_types,
+        listing,
         autostart,
     })
 }
@@ -217,6 +227,7 @@ fn read_registry_record(path: &Path) -> Result<SourceApp, String> {
         command,
         icon,
         mime_types,
+        listing: Listing::default(),
         autostart,
     })
 }

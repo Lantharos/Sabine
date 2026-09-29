@@ -91,6 +91,7 @@ pub fn install_bundle(
             app.icon
         },
         mime_types: app.mime_types,
+        listing: app.listing,
         autostart: options.autostart,
     };
     let source_record = directory.join("source-install.toml");
