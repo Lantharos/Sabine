@@ -171,6 +171,13 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
 #endif
   renderer_crashes_.erase(browser->GetIdentifier());
   ime_frames_.erase(browser->GetIdentifier());
+  for (auto it = clipboard_requests_.begin();
+       it != clipboard_requests_.end();) {
+    if (it->second.browser->IsSame(browser))
+      it = clipboard_requests_.erase(it);
+    else
+      ++it;
+  }
   ime_surrounding_state_.erase(browser->GetIdentifier());
   text_input_modes_.erase(browser->GetIdentifier());
   ime_cursor_rects_.erase(browser->GetIdentifier());

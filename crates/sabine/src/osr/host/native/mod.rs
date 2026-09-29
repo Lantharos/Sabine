@@ -110,6 +110,10 @@ pub(super) struct OsrNativeHost {
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
     #[cfg(target_os = "linux")]
     pub(super) media: crate::media::MediaHost,
+    #[cfg(target_os = "linux")]
+    pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
+    #[cfg(target_os = "linux")]
+    pub(super) paste_gesture: Option<Instant>,
 }
 
 impl OsrNativeHost {
@@ -207,6 +211,10 @@ impl OsrNativeHost {
             surface_broker: None,
             #[cfg(target_os = "linux")]
             media,
+            #[cfg(target_os = "linux")]
+            clipboard: None,
+            #[cfg(target_os = "linux")]
+            paste_gesture: None,
         }
     }
 
@@ -474,7 +482,7 @@ impl OsrNativeHost {
 }
 
 pub(super) struct IncomingFileDrag {
-    pub(super) id: DataTransferId,
+    pub(super) id: Option<DataTransferId>,
     pub(super) paths: Vec<PathBuf>,
     pub(super) x: f32,
     pub(super) y: f32,

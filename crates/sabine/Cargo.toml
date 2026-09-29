@@ -53,6 +53,7 @@ libloading.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
+x11rb.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey = "0.8.0"

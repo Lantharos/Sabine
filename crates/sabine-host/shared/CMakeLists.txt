@@ -40,6 +40,8 @@ set(SABINE_HOST_SOURCES
   app/app.h
   app/bridge.cc
   app/bridge.h
+  app/clipboard.cc
+  app/clipboard.h
   app/scheme.cc
   app/scheme.h
   common/json.cc
@@ -53,6 +55,7 @@ set(SABINE_HOST_SOURCES
   osr/handler.h
   osr/bridge.cc
   osr/browser/callbacks.cc
+  osr/browser/clipboard.cc
   osr/browser/recovery.cc
   osr/browser/downloads.cc
   osr/browser/permissions.cc

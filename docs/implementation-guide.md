@@ -628,6 +628,24 @@ separate browser manifests; an empty list grants no extensions access. Registrat
 for Chrome, Chromium, Edge, Brave, and Firefox. On Windows, each browser's registry key points to
 its corresponding manifest.
 
+### Clipboard
+
+Chromium renders offscreen and has no focused window of its own, so on Linux it cannot reach the
+compositor's clipboard or primary selection. The window host owns them instead. On Wayland it uses
+`ext-data-control` when the compositor offers it; otherwise it uses the seat's data device and
+primary selection device on the window's connection. Compositors without data control, such as
+GNOME's, deliver selections and drops only to a client's newest data device, so on those Sabine's
+device also receives the files dropped on the window and the window toolkit's drop handling is
+ignored. On X11 the host owns selections on an invisible window of its own connection, following the
+incremental protocol when reading large data.
+
+The browser host evaluates a small script in every frame. It routes trusted `paste` events,
+middle-click pastes and `navigator.clipboard` through the window host, and exports copies, cuts and
+selected text. Frames showing the app's own documents may read the clipboard at any time; other
+frames, such as guests, only while the user is pasting with Ctrl+V, Shift+Insert or a middle click.
+Chromium's clipboard permission is granted only to the app's own documents. Windows and macOS keep
+Chromium's own clipboard.
+
 ## Bundles and installs
 
 The CLI reads `Sabine.toml`, builds web assets and the selected Rust package, writes a normalized

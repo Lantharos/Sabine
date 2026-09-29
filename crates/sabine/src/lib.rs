@@ -1,5 +1,7 @@
 pub use sabine_service::AppEnvironment;
 mod bridge;
+#[cfg(target_os = "linux")]
+mod clipboard;
 mod desktop;
 mod error;
 mod host;

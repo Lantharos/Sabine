@@ -178,6 +178,30 @@ export interface PopupOptions {
   url?: string;
 }
 
+export type ClipboardSelection = "clipboard" | "primary";
+
+/** Clipboard contents by MIME type: text types as strings, others as bytes. */
+export type ClipboardData = Record<string, string | Uint8Array>;
+
+export interface ClipboardReadOptions {
+  /** `primary` is the selection that middle-click pastes, on Linux only. */
+  selection?: ClipboardSelection;
+  /** MIME types to read. Defaults to plain text, HTML, file lists and one image. */
+  types?: string[];
+}
+
+export interface ClipboardWriteOptions {
+  selection?: ClipboardSelection;
+}
+
+export interface SabineClipboardApi {
+  read(options?: ClipboardReadOptions): Promise<ClipboardData>;
+  write(
+    data: Record<string, string | Uint8Array | Blob>,
+    options?: ClipboardWriteOptions,
+  ): Promise<void>;
+}
+
 export interface SabineApi {
   bridge: SabineBridge;
   window: SabineWindowApi;
@@ -190,6 +214,7 @@ export interface SabineApi {
     open(options?: PopupOptions): Promise<unknown>;
     close(): Promise<unknown>;
   };
+  clipboard?: SabineClipboardApi;
 }
 
 export declare function isAvailable(): boolean;
@@ -383,6 +408,12 @@ export declare class NativeVideo extends EventTarget {
   ): void;
 }
 
+/**
+ * The desktop clipboard with any MIME type, and the primary selection on
+ * Linux. Elsewhere it uses the browser clipboard.
+ */
+export declare const clipboard: SabineClipboardApi;
+
 declare global {
   interface Window {
     sabine?: SabineApi;
@@ -403,6 +434,7 @@ declare const api: {
   guest: typeof guest;
   activity: typeof activity;
   popup: typeof popup;
+  clipboard: typeof clipboard;
   NativeVideo: typeof NativeVideo;
 };
 

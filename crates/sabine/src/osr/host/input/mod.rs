@@ -1,3 +1,4 @@
+mod drag;
 mod forward;
 mod ime;
 mod shortcuts;
@@ -25,6 +26,8 @@ impl ApplicationHandler for OsrNativeHost {
         if self.window.is_some() {
             return;
         }
+        #[cfg(target_os = "linux")]
+        self.connect_clipboard(event_loop);
         if !self.config.visible {
             self.launch_child();
             return;
@@ -38,6 +41,8 @@ impl ApplicationHandler for OsrNativeHost {
         self.recover_gpu();
         #[cfg(windows)]
         self.forward_system_keys();
+        #[cfg(target_os = "linux")]
+        self.deliver_clipboard_drops();
         self.process_osr_events(event_loop);
     }
 
@@ -122,6 +127,8 @@ impl ApplicationHandler for OsrNativeHost {
                 is_synthetic: false,
                 ..
             } => {
+                #[cfg(target_os = "linux")]
+                self.note_paste_key(&event);
                 self.send_key_event(&event);
             }
             WindowEvent::Ime(ime) => self.forward_ime(ime),
@@ -290,6 +297,10 @@ impl ApplicationHandler for OsrNativeHost {
                             }
                             return;
                         }
+                        #[cfg(target_os = "linux")]
+                        if button == Some(MouseButton::Middle) {
+                            self.note_middle_click();
+                        }
                         self.active_click_count = self.next_click_count(button);
                         self.set_mouse_button(button, true);
                         self.forward_mouse_click(button, false, self.active_click_count);
@@ -319,7 +330,7 @@ impl ApplicationHandler for OsrNativeHost {
             WindowEvent::MouseWheel { delta, .. } => {
                 self.forward_mouse_wheel(delta);
             }
-            WindowEvent::DragEntered { id, position } => {
+            WindowEvent::DragEntered { id, position } if !self.clipboard_owns_drops() => {
                 self.begin_incoming_file_drag(event_loop, id, position);
             }
             WindowEvent::DragPosition {

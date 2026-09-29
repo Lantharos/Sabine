@@ -368,6 +368,54 @@ export const popup = {
   },
 };
 
+const browserClipboard = {
+  async read({ selection = "clipboard", types } = {}) {
+    if (selection !== "clipboard") {
+      throw new Error("The primary selection is only available on Linux.");
+    }
+    const data = {};
+    for (const item of await navigator.clipboard.read()) {
+      for (const type of item.types) {
+        if (types && !types.includes(type)) continue;
+        const blob = await item.getType(type);
+        data[type] = type.startsWith("text/")
+          ? await blob.text()
+          : new Uint8Array(await blob.arrayBuffer());
+      }
+    }
+    return data;
+  },
+  async write(data, { selection = "clipboard" } = {}) {
+    if (selection !== "clipboard") {
+      throw new Error("The primary selection is only available on Linux.");
+    }
+    const blobs = Object.entries(data).map(([type, value]) => [type, new Blob([value], { type })]);
+    await navigator.clipboard.write([new ClipboardItem(Object.fromEntries(blobs))]);
+  },
+};
+
+function currentClipboard() {
+  return globalThis.window?.sabine?.clipboard ?? browserClipboard;
+}
+
+export const clipboard = {
+  /**
+   * @param {import("./index.d.ts").ClipboardReadOptions} [options]
+   * @returns {Promise<import("./index.d.ts").ClipboardData>}
+   */
+  read(options) {
+    return currentClipboard().read(options);
+  },
+  /**
+   * @param {Record<string, string | Uint8Array | Blob>} data
+   * @param {import("./index.d.ts").ClipboardWriteOptions} [options]
+   * @returns {Promise<void>}
+   */
+  write(data, options) {
+    return currentClipboard().write(data, options);
+  },
+};
+
 export default {
   isAvailable,
   fileUrl,
@@ -382,5 +430,6 @@ export default {
   guest,
   activity,
   popup,
+  clipboard,
   NativeVideo,
 };
