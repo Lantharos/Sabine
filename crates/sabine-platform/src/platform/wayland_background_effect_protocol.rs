@@ -35,6 +35,7 @@ pub(super) const SURFACE_SET_OPAQUE_REGION: u32 = 4;
 pub(super) const SURFACE_SET_INPUT_REGION: u32 = 5;
 pub(super) const REGION_DESTROY: u32 = 0;
 pub(super) const REGION_ADD: u32 = 1;
+pub(super) const REGION_SUBTRACT: u32 = 2;
 pub(super) const MANAGER_DESTROY: u32 = 0;
 pub(super) const MANAGER_GET_BACKGROUND_EFFECT: u32 = 1;
 pub(super) const MANAGER_CAPABILITY_BLUR: u32 = 1;

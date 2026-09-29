@@ -3,6 +3,9 @@
 - Fix Linux pages rendering without Chromium's built-in styles, which showed the contents of
   `<head>` as text: renderers could not find `resources.pak` and `chrome_100_percent.pak` beside
   the runtime library. Existing runtimes are repaired on the next launch or update.
+- Play H.264, HEVC, AAC and other media Chromium cannot decode through `NativeVideo` on Linux. Video
+  is decoded in hardware where available and shown on a native surface beneath the page, with the
+  page's own controls, subtitles, audio tracks and fullscreen.
 - Keep windows responsive while they are not being shown: presenting now waits for the compositor
   to ask for a frame instead of blocking the window until the display catches up. Bridge calls from
   animating pages return within a millisecond instead of one display frame, and out-of-view windows

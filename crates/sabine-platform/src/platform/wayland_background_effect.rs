@@ -1,6 +1,6 @@
 #[cfg(target_os = "linux")]
 use crate::WindowBackgroundEffect;
-use crate::WindowOptions;
+use crate::{WindowOptions, WindowRegionRect};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
 #[cfg(target_os = "linux")]
@@ -22,7 +22,7 @@ use wayland_background_effect_protocol::*;
 #[path = "wayland_background_effect_ext.rs"]
 mod wayland_background_effect_ext;
 #[cfg(target_os = "linux")]
-use wayland_background_effect_ext::{ExtBackgroundEffect, ManagerState, apply_surface_regions};
+use wayland_background_effect_ext::{ExtBackgroundEffect, ManagerState};
 
 #[cfg(target_os = "linux")]
 pub fn request(window: &Arc<dyn Window>, options: &WindowOptions) -> Option<WaylandEffect> {
@@ -89,7 +89,13 @@ pub struct WaylandEffect;
 
 #[cfg(not(target_os = "linux"))]
 impl WaylandEffect {
-    pub fn update(&self, _options: &WindowOptions, _width: i32, _height: i32) -> bool {
+    pub fn update(
+        &self,
+        _options: &WindowOptions,
+        _width: i32,
+        _height: i32,
+        _transparent_holes: &[WindowRegionRect],
+    ) -> bool {
         false
     }
 }
@@ -116,21 +122,19 @@ impl Drop for WaylandEffect {
 
 #[cfg(target_os = "linux")]
 impl WaylandEffect {
-    pub fn update(&self, options: &WindowOptions, width: i32, height: i32) -> bool {
+    /// Reapplies the surface regions; `transparent_holes` stay out of the
+    /// blur and opaque regions so surfaces beneath the window show there.
+    pub fn update(
+        &self,
+        options: &WindowOptions,
+        width: i32,
+        height: i32,
+        transparent_holes: &[WindowRegionRect],
+    ) -> bool {
         if self.display.is_null() || self.surface.is_null() || self.compositor.is_null() {
             return false;
         }
-        unsafe {
-            apply_surface_regions(
-                self.display,
-                self.surface,
-                self.compositor,
-                self.effect,
-                options,
-                width,
-                height,
-            )
-        }
+        unsafe { self.apply_surface_regions(options, width, height, transparent_holes) }
     }
 }
 

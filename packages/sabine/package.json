@@ -18,6 +18,8 @@
   },
   "files": [
     "index.js",
+    "media.js",
+    "media-layout.js",
     "index.d.ts",
     "README.md"
   ],

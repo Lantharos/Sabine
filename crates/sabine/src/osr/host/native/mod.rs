@@ -106,6 +106,8 @@ pub(super) struct OsrNativeHost {
     pub(super) handoff_deadline: Option<Instant>,
     #[cfg(target_os = "macos")]
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
+    #[cfg(target_os = "linux")]
+    pub(super) media: crate::media::MediaHost,
 }
 
 impl OsrNativeHost {
@@ -132,6 +134,8 @@ impl OsrNativeHost {
                 .hibernate_after
                 .map(|delay| Instant::now() + delay)
         };
+        #[cfg(target_os = "linux")]
+        let media = crate::media::MediaHost::new(config.transparent);
         Self {
             config,
             sender,
@@ -197,6 +201,8 @@ impl OsrNativeHost {
             handoff_deadline: None,
             #[cfg(target_os = "macos")]
             surface_broker: None,
+            #[cfg(target_os = "linux")]
+            media,
         }
     }
 

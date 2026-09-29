@@ -2,6 +2,8 @@ mod config;
 mod events;
 mod input;
 mod lifecycle;
+#[cfg(target_os = "linux")]
+mod media;
 mod native;
 mod paint;
 mod recovery;

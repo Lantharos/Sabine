@@ -5,8 +5,8 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::render::rect_pipeline::{
-    Globals, RectVertex, create_image_pipeline, create_rounded_rect_pipeline, push_rect_command,
-    push_rounded_rect_command, to_wgpu_color,
+    CUTOUT_BLENDING, Globals, RectVertex, create_image_pipeline, create_rounded_rect_pipeline,
+    push_rect_command, push_rounded_rect_command, to_wgpu_color,
 };
 use crate::render::{DisplayCommand, DisplayList};
 
@@ -54,10 +54,12 @@ pub struct GpuRenderer {
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
+    cutout_pipeline: Option<wgpu::RenderPipeline>,
     image_pipeline: wgpu::RenderPipeline,
     image_sampler: wgpu::Sampler,
     image_bind_group_layout: wgpu::BindGroupLayout,
     globals_buffer: wgpu::Buffer,
+    globals_bind_group_layout: wgpu::BindGroupLayout,
     globals_bind_group: wgpu::BindGroup,
     rect_vertex_buffer: DynamicVertexBuffer,
     image_vertex_buffer: DynamicVertexBuffer,
@@ -185,7 +187,12 @@ impl GpuRenderer {
                 resource: globals_buffer.as_entire_binding(),
             }],
         });
-        let pipeline = create_rounded_rect_pipeline(&device, format, &globals_bind_group_layout);
+        let pipeline = create_rounded_rect_pipeline(
+            &device,
+            format,
+            &globals_bind_group_layout,
+            wgpu::BlendState::ALPHA_BLENDING,
+        );
         let image_pipeline = create_image_pipeline(&device, format, &globals_bind_group_layout);
         let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sabine image sampler"),
@@ -228,10 +235,12 @@ impl GpuRenderer {
             surface,
             surface_config,
             pipeline,
+            cutout_pipeline: None,
             image_pipeline,
             image_sampler,
             image_bind_group_layout,
             globals_buffer,
+            globals_bind_group_layout,
             globals_bind_group,
             rect_vertex_buffer: DynamicVertexBuffer::default(),
             image_vertex_buffer: DynamicVertexBuffer::default(),
@@ -282,7 +291,15 @@ impl GpuRenderer {
                 _padding: [0.0, 0.0],
             }]),
         );
-        let rect_vertices = self.rect_vertices(display_list);
+        let (rect_vertices, rect_batches) = self.rect_vertices(display_list);
+        if rect_batches.iter().any(|batch| batch.cutout) && self.cutout_pipeline.is_none() {
+            self.cutout_pipeline = Some(create_rounded_rect_pipeline(
+                &self.device,
+                self.surface_config.format,
+                &self.globals_bind_group_layout,
+                CUTOUT_BLENDING,
+            ));
+        }
         let (image_draws, image_vertices) = self.image_draws(display_list);
         let has_text = display_list
             .commands
@@ -346,10 +363,15 @@ impl GpuRenderer {
             });
 
             if let Some(vertex_buffer) = &rect_vertex_buffer {
-                pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.globals_bind_group, &[]);
                 pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                pass.draw(0..rect_vertices.len() as u32, 0..1);
+                for batch in rect_batches {
+                    pass.set_pipeline(match &self.cutout_pipeline {
+                        Some(cutout) if batch.cutout => cutout,
+                        _ => &self.pipeline,
+                    });
+                    pass.draw(batch.vertices, 0..1);
+                }
             }
 
             for draw in &image_draws {
@@ -377,21 +399,43 @@ impl GpuRenderer {
         Ok(())
     }
 
-    fn rect_vertices(&self, display_list: &DisplayList) -> Vec<RectVertex> {
+    fn rect_vertices(&self, display_list: &DisplayList) -> (Vec<RectVertex>, Vec<RectBatch>) {
         let mut vertices = Vec::new();
+        let mut batches: Vec<RectBatch> = Vec::new();
         for command in &display_list.commands {
-            match command {
+            let start = vertices.len() as u32;
+            let cutout = match command {
                 DisplayCommand::Rect(command) => {
-                    push_rect_command(&mut vertices, command, self.scale_factor)
+                    push_rect_command(&mut vertices, command, self.scale_factor);
+                    false
                 }
                 DisplayCommand::RoundedRect(command) => {
-                    push_rounded_rect_command(&mut vertices, command, self.scale_factor)
+                    push_rounded_rect_command(&mut vertices, command, self.scale_factor);
+                    false
                 }
-                DisplayCommand::Text(_) | DisplayCommand::Image(_) => {}
+                #[cfg(target_os = "linux")]
+                DisplayCommand::Cutout(command) => {
+                    push_rounded_rect_command(&mut vertices, command, self.scale_factor);
+                    true
+                }
+                DisplayCommand::Text(_) | DisplayCommand::Image(_) => continue,
+            };
+            let end = vertices.len() as u32;
+            match batches.last_mut() {
+                Some(batch) if batch.cutout == cutout => batch.vertices.end = end,
+                _ => batches.push(RectBatch {
+                    vertices: start..end,
+                    cutout,
+                }),
             }
         }
-        vertices
+        (vertices, batches)
     }
+}
+
+struct RectBatch {
+    vertices: std::ops::Range<u32>,
+    cutout: bool,
 }
 
 #[cfg(any(windows, target_os = "macos"))]

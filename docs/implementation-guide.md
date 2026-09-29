@@ -312,6 +312,41 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 Palette and tray windows use the same native host as other desktop windows, with frameless chrome,
 always-on-top placement, and hide-on-blur behavior when configured.
 
+## Native media
+
+Sabine's Chromium runtime has no H.264, HEVC or AAC decoders. On Linux under Wayland, pages can play
+such media on a native surface instead, through `NativeVideo` in `@lantharos/sabine`. The page
+decides when: typically after a `<video>` reports that it cannot play a source.
+
+The window host answers `sabine.media.*` bridge requests itself, since it owns the window. Each
+media surface gets its own thread running a GStreamer `playbin3`. GStreamer is loaded when a page
+first creates a surface, so apps that never play native media do not load it and do not need it
+installed. Decoding uses the hardware decoders GStreamer selects: VA-API on AMD and Intel, NVDEC
+on NVIDIA. NVDEC receives a CUDA context that sleeps while it waits for the GPU instead of spinning
+a core.
+
+Decoded pictures stay on the GPU. The decoder hands GL textures to an OpenGL context that shares
+them with the surface's presenter, which draws the newest picture into a Wayland subsurface
+stacked beneath the window, scaled to fit and clipped to the element's rounded corners. The
+subsurface is desynchronized, so video frames reach the compositor without redrawing the window.
+Its buffer is sized in physical pixels and shown at logical size, so video stays sharp at any
+display scale.
+
+The page keeps drawing its own controls above the video. Everything the page paints beneath the
+element must be transparent where the video shows, which requires a transparent window; CSS has no
+way to erase what is already painted, so a page with opaque content there clips the video's shape
+out of a container instead (`cutout`), giving up drawing over the video inside it. The window leaves
+the surface's area out of its background, blur and opaque regions so the compositor shows the video
+through it. `NativeVideo` follows the element's layout, scrolling, overflow clipping, resizes and
+finished animations; the window position of the surface changes together with the window's next
+frame.
+
+Audio plays through the desktop's default sink. Time updates arrive four times a second while
+playing; nothing runs while a video is paused. A video paused for five seconds releases its
+decoder, which NVIDIA's driver otherwise keeps polling, and resumes from the same position.
+Subtitle tracks are delivered as text cues for the page to render. Pages can open `http(s)` URLs,
+their own `sabine://app/` files, and, with local file access, `sabine://file/` URLs.
+
 ## Runtime ownership
 
 `sabine-runtime` is the only crate allowed to decide runtime locations, versions, download archives,

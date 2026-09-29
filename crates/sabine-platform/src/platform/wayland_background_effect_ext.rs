@@ -5,7 +5,7 @@ use std::{
 
 use super::WaylandEffect;
 use super::wayland_background_effect_protocol::*;
-use crate::{WindowBackgroundEffect, WindowOptions, WindowRegion};
+use crate::{WindowBackgroundEffect, WindowOptions, WindowRegion, WindowRegionRect};
 
 #[cfg(target_os = "linux")]
 pub(super) struct ExtBackgroundEffect;
@@ -163,102 +163,97 @@ impl ExtBackgroundEffect {
         }
         unsafe { wl_proxy_destroy(registry.cast()) };
 
-        unsafe {
-            apply_surface_regions(
-                display,
-                surface,
-                compositor,
-                effect_proxy,
-                options,
-                width,
-                height,
-            )
-        };
-        debug("applied ext_background_effect_surface_v1 regions");
-
-        Some(WaylandEffect {
+        let effect = WaylandEffect {
             display,
             surface,
             effect: effect_proxy,
             manager: manager.cast(),
             compositor: compositor.cast(),
             _manager_state: manager_state,
-        })
+        };
+        unsafe { effect.apply_surface_regions(options, width, height, &[]) };
+        debug("applied ext_background_effect_surface_v1 regions");
+        Some(effect)
     }
 }
 
 #[cfg(target_os = "linux")]
-pub(super) unsafe fn apply_surface_regions(
-    display: *mut WlDisplay,
-    surface: *mut WlProxy,
-    compositor: *mut WlProxy,
-    effect_proxy: *mut WlProxy,
-    options: &WindowOptions,
-    width: i32,
-    height: i32,
-) -> bool {
-    if !effect_proxy.is_null() {
-        let blur = options
-            .regions
-            .blur
-            .clone()
-            .unwrap_or_else(WindowRegion::adaptive_full);
-        let Some(region) = (unsafe { create_region(compositor, &blur, width, height) }) else {
-            debug("failed to create blur wl_region");
-            return false;
-        };
-        unsafe {
-            wl_proxy_marshal_flags(
-                effect_proxy,
-                EFFECT_SET_BLUR_REGION,
-                ptr::null(),
-                1,
-                0,
-                region,
-            );
-            wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+impl WaylandEffect {
+    pub(super) unsafe fn apply_surface_regions(
+        &self,
+        options: &WindowOptions,
+        width: i32,
+        height: i32,
+        transparent_holes: &[WindowRegionRect],
+    ) -> bool {
+        let (display, surface, compositor, effect_proxy) =
+            (self.display, self.surface, self.compositor, self.effect);
+        if !effect_proxy.is_null() {
+            let blur = options
+                .regions
+                .blur
+                .clone()
+                .unwrap_or_else(WindowRegion::adaptive_full);
+            let Some(region) =
+                (unsafe { create_region(compositor, &blur, width, height, transparent_holes) })
+            else {
+                debug("failed to create blur wl_region");
+                return false;
+            };
+            unsafe {
+                wl_proxy_marshal_flags(
+                    effect_proxy,
+                    EFFECT_SET_BLUR_REGION,
+                    ptr::null(),
+                    1,
+                    0,
+                    region,
+                );
+                wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+            }
         }
-    }
 
-    if let Some(opaque) = &options.regions.opaque
-        && let Some(region) = (unsafe { create_region(compositor, opaque, width, height) })
-    {
-        unsafe {
-            wl_proxy_marshal_flags(
-                surface,
-                SURFACE_SET_OPAQUE_REGION,
-                ptr::null(),
-                wl_proxy_get_version(surface),
-                0,
-                region,
-            );
-            wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+        if let Some(opaque) = &options.regions.opaque
+            && let Some(region) =
+                (unsafe { create_region(compositor, opaque, width, height, transparent_holes) })
+        {
+            unsafe {
+                wl_proxy_marshal_flags(
+                    surface,
+                    SURFACE_SET_OPAQUE_REGION,
+                    ptr::null(),
+                    wl_proxy_get_version(surface),
+                    0,
+                    region,
+                );
+                wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+            }
         }
-    }
 
-    if let Some(input) = &options.regions.input
-        && let Some(region) = (unsafe { create_region(compositor, input, width, height) })
-    {
-        unsafe {
-            wl_proxy_marshal_flags(
-                surface,
-                SURFACE_SET_INPUT_REGION,
-                ptr::null(),
-                wl_proxy_get_version(surface),
-                0,
-                region,
-            );
-            wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+        if let Some(input) = &options.regions.input
+            && let Some(region) = (unsafe { create_region(compositor, input, width, height, &[]) })
+        {
+            unsafe {
+                wl_proxy_marshal_flags(
+                    surface,
+                    SURFACE_SET_INPUT_REGION,
+                    ptr::null(),
+                    wl_proxy_get_version(surface),
+                    0,
+                    region,
+                );
+                wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+            }
         }
-    }
 
-    // Do not wl_surface_commit here. This surface is owned by wgpu; a commit
-    // without attaching a buffer races presentation and flashes transparent
-    // windows (especially after interactive move / focus regain).
-    unsafe {
-        wl_display_flush(display);
+        // Do not wl_surface_commit here. This surface is owned by wgpu; a commit
+        // without attaching a buffer races presentation and flashes transparent
+        // windows (especially after interactive move / focus regain).
+        unsafe {
+            wl_display_flush(display);
+        }
+        true
     }
-    true
 }
 
 #[cfg(target_os = "linux")]
@@ -267,6 +262,7 @@ unsafe fn create_region(
     region: &WindowRegion,
     width: i32,
     height: i32,
+    holes: &[WindowRegionRect],
 ) -> Option<*mut WlProxy> {
     let proxy = unsafe {
         wl_proxy_marshal_flags(
@@ -282,11 +278,16 @@ unsafe fn create_region(
         return None;
     }
 
-    for rect in region.resolved_rects(width, height) {
+    let rects = region.resolved_rects(width, height);
+    for (opcode, rect) in rects
+        .iter()
+        .map(|rect| (REGION_ADD, rect))
+        .chain(holes.iter().map(|hole| (REGION_SUBTRACT, hole)))
+    {
         unsafe {
             wl_proxy_marshal_flags(
                 proxy,
-                REGION_ADD,
+                opcode,
                 ptr::null(),
                 1,
                 0,

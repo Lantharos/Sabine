@@ -215,6 +215,10 @@ impl OsrNativeHost {
                     self.activate_window(event_loop, token);
                 }
                 OsrHostEvent::Message(_, OsrMessage::BridgeRequest(line)) => {
+                    #[cfg(target_os = "linux")]
+                    if self.handle_media_request(&line) {
+                        continue;
+                    }
                     if !line.is_empty() {
                         let mut output = std::io::stdout();
                         use std::io::Write;
@@ -224,6 +228,8 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::Message(_, OsrMessage::MainLoadStarted) => {
                     super::trace_host(&self.config, "browser.load_started");
+                    #[cfg(target_os = "linux")]
+                    self.clear_media();
                     self.main_load_ready = false;
                     self.main_frame_presented = false;
                     if self.config.visible && self.loading.is_none() {
@@ -311,6 +317,8 @@ impl OsrNativeHost {
                     return;
                 }
                 OsrHostEvent::Disconnected(_) => {
+                    #[cfg(target_os = "linux")]
+                    self.clear_media();
                     self.drop_connection();
                     self.awaiting_connection = false;
                     self.connection_deadline = None;
