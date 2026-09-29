@@ -448,9 +448,10 @@ through `sabine`.
 
 ## Bridge security
 
-Browser permission prompts are denied explicitly. Camera and microphone requests are denied by
-CEF's off-screen policy, and notification/geolocation requests return a denial instead of remaining
-pending for an unavailable prompt. Sabine does not currently expose a browser permission grant API.
+Browser permission prompts are denied explicitly, except clipboard access for the app's own
+documents. Camera and microphone requests are denied by CEF's off-screen policy, and
+notification/geolocation requests return a denial instead of remaining pending for an unavailable
+prompt. Sabine does not currently expose a browser permission grant API.
 
 Bridge commands must be registered before launch. Each command can constrain targets and origins.
 The host rejects unknown commands, invalid targets, and origins outside the configured allowlist.
@@ -472,6 +473,21 @@ A command-specific origin grants that command only, without granting window cont
 Responses are bound to their originating V8 context and native request identity; navigation,
 cancellation, or caller request-ID reuse cannot redirect a response into another document.
 Resolved and failed JavaScript calls release their timeout immediately.
+
+### Events and bytes
+
+Events reach every window unless the app sends them with `emit_to` or `emit_bytes_to`. A command's
+`window` names the window whose page made the call, so a handler can answer that window alone.
+Sending an event waits while a window's pages have not yet taken earlier events, so a fast producer
+such as terminal output runs at the pace the page keeps up with instead of losing events. The window
+host hands the app's messages to the browser from the thread that reads them and waits the same way,
+keeping half of its queue for its own input so a burst of events never drops a keystroke.
+
+Bytes travel without JSON or base64. Between the app, its windows and the browser host, a message
+line starting with `SABINE_BRIDGE_BYTES\t<length>\t` is followed by that many bytes; between the
+browser and renderer processes they travel in shared memory. A call can carry up to 32 MiB as
+`body`, a handler answers with bytes through `BridgeResponse::bytes`, and `emit_bytes` sends bytes
+as an event. Pages receive them as `Uint8Array`s.
 
 Guests default to `allow_bridge = false`. Explicitly supplied HTML in an opted-in guest remains
 trusted when the app replaces it through `guest.navigate`; arbitrary data URLs do not gain access. A guest gets an isolated request context when it declares a

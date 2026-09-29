@@ -121,6 +121,8 @@ mod tests {
                 "height": 800,
             }),
             origin: None,
+            body: None,
+            window: None,
         };
         let control = GuestHostControl::from_bridge_command(&command).unwrap();
         assert_eq!(control.command_name(), "guest.create");

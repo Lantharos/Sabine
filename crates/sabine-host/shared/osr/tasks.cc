@@ -5,15 +5,18 @@
 namespace sabine_osr {
 
 OsrCommandTask::OsrCommandTask(CefRefPtr<SabineOsrHandler> handler,
-                               std::string line)
-    : handler_(std::move(handler)), line_(std::move(line)) {}
+                               std::string line,
+                               std::optional<std::string> body)
+    : handler_(std::move(handler)),
+      line_(std::move(line)),
+      body_(std::move(body)) {}
 
 OsrCommandTask::~OsrCommandTask() {
-  handler_->CompleteQueuedControl(line_.size());
+  handler_->CompleteQueuedControl(line_.size() + (body_ ? body_->size() : 0));
 }
 
 void OsrCommandTask::Execute() {
-  handler_->HandleQueuedControl(line_);
+  handler_->HandleQueuedControl(line_, body_);
 }
 
 OsrResizeTask::OsrResizeTask(CefRefPtr<SabineOsrHandler> handler)

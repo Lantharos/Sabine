@@ -84,6 +84,7 @@ impl OsrNativeHost {
                         continue;
                     }
                     self.socket = Some(stream);
+                    self.relay.connect(Some(std::sync::Arc::clone(&writer)));
                     self.control_writer = Some(writer);
                     self.awaiting_connection = false;
                     self.connection_deadline = None;
@@ -214,11 +215,13 @@ impl OsrNativeHost {
                 OsrHostEvent::Message(_, OsrMessage::FocusRequested(token)) => {
                     self.activate_window(event_loop, token);
                 }
-                OsrHostEvent::Message(_, OsrMessage::BridgeRequest(line)) => {
-                    if !line.is_empty() && !self.answer_window_bridge_request(&line) {
+                OsrHostEvent::Message(_, OsrMessage::BridgeRequest(frame)) => {
+                    let answered =
+                        frame.body.is_none() && self.answer_window_bridge_request(&frame.line);
+                    if !frame.line.is_empty() && !answered {
                         let mut output = std::io::stdout();
                         use std::io::Write;
-                        let _ = writeln!(output, "{line}");
+                        let _ = output.write_all(&frame.to_bytes());
                         let _ = output.flush();
                     }
                 }
@@ -296,13 +299,6 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::HostControl(HostControl::ActivityEnd(activity)) => {
                     self.end_activity(activity)
-                }
-                OsrHostEvent::ControlLine(line) => {
-                    let mut line = line;
-                    if !line.ends_with('\n') {
-                        line.push('\n');
-                    }
-                    self.send_control(&line);
                 }
                 OsrHostEvent::IncompatibleHost(_) => {
                     self.fail(

@@ -30,7 +30,7 @@ pub(super) const HEADER_LEN: usize = 28;
 pub(super) const MAGIC: &[u8; 4] = b"SAB1";
 const MAX_SURFACE_DIMENSION: u32 = 16_384;
 pub(super) const MAX_PAINT_BYTES: usize = 256 * 1024 * 1024;
-const MAX_CONTROL_BYTES: usize = 16 * 1024 * 1024;
+const MAX_CONTROL_BYTES: usize = 64 * 1024 * 1024;
 pub(super) const KIND_POPUP_HIDDEN: u32 = 3;
 pub(super) const KIND_CURSOR: u32 = 4;
 pub(super) const KIND_CLOSE_REQUESTED: u32 = 5;
@@ -290,7 +290,7 @@ impl WireReader {
             }
             KIND_IME_SURROUNDING_CHANGED => parse_ime_surrounding(&payload)?,
             KIND_BRIDGE_REQUEST => {
-                OsrMessage::BridgeRequest(String::from_utf8(payload).unwrap_or_default())
+                OsrMessage::BridgeRequest(crate::bridge::frame::Frame::decode(&payload)?)
             }
             #[cfg(any(windows, target_os = "macos"))]
             KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {

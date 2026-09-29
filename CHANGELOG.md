@@ -18,6 +18,13 @@
   middle-clicking uses the primary selection. The app's own pages can read the clipboard without
   a prompt. `clipboard.read()` and `clipboard.write()` in `@lantharos/sabine` take any MIME type,
   such as a file manager's copied files.
+- Send events to one window with `emit_to` and `emit_bytes_to`. Bridge commands name the window that
+  called them in `command.window`, so apps with several windows can answer only that one.
+- Sending events now waits while a window catches up instead of dropping them once 512 are queued,
+  and a burst of events no longer closes a window's connection to its pages.
+- Move bytes between pages and the app without JSON or base64: calls can carry a `body`, handlers
+  can answer with `BridgeResponse::bytes`, and `emit_bytes` streams bytes such as terminal output.
+  Pages receive a `Uint8Array`.
 - Choose the DevTools port of development runs with `SABINE_DEVTOOLS_PORT`, so several apps in
   development no longer collide on 9222. `0` picks a free port.
 - Add `appWindow.inhibitShortcuts(enabled)` so pages that record keyboard shortcuts receive keys the

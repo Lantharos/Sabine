@@ -157,6 +157,7 @@ pub(crate) fn spawn_osr_host_child(
                     .map(|descriptor| (name.clone(), serde_json::json!(descriptor.allowed_origins)))
             }).collect::<serde_json::Map<String, serde_json::Value>>(),
             "commands": sabine_bridge::bridge_commands_with_all_internal(config.bridge.commands()),
+            "bytes": true,
         },
         "regions": crate::osr::protocol::regions_to_json(&config.regions),
         "drag_regions": crate::osr::protocol::rects_to_json(&config.drag_regions),

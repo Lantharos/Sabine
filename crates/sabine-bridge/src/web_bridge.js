@@ -10,18 +10,21 @@
   const listeners = new Map();
   let nextId = 1;
 
+  const received = (payload) => payload instanceof ArrayBuffer ? new Uint8Array(payload) : payload;
+
   window.__sabineBridgeResolve = function (id, ok, payload) {
     const entry = pending.get(String(id));
     if (!entry) return;
     entry.cleanup();
     if (ok) {
-      entry.resolve(payload);
+      entry.resolve(received(payload));
     } else {
       entry.reject(new Error((payload && payload.message) || "Sabine bridge command failed"));
     }
   };
 
-  window.__sabineBridgeEmit = function (name, payload) {
+  window.__sabineBridgeEmit = function (name, value) {
+    const payload = received(value);
     const set = listeners.get(String(name));
     if (set) {
       for (const cb of Array.from(set)) {
@@ -76,7 +79,7 @@
       if (!commands.has(name)) {
         throw new Error("Sabine bridge command not registered: " + name);
       }
-      const { signal, timeoutMs = 60000 } = options;
+      const { signal, timeoutMs = 60000, body } = options;
       signal?.throwIfAborted();
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) {
         throw new RangeError("Sabine bridge timeoutMs must be between 1 and 2147483647");
@@ -86,6 +89,10 @@
       }
       const id = String(nextId++);
       const payload = JSON.stringify(params);
+      const bytes = body === undefined ? undefined
+        : body instanceof Blob ? await body.arrayBuffer()
+        : ArrayBuffer.isView(body) ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
+        : body;
       return new Promise((resolve, reject) => {
         const cleanup = () => {
           pending.delete(id);
@@ -104,7 +111,7 @@
         pending.set(id, { resolve, reject, cleanup, cancel });
         signal?.addEventListener("abort", abort, { once: true });
         try {
-          postNative("bridge", id, name, payload);
+          postNative("bridge", id, name, payload, ...(bytes === undefined ? [] : [bytes]));
         } catch (error) {
           cleanup();
           reject(error);

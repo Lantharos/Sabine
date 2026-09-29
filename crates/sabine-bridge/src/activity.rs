@@ -298,6 +298,8 @@ mod tests {
             name: name.to_string(),
             params,
             origin: None,
+            body: None,
+            window: None,
         }
     }
 

@@ -9,7 +9,6 @@ mod window;
 use std::{
     cell::Cell,
     collections::{BTreeMap, BTreeSet, VecDeque},
-    io::BufRead,
     path::PathBuf,
     process::Child,
     sync::{Arc, mpsc},
@@ -24,7 +23,8 @@ use winit::{
     window::{ActivationToken, Window as WinitWindow},
 };
 
-use crate::osr::control::ControlWriter;
+use crate::bridge::frame::Frame;
+use crate::osr::control::{ControlRelay, ControlWriter};
 use crate::osr::frame_buffer::FrameBuffer;
 
 use crate::osr::transport::IpcStream;
@@ -51,6 +51,7 @@ pub(super) struct OsrNativeHost {
     pub(super) socket: Option<IpcStream>,
     pub(super) socket_reader: Option<SocketReader>,
     pub(super) control_writer: Option<Arc<ControlWriter>>,
+    pub(super) relay: ControlRelay,
     pub(super) pending_messages: Option<(u64, Arc<crate::osr::message_queue::MessageQueue>)>,
     pub(super) connection_generation: u64,
     pub(super) awaiting_connection: bool,
@@ -123,7 +124,8 @@ impl OsrNativeHost {
         receiver: mpsc::Receiver<OsrHostEvent>,
         proxy: EventLoopProxy,
     ) -> Self {
-        start_parent_bridge_reader(sender.clone(), proxy.clone());
+        let relay = ControlRelay::default();
+        start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
         let visible = config.visible;
         let focused = visible && config.active;
@@ -154,6 +156,7 @@ impl OsrNativeHost {
             socket: None,
             socket_reader: None,
             control_writer: None,
+            relay,
             pending_messages: None,
             connection_generation: 0,
             awaiting_connection: false,
@@ -472,6 +475,7 @@ impl OsrNativeHost {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
         self.socket_reader = None;
+        self.relay.connect(None);
         self.control_writer = None;
         self.pending_messages = None;
         #[cfg(target_os = "macos")]
@@ -506,11 +510,16 @@ pub(super) fn present_window(window: &Arc<dyn WinitWindow>) {
     window.request_redraw();
 }
 
-fn start_parent_bridge_reader(sender: mpsc::SyncSender<OsrHostEvent>, proxy: EventLoopProxy) {
+fn start_parent_bridge_reader(
+    sender: mpsc::SyncSender<OsrHostEvent>,
+    proxy: EventLoopProxy,
+    relay: ControlRelay,
+) {
     std::thread::spawn(move || {
-        let input = std::io::stdin();
-        for line in input.lock().lines().map_while(std::result::Result::ok) {
-            if let Some((command, value)) = crate::parse_host_control(&line)
+        let mut input = std::io::stdin().lock();
+        while let Ok(Some(frame)) = Frame::read(&mut input) {
+            if frame.body.is_none()
+                && let Some((command, value)) = crate::parse_host_control(&frame.line)
                 && let Some(control) = super::events::host_control_from_parts(command, value)
             {
                 if sender.send(OsrHostEvent::HostControl(control)).is_err() {
@@ -519,10 +528,7 @@ fn start_parent_bridge_reader(sender: mpsc::SyncSender<OsrHostEvent>, proxy: Eve
                 proxy.wake_up();
                 continue;
             }
-            if sender.send(OsrHostEvent::ControlLine(line)).is_err() {
-                break;
-            }
-            proxy.wake_up();
+            relay.forward(frame.to_bytes());
         }
     });
 }

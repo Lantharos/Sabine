@@ -5,16 +5,29 @@ pub struct BridgeCommand {
     pub name: String,
     pub params: serde_json::Value,
     pub origin: Option<String>,
+    /// Bytes the page sent with the call, such as a file to save.
+    pub body: Option<Vec<u8>>,
+    /// The window whose page made the call.
+    pub window: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BridgeResponse {
     pub result: serde_json::Value,
+    /// Answers the call with bytes, which the page receives as a `Uint8Array`.
+    pub body: Option<Vec<u8>>,
 }
 
 impl BridgeResponse {
     pub fn json(result: serde_json::Value) -> Self {
-        Self { result }
+        Self { result, body: None }
+    }
+
+    pub fn bytes(body: impl Into<Vec<u8>>) -> Self {
+        Self {
+            result: serde_json::Value::Null,
+            body: Some(body.into()),
+        }
     }
 }
 
@@ -343,6 +356,8 @@ mod tests {
             name: name.to_string(),
             params: serde_json::json!({ "value": 1 }),
             origin: Some("file:///tmp/index.html".to_string()),
+            body: None,
+            window: None,
         }
     }
 

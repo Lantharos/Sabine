@@ -53,6 +53,16 @@ The default deadline is one minute. Aborting, timing out, or leaving the page re
 request and ignores later responses. This does not interrupt a Rust handler that is already running;
 handlers remain responsible for bounding their own work. A page can retain at most 128 requests.
 
+Bytes travel as they are, without JSON or base64. Send them with a call, and receive them from a
+handler that answers with `BridgeResponse::bytes` or from events sent with `emit_bytes`, as a
+`Uint8Array`. Each message carries up to 32 MiB:
+
+```js
+await invoke("file.save", { path }, { body: new TextEncoder().encode(text) });
+const contents = await invoke("file.read", { path }); // Uint8Array
+listen(`terminal.output.${id}`, (bytes) => terminal.write(bytes));
+```
+
 ## Window controls
 
 ```js

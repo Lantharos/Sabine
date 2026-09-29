@@ -1,6 +1,7 @@
 #ifndef SABINE_CEF_HOST_OSR_TASKS_H_
 #define SABINE_CEF_HOST_OSR_TASKS_H_
 
+#include <optional>
 #include <string>
 
 #include "include/cef_task.h"
@@ -10,13 +11,16 @@ namespace sabine_osr {
 
 class OsrCommandTask : public CefTask {
  public:
-  OsrCommandTask(CefRefPtr<SabineOsrHandler> handler, std::string line);
+  OsrCommandTask(CefRefPtr<SabineOsrHandler> handler,
+                 std::string line,
+                 std::optional<std::string> body);
   ~OsrCommandTask() override;
   void Execute() override;
 
  private:
   CefRefPtr<SabineOsrHandler> handler_;
   const std::string line_;
+  const std::optional<std::string> body_;
   IMPLEMENT_REFCOUNTING(OsrCommandTask);
 };
 

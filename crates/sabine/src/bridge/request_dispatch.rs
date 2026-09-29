@@ -2,6 +2,8 @@ use std::thread;
 
 use sabine_bridge::{BridgeCommand, BridgeError, BridgeResult};
 
+use super::frame::Frame;
+
 const MAX_PENDING_REQUESTS: usize = 128;
 const MAX_PENDING_RESPONSES: usize = MAX_PENDING_REQUESTS + REQUEST_WORKERS;
 const REQUEST_WORKERS: usize = 4;
@@ -13,8 +15,8 @@ pub(super) struct BridgeIpcRequest {
 }
 
 impl BridgeIpcRequest {
-    pub(super) fn parse(line: &str) -> Option<Self> {
-        let parts = line.splitn(6, '\t').collect::<Vec<_>>();
+    pub(super) fn parse(frame: Frame, window: u32) -> Option<Self> {
+        let parts = frame.line.splitn(6, '\t').collect::<Vec<_>>();
         if parts.first().copied()? != "SABINE_BRIDGE_REQUEST" || parts.len() != 6 {
             return None;
         }
@@ -26,6 +28,8 @@ impl BridgeIpcRequest {
                 origin: Some(parts[3].to_string()).filter(|origin| !origin.is_empty()),
                 name: parts[4].to_string(),
                 params,
+                body: frame.body,
+                window: Some(window),
             },
         })
     }
@@ -46,6 +50,7 @@ struct BridgeIpcResponse {
     id: String,
     ok: bool,
     payload: serde_json::Value,
+    body: Option<Vec<u8>>,
 }
 
 impl BridgeIpcResponse {
@@ -56,26 +61,25 @@ impl BridgeIpcResponse {
                 id,
                 ok: true,
                 payload: response.result,
+                body: response.body,
             },
             Err(error) => Self {
                 browser_id,
                 id,
                 ok: false,
                 payload: serde_json::json!({ "message": error.message }),
+                body: None,
             },
         }
     }
-}
 
-impl std::fmt::Display for BridgeIpcResponse {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn into_frame(self) -> Vec<u8> {
         let status = if self.ok { "ok" } else { "error" };
-        let payload = serde_json::to_string(&self.payload).unwrap_or_else(|_| "null".to_string());
-        write!(
-            formatter,
-            "SABINE_BRIDGE_RESPONSE\t{}\t{}\t{status}\t{payload}",
-            self.browser_id, self.id
-        )
+        let line = format!(
+            "SABINE_BRIDGE_RESPONSE\t{}\t{}\t{status}\t{}",
+            self.browser_id, self.id, self.payload
+        );
+        Frame::encode(&line, self.body.as_deref())
     }
 }
 
@@ -88,8 +92,8 @@ impl BridgeRequestDispatcher {
     pub(super) fn new(
         runtime: sabine_bridge::BridgeRuntime,
         activity: sabine_bridge::ActivityRegistry,
-        activity_emitter: super::events::BridgeEventEmitter,
-        writer: super::events::BridgeWriter,
+        activity_emitter: super::emitter::BridgeEventEmitter,
+        writer: super::writer::BridgeWriter,
     ) -> Self {
         let (request_sender, request_receiver) =
             crossbeam_channel::bounded::<BridgeIpcRequest>(MAX_PENDING_REQUESTS);
@@ -126,7 +130,7 @@ impl BridgeRequestDispatcher {
 
         thread::spawn(move || {
             while let Ok(response) = response_receiver.recv() {
-                if !writer.send(response.to_string()) {
+                if !writer.send(response.into_frame().into()) {
                     break;
                 }
             }
