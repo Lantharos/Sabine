@@ -47,7 +47,9 @@
 
 using namespace sabine_osr;
 
-void SabineOsrHandler::HandleControlLine(const std::string& line) {
+void SabineOsrHandler::HandleControlLine(
+    const std::string& line,
+    const std::optional<std::string>& body) {
   CEF_REQUIRE_UI_THREAD();
   std::string browser_id;
   std::string request_id;
@@ -57,11 +59,11 @@ void SabineOsrHandler::HandleControlLine(const std::string& line) {
   std::string value;
   bool ok = false;
   if (ParseBridgeResponse(line, &browser_id, &request_id, &ok, &payload)) {
-    ResolveBridgeResponse(browser_id, request_id, ok, payload);
+    ResolveBridgeResponse(browser_id, request_id, ok, payload, body);
     return;
   }
   if (ParseBridgeEvent(line, &name_json, &payload)) {
-    EmitBridgeEvent(name_json, payload);
+    EmitBridgeEvent(name_json, payload, body);
     return;
   }
   if (ParseHostControl(line, &command, &value)) {

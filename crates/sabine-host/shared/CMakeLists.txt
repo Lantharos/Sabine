@@ -44,6 +44,8 @@ set(SABINE_HOST_SOURCES
   app/clipboard.h
   app/scheme.cc
   app/scheme.h
+  common/bytes_message.cc
+  common/bytes_message.h
   common/json.cc
   common/json.h
   common/bridge_policy.h

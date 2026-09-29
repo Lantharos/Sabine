@@ -92,7 +92,7 @@ pub(crate) enum OsrMessage {
         base_utf16: usize,
     },
     /// Full `SABINE_BRIDGE_REQUEST\t...` line from the owning CEF handler.
-    BridgeRequest(String),
+    BridgeRequest(crate::bridge::frame::Frame),
 }
 
 #[derive(Clone, Debug)]

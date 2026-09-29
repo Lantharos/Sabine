@@ -4,6 +4,7 @@
 #include <utility>
 #include <vector>
 #include "common/bridge_policy.h"
+#include "common/bytes_message.h"
 #include "osr/utilities.h"
 
 namespace sabine_bridge {
@@ -40,7 +41,13 @@ class NativePostMessageHandler : public CefV8Handler {
                CefString& exception) override {
     std::vector<std::string> values;
     size_t bytes = 0;
-    for (const auto& argument : arguments) {
+    CefRefPtr<CefV8Value> body;
+    for (size_t index = 0; index < arguments.size(); ++index) {
+      const auto& argument = arguments[index];
+      if (index + 1 == arguments.size() && argument->IsArrayBuffer()) {
+        body = argument;
+        continue;
+      }
       if (!argument->IsString()) {
         exception = "Sabine native messages take string arguments";
         return true;
@@ -62,6 +69,22 @@ class NativePostMessageHandler : public CefV8Handler {
     const bool native = message_name_ == "sabine.native";
     if (native && !TrackRequest(context, &values, exception))
       return true;
+    if (body) {
+      if (!native || values.front() != "bridge" ||
+          body->GetArrayBufferByteLength() > sabine_bytes::kMaxBodyBytes) {
+        exception = "Sabine bridge bytes are limited to 32 MiB per call";
+        return true;
+      }
+      values.insert(values.begin(), origin_);
+      auto message = sabine_bytes::Create(
+          "sabine.native.bytes", values,
+          static_cast<const char*>(body->GetArrayBufferData()),
+          body->GetArrayBufferByteLength());
+      if (message)
+        frame_->SendProcessMessage(PID_BROWSER, message);
+      retval = CefV8Value::CreateUndefined();
+      return true;
+    }
     auto message = CefProcessMessage::Create(message_name_);
     auto list = message->GetArgumentList();
     size_t index = 0;
@@ -142,6 +165,53 @@ void CallPage(
     function->ExecuteFunction(nullptr, arguments(global));
   context->Exit();
 }
+
+CefRefPtr<CefV8Value> ArrayBuffer(const sabine_bytes::Message& bytes) {
+  return CefV8Value::CreateArrayBufferWithCopy(const_cast<char*>(bytes.body),
+                                               bytes.body_size);
+}
+
+bool AuthorizedEventContext(CefRefPtr<CefFrame> frame,
+                            CefRefPtr<CefDictionaryValue> policy,
+                            CefRefPtr<CefV8Context>* context) {
+  if (!frame->IsMain() || !AllowsDocument(policy, frame->GetURL()))
+    return false;
+  *context = frame->GetV8Context();
+  if (!*context || !(*context)->IsValid())
+    return false;
+  for (const auto& entry : contexts) {
+    if (entry.context->IsSame(*context))
+      return MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
+  }
+  return false;
+}
+
+void ReceiveBytes(CefRefPtr<CefBrowser> browser,
+                  CefRefPtr<CefFrame> frame,
+                  bool event,
+                  const sabine_bytes::Message& bytes,
+                  CefRefPtr<CefDictionaryValue> policy) {
+  if (event) {
+    CefRefPtr<CefV8Context> context;
+    if (!AuthorizedEventContext(frame, policy, &context))
+      return;
+    CallPage(context, "__sabineBridgeEmit",
+             [&](CefRefPtr<CefV8Value> global) -> CefV8ValueList {
+               return {ParseJson(global, bytes.fields[0]), ArrayBuffer(bytes)};
+             });
+    return;
+  }
+  auto found = pending.find(bytes.fields[0]);
+  if (found == pending.end() || !found->second.browser->IsSame(browser))
+    return;
+  const PendingRequest request = found->second;
+  pending.erase(found);
+  CallPage(request.context, "__sabineBridgeResolve",
+           [&](CefRefPtr<CefV8Value>) -> CefV8ValueList {
+             return {CefV8Value::CreateString(request.page_id),
+                     CefV8Value::CreateBool(true), ArrayBuffer(bytes)};
+           });
+}
 }  // namespace
 
 void InstallTransport(CefRefPtr<CefFrame> frame,
@@ -195,6 +265,12 @@ bool Receive(CefRefPtr<CefBrowser> browser,
              CefRefPtr<CefProcessMessage> message,
              CefRefPtr<CefDictionaryValue> policy) {
   const std::string name = message->GetName();
+  if (name == "sabine.response.bytes" || name == "sabine.event.bytes") {
+    sabine_bytes::Message bytes;
+    if (sabine_bytes::Read(message, &bytes) && bytes.fields.size() == 1)
+      ReceiveBytes(browser, frame, name == "sabine.event.bytes", bytes, policy);
+    return true;
+  }
   auto values = message->GetArgumentList();
   if (name == "sabine.response") {
     if (values->GetSize() != 3)
@@ -215,20 +291,9 @@ bool Receive(CefRefPtr<CefBrowser> browser,
   }
   if (name != "sabine.event")
     return false;
-  if (values->GetSize() != 2 || !frame->IsMain() ||
-      !AllowsDocument(policy, frame->GetURL()))
-    return true;
-  auto context = frame->GetV8Context();
-  if (!context || !context->IsValid())
-    return true;
-  bool authorized = false;
-  for (const auto& entry : contexts) {
-    if (entry.context->IsSame(context)) {
-      authorized = MatchesSecurityOrigin(policy, frame->GetURL(), entry.origin);
-      break;
-    }
-  }
-  if (!authorized)
+  CefRefPtr<CefV8Context> context;
+  if (values->GetSize() != 2 ||
+      !AuthorizedEventContext(frame, policy, &context))
     return true;
   const std::string event_name = values->GetString(0);
   const std::string payload = values->GetString(1);

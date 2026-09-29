@@ -10,6 +10,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -222,22 +223,27 @@ class SabineOsrHandler : public CefClient,
   void UpdateDragCursor(CefRefPtr<CefBrowser> browser,
                         DragOperation operation) override;
 
-  void HandleControlLine(const std::string& line);
+  void HandleControlLine(const std::string& line,
+                         const std::optional<std::string>& body = std::nullopt);
   void QueueResizeControlLine(std::string line);
   void HandlePendingResize();
   bool QualifyResizeFrame(int pixel_width, int pixel_height);
   void CompleteResizeFrame(int pixel_width, int pixel_height);
   void CloseFromNativeDisconnect();
-  void HandleQueuedControl(const std::string& line);
+  void HandleQueuedControl(const std::string& line,
+                           const std::optional<std::string>& body);
   void CompleteQueuedControl(size_t bytes);
   void FinishNativeFileDrag(int x, int y, const std::string& operation);
   void ApplyHostControl(const std::string& command, const std::string& value);
-  void ResolveBridgeResponse(const std::string& browser_id,
-                             const std::string& request_id,
-                             bool ok,
-                             const std::string& payload);
+  void ResolveBridgeResponse(
+      const std::string& browser_id,
+      const std::string& request_id,
+      bool ok,
+      const std::string& payload,
+      const std::optional<std::string>& body = std::nullopt);
   void EmitBridgeEvent(const std::string& name_json,
-                       const std::string& payload);
+                       const std::string& payload,
+                       const std::optional<std::string>& body = std::nullopt);
 #ifndef _WIN32
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
 #endif
@@ -282,7 +288,7 @@ class SabineOsrHandler : public CefClient,
 #endif
 
   bool ConnectSocket();
-  bool QueueControl(std::string line);
+  bool QueueControl(std::string line, std::optional<std::string> body);
   void CloseTransport();
   bool SendMessage(uint32_t kind,
                    uint32_t width,
@@ -311,7 +317,12 @@ class SabineOsrHandler : public CefClient,
                            CefRefPtr<CefFrame> frame,
                            const std::string& request_id,
                            const std::string& command,
-                           const std::string& payload);
+                           const std::string& payload,
+                           const std::optional<std::string>& body);
+  void ReceiveNativeMessage(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            const std::vector<std::string>& values,
+                            const std::optional<std::string>& body);
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
   void ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,

@@ -10,6 +10,8 @@ export interface InvokeOptions {
   signal?: AbortSignal;
   /** Deadline in milliseconds; defaults to 60000. */
   timeoutMs?: number;
+  /** Bytes sent with the call, up to 32 MiB, which the handler reads as `command.body`. */
+  body?: ArrayBuffer | ArrayBufferView | Blob;
 }
 
 export interface SabineBridge {

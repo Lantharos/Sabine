@@ -85,8 +85,6 @@ pub(super) enum OsrHostEvent {
     Message(u64, OsrMessage),
     MessagesReady(u64, Arc<crate::osr::message_queue::MessageQueue>),
     HostControl(HostControl),
-    /// Forward a bridge or guest-control line to the owning CEF handler socket.
-    ControlLine(String),
     Disconnected(u64),
     IncompatibleHost(u64),
 }
@@ -99,7 +97,7 @@ impl OsrHostEvent {
             | Self::MessagesReady(generation, _)
             | Self::Disconnected(generation)
             | Self::IncompatibleHost(generation) => Some(*generation),
-            Self::HostControl(_) | Self::ControlLine(_) => None,
+            Self::HostControl(_) => None,
         }
     }
 }

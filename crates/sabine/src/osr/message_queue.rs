@@ -187,8 +187,10 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
         OsrMessage::FatalError(text)
         | OsrMessage::GuestHidden(text)
         | OsrMessage::Cursor(text)
-        | OsrMessage::TooltipChanged(text)
-        | OsrMessage::BridgeRequest(text) => text.capacity(),
+        | OsrMessage::TooltipChanged(text) => text.capacity(),
+        OsrMessage::BridgeRequest(frame) => {
+            frame.line.capacity() + frame.body.as_ref().map_or(0, Vec::capacity)
+        }
         OsrMessage::FocusRequested(text) => text.as_ref().map_or(0, String::capacity),
         OsrMessage::GuestCaptureRequested {
             browser_id,

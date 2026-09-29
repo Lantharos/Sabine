@@ -9,6 +9,8 @@ use super::transport::IpcStream;
 
 const MAX_QUEUED_CONTROLS: usize = 256;
 const MAX_QUEUED_BYTES: usize = 64 * 1024 * 1024;
+const MAX_RELAYED_CONTROLS: usize = MAX_QUEUED_CONTROLS / 2;
+const MAX_RELAYED_BYTES: usize = MAX_QUEUED_BYTES / 2;
 
 pub(crate) struct ControlWriter {
     queue: Arc<ControlQueue>,
@@ -18,6 +20,27 @@ pub(crate) struct ControlWriter {
 struct ControlQueue {
     state: Mutex<ControlQueueState>,
     ready: Condvar,
+    space: Condvar,
+}
+
+/// Carries the app's bridge messages to the current browser connection from
+/// the thread that reads them, waiting while the browser catches up.
+#[derive(Clone, Default)]
+pub(crate) struct ControlRelay(Arc<Mutex<Option<Arc<ControlWriter>>>>);
+
+impl ControlRelay {
+    pub(crate) fn connect(&self, writer: Option<Arc<ControlWriter>>) {
+        if let Ok(mut current) = self.0.lock() {
+            *current = writer;
+        }
+    }
+
+    pub(crate) fn forward(&self, frame: Vec<u8>) {
+        let writer = self.0.lock().ok().and_then(|current| current.clone());
+        if let Some(writer) = writer {
+            let _ = writer.finish_send(writer.queue.push_relayed(frame));
+        }
+    }
 }
 
 struct ControlQueueState {
@@ -33,6 +56,7 @@ enum ControlMessage {
         line: String,
         coalescing_key: Option<ControlCoalescingKey>,
     },
+    Relayed(Vec<u8>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -50,7 +74,7 @@ impl ControlWriter {
         let worker_queue = Arc::clone(&queue);
         thread::spawn(move || {
             while let Some(message) = worker_queue.next() {
-                if let Err(error) = stream.write_all(message.into_line().as_bytes()) {
+                if let Err(error) = stream.write_all(&message.into_bytes()) {
                     worker_queue.fail(error);
                     let _ = stream.shutdown(std::net::Shutdown::Both);
                     break;
@@ -86,6 +110,7 @@ impl Drop for ControlWriter {
             state.closed = true;
         }
         self.queue.ready.notify_one();
+        self.queue.space.notify_all();
         let _ = self.stream.shutdown(std::net::Shutdown::Both);
     }
 }
@@ -100,7 +125,28 @@ impl ControlQueue {
                 error: None,
             }),
             ready: Condvar::new(),
+            space: Condvar::new(),
         }
+    }
+
+    fn push_relayed(&self, frame: Vec<u8>) -> Result<(), String> {
+        let mut state = self.lock_open_state()?;
+        while state.messages.len() >= MAX_RELAYED_CONTROLS
+            || (state.bytes > 0 && state.bytes + frame.len() > MAX_RELAYED_BYTES)
+        {
+            state = self
+                .space
+                .wait(state)
+                .map_err(|_| "control queue lock was poisoned".to_string())?;
+            if state.closed {
+                return Err("control writer is closed".to_string());
+            }
+        }
+        state.bytes += frame.len();
+        state.messages.push_back(ControlMessage::Relayed(frame));
+        drop(state);
+        self.ready.notify_one();
+        Ok(())
     }
 
     fn push_ordered(&self, line: String) -> Result<(), String> {
@@ -191,6 +237,7 @@ impl ControlQueue {
             }
             if let Some(message) = state.messages.pop_front() {
                 state.bytes -= message.len();
+                self.space.notify_all();
                 return Some(message);
             }
             state = self.ready.wait(state).ok()?;
@@ -205,6 +252,7 @@ impl ControlQueue {
             state.bytes = 0;
         }
         self.ready.notify_all();
+        self.space.notify_all();
     }
 }
 
@@ -212,6 +260,7 @@ impl ControlMessage {
     fn len(&self) -> usize {
         match self {
             Self::Motion(line) | Self::Ordered { line, .. } => line.len(),
+            Self::Relayed(frame) => frame.len(),
         }
     }
 
@@ -239,9 +288,10 @@ impl ControlMessage {
         )
     }
 
-    fn into_line(self) -> String {
+    fn into_bytes(self) -> Vec<u8> {
         match self {
-            Self::Motion(line) | Self::Ordered { line, .. } => line,
+            Self::Motion(line) | Self::Ordered { line, .. } => line.into_bytes(),
+            Self::Relayed(frame) => frame,
         }
     }
 }
