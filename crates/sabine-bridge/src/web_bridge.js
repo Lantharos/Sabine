@@ -60,6 +60,9 @@
     async inhibitShortcuts(enabled) {
       await window.sabine.bridge.invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
     },
+    async setRegions(regions) {
+      await window.sabine.bridge.invoke("sabine.window.setRegions", regions);
+    },
   });
 
   window.sabine.bridge = {

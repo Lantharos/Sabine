@@ -164,6 +164,60 @@ export const appWindow = {
   async inhibitShortcuts(enabled) {
     await invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
   },
+  /**
+   * @param {import("./index.d.ts").WindowRegions} regions
+   * @returns {Promise<void>}
+   */
+  async setRegions(regions) {
+    await invoke("sabine.window.setRegions", regions);
+  },
+};
+
+/** @param {Record<string, unknown>} adaptive */
+function adaptiveRegion(adaptive) {
+  return { adaptive, rects: [] };
+}
+
+/** Regions for `appWindow.setRegions`, which follow the window's size. */
+export const region = {
+  empty() {
+    return { rects: [] };
+  },
+  rect(x, y, width, height) {
+    return { rects: [{ x, y, width, height }] };
+  },
+  full() {
+    return adaptiveRegion({ kind: "full" });
+  },
+  roundedRect(radius) {
+    return adaptiveRegion({ kind: "rounded_rect", radius });
+  },
+  roundedLeft(width, radius) {
+    return adaptiveRegion({ kind: "rounded_left", width, radius });
+  },
+  titlebarAndSidebar(sidebarWidth, titlebarHeight, radius) {
+    return adaptiveRegion({
+      kind: "titlebar_sidebar",
+      sidebar_width: sidebarWidth,
+      titlebar_height: titlebarHeight,
+      radius,
+    });
+  },
+  contentAfterSidebar(sidebarWidth, titlebarHeight = 0) {
+    return adaptiveRegion({
+      kind: "content_after_sidebar",
+      sidebar_width: sidebarWidth,
+      titlebar_height: titlebarHeight,
+    });
+  },
+  contentAfterSidebarRoundedRight(sidebarWidth, titlebarHeight, radius) {
+    return adaptiveRegion({
+      kind: "content_after_sidebar_rounded_right",
+      sidebar_width: sidebarWidth,
+      titlebar_height: titlebarHeight,
+      radius,
+    });
+  },
 };
 
 /**
@@ -431,5 +485,6 @@ export default {
   activity,
   popup,
   clipboard,
+  region,
   NativeVideo,
 };

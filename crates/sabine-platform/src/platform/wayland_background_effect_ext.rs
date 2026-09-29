@@ -149,38 +149,16 @@ impl WaylandEffect {
             }
         }
 
-        if let Some(opaque) = &options.regions.opaque
-            && let Some(region) =
-                (unsafe { create_region(compositor, opaque, width, height, transparent_holes) })
-        {
-            unsafe {
-                wl_proxy_marshal_flags(
-                    surface,
-                    SURFACE_SET_OPAQUE_REGION,
-                    ptr::null(),
-                    wl_proxy_get_version(surface),
-                    0,
-                    region,
-                );
-                wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
-            }
-        }
-
-        if let Some(input) = &options.regions.input
-            && let Some(region) = (unsafe { create_region(compositor, input, width, height, &[]) })
-        {
-            unsafe {
-                wl_proxy_marshal_flags(
-                    surface,
-                    SURFACE_SET_INPUT_REGION,
-                    ptr::null(),
-                    wl_proxy_get_version(surface),
-                    0,
-                    region,
-                );
-                wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
-            }
-        }
+        let opaque = options.regions.opaque.as_ref().and_then(|opaque| unsafe {
+            create_region(compositor, opaque, width, height, transparent_holes)
+        });
+        unsafe { set_surface_region(surface, SURFACE_SET_OPAQUE_REGION, opaque) };
+        let input = options
+            .regions
+            .input
+            .as_ref()
+            .and_then(|input| unsafe { create_region(compositor, input, width, height, &[]) });
+        unsafe { set_surface_region(surface, SURFACE_SET_INPUT_REGION, input) };
 
         // Do not wl_surface_commit here. This surface is owned by wgpu; a commit
         // without attaching a buffer races presentation and flashes transparent
@@ -189,6 +167,24 @@ impl WaylandEffect {
             wl_display_flush(display);
         }
         true
+    }
+}
+
+/// Sets or, without a region, clears one of the surface's regions.
+#[cfg(target_os = "linux")]
+unsafe fn set_surface_region(surface: *mut WlProxy, opcode: u32, region: Option<*mut WlProxy>) {
+    unsafe {
+        wl_proxy_marshal_flags(
+            surface,
+            opcode,
+            ptr::null(),
+            wl_proxy_get_version(surface),
+            0,
+            region.unwrap_or(ptr::null_mut()),
+        );
+        if let Some(region) = region {
+            wl_proxy_marshal_flags(region, REGION_DESTROY, ptr::null(), 1, DESTROY_FLAG);
+        }
     }
 }
 
