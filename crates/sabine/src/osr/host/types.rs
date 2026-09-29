@@ -202,6 +202,7 @@ pub(super) enum HostControl {
     Quit,
     ActivityBegin(HostActivity),
     ActivityEnd(HostActivity),
+    Regions(sabine_platform::WindowRegions),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -87,6 +87,21 @@ This works on Wayland compositors that support keyboard shortcut inhibiting, on 
 Windows, where Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS.
 Some compositors ask the user before they allow it.
 
+Glass windows can change which parts are blurred, opaque or clickable while they run, for example
+to drop a sidebar's blur while it is hidden:
+
+```js
+import { appWindow, region } from "@lantharos/sabine";
+
+await appWindow.setRegions({
+  blur: region.empty(),
+  opaque: region.contentAfterSidebarRoundedRight(0, 0, 12),
+});
+```
+
+Rust code can do the same with `set_regions` or, for one window, `set_regions_of` on the app's
+`BridgeEventEmitter`.
+
 ## Clipboard
 
 Copy, cut, paste and `navigator.clipboard` work with the desktop clipboard as they do in a browser,

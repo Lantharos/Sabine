@@ -21,8 +21,8 @@ mod metrics;
 
 pub use activity::{
     ActivityEventEmitter, ActivityHostUpdate, ActivityOptions, ActivityRecord, ActivityRegistry,
-    INHIBIT_SHORTCUTS_COMMAND, SabineActivityLease, bridge_commands_with_all_internal,
-    host_update_json,
+    INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND, SabineActivityLease,
+    bridge_commands_with_all_internal, host_update_json,
 };
 pub use bridge::{
     BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeHandlers, BridgeRegistry,

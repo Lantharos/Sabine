@@ -18,6 +18,9 @@
   middle-clicking uses the primary selection. The app's own pages can read the clipboard without
   a prompt. `clipboard.read()` and `clipboard.write()` in `@lantharos/sabine` take any MIME type,
   such as a file manager's copied files.
+- Change a window's blur, opaque and input regions while it runs, with `set_regions` and
+  `set_regions_of` in Rust or `appWindow.setRegions` in pages, so an app can drop a hidden
+  sidebar's blur without restarting.
 - Send events to one window with `emit_to` and `emit_bytes_to`. Bridge commands name the window that
   called them in `command.window`, so apps with several windows can answer only that one.
 - Sending events now waits while a window catches up instead of dropping them once 512 are queued,

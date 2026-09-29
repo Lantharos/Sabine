@@ -185,6 +185,18 @@ impl OsrNativeHost {
         self.forward_ime(winit::event::Ime::Disabled);
     }
 
+    pub(in crate::osr::host) fn set_regions(&mut self, regions: sabine_platform::WindowRegions) {
+        self.config.regions = regions;
+        let Some(window) = self.window.clone().filter(|_| self.presented) else {
+            return;
+        };
+        if self.effect.is_none() {
+            self.effect = sabine_platform::request_window_effect(&window, &self.window_options());
+        }
+        self.update_effect_regions();
+        window.request_redraw();
+    }
+
     pub(in crate::osr::host) fn update_effect_regions(&self) {
         let Some(effect) = &self.effect else {
             return;

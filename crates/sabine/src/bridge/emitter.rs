@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use sabine_platform::WindowRegions;
+
 use super::frame::Frame;
 use super::writer::BridgeWriter;
 use crate::host::WindowId;
@@ -92,6 +94,17 @@ impl BridgeEventEmitter {
         self.emit_host_control("focus", "1")
     }
 
+    /// Replaces the blur, opaque and input regions of every window, for
+    /// example to drop a sidebar's blur while the sidebar is hidden.
+    pub fn set_regions(&self, regions: &WindowRegions) -> bool {
+        self.deliver(None, regions_control(regions), None)
+    }
+
+    /// Replaces the blur, opaque and input regions of one window.
+    pub fn set_regions_of(&self, window: WindowId, regions: &WindowRegions) -> bool {
+        self.deliver(Some(window), regions_control(regions), None)
+    }
+
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool {
         self.emit_host_control(
             "focus",
@@ -155,6 +168,13 @@ impl sabine_bridge::ActivityEventEmitter for BridgeEventEmitter {
     fn emit_activity_update(&self, update: &sabine_bridge::ActivityHostUpdate) -> bool {
         BridgeEventEmitter::emit_activity_update(self, update)
     }
+}
+
+fn regions_control(regions: &WindowRegions) -> String {
+    format!(
+        "{HOST_CONTROL_PREFIX}\tregions\t{}",
+        crate::osr::protocol::regions_to_json(regions)
+    )
 }
 
 fn event_line(name: &str, payload: &serde_json::Value) -> String {

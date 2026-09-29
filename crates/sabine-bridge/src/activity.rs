@@ -13,14 +13,16 @@ pub const LIST_COMMAND: &str = "sabine.activity.list";
 pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
 pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
+pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 
-const INTERNAL_COMMANDS: [&str; 6] = [
+const INTERNAL_COMMANDS: [&str; 7] = [
     BEGIN_COMMAND,
     END_COMMAND,
     LIST_COMMAND,
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
+    SET_REGIONS_COMMAND,
 ];
 
 /// Activity, popup, guest, and media internal bridge commands.

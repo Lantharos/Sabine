@@ -446,6 +446,11 @@ bridge handlers, lifecycle policy, desktop integrations, and `RuntimeConfig`. Ru
 service policy, and native-host build helpers stay in their owning crates instead of being re-exported
 through `sabine`.
 
+Blur, opaque and input regions can change while the window runs, from Rust through
+`BridgeEventEmitter::set_regions` or `set_regions_of`, and from pages through
+`appWindow.setRegions`. A region left out returns to its default: blur behind the whole window,
+nothing opaque, and input everywhere. Regions follow the window's size as before.
+
 ## Bridge security
 
 Browser permission prompts are denied explicitly, except clipboard access for the app's own

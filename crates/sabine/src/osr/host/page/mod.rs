@@ -3,7 +3,7 @@ mod clipboard;
 #[cfg(target_os = "linux")]
 mod media;
 
-use sabine_bridge::INHIBIT_SHORTCUTS_COMMAND;
+use sabine_bridge::{INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
 
 use super::native::OsrNativeHost;
 
@@ -39,6 +39,16 @@ impl<'a> BridgeRequest<'a> {
 }
 
 impl OsrNativeHost {
+    fn answer_set_regions(&mut self, request: &BridgeRequest) {
+        let result = serde_json::from_str::<serde_json::Value>(request.payload)
+            .map(|regions| {
+                self.set_regions(crate::osr::protocol::regions_from_json(Some(&regions)))
+            })
+            .map(|()| serde_json::Value::Null)
+            .map_err(|error| error.to_string());
+        self.send_bridge_response(request.browser_id, request.request_id, result);
+    }
+
     /// Answers the bridge commands that act on this window. Returns false for
     /// every other command so it reaches the app.
     pub(super) fn answer_window_bridge_request(&mut self, line: &str) -> bool {
@@ -47,6 +57,7 @@ impl OsrNativeHost {
         };
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
+            SET_REGIONS_COMMAND => self.answer_set_regions(&request),
             #[cfg(target_os = "linux")]
             command if command.starts_with(sabine_bridge::media::COMMAND_PREFIX) => {
                 self.answer_media(&request)
