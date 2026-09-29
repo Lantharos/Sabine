@@ -24,7 +24,7 @@ mod vertex_buffer;
 #[cfg(any(windows, target_os = "macos"))]
 pub(crate) use external::ExternalSlot;
 
-use surface::select_surface_alpha_mode;
+use surface::{select_present_mode, select_surface_alpha_mode};
 use text::TextRendererState;
 use vertex_buffer::DynamicVertexBuffer;
 
@@ -119,12 +119,7 @@ impl GpuRenderer {
             .copied()
             .find(wgpu::TextureFormat::is_srgb)
             .unwrap_or(capabilities.formats[0]);
-        let present_mode = capabilities
-            .present_modes
-            .iter()
-            .copied()
-            .find(|mode| *mode == wgpu::PresentMode::Fifo)
-            .unwrap_or(capabilities.present_modes[0]);
+        let present_mode = select_present_mode(&capabilities.present_modes);
         let alpha_mode = select_surface_alpha_mode(&capabilities.alpha_modes, transparent);
         let surface_alpha_is_opaque = matches!(
             alpha_mode,
