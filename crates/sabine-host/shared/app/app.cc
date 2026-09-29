@@ -1,6 +1,7 @@
 #include "app/app.h"
 #include "runtime/probe.h"
 #include "app/bridge.h"
+#include "app/clipboard.h"
 #include "app/scheme.h"
 #include "common/bridge_policy.h"
 #include "common/json.h"
@@ -210,16 +211,20 @@ void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                   "sabine.ime_state");
   frame->ExecuteJavaScript(kImeStateScript, frame->GetURL(), 0);
   const auto policy = BridgePolicyFor(browser);
+  const std::string url = frame->GetURL();
   const std::string security_origin = sabine_bridge::RememberContext(context);
-  if (!frame->IsMain() ||
-      !sabine_bridge::ExposesBridge(policy, frame->GetURL()) ||
-      !sabine_bridge::MatchesSecurityOrigin(policy, frame->GetURL(),
-                                            security_origin))
-    return;
-  sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage",
-                                  "sabine.native");
-  const auto commands = sabine_bridge::Commands(policy);
-  frame->ExecuteJavaScript(BridgeInstallScript(commands), frame->GetURL(), 0);
+  const bool bridged =
+      frame->IsMain() && sabine_bridge::ExposesBridge(policy, url) &&
+      sabine_bridge::MatchesSecurityOrigin(policy, url, security_origin);
+  if (bridged) {
+    sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage",
+                                    "sabine.native");
+    frame->ExecuteJavaScript(
+        BridgeInstallScript(sabine_bridge::Commands(policy)), url, 0);
+  }
+  if (policy && policy->GetBool("clipboard"))
+    sabine_clipboard::Install(frame, context,
+                              sabine_bridge::AllowsDocument(policy, url));
 }
 
 void SabineApp::OnContextReleased(CefRefPtr<CefBrowser> browser,
@@ -227,6 +232,7 @@ void SabineApp::OnContextReleased(CefRefPtr<CefBrowser> browser,
                                   CefRefPtr<CefV8Context> context) {
   CEF_REQUIRE_RENDERER_THREAD();
   sabine_bridge::ReleaseContext(context);
+  sabine_clipboard::Release(context);
 }
 
 bool SabineApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -236,7 +242,8 @@ bool SabineApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
   CEF_REQUIRE_RENDERER_THREAD();
   if (source_process != PID_BROWSER || !browser || !frame || !message)
     return false;
-  return sabine_bridge::Receive(browser, frame, message,
+  return sabine_clipboard::Receive(frame, message) ||
+         sabine_bridge::Receive(browser, frame, message,
                                 BridgePolicyFor(browser));
 }
 

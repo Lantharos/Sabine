@@ -113,8 +113,11 @@ impl OsrNativeHost {
         self.renderer = Some(renderer);
         self.window = Some(window.clone());
         #[cfg(target_os = "linux")]
-        if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
-            eprintln!("Sabine media: {error}");
+        {
+            if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
+                eprintln!("Sabine media: {error}");
+            }
+            self.attach_clipboard(window.as_ref());
         }
         self.restore_ime_state();
         #[cfg(not(target_os = "macos"))]

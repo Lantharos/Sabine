@@ -11,6 +11,7 @@
 
 mod activity;
 mod bridge;
+pub mod clipboard;
 mod guest;
 mod guest_create;
 mod guest_download;

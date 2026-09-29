@@ -1,7 +1,6 @@
 #[cfg(windows)]
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
-use sabine_bridge::INHIBIT_SHORTCUTS_COMMAND;
 #[cfg(not(target_os = "macos"))]
 use sabine_platform::ShortcutInhibitor;
 #[cfg(windows)]
@@ -9,6 +8,7 @@ use sabine_platform::SystemKey;
 use serde_json::Value;
 
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::page::BridgeRequest;
 
 #[cfg(not(target_os = "macos"))]
 #[derive(Default)]
@@ -20,30 +20,19 @@ pub(in crate::osr::host) struct ShortcutInhibition {
 }
 
 impl OsrNativeHost {
-    /// Answer the bridge commands that act on this window. Returns false for
-    /// every other command so it reaches the app.
-    pub(in crate::osr::host) fn answer_window_bridge_request(&mut self, line: &str) -> bool {
-        let parts = line.splitn(6, '\t').collect::<Vec<_>>();
-        let [
-            _,
-            browser_id,
-            request_id,
-            _,
-            INHIBIT_SHORTCUTS_COMMAND,
-            params,
-        ] = parts[..]
-        else {
-            return false;
-        };
-        let enabled = serde_json::from_str::<Value>(params)
+    pub(in crate::osr::host) fn answer_inhibit_shortcuts(&mut self, request: &BridgeRequest) {
+        let enabled = serde_json::from_str::<Value>(request.payload)
             .ok()
             .and_then(|params| params.get("enabled")?.as_bool());
         let result = match enabled {
             Some(enabled) => self.set_shortcuts_inhibited(enabled),
             None => Err("inhibitShortcuts expects a boolean".to_string()),
         };
-        self.send_bridge_response(browser_id, request_id, result.map(|()| Value::Null));
-        true
+        self.send_bridge_response(
+            request.browser_id,
+            request.request_id,
+            result.map(|()| Value::Null),
+        );
     }
 
     #[cfg(target_os = "macos")]

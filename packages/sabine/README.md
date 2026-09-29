@@ -77,6 +77,26 @@ This works on Wayland compositors that support keyboard shortcut inhibiting, on 
 Windows, where Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS.
 Some compositors ask the user before they allow it.
 
+## Clipboard
+
+Copy, cut, paste and `navigator.clipboard` work with the desktop clipboard as they do in a browser,
+and on Linux selecting text sets the primary selection that middle-click pastes. For other formats,
+such as a file manager's copied files, read and write any MIME type:
+
+```js
+import { clipboard } from "@lantharos/sabine";
+
+await clipboard.write({
+  "text/uri-list": "file:///home/me/notes.txt\r\n",
+  "x-special/gnome-copied-files": "copy\nfile:///home/me/notes.txt",
+});
+const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
+const selected = await clipboard.read({ selection: "primary" });
+```
+
+Text types arrive as strings and other types as `Uint8Array`s. The primary selection is Linux
+only; elsewhere these helpers use the browser clipboard.
+
 ## Guests
 
 ```js

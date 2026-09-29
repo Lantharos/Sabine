@@ -13,6 +13,11 @@
   present in mailbox mode where the driver supports it. Bridge calls from animating pages return
   within a millisecond instead of one display frame, and out-of-view windows no longer stall for up
   to a second on every paint.
+- Fix copy and paste on Linux: pages now use the desktop clipboard for Ctrl+C, Ctrl+X, Ctrl+V,
+  Ctrl+Shift+V, `navigator.clipboard` and cut, including HTML and images, and selecting text or
+  middle-clicking uses the primary selection. The app's own pages can read the clipboard without
+  a prompt. `clipboard.read()` and `clipboard.write()` in `@lantharos/sabine` take any MIME type,
+  such as a file manager's copied files.
 - Add `appWindow.inhibitShortcuts(enabled)` so pages that record keyboard shortcuts receive keys the
   desktop normally keeps for itself, such as the Super key or Alt+Tab. It works on Wayland, X11 and
   Windows and rejects on macOS.

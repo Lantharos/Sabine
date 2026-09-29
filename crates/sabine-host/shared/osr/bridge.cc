@@ -61,6 +61,11 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       return true;
     }
   }
+  if (message->GetName() == "sabine.clipboard") {
+    if (arguments->GetSize() == 1)
+      ForwardClipboardRequest(browser, frame, arguments->GetString(0));
+    return true;
+  }
   if (message->GetName() == "sabine.ime_state") {
     const int browser_id = browser->GetIdentifier();
     ime_surrounding_state_[browser_id] = arguments->GetString(0);
@@ -159,7 +164,8 @@ void SabineOsrHandler::HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
                                       request_id)) {
     return;
   }
-  if (bridge_commands_.find(command) == bridge_commands_.end()) {
+  if (bridge_commands_.find(command) == bridge_commands_.end() ||
+      command.rfind(kClipboardCommandPrefix, 0) == 0) {
     ResolveBridgeResponse(
         browser_id, request_id, false,
         "{\"message\":\"Sabine bridge command is not allowlisted\"}");
@@ -219,6 +225,8 @@ void SabineOsrHandler::ResolveBridgeResponse(const std::string& browser_id,
                                              bool ok,
                                              const std::string& payload) {
   CEF_REQUIRE_UI_THREAD();
+  if (ResolveClipboardResponse(request_id, ok, payload))
+    return;
   const int expected_id = std::atoi(browser_id.c_str());
   CefRefPtr<CefBrowser> target;
   for (auto& browser : browsers_) {

@@ -215,10 +215,6 @@ impl OsrNativeHost {
                     self.activate_window(event_loop, token);
                 }
                 OsrHostEvent::Message(_, OsrMessage::BridgeRequest(line)) => {
-                    #[cfg(target_os = "linux")]
-                    if self.handle_media_request(&line) {
-                        continue;
-                    }
                     if !line.is_empty() && !self.answer_window_bridge_request(&line) {
                         let mut output = std::io::stdout();
                         use std::io::Write;
@@ -392,14 +388,20 @@ impl OsrNativeHost {
         request_id: &str,
         result: Result<serde_json::Value, String>,
     ) {
-        let (status, payload) = match result {
-            Ok(payload) => ("ok", payload),
-            Err(message) => ("error", serde_json::json!({ "message": message })),
-        };
-        self.send_control(&format!(
-            "SABINE_BRIDGE_RESPONSE\t{browser_id}\t{request_id}\t{status}\t{payload}\n"
-        ));
+        self.send_control(&bridge_response_line(browser_id, request_id, result));
     }
+}
+
+pub(super) fn bridge_response_line(
+    browser_id: &str,
+    request_id: &str,
+    result: Result<serde_json::Value, String>,
+) -> String {
+    let (status, payload) = match result {
+        Ok(payload) => ("ok", payload),
+        Err(message) => ("error", serde_json::json!({ "message": message })),
+    };
+    format!("SABINE_BRIDGE_RESPONSE\t{browser_id}\t{request_id}\t{status}\t{payload}\n")
 }
 
 pub(super) fn host_control_from_parts(command: &str, value: &str) -> Option<HostControl> {

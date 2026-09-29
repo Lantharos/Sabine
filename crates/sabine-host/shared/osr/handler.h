@@ -65,6 +65,7 @@ constexpr uint32_t kMaximizeRequested = 35;
 constexpr uint32_t kRestoreRequested = 36;
 constexpr uint32_t kFatalError = 37;
 constexpr uint32_t kHostHello = 38;
+constexpr char kClipboardCommandPrefix[] = "sabine.clipboard.";
 
 constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
 
@@ -313,6 +314,12 @@ class SabineOsrHandler : public CefClient,
                            const std::string& payload);
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
+  void ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefFrame> frame,
+                               const std::string& request);
+  bool ResolveClipboardResponse(const std::string& request_id,
+                                bool ok,
+                                const std::string& payload);
   void RequestNativeClose();
   void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
   void ApplyLifecycle(const std::string& state,
@@ -402,6 +409,13 @@ class SabineOsrHandler : public CefClient,
   std::map<int, CefRect> ime_cursor_rects_;
   std::map<int, std::string> ime_surrounding_state_;
   std::map<int, CefRefPtr<CefFrame>> ime_frames_;
+  struct ClipboardRequest {
+    CefRefPtr<CefBrowser> browser;
+    CefString frame;
+    int page_request;
+  };
+  std::map<std::string, ClipboardRequest> clipboard_requests_;
+  uint64_t clipboard_request_serial_ = 0;
   std::string pending_guest_id_;
   std::map<std::string, CefRefPtr<CefRequestContext>> guest_contexts_;
   std::set<std::string> initialized_guest_contexts_;
