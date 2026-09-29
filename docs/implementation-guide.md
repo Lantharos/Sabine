@@ -673,9 +673,11 @@ CEF archives are extracted with `tar` using the destination as the process worki
 `tar -C C:\...`). Git for Windows’ GNU tar treats a drive letter in `-C` as a remote host and can
 leave a partial tree that looks installed but cannot build the host.
 
-On Windows and Linux, `icudtl.dat` must also be available beside `libcef` in the
-runtime’s `Release` directory. Sabine prepares a hard link from `Resources/icudtl.dat`
-before starting Chromium; the resource-directory setting only controls resource packs.
+On Windows and Linux, `icudtl.dat` and the `.pak` resource packs must also be available beside
+`libcef` in the runtime’s `Release` directory: Chromium's child processes load them from there
+regardless of the browser's resource-directory setting, and a renderer without `resources.pak`
+has no built-in style sheet. Sabine hard-links them from `Resources` before every launch and
+runtime check, which also repairs runtimes installed by older releases.
 
 ### Startup diagnostics
 
