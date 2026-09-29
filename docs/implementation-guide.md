@@ -234,7 +234,11 @@ to benchmark the GPU in the background.
   Slots are isolated by browser and released when that browser closes. The compositor evicts
   retired guest and popup textures and clears page textures during hibernation.
 - **Linux** uses CEF software `OnPaint` on Wayland and X11, with GPU composition in the native host.
-  Launch selects the available display connection without rewriting the session type.
+  Launch selects the available display connection without rewriting the session type. The window
+  presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
+  On Wayland each frame requests a compositor frame callback and further redraws wait for it; with
+  FIFO presentation some drivers hold the buffer carrying that callback, which stopped the window
+  from presenting until input arrived.
 - **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
   returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
   surface and waits for the copy before publishing it. Each owned IOSurface is handed to the native

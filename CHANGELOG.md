@@ -9,9 +9,10 @@
 - Let launchers find apps by other names: `generic_name`, `categories` and `keywords` under `[app]`
   in `Sabine.toml` go into desktop entries, with `categories` replacing the fixed `Utility`.
 - Keep windows responsive while they are not being shown: presenting now waits for the compositor
-  to ask for a frame instead of blocking the window until the display catches up. Bridge calls from
-  animating pages return within a millisecond instead of one display frame, and out-of-view windows
-  no longer stall for up to a second on every paint.
+  to ask for a frame instead of blocking the window until the display catches up, and Linux windows
+  present in mailbox mode where the driver supports it. Bridge calls from animating pages return
+  within a millisecond instead of one display frame, and out-of-view windows no longer stall for up
+  to a second on every paint.
 - Add `appWindow.inhibitShortcuts(enabled)` so pages that record keyboard shortcuts receive keys the
   desktop normally keeps for itself, such as the Super key or Alt+Tab. It works on Wayland, X11 and
   Windows and rejects on macOS.

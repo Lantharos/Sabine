@@ -22,6 +22,20 @@ pub(super) fn select_surface_alpha_mode(
         .unwrap_or(modes[0])
 }
 
+#[cfg(target_os = "linux")]
+const PREFERRED_PRESENT_MODES: &[wgpu::PresentMode] =
+    &[wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo];
+#[cfg(not(target_os = "linux"))]
+const PREFERRED_PRESENT_MODES: &[wgpu::PresentMode] = &[wgpu::PresentMode::Fifo];
+
+pub(super) fn select_present_mode(modes: &[wgpu::PresentMode]) -> wgpu::PresentMode {
+    PREFERRED_PRESENT_MODES
+        .iter()
+        .copied()
+        .find(|mode| modes.contains(mode))
+        .unwrap_or(modes[0])
+}
+
 impl GpuRenderer {
     pub fn resize(&mut self, width: u32, height: u32, scale_factor: f32) {
         if self.health.failure().is_some() {
