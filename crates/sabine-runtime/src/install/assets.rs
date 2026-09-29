@@ -1,27 +1,24 @@
 // ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
 //
-// Windows Chromium subprocesses look beside the runtime DLLs for ICU and .pak
-// files even when the browser has explicit resource paths. Keep the Release
-// hard links to Resources; removing these apparent duplicates breaks startup.
+// Chromium subprocesses on Windows and Linux look beside libcef for ICU and
+// .pak files even when the browser has explicit resource paths. Keep the
+// Release hard links to Resources; removing these apparent duplicates breaks
+// startup on Windows and leaves Linux renderers without Blink's resources.
 
 use std::{io, path::Path};
 
+#[cfg(any(target_os = "linux", windows))]
+const RELEASE_ASSETS: [&str; 4] = [
+    "icudtl.dat",
+    "chrome_100_percent.pak",
+    "chrome_200_percent.pak",
+    "resources.pak",
+];
+
 pub fn prepare_runtime_assets(runtime_dir: &Path) -> io::Result<()> {
     #[cfg(any(target_os = "linux", windows))]
-    {
-        let assets = if cfg!(windows) {
-            &[
-                "icudtl.dat",
-                "chrome_100_percent.pak",
-                "chrome_200_percent.pak",
-                "resources.pak",
-            ][..]
-        } else {
-            &["icudtl.dat"][..]
-        };
-        for asset in assets {
-            link_runtime_asset(runtime_dir, asset)?;
-        }
+    for asset in RELEASE_ASSETS {
+        link_runtime_asset(runtime_dir, asset)?;
     }
     #[cfg(windows)]
     crate::prepare_sandbox_access(runtime_dir, true).map_err(io::Error::other)?;
