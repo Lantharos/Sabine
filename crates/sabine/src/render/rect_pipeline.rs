@@ -20,10 +20,25 @@ pub(crate) struct RectVertex {
     radius: f32,
 }
 
+/// Erases the destination by the shape's coverage.
+pub(crate) const CUTOUT_BLENDING: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
 pub(crate) fn create_rounded_rect_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     globals_bind_group_layout: &wgpu::BindGroupLayout,
+    blend: wgpu::BlendState,
 ) -> wgpu::RenderPipeline {
     const ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
         0 => Float32x2,
@@ -70,7 +85,7 @@ pub(crate) fn create_rounded_rect_pipeline(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                blend: Some(blend),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),

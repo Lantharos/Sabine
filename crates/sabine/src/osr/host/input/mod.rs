@@ -65,6 +65,8 @@ impl ApplicationHandler for OsrNativeHost {
                 self.surface_size = size;
                 self.scale_factor = scale;
                 self.effect_regions_dirty = true;
+                #[cfg(target_os = "linux")]
+                self.relayout_media();
                 self.queue_resize_paint();
                 if self.presented {
                     self.render();
@@ -78,6 +80,8 @@ impl ApplicationHandler for OsrNativeHost {
                 self.surface_size = size;
                 self.scale_factor = scale_factor;
                 self.effect_regions_dirty = true;
+                #[cfg(target_os = "linux")]
+                self.relayout_media();
                 self.queue_resize_paint();
                 if self.presented {
                     self.render();
@@ -98,6 +102,8 @@ impl ApplicationHandler for OsrNativeHost {
             }
             WindowEvent::Occluded(occluded) => {
                 self.occluded = occluded;
+                #[cfg(target_os = "linux")]
+                self.media.set_occluded(occluded);
                 self.schedule_lifecycle_sync(if occluded { "occluded" } else { "visible" });
             }
             WindowEvent::ModifiersChanged(modifiers) => {

@@ -15,6 +15,7 @@ mod guest;
 mod guest_create;
 mod guest_download;
 mod guest_host_control;
+pub mod media;
 mod metrics;
 
 pub use activity::{

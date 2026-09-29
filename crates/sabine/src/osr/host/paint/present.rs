@@ -1,6 +1,8 @@
 use sabine_platform::request_window_effect;
 
 use crate::osr::protocol::{MAIN_TEXTURE_ID, POPUP_OVERLAY_ID};
+#[cfg(target_os = "linux")]
+use crate::render::DisplayCommand;
 use crate::render::{DisplayList, ImageCommand, RectCommand, RoundedRectCommand};
 use crate::window::style::Color;
 
@@ -104,6 +106,17 @@ impl OsrNativeHost {
                     color: self.config.background_color,
                 });
             }
+        }
+        #[cfg(target_os = "linux")]
+        for hole in self.media.holes() {
+            list.push(DisplayCommand::Cutout(RoundedRectCommand {
+                x: hole.bounds.x as f32,
+                y: hole.bounds.y as f32,
+                width: hole.bounds.width as f32,
+                height: hole.bounds.height as f32,
+                radius: hole.radius as f32,
+                color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            }));
         }
         self.draw_titlebar(&mut list, width);
         if self.loading.is_some_and(|loading| loading.revealed()) {

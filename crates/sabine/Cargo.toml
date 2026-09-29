@@ -46,7 +46,13 @@ softbuffer = "0.4.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd.workspace = true
+glow.workspace = true
+khronos-egl.workspace = true
 ksni.workspace = true
+libloading.workspace = true
+wayland-backend.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey = "0.8.0"

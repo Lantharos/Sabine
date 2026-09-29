@@ -139,6 +139,39 @@ image.src = fileUrl("/home/me/Pictures/photo.png");
 
 These URLs work only inside the app's own pages.
 
+## Native video
+
+Sabine's Chromium cannot decode H.264, HEVC or AAC. On Linux, `NativeVideo` plays those on a native
+surface beneath the page, with the page's own controls on top. It mirrors the parts of
+`HTMLVideoElement` a custom player uses, so a player can switch to it when a `<video>` cannot play
+its source:
+
+```js
+import { NativeVideo, fileUrl } from "@lantharos/sabine";
+
+video.addEventListener("error", async () => {
+  if (!NativeVideo.isSupported()) return;
+  const native = await NativeVideo.create(fileUrl(path), { element: stage, autoplay: true });
+  native.addEventListener("timeupdate", () => render(native.currentTime, native.duration));
+  native.addEventListener("error", () => showError(native.error.message));
+});
+```
+
+The video fills `element`, follows its layout, scrolling and rounded corners, and letterboxes to
+its aspect ratio. It shows through the page, so the window must be transparent, and the element and
+everything painted beneath it must be transparent where the video is. When opaque content lies
+beneath, such as a dialog over the rest of the app, pass `cutout: container` to clip the video's
+shape out of that container; content inside it can then no longer draw over the video. Call
+`updateRect()` while moving the element with a transform, and `destroy()` when the player goes
+away.
+
+It supports `play()`, `pause()`, `currentTime`, `fastSeek()`, `playbackRate`, `volume`, `muted`,
+`loop`, `duration`, `paused`, `ended`, `videoWidth` and `videoHeight`, and dispatches the usual
+media events. Tracks are listed in `audioTracks` and `subtitleTracks` and chosen with
+`selectAudioTrack(id)` and `selectSubtitleTrack(id)`; `activeCue` holds the subtitle showing now
+and changes with `cuechange`. Sources can be `http(s)` URLs, app files, or `fileUrl` paths in apps
+with local file access.
+
 ## Availability
 
 ```js

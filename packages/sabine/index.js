@@ -6,6 +6,10 @@
 /** @typedef {import("./index.d.ts").ActivityOptions} ActivityOptions */
 /** @typedef {import("./index.d.ts").PopupOptions} PopupOptions */
 
+import { NativeVideo } from "./media.js";
+
+export { NativeVideo };
+
 function requireApi() {
   const api = globalThis.window?.sabine;
   if (!api) {
@@ -374,4 +378,5 @@ export default {
   guest,
   activity,
   popup,
+  NativeVideo,
 };
