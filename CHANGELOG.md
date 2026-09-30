@@ -7,10 +7,10 @@
   `appWindow.visible`, `appWindow.suspended` and `appWindow.onVisibilityChanged` from
   `@lantharos/sabine`, and Rust code with `SabineWindow::on_visibility_changed`. The internal
   `window.__sabineLifecycleSet` hook is gone.
-- Fix Chromium spinning at full speed after a window lost keyboard focus on Linux. The window
+- Fix Chromium spinning at full speed after a window was minimized or hidden on Linux. The window
   cancelled an input method composition even when none was open, which set the page and browser
   processes messaging each other without end, at about one and a half cores, even after the window
-  had focus again.
+  was shown again.
 - Paint software frames with one copy instead of two. The window writes each changed region from
   Chromium's shared memory straight into its GPU texture rather than patching a full copy of the
   page first, which cut the window's CPU time by about a fifth while scrolling a large folder in
