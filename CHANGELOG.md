@@ -1,5 +1,9 @@
 # Unreleased
 
+- Fix Chromium spinning at full speed after a window lost keyboard focus on Linux. The window
+  cancelled an input method composition even when none was open, which set the page and browser
+  processes messaging each other without end, at about one and a half cores, even after the window
+  had focus again.
 - Only the primary mouse button moves or resizes a window from drag regions, resize edges and
   window controls; other buttons reach the page, so right-clicking empty space in a draggable
   sidebar no longer starts a window move.
