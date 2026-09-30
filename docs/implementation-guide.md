@@ -264,9 +264,10 @@ one of at most four reusable shared-memory slots per browser; each slot is mappe
 host and handed back with a release message after its pixels are consumed, so steady-state painting
 needs no per-frame allocation, mapping, or file writes. Smaller paints travel inline, and a paint
 whose slots are all still in use falls back to the inline path. Every rectangle in a batch refers to
-that batch's single byte backing instead of a separate allocation. The native host patches one
-backing store per surface and uploads only the changed ranges to an independent GPU texture (sparse
-per-rect uploads when damage is disjoint):
+that batch's single byte backing instead of a separate allocation. The native host writes each
+changed rectangle from those bytes straight into the surface's GPU texture, with no intermediate
+copy on the CPU. A Linux window that is unmapped while hidden reads its textures back once and
+uploads them again when it returns, so it reappears with its last frame:
 
 - main page
 - popup overlay

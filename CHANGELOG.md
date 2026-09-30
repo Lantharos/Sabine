@@ -11,6 +11,10 @@
   cancelled an input method composition even when none was open, which set the page and browser
   processes messaging each other without end, at about one and a half cores, even after the window
   had focus again.
+- Paint software frames with one copy instead of two. The window writes each changed region from
+  Chromium's shared memory straight into its GPU texture rather than patching a full copy of the
+  page first, which cut the window's CPU time by about a fifth while scrolling a large folder in
+  Rover, and it no longer keeps that copy of every window's pixels in memory.
 - Only the primary mouse button moves or resizes a window from drag regions, resize edges and
   window controls; other buttons reach the page, so right-clicking empty space in a draggable
   sidebar no longer starts a window move.

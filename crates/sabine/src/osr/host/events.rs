@@ -6,7 +6,7 @@ use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID};
 
 use super::native::OsrNativeHost;
 pub(super) use super::types::HostActivity;
-use super::types::{HostControl, OsrHostEvent};
+use super::types::{HostControl, OsrHostEvent, overlay_texture_id};
 use super::visibility::{activation_token_value, bool_control_value};
 
 const HOST_EVENT_DISPATCH_BUDGET: usize = 16;
@@ -364,15 +364,16 @@ impl OsrNativeHost {
 
     pub(super) fn capture_guest(&self, browser_id: &str, request_id: &str, guest_id: &str) {
         let result = self
-            .overlays
-            .get(guest_id)
+            .renderer
+            .as_ref()
+            .filter(|_| self.overlays.contains_key(guest_id))
+            .and_then(|renderer| renderer.read_bgra_image(&overlay_texture_id(guest_id)))
             .ok_or_else(|| "guest has no frame to capture".to_string())
-            .and_then(|overlay| {
-                let (width, height) = overlay.buffer.size();
+            .and_then(|frame| {
                 super::paint::guest_preview::guest_preview_data_url(
-                    overlay.buffer.bytes(),
-                    width,
-                    height,
+                    &frame.bytes,
+                    frame.width,
+                    frame.height,
                 )
             });
         self.send_bridge_response(

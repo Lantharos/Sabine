@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use crate::osr::frame_buffer::FrameBuffer;
+use crate::osr::paint_rects::surface_rects;
 use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrPaintBatch, OsrSurface};
-use crate::render::{GpuRenderer, PixelRect, RendererError};
+use crate::render::{GpuRenderer, RendererError};
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
@@ -120,19 +120,13 @@ impl OsrNativeHost {
             return false;
         };
         let uploaded = match batch.surface.overlay_id() {
-            None => paint_surface(renderer, MAIN_TEXTURE_ID, &mut self.main_buffer, &batch),
+            None => paint_surface(renderer, MAIN_TEXTURE_ID, &batch),
             Some(overlay_id) => {
-                let overlay = self
-                    .overlays
+                self.overlays
                     .entry(overlay_id.to_string())
-                    .or_insert_with(|| OverlayLayer::new(geometry));
-                overlay.geometry = geometry;
-                paint_surface(
-                    renderer,
-                    &overlay_texture_id(overlay_id),
-                    &mut overlay.buffer,
-                    &batch,
-                )
+                    .or_insert_with(|| OverlayLayer::new(geometry))
+                    .geometry = geometry;
+                paint_surface(renderer, &overlay_texture_id(overlay_id), &batch)
             }
         };
         if !uploaded {
@@ -155,63 +149,41 @@ impl OsrNativeHost {
         }
     }
 
-    pub(in crate::osr::host) fn upload_cached_textures(&mut self) -> Result<(), RendererError> {
+    /// Keeps the shown surfaces on the CPU before the renderer holding them
+    /// goes away, so the window can show them again right away.
+    pub(in crate::osr::host) fn retain_frames(&mut self) {
+        let Some(renderer) = &self.renderer else {
+            return;
+        };
+        let texture_ids = self
+            .main_surface
+            .map(|_| MAIN_TEXTURE_ID.to_string())
+            .into_iter()
+            .chain(self.overlays.keys().map(|id| overlay_texture_id(id)));
+        self.retained_frames = texture_ids
+            .filter_map(|id| Some((id.clone(), renderer.read_bgra_image(&id)?)))
+            .collect();
+        if !self.retained_frames.contains_key(MAIN_TEXTURE_ID) {
+            self.main_surface = None;
+        }
+    }
+
+    pub(in crate::osr::host) fn restore_retained_frames(&mut self) -> Result<(), RendererError> {
+        let frames = std::mem::take(&mut self.retained_frames);
         let Some(renderer) = self.renderer.as_mut() else {
             return Ok(());
         };
-        if self.main_surface.is_some() {
-            upload_entire(renderer, MAIN_TEXTURE_ID, &self.main_buffer)?;
-        }
-        for (id, overlay) in &self.overlays {
-            upload_entire(renderer, &overlay_texture_id(id), &overlay.buffer)?;
+        for (id, frame) in &frames {
+            renderer.write_bgra_rects(id, frame.size(), &[frame.whole()])?;
         }
         Ok(())
     }
 }
 
-fn paint_surface(
-    renderer: &mut GpuRenderer,
-    texture_id: &str,
-    buffer: &mut FrameBuffer,
-    batch: &OsrPaintBatch,
-) -> bool {
-    let Some(damage) = buffer.compose(batch.width, batch.height, &batch.rects) else {
-        return false;
-    };
-    let bounds = damage
-        .iter()
-        .copied()
-        .reduce(PixelRect::union)
-        .expect("composed paint has damage");
-    let damaged_area = damage.iter().map(|rect| rect.area()).sum::<u64>();
-    let regions = if bounds.area() > damaged_area.saturating_mul(2) {
-        damage.as_slice()
-    } else {
-        std::slice::from_ref(&bounds)
-    };
-    renderer
-        .upload_bgra_regions(texture_id, buffer.size(), buffer.bytes(), regions)
-        .is_ok()
-}
-
-fn upload_entire(
-    renderer: &mut GpuRenderer,
-    texture_id: &str,
-    buffer: &FrameBuffer,
-) -> Result<(), RendererError> {
-    if buffer.bytes().is_empty() {
-        return Ok(());
-    }
-    let (width, height) = buffer.size();
-    renderer.upload_bgra_regions(
-        texture_id,
-        (width, height),
-        buffer.bytes(),
-        &[PixelRect {
-            x: 0,
-            y: 0,
-            width,
-            height,
-        }],
-    )
+fn paint_surface(renderer: &mut GpuRenderer, texture_id: &str, batch: &OsrPaintBatch) -> bool {
+    surface_rects(&batch.rects, batch.width, batch.height).is_some_and(|rects| {
+        renderer
+            .write_bgra_rects(texture_id, (batch.width, batch.height), &rects)
+            .is_ok()
+    })
 }

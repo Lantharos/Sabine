@@ -10,7 +10,6 @@ use winit::event::MouseButton;
 
 use crate::SabineWindowChrome;
 use crate::osr::control::ControlWriter;
-use crate::osr::frame_buffer::FrameBuffer;
 use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID, POPUP_TEXTURE_ID};
 use crate::osr::transport::IpcStream;
 
@@ -69,15 +68,11 @@ impl SurfaceGeometry {
 
 pub(super) struct OverlayLayer {
     pub(super) geometry: SurfaceGeometry,
-    pub(super) buffer: FrameBuffer,
 }
 
 impl OverlayLayer {
     pub(super) fn new(geometry: SurfaceGeometry) -> Self {
-        Self {
-            geometry,
-            buffer: FrameBuffer::new(),
-        }
+        Self { geometry }
     }
 }
 

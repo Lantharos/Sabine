@@ -57,7 +57,6 @@ impl OsrNativeHost {
         let geometry = self.accel_geometry(frame);
         match frame.surface.overlay_id() {
             None => {
-                self.main_buffer.release();
                 self.main_surface = Some(geometry);
                 if self.main_load_ready {
                     self.loading = None;
@@ -65,12 +64,10 @@ impl OsrNativeHost {
                 self.clear_pending_resize_paint();
             }
             Some(overlay_id) => {
-                let overlay = self
-                    .overlays
+                self.overlays
                     .entry(overlay_id.to_string())
-                    .or_insert_with(|| OverlayLayer::new(geometry));
-                overlay.buffer.release();
-                overlay.geometry = geometry;
+                    .or_insert_with(|| OverlayLayer::new(geometry))
+                    .geometry = geometry;
             }
         }
     }

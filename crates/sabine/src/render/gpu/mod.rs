@@ -15,6 +15,7 @@ mod external;
 mod health;
 mod images;
 mod instance;
+mod readback;
 #[cfg(any(windows, target_os = "macos"))]
 mod retirement;
 mod surface;

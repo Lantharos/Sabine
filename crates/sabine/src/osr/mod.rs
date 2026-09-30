@@ -1,10 +1,10 @@
 #[cfg(any(windows, target_os = "macos"))]
 pub(crate) mod accel;
 pub(crate) mod control;
-pub(crate) mod frame_buffer;
 pub(crate) mod host;
 pub(crate) mod launch;
 mod message_queue;
+pub(crate) mod paint_rects;
 pub(crate) mod protocol;
 pub(crate) mod transport;
 
