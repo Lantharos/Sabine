@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.33
 
 - Pause pages while the desktop hides their window. On Wayland compositors that mark minimized or
   covered windows as suspended, such as Kestrel, and on X11 when a window is fully covered,
