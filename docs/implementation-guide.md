@@ -547,7 +547,6 @@ The web bridge exposes:
 ```text
 window.sabine.bridge
 window.sabine.window
-window.sabine.lifecycle
 window.sabine.activity
 window.sabine.guest
 ```
@@ -555,12 +554,24 @@ window.sabine.guest
 ## Lifecycle and performance
 
 Sabine distinguishes active, background, suspended, hibernating, and hibernated states. Activity
-leases allow durable Rust work or page work to block hibernation while it is genuinely active.
-Blur and occlusion suspend only lower the windowless frame rate; they do not call CEF `WasHidden`,
-so brief focus loss during interactive move does not blank the surface. Hibernation is what actually
-hides the view and tears down its browser. The shared CEF process stays alive when it still owns
-other windows. Waking creates a fresh browser through the same profile-singleton handoff path, and
-connection generations prevent a late disconnect from the old browser from clearing the new one.
+leases allow durable Rust work or page work to block hibernation while it is genuinely active. Blur
+suspend only lowers the windowless frame rate; it does not call CEF `WasHidden`, so brief focus loss
+during interactive move does not blank the surface. When the desktop reports a shown window as out
+of sight, Chromium stops rendering it with `WasHidden`, which also throttles the page's timers, and
+the window ignores paints until it is seen again, then keeps showing its last frame while Chromium
+repaints. Wayland compositors report this with the xdg-shell `suspended` state, which Mutter-based
+compositors such as Kestrel set on minimized and fully covered windows; X11 reports a fully obscured
+window. Winit turns both into occlusion events. Hibernation hides the view too, and tears down its
+browser. The shared CEF process stays alive when it still owns other windows. Waking creates a fresh
+browser through the same profile-singleton handoff path, and connection generations prevent a late
+disconnect from the old browser from clearing the new one.
+
+Pages read the window's state from `window.sabine.window.visible` and `.suspended`, and hear about
+changes through the `window.visibility` bridge event. `visible` is false while the window is hidden
+or the desktop reports it out of sight; `suspended` is true while the page runs at its background
+frame rate. The native window sends the page its state whenever either changes and again when a page
+finishes loading while hidden or suspended, and reports the same changes to the app's
+`on_visibility_changed` listener.
 
 Visible windows remain unmapped until the first browser frame when startup or wake completes
 quickly. After 120 milliseconds, Sabine presents a neutral native loading surface using the same

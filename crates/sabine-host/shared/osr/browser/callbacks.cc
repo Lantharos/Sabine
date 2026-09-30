@@ -270,6 +270,9 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   if (!guest) {
     InstallTransparentBackground(frame);
     SendMessage(kMainLoadReady, 0, 0, 0, 0, nullptr, 0);
+    if (!window_visible_ || window_suspended_) {
+      DispatchWindowState();
+    }
     return;
   }
   guest->url = frame->GetURL();

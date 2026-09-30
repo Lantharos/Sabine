@@ -95,6 +95,7 @@ impl OsrNativeHost {
                     self.handoff_deadline = None;
                     self.send_resize();
                     self.send_current_lifecycle();
+                    self.send_window_state();
                     self.send_control(if self.focused {
                         "focus\t1\n"
                     } else {

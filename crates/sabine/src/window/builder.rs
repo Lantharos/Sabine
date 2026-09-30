@@ -313,6 +313,16 @@ impl SabineWindow {
         self
     }
 
+    /// Calls `listener` whenever the window becomes visible or hidden, or its
+    /// page is suspended or resumed, starting with the state it opens in.
+    pub fn on_visibility_changed(
+        mut self,
+        listener: impl Fn(super::WindowVisibility) + Send + Sync + 'static,
+    ) -> Self {
+        self.config.visibility_listener = Some(super::VisibilityListener::new(listener));
+        self
+    }
+
     pub fn lifecycle_policy(mut self, lifecycle: SabineLifecyclePolicy) -> Self {
         self.config.lifecycle = lifecycle;
         self

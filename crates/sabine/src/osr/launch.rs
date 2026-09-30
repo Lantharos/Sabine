@@ -69,6 +69,7 @@ pub(crate) fn launch_process(
             config.security.clone(),
         ),
         activity.clone(),
+        config.visibility_listener.clone(),
     );
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let (command_sender, command_receiver) = crossbeam_channel::unbounded();
@@ -230,6 +231,7 @@ pub(crate) fn attach_open_window(
         ),
         process.activity.clone(),
         &emitter,
+        window_config.visibility_listener.clone(),
     );
     if let Some(thread) = thread {
         process.extra_bridge_threads.push(thread);

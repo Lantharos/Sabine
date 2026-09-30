@@ -1,5 +1,12 @@
 # Unreleased
 
+- Pause pages while the desktop hides their window. On Wayland compositors that mark minimized or
+  covered windows as suspended, such as Kestrel, and on X11 when a window is fully covered,
+  Chromium stops rendering the page and throttles its timers until the window is seen again; a
+  minimized Barometer went from 7.5% of a core to 0.4%. Pages can follow the window's state with
+  `appWindow.visible`, `appWindow.suspended` and `appWindow.onVisibilityChanged` from
+  `@lantharos/sabine`, and Rust code with `SabineWindow::on_visibility_changed`. The internal
+  `window.__sabineLifecycleSet` hook is gone.
 - Fix Chromium spinning at full speed after a window lost keyboard focus on Linux. The window
   cancelled an input method composition even when none was open, which set the page and browser
   processes messaging each other without end, at about one and a half cores, even after the window

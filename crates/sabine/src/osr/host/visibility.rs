@@ -1,6 +1,10 @@
+use std::io::Write;
+
 use winit::event_loop::ActiveEventLoop;
 
 use super::native::{OsrNativeHost, present_window};
+use super::types::{LifecycleState, WindowState};
+use crate::window::VISIBILITY_LINE;
 
 impl OsrNativeHost {
     pub(super) fn show_window(&mut self, reason: &str) {
@@ -55,6 +59,57 @@ impl OsrNativeHost {
         }
         self.ensure_window(event_loop);
         self.focus_window("focus");
+    }
+}
+
+impl OsrNativeHost {
+    fn window_state(&self) -> WindowState {
+        WindowState {
+            shown: self.config.visible,
+            occluded: self.occluded,
+            suspended: self.lifecycle_state != LifecycleState::Active,
+        }
+    }
+
+    /// Tells the page and the app when the window's visibility or lifecycle
+    /// changed since they last heard.
+    pub(super) fn sync_window_state(&mut self) {
+        let state = self.window_state();
+        let Some(previous) = self.published_window_state.replace(state) else {
+            self.send_window_state();
+            self.report_visibility(state);
+            return;
+        };
+        if previous == state {
+            return;
+        }
+        self.send_window_state();
+        if previous.visible() != state.visible() || previous.suspended != state.suspended {
+            self.report_visibility(state);
+        }
+    }
+
+    pub(super) fn send_window_state(&self) {
+        let Some(state) = self.published_window_state else {
+            return;
+        };
+        self.send_control(&format!(
+            "window_state\t{}\t{}\t{}\n",
+            u8::from(state.shown),
+            u8::from(state.occluded),
+            u8::from(state.suspended)
+        ));
+    }
+
+    fn report_visibility(&self, state: WindowState) {
+        let mut output = std::io::stdout().lock();
+        let _ = writeln!(
+            output,
+            "{VISIBILITY_LINE}\t{}\t{}",
+            u8::from(state.visible()),
+            u8::from(state.suspended)
+        );
+        let _ = output.flush();
     }
 }
 

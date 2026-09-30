@@ -1,4 +1,5 @@
 mod config;
+mod deadlines;
 mod events;
 mod input;
 mod lifecycle;

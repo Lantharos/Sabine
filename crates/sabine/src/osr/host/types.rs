@@ -41,6 +41,19 @@ pub(super) const EVENTFLAG_IS_REPEAT: u32 = 1 << 13;
 pub(super) const EVENTFLAG_PRECISION_SCROLLING_DELTA: u32 = 1 << 14;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct WindowState {
+    pub(super) shown: bool,
+    pub(super) occluded: bool,
+    pub(super) suspended: bool,
+}
+
+impl WindowState {
+    pub(super) fn visible(self) -> bool {
+        self.shown && !self.occluded
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct SurfaceGeometry {
     pub(super) x: i32,
     pub(super) y: i32,

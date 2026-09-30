@@ -336,7 +336,9 @@ class SabineOsrHandler : public CefClient,
   void ApplyLifecycle(const std::string& state,
                       int frame_rate,
                       const std::string& reason);
-  void DispatchLifecycle(const std::string& state, const std::string& reason);
+  void ApplyWindowState(bool shown, bool occluded, bool suspended);
+  bool UpdateViewHidden();
+  void DispatchWindowState();
   void StartCommandReader();
 
   GuestView* GuestForBrowser(const CefRefPtr<CefBrowser>& browser);
@@ -438,8 +440,12 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
   bool transparent_background_ = false;
   bool suspended_ = false;
-  // True only when the view is actually taken off-screen (hibernate).
-  // Blur/occlusion suspend only throttles frame rate — WasHidden there
+  bool hibernating_ = false;
+  bool window_visible_ = true;
+  bool window_occluded_ = false;
+  bool window_suspended_ = false;
+  // True only while hibernating or while the compositor reports the shown
+  // window as fully hidden. Blur only throttles frame rate — WasHidden there
   // blanks OSR and flickers on resume (common after interactive move).
   bool view_hidden_ = false;
   bool resume_needs_paint_ = false;

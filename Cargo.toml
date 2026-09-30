@@ -89,15 +89,15 @@ wayland-backend = { version = "0.3.17", features = ["client_system"] }
 wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
 wgpu = "30.0.1"
-winit = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
+winit = { git = "https://github.com/rust-windowing/winit", rev = "a68ac903f27c48a614a2cab899d517ca34c6b1e8" }
 windows = "0.62.2"
 x11-dl = "2.21.0"
 x11rb = "0.14.0"
 
 [patch.crates-io]
-dpi = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
-winit-common = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
-winit-core = { git = "https://github.com/rust-windowing/winit", rev = "8b5f46d4be7d29f5b0ed91f4343b78d8c2668bd0" }
+dpi = { git = "https://github.com/rust-windowing/winit", rev = "a68ac903f27c48a614a2cab899d517ca34c6b1e8" }
+winit-common = { git = "https://github.com/rust-windowing/winit", rev = "a68ac903f27c48a614a2cab899d517ca34c6b1e8" }
+winit-core = { git = "https://github.com/rust-windowing/winit", rev = "a68ac903f27c48a614a2cab899d517ca34c6b1e8" }
 
 [profile.dev.package.libbz2-rs-sys]
 opt-level = 3

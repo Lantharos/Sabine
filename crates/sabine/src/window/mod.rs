@@ -6,6 +6,7 @@ pub(crate) mod config;
 mod launch;
 mod manifest;
 pub(crate) mod style;
+mod visibility;
 
 pub use app_chrome::AppChrome;
 use config::SabineWindowConfig;
@@ -13,6 +14,8 @@ pub use config::{
     SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
 };
 pub use style::Color as SabineColor;
+pub use visibility::WindowVisibility;
+pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
 use crate::{error::SabineResult, host::SabineProcess};
 
