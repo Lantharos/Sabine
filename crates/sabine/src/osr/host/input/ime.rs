@@ -15,10 +15,7 @@ impl OsrNativeHost {
     pub(in crate::osr::host) fn forward_ime(&mut self, ime: Ime) {
         match ime {
             Ime::Enabled => {}
-            Ime::Disabled => {
-                self.ime_preedit = None;
-                self.send_control("ime_cancel\n");
-            }
+            Ime::Disabled => self.cancel_preedit(),
             Ime::Commit(text) => {
                 self.ime_preedit = None;
                 let encoded = encode_component(&text);
@@ -26,8 +23,7 @@ impl OsrNativeHost {
             }
             Ime::Preedit(text, selection) => {
                 if text.is_empty() {
-                    self.ime_preedit = None;
-                    self.send_control("ime_cancel\n");
+                    self.cancel_preedit();
                 } else {
                     self.ime_preedit = Some(ImePreedit { text, selection });
                     self.send_preedit();
@@ -37,6 +33,12 @@ impl OsrNativeHost {
                 before_bytes,
                 after_bytes,
             } => self.delete_ime_surrounding(before_bytes, after_bytes),
+        }
+    }
+
+    fn cancel_preedit(&mut self) {
+        if self.ime_preedit.take().is_some() {
+            self.send_control("ime_cancel\n");
         }
     }
 
@@ -72,7 +74,9 @@ impl OsrNativeHost {
         let Some(end_utf16) = utf16_offset(&surrounding.text, end) else {
             return;
         };
-        self.send_control("ime_cancel\n");
+        if self.ime_preedit.is_some() {
+            self.send_control("ime_cancel\n");
+        }
         self.send_control(&format!(
             "ime_delete\t{}\t{}\n",
             surrounding.base_utf16 + start_utf16,
