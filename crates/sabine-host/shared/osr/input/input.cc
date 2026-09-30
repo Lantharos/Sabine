@@ -329,6 +329,8 @@ void SabineOsrHandler::HandleControlLine(
     const std::string reason =
         parts.size() >= 4 ? DecodeControlComponent(parts[3]) : "";
     ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())), reason);
+  } else if (parts[0] == "window_state" && parts.size() >= 4) {
+    ApplyWindowState(parts[1] == "1", parts[2] == "1", parts[3] == "1");
   } else if (parts[0] == "close") {
     // Close only this browser. CefQuitMessageLoop runs from OnBeforeClose
     // when the last OSR handler is gone so sibling windows stay alive.
@@ -340,62 +342,5 @@ void SabineOsrHandler::HandleControlLine(
   } else if (parts[0] == "file_drag_ended" && parts.size() >= 4) {
     FinishNativeFileDrag(std::atoi(parts[1].c_str()),
                          std::atoi(parts[2].c_str()), parts[3]);
-  }
-}
-
-void SabineOsrHandler::ApplyLifecycle(const std::string& state,
-                                      int frame_rate,
-                                      const std::string& reason) {
-  CEF_REQUIRE_UI_THREAD();
-  if (!browser_) {
-    return;
-  }
-  CefRefPtr<CefBrowserHost> host = browser_->GetHost();
-  if (state == "active") {
-    const bool was_hidden = view_hidden_;
-    const bool needs_paint = was_hidden || resume_needs_paint_;
-    suspended_ = false;
-    view_hidden_ = false;
-    resume_needs_paint_ = false;
-    host->SetWindowlessFrameRate(std::max(1, frame_rate));
-    if (was_hidden) {
-      host->WasHidden(false);
-      host->WasResized();
-    }
-    if (needs_paint) {
-      host->Invalidate(PET_VIEW);
-    }
-    ApplyGuestLifecycle();
-    DispatchLifecycle("active", reason);
-    return;
-  }
-  if (state == "hibernate") {
-    DispatchLifecycle("hibernate", reason);
-    suspended_ = true;
-    view_hidden_ = true;
-    resume_needs_paint_ = false;
-    host->SetWindowlessFrameRate(std::max(1, background_frame_rate_));
-    host->WasHidden(true);
-    ApplyGuestLifecycle();
-    return;
-  }
-  // Suspend: throttle only. Do not WasHidden — Wayland fires brief blur /
-  // occlusion around interactive move, and hiding blanks the OSR surface.
-  suspended_ = true;
-  resume_needs_paint_ = resume_needs_paint_ || reason == "hidden";
-  host->SetWindowlessFrameRate(std::max(1, frame_rate));
-  ApplyGuestLifecycle();
-  DispatchLifecycle("suspended", reason);
-}
-
-void SabineOsrHandler::DispatchLifecycle(const std::string& state,
-                                         const std::string& reason) {
-  CEF_REQUIRE_UI_THREAD();
-  const std::string script =
-      "window.__sabineLifecycleSet&&window.__sabineLifecycleSet(" +
-      JsString(state) + "," + JsString(reason) + ");";
-  for (auto& browser : browsers_) {
-    browser->GetMainFrame()->ExecuteJavaScript(
-        script, browser->GetMainFrame()->GetURL(), 0);
   }
 }

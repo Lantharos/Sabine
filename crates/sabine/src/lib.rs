@@ -16,7 +16,7 @@ pub use error::{SabineError, SabineResult};
 pub use host::{SabineProcess, SabineProcessHandle, WindowId};
 pub use window::{
     AppChrome, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
-    SabineWindowControlAction,
+    SabineWindowControlAction, WindowVisibility,
 };
 
 /// Common imports for app authors.

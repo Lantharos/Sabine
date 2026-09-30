@@ -45,6 +45,28 @@ export interface SabineWindowApi {
    * everywhere.
    */
   setRegions(regions: WindowRegions): Promise<void>;
+  /**
+   * Whether people can see the window: it is shown and the desktop has not
+   * reported it out of sight, as it does for minimized or fully covered
+   * windows where it can.
+   */
+  readonly visible: boolean;
+  /**
+   * Whether Sabine is running the page at its background frame rate, for
+   * example while the window is hidden or, with some lifecycle policies,
+   * while it is not focused.
+   */
+  readonly suspended: boolean;
+}
+
+export interface WindowVisibility {
+  visible: boolean;
+  suspended: boolean;
+}
+
+export interface AppWindow extends SabineWindowApi {
+  /** Calls `callback` whenever `visible` or `suspended` changes. */
+  onVisibilityChanged(callback: (state: WindowVisibility) => void): () => void;
 }
 
 /** A window region built with the `region` helpers. */
@@ -273,7 +295,7 @@ export declare const app: {
   takeOpenUrls(): Promise<string[]>;
 };
 
-export declare const appWindow: SabineWindowApi;
+export declare const appWindow: AppWindow;
 
 export declare class Guest {
   readonly id: string;

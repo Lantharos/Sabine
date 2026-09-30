@@ -171,6 +171,16 @@ export const appWindow = {
   async setRegions(regions) {
     await invoke("sabine.window.setRegions", regions);
   },
+  get visible() {
+    return requireApi().window.visible;
+  },
+  get suspended() {
+    return requireApi().window.suspended;
+  },
+  /** @param {(state: import("./index.d.ts").WindowVisibility) => void} callback */
+  onVisibilityChanged(callback) {
+    return listen("window.visibility", callback);
+  },
 };
 
 /** @param {Record<string, unknown>} adaptive */

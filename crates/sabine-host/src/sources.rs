@@ -112,6 +112,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ),
     ("osr/utilities.h", include_str!("../shared/osr/utilities.h")),
     (
+        "osr/window_state.cc",
+        include_str!("../shared/osr/window_state.cc"),
+    ),
+    (
         "osr/accelerated/paint.cc",
         include_str!("../shared/osr/accelerated/paint.cc"),
     ),

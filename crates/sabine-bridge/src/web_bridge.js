@@ -45,6 +45,13 @@
     postNative("window", action, value == null ? "" : String(value));
   };
 
+  let windowState = { visible: true, suspended: false };
+  window.__sabineWindowStateSet = function (visible, suspended) {
+    if (windowState.visible === visible && windowState.suspended === suspended) return;
+    windowState = { visible, suspended };
+    window.__sabineBridgeEmit("window.visibility", { visible, suspended });
+  };
+
   window.sabine = window.sabine || {};
   window.sabine.window = Object.assign(window.sabine.window || {}, {
     show() { windowCommand("show"); },
@@ -63,6 +70,10 @@
     async setRegions(regions) {
       await window.sabine.bridge.invoke("sabine.window.setRegions", regions);
     },
+  });
+  Object.defineProperties(window.sabine.window, {
+    visible: { get: () => windowState.visible, configurable: true },
+    suspended: { get: () => windowState.suspended, configurable: true },
   });
 
   window.sabine.bridge = {

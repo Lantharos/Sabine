@@ -48,6 +48,7 @@ pub(crate) struct SabineWindowConfig {
     pub security: ContentSecurity,
     pub local_files: bool,
     pub browser: BrowserOptions,
+    pub visibility_listener: Option<super::VisibilityListener>,
 }
 
 impl Default for SabineWindowConfig {
@@ -87,6 +88,7 @@ impl Default for SabineWindowConfig {
             security: ContentSecurity::default(),
             local_files: false,
             browser: BrowserOptions::default(),
+            visibility_listener: None,
         }
     }
 }

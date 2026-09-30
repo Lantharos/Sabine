@@ -87,6 +87,20 @@ This works on Wayland compositors that support keyboard shortcut inhibiting, on 
 Windows, where Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS.
 Some compositors ask the user before they allow it.
 
+Pages can pause work while nobody can see them. `appWindow.visible` is false while the window is
+hidden or the desktop reports it out of sight, for example when it is minimized or fully covered,
+and `appWindow.suspended` is true while Sabine runs the page at its background frame rate:
+
+```js
+const stop = appWindow.onVisibilityChanged(({ visible, suspended }) => {
+  if (visible) startSampling();
+  else stopSampling();
+});
+```
+
+While a shown window is out of sight, Chromium also stops rendering it and treats the document as
+hidden. Rust code can follow the same changes with `SabineWindow::on_visibility_changed`.
+
 Glass windows can change which parts are blurred, opaque or clickable while they run, for example
 to drop a sidebar's blur while it is hidden:
 

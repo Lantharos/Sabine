@@ -97,6 +97,7 @@ impl OsrNativeHost {
         };
         self.surface_size = window.surface_size();
         self.scale_factor = window.scale_factor();
+        self.occluded = false;
         let proxy = self.proxy.clone();
         let renderer = match pollster::block_on(GpuRenderer::new(
             window.clone(),
