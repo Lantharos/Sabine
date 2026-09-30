@@ -1,3 +1,9 @@
+# Unreleased
+
+- Only the primary mouse button moves or resizes a window from drag regions, resize edges and
+  window controls; other buttons reach the page, so right-clicking empty space in a draggable
+  sidebar no longer starts a window move.
+
 # Sabine 0.32
 
 - Fix Linux pages rendering without Chromium's built-in styles, which showed the contents of
