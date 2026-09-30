@@ -313,7 +313,13 @@ pub(crate) fn cef_osr_command(
             "--cache-path={}",
             cache_dir.join("browser").display()
         ));
-    crate::apply_browser_launch_args(&mut command, &config.browser_options(), config.dev_mode);
+    crate::apply_browser_launch_args(
+        &mut command,
+        &config.browser_options(),
+        config.dev_mode,
+        #[cfg(target_os = "linux")]
+        viewport.accelerated_paint,
+    );
     if config.dev_mode {
         command.arg("--sabine-dev-mode");
     }

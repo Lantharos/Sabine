@@ -115,6 +115,10 @@ pub(super) struct OsrNativeHost {
     pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
+    #[cfg(target_os = "linux")]
+    pub(super) software_paint: bool,
+    #[cfg(target_os = "linux")]
+    pub(super) accelerated_launch: bool,
 }
 
 impl OsrNativeHost {
@@ -218,6 +222,10 @@ impl OsrNativeHost {
             clipboard: None,
             #[cfg(target_os = "linux")]
             paste_gesture: None,
+            #[cfg(target_os = "linux")]
+            software_paint: false,
+            #[cfg(target_os = "linux")]
+            accelerated_launch: false,
         }
     }
 
@@ -271,6 +279,11 @@ impl OsrNativeHost {
         self.handoff_deadline = None;
 
         let (width, height, scale) = self.content_size_for_cef();
+        let accelerated_paint = self.accelerated_paint();
+        #[cfg(target_os = "linux")]
+        {
+            self.accelerated_launch = accelerated_paint;
+        }
         let mut command = match osr::cef_osr_command(
             &self.config.runtime_dir,
             &self.config.host_binary,
@@ -289,8 +302,7 @@ impl OsrNativeHost {
                         _ => None,
                     }
                 }),
-                accelerated_paint: cfg!(target_os = "macos")
-                    || (cfg!(windows) && self.renderer.is_some()),
+                accelerated_paint,
             },
         ) {
             Ok(command) => command,

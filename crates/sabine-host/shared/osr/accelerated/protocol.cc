@@ -65,4 +65,16 @@ std::string BuildAccelRetirePayload(const std::vector<uint64_t>& resource_ids) {
   return std::string(payload.begin(), payload.end());
 }
 
+std::string BuildDmabufAnnouncePayload(uint64_t resource_id,
+                                       uint64_t modifier,
+                                       uint32_t stride,
+                                       uint32_t offset) {
+  std::vector<char> payload(8 + 8 + 4 + 4, 0);
+  PutU64(&payload, 0, resource_id);
+  PutU64(&payload, 8, modifier);
+  PutU32(&payload, 16, stride);
+  PutU32(&payload, 20, offset);
+  return std::string(payload.begin(), payload.end());
+}
+
 }  // namespace sabine_osr

@@ -18,21 +18,16 @@ pub(super) struct ImageDraw {
 
 impl GpuRenderer {
     pub(crate) fn remove_image(&mut self, id: &str) {
-        #[cfg(any(windows, target_os = "macos"))]
-        {
-            self.retire_external_texture(id);
-            self.external_imports.remove(id);
-        }
+        self.retire_external_texture(id);
+        self.external_imports.remove(id);
         self.texture_cache.remove(id);
     }
 
     pub(crate) fn clear_images(&mut self) {
-        #[cfg(any(windows, target_os = "macos"))]
         for (_, completed) in self.external_texture_releases.drain() {
             self.queue.on_submitted_work_done(completed);
             self.submission_poller.notify();
         }
-        #[cfg(any(windows, target_os = "macos"))]
         self.external_imports.clear();
         self.texture_cache.clear();
     }
@@ -136,7 +131,6 @@ impl GpuRenderer {
     }
 
     pub(super) fn create_dynamic_bgra_image(&mut self, id: String, width: u32, height: u32) {
-        #[cfg(any(windows, target_os = "macos"))]
         self.retire_external_texture(&id);
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(&id),

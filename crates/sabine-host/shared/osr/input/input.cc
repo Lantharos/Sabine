@@ -71,12 +71,10 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
   const auto parts = Split(line, '\t');
-#if defined(OS_WIN) || defined(OS_MAC)
   if (parts.size() == 2 && parts[0] == "accel_release") {
     ReleaseAcceleratedFrame(std::strtoull(parts[1].c_str(), nullptr, 10));
     return;
   }
-#endif
 #ifndef _WIN32
   if (parts.size() == 3 && parts[0] == "paint_release") {
     ReleaseSharedPaint(

@@ -53,10 +53,14 @@ impl BrowserOptions {
     }
 }
 
+/// On Linux, `accelerated_paint` makes Chromium composite with Vulkan, which
+/// can render into the shareable buffers its accelerated frames use on every
+/// driver, where OpenGL cannot on NVIDIA.
 pub(crate) fn apply_browser_launch_args(
     command: &mut Command,
     options: &BrowserOptions,
     dev_mode: bool,
+    #[cfg(target_os = "linux")] accelerated_paint: bool,
 ) {
     let enabled_features: Vec<&str> = {
         #[cfg(target_os = "linux")]
@@ -65,6 +69,9 @@ pub(crate) fn apply_browser_launch_args(
             command.arg(format!("--ozone-platform={}", linux_ozone_platform()));
             if options.vaapi_hardware_decode {
                 features.push("VaapiVideoDecoder");
+            }
+            if accelerated_paint {
+                features.push("Vulkan");
             }
             features
         }

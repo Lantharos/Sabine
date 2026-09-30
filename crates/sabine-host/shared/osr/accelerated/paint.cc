@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "include/base/cef_callback.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "osr/handler.h"
 #include "osr/accelerated/protocol.h"
 #include "osr/utilities.h"
@@ -13,12 +15,25 @@
 #include <windows.h>
 #elif defined(OS_MAC)
 #include "osr/accelerated/macos/iosurface_copy.h"
+#elif defined(OS_LINUX)
+#include <thread>
+
+#include "osr/accelerated/linux/dmabuf_copy.h"
+
+constexpr int64_t kAcceleratedPaintGraceMs = 2000;
 #endif
 
 namespace sabine_osr {
 
 bool PreferSharedTexture(CefRefPtr<CefCommandLine> command_line) {
-  return command_line && command_line->HasSwitch("sabine-shared-texture");
+  const bool preferred =
+      command_line && command_line->HasSwitch("sabine-shared-texture");
+#if defined(OS_LINUX)
+  if (preferred) {
+    std::thread(AcceleratedDmabufAvailable).detach();
+  }
+#endif
+  return preferred;
 }
 
 void ApplySharedTexture(CefWindowInfo* window_info, bool enabled) {
@@ -124,22 +139,6 @@ void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
   ReleaseAcceleratedD3d11Frame(slot_token);
 }
 
-void SabineOsrHandler::RetireAcceleratedResources(
-    const std::vector<uint64_t>& resource_ids) {
-  std::vector<uint64_t> announced;
-  for (const uint64_t resource_id : resource_ids) {
-    if (announced_accelerated_resources_.erase(resource_id)) {
-      announced.push_back(resource_id);
-    }
-  }
-  if (announced.empty()) {
-    return;
-  }
-  const std::string payload = BuildAccelRetirePayload(announced);
-  SendMessage(kAccelRetire, 0, 0, 0, 0, payload.data(),
-              static_cast<uint32_t>(payload.size()));
-}
-
 void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
   RetireAcceleratedResources(RetireAcceleratedD3d11Browser(browser_id));
 }
@@ -200,9 +199,100 @@ void SabineOsrHandler::RetireAcceleratedResources(
 void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
   RetireAcceleratedResources(RetireAcceleratedIOSurfaceBrowser(browser_id));
 }
+#elif defined(OS_LINUX)
+bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
+                                            const CefAcceleratedPaintInfo& info,
+                                            int width,
+                                            int height,
+                                            CopiedAccelFrame* out) {
+  (void)width;
+  (void)height;
+  AccelDmabufCopiedFrame copied{};
+  const DmabufCopy result = CopyAcceleratedDmabufFrame(slot_key, info, &copied);
+  RetireAcceleratedResources(copied.retired_resource_ids);
+  if (result == DmabufCopy::kFailed) {
+    ReportAcceleratedPaintUnavailable();
+  }
+  if (result != DmabufCopy::kCopied) {
+    return false;
+  }
+  if (!announced_accelerated_resources_.count(copied.resource_id)) {
+    const std::string payload = BuildDmabufAnnouncePayload(
+        copied.resource_id, copied.modifier, copied.stride, copied.offset);
+    if (!SendMessageWithFd(kAccelDmabuf, copied.width, copied.height, 0, 0,
+                           payload.data(),
+                           static_cast<uint32_t>(payload.size()), copied.fd)) {
+      ReleaseAcceleratedDmabufFrame(copied.slot_token);
+      return false;
+    }
+    announced_accelerated_resources_.insert(copied.resource_id);
+  }
+  *out = {
+      copied.width,     copied.height, copied.resource_id, copied.slot_index, 0,
+      copied.slot_token};
+  return true;
+}
+
+void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {
+  ReleaseAcceleratedDmabufFrame(frame.slot_token);
+}
+
+void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
+  ReleaseAcceleratedDmabufFrame(slot_token);
+}
+
+void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
+  RetireAcceleratedResources(RetireAcceleratedDmabufBrowser(browser_id));
+}
+
+void SabineOsrHandler::UseAcceleratedPaint(bool enabled) {
+  accelerated_paint_ = enabled;
+}
+
+void SabineOsrHandler::WatchAcceleratedPaint() {
+  if (!accelerated_paint_ || accelerated_paint_seen_) {
+    return;
+  }
+  CefRefPtr<SabineOsrHandler> self(this);
+  CefPostDelayedTask(TID_UI,
+                     CefCreateClosureTask(base::BindOnce(
+                         [](CefRefPtr<SabineOsrHandler> handler) {
+                           if (!handler->accelerated_paint_seen_ &&
+                               !handler->view_hidden_ && handler->browser_) {
+                             handler->ReportAcceleratedPaintUnavailable();
+                           }
+                         },
+                         self)),
+                     kAcceleratedPaintGraceMs);
+}
+
+void SabineOsrHandler::ReportAcceleratedPaintUnavailable() {
+  if (accelerated_paint_failed_) {
+    return;
+  }
+  accelerated_paint_failed_ = true;
+  SendMessage(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
+}
 #endif
 
-#if defined(OS_WIN) || defined(OS_MAC)
+#if defined(OS_WIN) || defined(OS_LINUX)
+void SabineOsrHandler::RetireAcceleratedResources(
+    const std::vector<uint64_t>& resource_ids) {
+  std::vector<uint64_t> announced;
+  for (const uint64_t resource_id : resource_ids) {
+    if (announced_accelerated_resources_.erase(resource_id)) {
+      announced.push_back(resource_id);
+    }
+  }
+  if (announced.empty()) {
+    return;
+  }
+  const std::string payload = BuildAccelRetirePayload(announced);
+  SendMessage(kAccelRetire, 0, 0, 0, 0, payload.data(),
+              static_cast<uint32_t>(payload.size()));
+}
+#endif
+
 void SabineOsrHandler::ReleaseAcceleratedFrame(uint64_t slot_token) {
   ReleaseAcceleratedSlot(slot_token);
   for (auto& [browser, type] : dropped_accelerated_paints_) {
@@ -210,23 +300,18 @@ void SabineOsrHandler::ReleaseAcceleratedFrame(uint64_t slot_token) {
   }
   dropped_accelerated_paints_.clear();
 }
-#endif
 
 void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                           PaintElementType type,
                                           const RectList& dirtyRects,
                                           const CefAcceleratedPaintInfo& info) {
-#if !defined(OS_WIN) && !defined(OS_MAC)
-  (void)browser;
-  (void)type;
-  (void)dirtyRects;
-  (void)info;
-  return;
-#else
   (void)dirtyRects;
   if (!browser) {
     return;
   }
+#if defined(OS_LINUX)
+  accelerated_paint_seen_ = true;
+#endif
 
   static bool traced_first_callback = false;
   if (!traced_first_callback && std::getenv("SABINE_TRACE")) {
@@ -364,5 +449,4 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   if (type == PET_VIEW) {
     CompleteResizeFrame(reported_visible.width, reported_visible.height);
   }
-#endif
 }

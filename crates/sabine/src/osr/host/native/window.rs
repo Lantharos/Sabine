@@ -110,8 +110,14 @@ impl OsrNativeHost {
                 return;
             }
         };
+        #[cfg(target_os = "linux")]
+        let imports_dmabuf = renderer.imports_dmabuf();
         self.renderer = Some(renderer);
         self.window = Some(window.clone());
+        #[cfg(target_os = "linux")]
+        if !imports_dmabuf {
+            self.paint_in_software("the window's graphics device cannot import dma-bufs");
+        }
         #[cfg(target_os = "linux")]
         {
             if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {

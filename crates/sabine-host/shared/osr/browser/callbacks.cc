@@ -166,9 +166,7 @@ bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-#if defined(OS_WIN) || defined(OS_MAC)
   RetireAcceleratedBrowser(browser->GetIdentifier());
-#endif
   renderer_crashes_.erase(browser->GetIdentifier());
   ime_frames_.erase(browser->GetIdentifier());
   for (auto it = clipboard_requests_.begin();
@@ -270,6 +268,9 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   if (!guest) {
     InstallTransparentBackground(frame);
     SendMessage(kMainLoadReady, 0, 0, 0, 0, nullptr, 0);
+#if defined(OS_LINUX)
+    WatchAcceleratedPaint();
+#endif
     return;
   }
   guest->url = frame->GetURL();

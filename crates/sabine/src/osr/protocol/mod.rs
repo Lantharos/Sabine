@@ -47,8 +47,10 @@ impl FrameBytes {
 #[derive(Debug)]
 pub(crate) enum OsrMessage {
     PaintBatch(OsrPaintBatch),
-    #[cfg(any(windows, target_os = "macos"))]
     AccelFrame(OsrAccelFrame),
+    /// The browser host cannot share accelerated frames on this machine.
+    #[cfg(target_os = "linux")]
+    AccelUnavailable,
     /// Hide the built-in popup overlay (`__sabine_popup`).
     PopupHidden,
     /// Hide a guest overlay by id.
@@ -110,7 +112,6 @@ pub(crate) struct OsrPaintBatch {
     pub rects: Vec<PaintRect>,
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 #[derive(Debug)]
 pub(crate) struct OsrAccelFrame {
     pub surface: OsrSurface,

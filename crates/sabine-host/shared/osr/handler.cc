@@ -186,8 +186,8 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
   }
 #endif
   window_info.SetAsWindowless(parent_window);
-  sabine_osr::ApplySharedTexture(&window_info,
-                                 sabine_osr::PreferSharedTexture(command_line));
+  const bool shared_texture = sabine_osr::PreferSharedTexture(command_line);
+  sabine_osr::ApplySharedTexture(&window_info, shared_texture);
   CefRefPtr<SabineOsrHandler> handler(
       new SabineOsrHandler(endpoint, authentication_token, width, height, scale,
                            policy, command_line->HasSwitch("sabine-dev-mode"),
@@ -196,6 +196,8 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
 #if defined(OS_MAC)
   handler->UseSurfaceService(
       command_line->GetSwitchValue("sabine-surface-service"));
+#elif defined(OS_LINUX)
+  handler->UseAcceleratedPaint(shared_texture);
 #endif
   return CefBrowserHost::CreateBrowser(window_info, handler, url,
                                        browser_settings, policy, nullptr);

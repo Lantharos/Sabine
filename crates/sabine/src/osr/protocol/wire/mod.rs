@@ -1,4 +1,3 @@
-#[cfg(any(windows, target_os = "macos"))]
 mod accel;
 mod header;
 mod paint;
@@ -18,9 +17,10 @@ use crate::osr::protocol::OsrMessage;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
-#[cfg(windows)]
+#[cfg(target_os = "linux")]
+use accel::{KIND_ACCEL_DMABUF, KIND_ACCEL_UNAVAILABLE, parse_dmabuf_announcement};
+#[cfg(any(windows, target_os = "linux"))]
 use accel::{KIND_ACCEL_RETIRE, parse_retired_resources};
-#[cfg(any(windows, target_os = "macos"))]
 use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
 use header::{read_header, read_i32, read_u32};
 use paint::{BatchHeader, BatchSurface, parse_inline_batch};
@@ -72,6 +72,8 @@ pub(crate) struct WireReader {
     slots: PaintSlots,
     #[cfg(target_os = "macos")]
     surfaces: Arc<SurfaceRegistry>,
+    #[cfg(target_os = "linux")]
+    dmabufs: crate::osr::accel::Dmabufs,
     #[cfg(windows)]
     shared_handles: crate::osr::accel::SharedHandles,
 }
@@ -88,6 +90,8 @@ impl WireReader {
             slots,
             #[cfg(target_os = "macos")]
             surfaces,
+            #[cfg(target_os = "linux")]
+            dmabufs: Default::default(),
         }
     }
 
@@ -141,6 +145,15 @@ impl WireReader {
         _shared_handle: u64,
     ) -> Option<crate::osr::accel::SharedResource> {
         self.surfaces.surface(resource_id)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn shared_resource(
+        &mut self,
+        resource_id: u64,
+        _shared_handle: u64,
+    ) -> Option<crate::osr::accel::SharedResource> {
+        self.dmabufs.resolve(resource_id)
     }
 
     pub(crate) fn read(&mut self) -> io::Result<Option<OsrMessage>> {
@@ -292,7 +305,6 @@ impl WireReader {
             KIND_BRIDGE_REQUEST => {
                 OsrMessage::BridgeRequest(crate::bridge::frame::Frame::decode(&payload)?)
             }
-            #[cfg(any(windows, target_os = "macos"))]
             KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {
                 let (frame, shared_handle) =
                     parse_accel_frame(kind, width, height, x, y, &payload)?;
@@ -307,6 +319,20 @@ impl WireReader {
                     .retire(parse_retired_resources(&payload)?);
                 return self.read();
             }
+            #[cfg(target_os = "linux")]
+            KIND_ACCEL_RETIRE => {
+                self.dmabufs.retire(parse_retired_resources(&payload)?);
+                return self.read();
+            }
+            #[cfg(target_os = "linux")]
+            KIND_ACCEL_DMABUF => {
+                let (resource_id, dmabuf) =
+                    parse_dmabuf_announcement(width, height, &payload, fd.take())?;
+                self.dmabufs.announce(resource_id, dmabuf);
+                return self.read();
+            }
+            #[cfg(target_os = "linux")]
+            KIND_ACCEL_UNAVAILABLE => OsrMessage::AccelUnavailable,
             _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -350,7 +376,6 @@ fn batch_surface(kind: u32) -> BatchSurface {
 }
 
 fn is_paint_kind(kind: u32) -> bool {
-    #[cfg(any(windows, target_os = "macos"))]
     if matches!(kind, KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL) {
         return true;
     }

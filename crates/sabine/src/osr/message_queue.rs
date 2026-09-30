@@ -180,7 +180,6 @@ fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
 fn message_retained_bytes(message: &OsrMessage) -> usize {
     match message {
         OsrMessage::PaintBatch(batch) => batch_retained_bytes(batch),
-        #[cfg(any(windows, target_os = "macos"))]
         OsrMessage::AccelFrame(frame) => {
             frame.coded_width as usize * frame.coded_height as usize * 4
         }
