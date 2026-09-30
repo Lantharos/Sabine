@@ -271,7 +271,9 @@ impl ApplicationHandler for OsrNativeHost {
                         if matches!(button, Some(MouseButton::Back | MouseButton::Forward)) {
                             return;
                         }
-                        if self.config.resizable
+                        let left = matches!(button, Some(MouseButton::Left));
+                        if left
+                            && self.config.resizable
                             && let Some(direction) = resize_direction_at(
                                 self.cursor_x,
                                 self.cursor_y,
@@ -285,13 +287,15 @@ impl ApplicationHandler for OsrNativeHost {
                             return;
                         }
                         let width = self.logical_width();
-                        if let Some(control) = self.control_at(width, self.cursor_x, self.cursor_y)
+                        if left
+                            && let Some(control) =
+                                self.control_at(width, self.cursor_x, self.cursor_y)
                         {
                             self.pressed_control = Some(control);
                             window.request_redraw();
                             return;
                         }
-                        if self.is_drag_region(width, self.cursor_x, self.cursor_y) {
+                        if left && self.is_drag_region(width, self.cursor_x, self.cursor_y) {
                             if let Err(error) = window.drag_window() {
                                 eprintln!("failed to begin native window drag: {error}");
                             }
