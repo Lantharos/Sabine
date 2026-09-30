@@ -28,7 +28,7 @@ impl OsrNativeHost {
             self.lifecycle_state = LifecycleState::Hibernated;
             self.main_surface = None;
             self.overlays.clear();
-            self.main_buffer.release();
+            self.retained_frames.clear();
             if let Some(renderer) = &mut self.renderer {
                 renderer.clear_images();
             }

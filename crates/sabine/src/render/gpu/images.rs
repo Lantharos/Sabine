@@ -7,7 +7,7 @@
 use std::ops::Range;
 
 use crate::render::rect_pipeline::{ImageVertex, push_image_quad};
-use crate::render::{DisplayCommand, DisplayList, PixelRect};
+use crate::render::{BgraRect, DisplayCommand, DisplayList};
 
 use super::{CachedTexture, GpuRenderer, RendererError};
 
@@ -37,12 +37,13 @@ impl GpuRenderer {
         self.texture_cache.clear();
     }
 
-    pub(crate) fn upload_bgra_regions(
+    /// Writes `rects` into the `size` image `id`, replacing the image with a
+    /// cleared one first when its size changed.
+    pub(crate) fn write_bgra_rects(
         &mut self,
         id: &str,
         size: (u32, u32),
-        bytes: &[u8],
-        regions: &[PixelRect],
+        rects: &[BgraRect<'_>],
     ) -> Result<(), RendererError> {
         self.check_device()?;
         let (width, height) = size;
@@ -51,16 +52,10 @@ impl GpuRenderer {
                 "dynamic image has empty size".to_string(),
             ));
         }
-        let expected_len = width as usize * height as usize * 4;
-        if bytes.len() != expected_len {
+        if let Some(rect) = rects.iter().find(|rect| !rect.target.fits(width, height)) {
             return Err(RendererError::Texture(format!(
-                "dynamic image expected {expected_len} bytes, got {}",
-                bytes.len()
-            )));
-        }
-        if let Some(region) = regions.iter().find(|region| !region.fits(width, height)) {
-            return Err(RendererError::Texture(format!(
-                "dynamic image region {region:?} exceeds {width}x{height}"
+                "dynamic image region {:?} exceeds {width}x{height}",
+                rect.target
             )));
         }
         let reusable = self
@@ -70,35 +65,28 @@ impl GpuRenderer {
         if !reusable {
             self.create_dynamic_bgra_image(id.to_string(), width, height);
         }
-        let entire = [PixelRect {
-            x: 0,
-            y: 0,
-            width,
-            height,
-        }];
-        let regions = if reusable { regions } else { &entire };
         let texture = &self.texture_cache[id].texture;
-        for region in regions.iter().filter(|region| region.area() > 0) {
+        for rect in rects {
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d {
-                        x: region.x,
-                        y: region.y,
+                        x: rect.target.x,
+                        y: rect.target.y,
                         z: 0,
                     },
                     aspect: wgpu::TextureAspect::All,
                 },
-                bytes,
+                rect.bytes,
                 wgpu::TexelCopyBufferLayout {
-                    offset: (u64::from(region.y) * u64::from(width) + u64::from(region.x)) * 4,
-                    bytes_per_row: Some(4 * width),
-                    rows_per_image: Some(height),
+                    offset: rect.offset,
+                    bytes_per_row: Some(rect.bytes_per_row),
+                    rows_per_image: None,
                 },
                 wgpu::Extent3d {
-                    width: region.width,
-                    height: region.height,
+                    width: rect.target.width,
+                    height: rect.target.height,
                     depth_or_array_layers: 1,
                 },
             );
@@ -149,7 +137,9 @@ impl GpuRenderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let bind_group = self.image_bind_group(&id, &texture);

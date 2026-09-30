@@ -33,7 +33,7 @@ impl OsrNativeHost {
         self.renderer = None;
         let proxy = self.proxy.clone();
         let renderer = match pollster::block_on(GpuRenderer::new(
-            window.clone(),
+            window,
             self.config.transparent,
             move || proxy.wake_up(),
         )) {
@@ -49,11 +49,6 @@ impl OsrNativeHost {
             return;
         }
         self.renderer = Some(renderer);
-        if let Err(error) = self.upload_cached_textures() {
-            self.fail(format!("Could not restore window textures: {error}"));
-            return;
-        }
         self.send_control("repaint\n");
-        window.request_redraw();
     }
 }

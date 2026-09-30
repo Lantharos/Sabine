@@ -127,7 +127,7 @@ impl OsrNativeHost {
         }
         self.send_screen_origin();
         self.launch_child();
-        if let Err(error) = self.upload_cached_textures() {
+        if let Err(error) = self.restore_retained_frames() {
             self.fail(format!("Could not restore window textures: {error}"));
             return;
         }
@@ -144,11 +144,10 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn drop_hidden_window(&mut self) {
-        self.drop_presented_window();
         self.main_surface = None;
         self.overlays.clear();
         self.pending_resize_paint = None;
-        self.main_buffer.release();
+        self.drop_presented_window();
     }
 
     pub(in crate::osr::host) fn unmap_window(&mut self) {
@@ -175,6 +174,7 @@ impl OsrNativeHost {
         self.media.detach();
         #[cfg(not(target_os = "macos"))]
         self.release_shortcut_inhibitor();
+        self.retain_frames();
         self.window = None;
         self.renderer = None;
         self.effect = None;

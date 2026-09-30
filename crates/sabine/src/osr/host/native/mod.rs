@@ -8,7 +8,7 @@ mod window;
 
 use std::{
     cell::Cell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     path::PathBuf,
     process::Child,
     sync::{Arc, mpsc},
@@ -25,10 +25,9 @@ use winit::{
 
 use crate::bridge::frame::Frame;
 use crate::osr::control::{ControlRelay, ControlWriter};
-use crate::osr::frame_buffer::FrameBuffer;
 
 use crate::osr::transport::IpcStream;
-use crate::render::GpuRenderer;
+use crate::render::{BgraImage, GpuRenderer};
 use crate::{SabineWindowChrome, osr};
 use sabine_platform::WindowEffect;
 
@@ -64,7 +63,7 @@ pub(super) struct OsrNativeHost {
     pub(super) scale_factor: f64,
     pub(super) main_surface: Option<SurfaceGeometry>,
     pub(super) main_load_ready: bool,
-    pub(super) main_buffer: FrameBuffer,
+    pub(super) retained_frames: HashMap<String, BgraImage>,
     pub(super) overlays: BTreeMap<String, OverlayLayer>,
     pub(super) page_drag_regions: Vec<WindowRegionRect>,
     pub(super) page_drag_exclusion_regions: Vec<WindowRegionRect>,
@@ -170,7 +169,7 @@ impl OsrNativeHost {
             scale_factor: 1.0,
             main_surface: None,
             main_load_ready: false,
-            main_buffer: FrameBuffer::new(),
+            retained_frames: HashMap::new(),
             overlays: BTreeMap::new(),
             page_drag_regions: Vec::new(),
             page_drag_exclusion_regions: Vec::new(),
