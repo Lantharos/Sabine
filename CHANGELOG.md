@@ -1,3 +1,9 @@
+# Unreleased
+
+- Fix Linux apps crashing at startup, over and over, when the desktop's settings portal is not
+  running. Chromium's GTK 4 integration called into GTK 3 when it found no text scaling setting,
+  so Sabine now has Chromium use GTK 3, which reads the desktop's settings without the portal.
+
 # Sabine 0.33
 
 - Pause pages while the desktop hides their window. On Wayland compositors that mark minimized or
