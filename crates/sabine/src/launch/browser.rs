@@ -13,6 +13,11 @@ const DISABLED_CEF_FEATURES: &str = concat!(
 
 const ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS: u8 = 8;
 
+/// Chromium's GTK 4 integration crashes the browser process when the desktop's settings portal
+/// is unavailable; GTK 3 reads the desktop settings itself.
+#[cfg(target_os = "linux")]
+const LINUX_GTK_VERSION: &str = "--gtk-version=3";
+
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
 const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
 
@@ -62,7 +67,9 @@ pub(crate) fn apply_browser_launch_args(
         #[cfg(target_os = "linux")]
         {
             let mut features = vec!["UseOzonePlatform"];
-            command.arg(format!("--ozone-platform={}", linux_ozone_platform()));
+            command
+                .arg(format!("--ozone-platform={}", linux_ozone_platform()))
+                .arg(LINUX_GTK_VERSION);
             if options.vaapi_hardware_decode {
                 features.push("VaapiVideoDecoder");
             }
