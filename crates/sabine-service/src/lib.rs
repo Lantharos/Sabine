@@ -7,9 +7,16 @@ mod release;
 mod types;
 mod uninstall;
 mod updates;
+#[cfg(windows)]
+pub mod windows_registry;
 
 pub use app::data::browser_profile_path;
 pub use app::environment::AppEnvironment;
+#[cfg(windows)]
+pub use app::native_messaging::native_messaging_registry_keys;
+pub use app::native_messaging::{
+    NativeMessagingBrowser, native_messaging_manifest_dirs, remove_native_messaging_hosts,
+};
 pub use app::payload::remove_app_payload;
 pub use uninstall::uninstall_system;
 

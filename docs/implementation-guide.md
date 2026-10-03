@@ -665,11 +665,15 @@ Linux creates a hidden desktop handler pointing to the running executable before
 Windows installers remove the scheme keys when the app is uninstalled. `sabine uninstall` removes
 what the app registered on every platform: its scheme keys on Windows, the hidden handler and the
 `mimeapps.list` entries naming the app's desktop entries on Linux, and the bundle's Launch Services
-record on macOS. Both leave a scheme or handler alone once it launches a different executable, except
-MSI packages, which remove the registry values they installed. On macOS, URL schemes must be
-declared in the application bundle before signing. A runtime `.deep_link(...)` call checks those
-declarations and reports a missing scheme instead of writing an unused registration file. Run the
-bundled app when testing macOS URL handlers.
+record on macOS. Both leave a scheme or handler alone once it launches a different executable,
+except MSI packages, which remove the registry values they installed. Linux handlers name the
+executable in `TryExec` as well as `Exec`, so once a deb, rpm or AppImage is removed, desktops stop
+offering a handler whose program is gone. Package removal runs as root and cannot reach each user's
+files, so the handler file and its `mimeapps.list` entries stay until the app is installed and
+launched again, which rewrites them. On macOS, URL schemes must be declared in the application
+bundle before signing. A runtime `.deep_link(...)` call checks those declarations and reports a
+missing scheme instead of writing an unused registration file. Run the bundled app when testing
+macOS URL handlers.
 
 Initial URL arguments and subsequent single-instance activations enter the same pending queue as
 macOS URL/document events. `SabineProcess::take_open_urls()` and the package's `app.takeOpenUrls()`
@@ -688,6 +692,13 @@ Set `allowed_origins` to the Chromium extensions' exact `chrome-extension://<id>
 separate browser manifests; an empty list grants no extensions access. Registrations are per-user
 for Chrome, Chromium, Edge, Brave, and Firefox. On Windows, each browser's registry key points to
 its corresponding manifest.
+
+`sabine uninstall`, and the uninstallers of Windows `.exe` and MSI packages, remove the manifests
+whose executable is inside the app's installation, along with the Windows registry keys that still
+point to them. A host name another installation has since registered keeps its manifest. Removing a
+deb, rpm or AppImage package, or moving a macOS app to the Trash, leaves the manifests in each
+user's browser folders; browsers report the host as missing until the app is installed and launched
+again.
 
 ### Clipboard
 
@@ -889,8 +900,9 @@ files. Cargo's reported executable path is used, including when a custom target 
 Local installations record their source and build-environment file paths for explicit rebuilds.
 They execute installed binaries and resources; launching does not invoke Cargo or need the checkout.
 The CLI owns their desktop integration and removal. Uninstall preserves browser profiles and
-unlisted user files unless `--purge` is requested. Removing the shared Sabine system requires an
-empty app registry and stops the verified daemon before deleting its binaries.
+unlisted user files unless `--purge` is requested; it removes every packaged file, the record of
+them, and the installation folder once nothing else is left in it. Removing the shared Sabine system
+requires an empty app registry and stops the verified daemon before deleting its binaries.
 
 `sabine update` checks published stable releases independently of GitHub's latest-release promotion,
 verifies the signed system manifest, applies the soak policy, updates the CLI and shared components,

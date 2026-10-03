@@ -75,6 +75,9 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
         remove_path(&directory)?;
         let profile = sabine_service::browser_profile_path(&id);
         remove_path(profile.parent().ok_or("browser profile has no parent")?)?;
+    } else {
+        remove_empty_dir(&directory.join("install"))?;
+        remove_empty_dir(&directory)?;
     }
     println!(
         "Uninstalled {}{}",
@@ -89,6 +92,7 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
 }
 
 fn remove_desktop(id: &str, install: &Path) -> Result<(), String> {
+    sabine_service::remove_native_messaging_hosts(install).map_err(|error| error.to_string())?;
     #[cfg(target_os = "linux")]
     {
         super::handlers::linux::remove(id, install)?;
@@ -158,4 +162,19 @@ fn remove_path(path: &Path) -> Result<(), String> {
         Err(error) => Err(error),
     };
     result.map_err(|error| format!("could not remove {}: {error}", path.display()))
+}
+
+fn remove_empty_dir(path: &Path) -> Result<(), String> {
+    match fs::remove_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(format!("could not remove {}: {error}", path.display())),
+    }
 }

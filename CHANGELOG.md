@@ -11,6 +11,13 @@
   on Windows, its hidden URL handler and `mimeapps.list` defaults on Linux, and its Launch Services
   record on macOS. Registrations that another installation has since taken over are kept, and
   Windows `.exe` uninstallers now leave such schemes alone too.
+- `sabine uninstall` and Windows `.exe` and MSI uninstallers remove the browser native messaging
+  manifests an app wrote, and on Windows the registry keys pointing to them, as long as they still
+  launch that installation.
+- `sabine uninstall` without `--purge` no longer leaves the installation's file list and an empty
+  installation folder behind. Browser profiles and files people added to the folder are still kept.
+- Linux URL handlers name their program in `TryExec`, so desktops ignore a handler left behind after
+  a deb, rpm or AppImage package is removed.
 - Fix Linux apps crashing at startup, over and over, when the desktop's settings portal is not
   running. Chromium's GTK 4 integration called into GTK 3 when it found no text scaling setting,
   so Sabine now has Chromium use GTK 3, which reads the desktop's settings without the portal.

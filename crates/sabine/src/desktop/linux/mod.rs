@@ -17,7 +17,7 @@ mod util;
 pub(super) type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
 
 use instance::SingleInstanceGuard;
-use links::{register_deep_links, register_native_messaging_host, write_autostart_entry};
+use links::{register_deep_links, write_autostart_entry};
 use shortcuts::{ShortcutRuntime, spawn_global_shortcut};
 use tray::{TrayRuntime, spawn_tray_icon};
 
@@ -92,7 +92,7 @@ pub fn apply_desktop_services(
         register_deep_links(registration).map_err(|error| error.to_string())?;
     }
     for host in native_messaging_hosts {
-        register_native_messaging_host(host).map_err(|error| error.to_string())?;
+        super::native_messaging::write_manifests(host).map_err(|error| error.to_string())?;
     }
     Ok(state)
 }

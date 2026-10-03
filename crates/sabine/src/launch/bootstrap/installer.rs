@@ -110,6 +110,11 @@ fn unregister(config: &SabineWindowConfig) -> Result<(), String> {
         .app_id
         .as_deref()
         .ok_or("The app has no installation identity")?;
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let install = executable
+        .parent()
+        .ok_or("The app executable has no directory")?;
+    sabine_service::remove_native_messaging_hosts(install).map_err(|error| error.to_string())?;
     match SabineService::default().unregister(id) {
         Ok(_) | Err(ServiceError::AppNotFound(_)) => {
             println!("Application registration removed.");

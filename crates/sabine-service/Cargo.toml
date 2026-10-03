@@ -43,6 +43,7 @@ self-replace = "1.5.0"
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_System_Registry",
     "Win32_System_Threading",
 ] }
 
