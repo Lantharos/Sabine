@@ -660,8 +660,9 @@ no interface at all, so Sabine sets neither, and an app dragged from a disk imag
 register no handlers.
 
 Windows registers schemes for the current user when the app is installed and again whenever it runs.
-Linux creates a hidden desktop handler pointing to the running executable before updating
-`mimeapps.list`; unrelated associations are preserved and Sabine registrations are serialized.
+Linux creates a hidden desktop handler pointing to the running executable, or to the AppImage file
+when the app runs from one, before updating `mimeapps.list`; unrelated associations are preserved
+and Sabine registrations are serialized.
 Windows installers remove the scheme keys when the app is uninstalled. `sabine uninstall` removes
 what the app registered on every platform: its scheme keys on Windows, the hidden handler and the
 `mimeapps.list` entries naming the app's desktop entries on Linux, and the bundle's Launch Services
@@ -690,8 +691,16 @@ absolute path.
 Set `allowed_origins` to the Chromium extensions' exact `chrome-extension://<id>/` origins, and
 `allowed_extensions` to Firefox add-on IDs such as `my-extension@example.org`. These produce
 separate browser manifests; an empty list grants no extensions access. Registrations are per-user
-for Chrome, Chromium, Edge, Brave, and Firefox. On Windows, each browser's registry key points to
-its corresponding manifest.
+for Chrome, Chromium, Edge, Brave, Vivaldi, Opera, Helium and Firefox. Zen reads Firefox's
+manifests, so it is covered too. On Windows, each browser's registry key points to its
+corresponding manifest; Vivaldi, Opera and Helium read Chrome's key, Helium after Chromium's.
+
+An app running from an AppImage only exists at its temporary mount while it runs, so a host
+executable inside the AppImage is registered through a small launcher in Sabine's data folder
+(`~/.local/share/sabine/native-messaging/<host id>`). The launcher starts the AppImage file, whose
+`AppRun` hands the browser's arguments to the host instead of the app. AppImages built before this
+`AppRun` existed must be rebuilt for their hosts to start. Sabine's record of the app, which
+updates and relaunches use, names the AppImage file as well.
 
 `sabine uninstall`, and the uninstallers of Windows `.exe` and MSI packages, remove the manifests
 whose executable is inside the app's installation, along with the Windows registry keys that still

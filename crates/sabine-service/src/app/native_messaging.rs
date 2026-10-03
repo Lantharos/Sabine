@@ -22,6 +22,9 @@ pub fn native_messaging_manifest_dirs() -> io::Result<Vec<(NativeMessagingBrowse
             "chromium",
             "microsoft-edge",
             "BraveSoftware/Brave-Browser",
+            "vivaldi",
+            "opera",
+            "net.imput.helium",
         ]
         .into_iter()
         .map(|browser| (Chromium, config.join(browser).join("NativeMessagingHosts")))
@@ -36,6 +39,9 @@ pub fn native_messaging_manifest_dirs() -> io::Result<Vec<(NativeMessagingBrowse
             "Chromium",
             "Microsoft Edge",
             "BraveSoftware/Brave-Browser",
+            "Vivaldi",
+            "com.operasoftware.Opera",
+            "net.imput.helium",
         ]
         .into_iter()
         .map(|browser| (Chromium, support.join(browser).join("NativeMessagingHosts")))

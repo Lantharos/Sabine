@@ -18,6 +18,12 @@
   installation folder behind. Browser profiles and files people added to the folder are still kept.
 - Linux URL handlers name their program in `TryExec`, so desktops ignore a handler left behind after
   a deb, rpm or AppImage package is removed.
+- Register browser native messaging hosts for Vivaldi, Opera and Helium as well, and remove them
+  again on uninstall. Zen already reads the Firefox manifests.
+- Fix URL handlers and native messaging hosts of apps run from an AppImage pointing into the
+  AppImage's temporary mount, which disappears when the app exits. Handlers now launch the AppImage
+  file, and hosts inside it start through a launcher that runs them from the AppImage, which needs
+  the app to be rebuilt with this version. Sabine's record of the app names the AppImage file too.
 - Fix Linux apps crashing at startup, over and over, when the desktop's settings portal is not
   running. Chromium's GTK 4 integration called into GTK 3 when it found no text scaling setting,
   so Sabine now has Chromium use GTK 3, which reads the desktop's settings without the portal.

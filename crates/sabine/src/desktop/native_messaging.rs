@@ -71,6 +71,8 @@ impl Manifests {
                 ),
             ));
         }
+        #[cfg(target_os = "linux")]
+        let executable = super::platform::native_host_program(&host.id, executable)?;
         let executable = executable.to_str().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,

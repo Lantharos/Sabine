@@ -30,7 +30,7 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> io::Re
         std::time::Duration::from_secs(5),
         |_| {},
     )?;
-    let executable = std::env::current_exe()?;
+    let executable = crate::launch::executable::launch_executable()?;
     let executable = executable
         .to_str()
         .ok_or_else(|| io::Error::other("URL handler executable must have a UTF-8 path"))?;
