@@ -48,6 +48,7 @@ pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
     app.id = sabine_service::AppEnvironment::Development.app_id(&app.id);
     app.name = format!("{} (Development)", app.name);
     app.mime_types.clear();
+    app.listing.listed = true;
     register_app(&app, options.desktop)?;
     println!("installed {} from {}", app.name, app.source.display());
     Ok(ExitCode::SUCCESS)
@@ -73,6 +74,7 @@ fn update_registered_app(app: &SourceApp) -> Result<(), String> {
     )?;
     app.name = format!("{} (Development)", app.name);
     app.mime_types.clear();
+    app.listing.listed = true;
     register_app(&app, true)?;
     println!("updated {} from {}", app.name, app.source.display());
     Ok(())

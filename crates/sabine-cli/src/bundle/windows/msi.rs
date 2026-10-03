@@ -28,6 +28,11 @@ pub(in crate::bundle) fn wix_source(
             )
         })
         .unwrap_or_default();
+    let program_menu = if app.listing.listed {
+        "    <StandardDirectory Id=\"ProgramMenuFolder\"/>\n"
+    } else {
+        ""
+    };
     let inventory = directory_inventory(
         app,
         Path::new(staged_app_dir),
@@ -48,8 +53,7 @@ pub(in crate::bundle) fn wix_source(
         </Directory>
       </Directory>
     </StandardDirectory>
-    <StandardDirectory Id="ProgramMenuFolder"/>
-{}
+{}{}
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER"/>
     <UI>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" Condition="NOT Installed"/>
@@ -75,6 +79,7 @@ pub(in crate::bundle) fn wix_source(
         upgrade_code,
         xml(&app.id),
         inventory,
+        program_menu,
         icon_element,
         xml(actions_binary),
         actions(),
@@ -130,13 +135,16 @@ fn directory_inventory(
                 r#"<File{file_id} Source="{}"/>"#,
                 xml(&path.display().to_string())
             ));
-            if main {
+            if main && app.listing.listed {
                 let icon = if has_icon {
                     r#" Icon="AppIcon.ico""#
                 } else {
                     ""
                 };
                 contents.push_str(&format!(r#"<Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="{}" Target="[#MainExecutableFile]" WorkingDirectory="INSTALLFOLDER"{icon}/>"#, xml(&app.name)));
+            }
+            if main {
+                contents.push_str(&scheme_registrations(app));
             }
         } else {
             return Err(format!(
@@ -155,6 +163,16 @@ fn directory_inventory(
             r#"<Directory Id="{id}" Name="{name}">{contents}</Directory>"#
         ))
     }
+}
+
+fn scheme_registrations(app: &BundleApp) -> String {
+    crate::desktop::types::schemes(&app.mime_types)
+        .map(|scheme| {
+            format!(
+                r#"<RegistryKey Root="HKCU" Key="Software\Classes\{scheme}"><RegistryValue Type="string" Value="URL:{scheme}"/><RegistryValue Name="URL Protocol" Type="string" Value=""/><RegistryValue Key="shell\open\command" Type="string" Value="&quot;[#MainExecutableFile]&quot; &quot;%1&quot;"/></RegistryKey>"#
+            )
+        })
+        .collect()
 }
 
 fn actions() -> String {

@@ -43,6 +43,45 @@ pub(super) fn nsis_script(
             )
         })
         .unwrap_or_default();
+    let schemes = crate::desktop::types::schemes(&app.mime_types).collect::<Vec<_>>();
+    let register_schemes = schemes
+        .iter()
+        .map(|scheme| {
+            format!(
+                r#"  WriteRegStr HKCU "Software\Classes\{scheme}" "" "URL:{scheme}"
+  WriteRegStr HKCU "Software\Classes\{scheme}" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\{scheme}\shell\open\command" "" '"$INSTDIR\{executable}" "%1"'
+"#
+            )
+        })
+        .collect::<String>();
+    let unregister_schemes = schemes
+        .iter()
+        .map(|scheme| format!("  DeleteRegKey HKCU \"Software\\Classes\\{scheme}\"\n"))
+        .collect::<String>();
+    let (finish_run, start_menu, start_menu_removal) = if app.listing.listed {
+        (
+            format!(
+                r#"!define MUI_FINISHPAGE_RUN "$INSTDIR\{executable}"
+!define MUI_FINISHPAGE_RUN_NOTCHECKED
+"#
+            ),
+            format!(
+                r#"  CreateDirectory "$SMPROGRAMS\{name}"
+  CreateShortcut "$SMPROGRAMS\{name}\{name}.lnk" "$INSTDIR\{executable}"
+  CreateShortcut "$SMPROGRAMS\{name}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+"#
+            ),
+            format!(
+                r#"  Delete "$SMPROGRAMS\{name}\{name}.lnk"
+  Delete "$SMPROGRAMS\{name}\Uninstall.lnk"
+  RMDir "$SMPROGRAMS\{name}"
+"#
+            ),
+        )
+    } else {
+        Default::default()
+    };
     Ok(format!(
         r#"Unicode true
 !include "MUI2.nsh"
@@ -64,9 +103,7 @@ Var CancelButton
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\{executable}"
-!define MUI_FINISHPAGE_RUN_NOTCHECKED
-!insertmacro MUI_PAGE_FINISH
+{finish_run}!insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
@@ -122,10 +159,7 @@ setup_ready:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "NoRepair" 1
-  CreateDirectory "$SMPROGRAMS\{name}"
-  CreateShortcut "$SMPROGRAMS\{name}\{name}.lnk" "$INSTDIR\{executable}"
-  CreateShortcut "$SMPROGRAMS\{name}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
-SectionEnd
+{register_schemes}{start_menu}SectionEnd
 
 Section "Uninstall"
   SetShellVarContext current
@@ -142,10 +176,7 @@ unregister_failed:
 unregister_done:
 {uninstall_files}
   Delete "$INSTDIR\.sabine-install.json"
-  Delete "$SMPROGRAMS\{name}\{name}.lnk"
-  Delete "$SMPROGRAMS\{name}\Uninstall.lnk"
-  RMDir "$SMPROGRAMS\{name}"
-  Delete "$INSTDIR\Uninstall.exe"
+{start_menu_removal}{unregister_schemes}  Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}"
   DeleteRegKey HKCU "Software\{id}"
@@ -246,5 +277,52 @@ pub(super) fn architecture(binary: &Path) -> Result<&'static str, String> {
         0x8664 => Ok("x64"),
         0xaa64 => Ok("ARM64"),
         _ => Err("Windows packages require an x86_64 or ARM64 executable".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::desktop::entry::Listing;
+
+    #[test]
+    fn unlisted_installers_register_schemes_without_shortcuts() {
+        let payload = tempfile::tempdir().unwrap();
+        fs::write(payload.path().join("signin.exe"), b"").unwrap();
+        let app = BundleApp {
+            id: "com.example.signin".into(),
+            name: "Sign-In".into(),
+            version: "1.0.0".into(),
+            publisher: "Example".into(),
+            maintainer: None,
+            license: None,
+            icon: None,
+            mime_types: vec!["x-scheme-handler/example-signin".into()],
+            listing: Listing {
+                listed: false,
+                ..Listing::default()
+            },
+            cargo_manifest: payload.path().join("Cargo.toml"),
+            source_dir: payload.path().to_path_buf(),
+            cargo_package: "signin".into(),
+            web: None,
+            updates: None,
+        };
+        let script = nsis_script(&app, payload.path(), "signin.exe", "setup.exe", None).unwrap();
+        assert!(!script.contains("$SMPROGRAMS"));
+        assert!(script.contains(
+            r#"WriteRegStr HKCU "Software\Classes\example-signin\shell\open\command" "" '"$INSTDIR\signin.exe" "%1"'"#
+        ));
+        assert!(script.contains(r#"DeleteRegKey HKCU "Software\Classes\example-signin""#));
+        let wix = msi::wix_source(
+            &app,
+            &payload.path().display().to_string(),
+            "signin.exe",
+            None,
+            "actions.dll",
+        )
+        .unwrap();
+        assert!(!wix.contains("Shortcut"));
+        assert!(wix.contains(r#"Key="Software\Classes\example-signin""#));
     }
 }

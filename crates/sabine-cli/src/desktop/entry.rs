@@ -24,6 +24,8 @@ pub(crate) struct Listing {
     pub categories: Vec<String>,
     #[serde(default)]
     pub keywords: Vec<String>,
+    #[serde(default = "default_listed")]
+    pub listed: bool,
 }
 
 impl Default for Listing {
@@ -32,12 +34,17 @@ impl Default for Listing {
             generic_name: None,
             categories: default_categories(),
             keywords: Vec::new(),
+            listed: default_listed(),
         }
     }
 }
 
 fn default_categories() -> Vec<String> {
     vec!["Utility".to_string()]
+}
+
+fn default_listed() -> bool {
+    true
 }
 
 impl Listing {
@@ -122,6 +129,9 @@ impl Entry<'_> {
         if !self.listing.keywords.is_empty() {
             entry.push_str(&format!("Keywords={}\n", list(&self.listing.keywords)));
         }
+        if !self.listing.listed {
+            entry.push_str("NoDisplay=true\n");
+        }
         entry.push_str(&format!(
             "Terminal=false\nCategories={}\nStartupNotify=true\nStartupWMClass={}\n",
             list(&self.listing.categories),
@@ -166,6 +176,7 @@ mod tests {
             generic_name: Some("Terminal".to_string()),
             categories: vec!["System".to_string(), "TerminalEmulator".to_string()],
             keywords: vec!["console".to_string(), "a;b".to_string()],
+            listed: true,
         };
         let entry = Entry {
             id: "com.example.tern",
@@ -179,6 +190,25 @@ mod tests {
         assert!(entry.contains("GenericName=Terminal\n"));
         assert!(entry.contains("Categories=System;TerminalEmulator;\n"));
         assert!(entry.contains("Keywords=console;a\\;b;\n"));
+    }
+
+    #[test]
+    fn unlisted_apps_keep_their_handlers() {
+        let listing = Listing {
+            listed: false,
+            ..Listing::default()
+        };
+        let entry = Entry {
+            id: "com.example.signin",
+            name: "Sign-In",
+            exec: "/opt/signin/signin",
+            icon: None,
+            mime_types: &["x-scheme-handler/example-signin".to_string()],
+            listing: &listing,
+        }
+        .render();
+        assert!(entry.contains("NoDisplay=true\n"));
+        assert!(entry.contains("MimeType=x-scheme-handler/example-signin;\n"));
     }
 
     #[test]

@@ -639,12 +639,33 @@ main category, such as `Utility`, `System`, `Development`, `Graphics`, `AudioVid
 category to their application category, and Windows Start menu shortcuts use the generic name as
 their description.
 
-Windows registers schemes for the current user. Linux creates a hidden desktop handler pointing to
-the running executable before updating `mimeapps.list`; unrelated associations are preserved and
-Sabine registrations are serialized. On macOS, URL schemes must be declared in the application
-bundle before signing. A runtime `.deep_link(...)` call checks those declarations and reports a
-missing scheme instead of writing an unused registration file. Run the bundled app when testing
-macOS URL handlers.
+Apps that should only open from their URL schemes or documents, such as a sign-in window raised by a
+notification, can stay out of launchers:
+
+```toml
+[app]
+listed = false
+mime_types = ["x-scheme-handler/my-app-signin"]
+```
+
+The app is still installed and still handles its schemes and documents. Linux desktop entries add
+`NoDisplay=true` and keep their `MimeType`. Windows installers skip the Start menu shortcut and the
+finish page's launch option while registering the schemes and keeping the uninstall entry.
+`sabine install` on macOS leaves the bundle out of `~/Applications` and registers it with Launch
+Services directly, so it handles its schemes without appearing in Launchpad. No Info.plist
+key hides a macOS bundle from Launchpad or Spotlight wherever it is placed: `LSUIElement` takes away
+the Dock icon and menu bar, which a window people interact with needs, and `LSBackgroundOnly` allows
+no interface at all, so Sabine sets neither, and an app dragged from a disk image into
+`/Applications` is listed like any other. Development installs are always listed, since they
+register no handlers.
+
+Windows registers schemes for the current user when the app is installed and again whenever it runs,
+and its installer's uninstaller removes them. Linux creates a hidden desktop handler pointing to the
+running executable before updating `mimeapps.list`; unrelated associations are preserved and Sabine
+registrations are serialized. On macOS, URL schemes must be declared in the application bundle
+before signing. A runtime `.deep_link(...)` call checks those declarations and reports a missing
+scheme instead of writing an unused registration file. Run the bundled app when testing macOS URL
+handlers.
 
 Initial URL arguments and subsequent single-instance activations enter the same pending queue as
 macOS URL/document events. `SabineProcess::take_open_urls()` and the package's `app.takeOpenUrls()`
