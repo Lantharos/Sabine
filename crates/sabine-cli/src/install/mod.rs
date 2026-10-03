@@ -1,5 +1,6 @@
 pub(crate) mod assets;
 pub(crate) mod desktop;
+mod handlers;
 pub(crate) mod source;
 pub mod uninstall;
 

@@ -7,6 +7,10 @@
   `~/Applications`.
 - Windows installers register an app's URL schemes during installation, so links open it before
   its first launch, and remove them when it is uninstalled.
+- `sabine uninstall` removes the URL scheme and file type registrations an app made: its scheme keys
+  on Windows, its hidden URL handler and `mimeapps.list` defaults on Linux, and its Launch Services
+  record on macOS. Registrations that another installation has since taken over are kept, and
+  Windows `.exe` uninstallers now leave such schemes alone too.
 - Fix Linux apps crashing at startup, over and over, when the desktop's settings portal is not
   running. Chromium's GTK 4 integration called into GTK 3 when it found no text scaling setting,
   so Sabine now has Chromium use GTK 3, which reads the desktop's settings without the portal.

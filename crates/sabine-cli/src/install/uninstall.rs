@@ -46,7 +46,7 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
         |_| {},
     )
     .map_err(|error| error.to_string())?;
-    remove_desktop(&id)?;
+    remove_desktop(&id, &directory.join("install"))?;
     if bundle_install && !purge {
         let payload = if cfg!(target_os = "macos") {
             directory.join("install").join(format!("{id}.app"))
@@ -88,9 +88,10 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     Ok(ExitCode::SUCCESS)
 }
 
-fn remove_desktop(id: &str) -> Result<(), String> {
+fn remove_desktop(id: &str, install: &Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        super::handlers::linux::remove(id, install)?;
         let data = super::source::data_home()?;
         let applications = data.join("applications");
         remove_path(&applications.join(format!("{id}.desktop")))?;
@@ -111,6 +112,7 @@ fn remove_desktop(id: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
+        super::handlers::macos::remove(id, install);
         let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
         let agent = home
             .join("Library/LaunchAgents")
@@ -123,20 +125,10 @@ fn remove_desktop(id: &str) -> Result<(), String> {
             remove_path(&agent)?;
         }
         remove_path(&home.join("Applications").join(format!("{id}.app")))?;
-        let bundle = sabine_service::service_data_dir()
-            .join("apps")
-            .join(id)
-            .join("install")
-            .join(format!("{id}.app"));
-        if bundle.exists() {
-            let _ = std::process::Command::new(super::desktop::LSREGISTER)
-                .arg("-u")
-                .arg(&bundle)
-                .status();
-        }
     }
     #[cfg(windows)]
     {
+        super::handlers::windows::remove(install)?;
         let roaming = PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?);
         remove_path(
             &roaming

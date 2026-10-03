@@ -387,7 +387,7 @@ pub(crate) fn data_home() -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "linux")]
-fn config_home() -> Result<PathBuf, String> {
+pub(crate) fn config_home() -> Result<PathBuf, String> {
     if let Some(path) = env::var_os("XDG_CONFIG_HOME") {
         return Ok(PathBuf::from(path));
     }

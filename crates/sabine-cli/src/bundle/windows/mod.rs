@@ -57,7 +57,14 @@ pub(super) fn nsis_script(
         .collect::<String>();
     let unregister_schemes = schemes
         .iter()
-        .map(|scheme| format!("  DeleteRegKey HKCU \"Software\\Classes\\{scheme}\"\n"))
+        .map(|scheme| {
+            format!(
+                r#"  ReadRegStr $0 HKCU "Software\Classes\{scheme}\shell\open\command" ""
+  StrCmp $0 '"$INSTDIR\{executable}" "%1"' 0 +2
+  DeleteRegKey HKCU "Software\Classes\{scheme}"
+"#
+            )
+        })
         .collect::<String>();
     let (finish_run, start_menu, start_menu_removal) = if app.listing.listed {
         (
@@ -313,7 +320,10 @@ mod tests {
         assert!(script.contains(
             r#"WriteRegStr HKCU "Software\Classes\example-signin\shell\open\command" "" '"$INSTDIR\signin.exe" "%1"'"#
         ));
-        assert!(script.contains(r#"DeleteRegKey HKCU "Software\Classes\example-signin""#));
+        assert!(script.contains(
+            r#"StrCmp $0 '"$INSTDIR\signin.exe" "%1"' 0 +2
+  DeleteRegKey HKCU "Software\Classes\example-signin""#
+        ));
         let wix = msi::wix_source(
             &app,
             &payload.path().display().to_string(),
