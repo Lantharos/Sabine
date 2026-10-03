@@ -1,5 +1,12 @@
 # Unreleased
 
+- Keep apps that only open from their URL schemes or documents out of launchers with
+  `listed = false` under `[app]` in `Sabine.toml`. They stay installed and keep their handlers:
+  Linux desktop entries are marked `NoDisplay`, Windows installs skip the Start menu shortcut, and
+  `sabine install` on macOS registers the bundle with Launch Services instead of placing it in
+  `~/Applications`.
+- Windows installers register an app's URL schemes during installation, so links open it before
+  its first launch, and remove them when it is uninstalled.
 - Fix Linux apps crashing at startup, over and over, when the desktop's settings portal is not
   running. Chromium's GTK 4 integration called into GTK 3 when it found no text scaling setting,
   so Sabine now has Chromium use GTK 3, which reads the desktop's settings without the portal.

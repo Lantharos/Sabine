@@ -123,6 +123,17 @@ fn remove_desktop(id: &str) -> Result<(), String> {
             remove_path(&agent)?;
         }
         remove_path(&home.join("Applications").join(format!("{id}.app")))?;
+        let bundle = sabine_service::service_data_dir()
+            .join("apps")
+            .join(id)
+            .join("install")
+            .join(format!("{id}.app"));
+        if bundle.exists() {
+            let _ = std::process::Command::new(super::desktop::LSREGISTER)
+                .arg("-u")
+                .arg(&bundle)
+                .status();
+        }
     }
     #[cfg(windows)]
     {

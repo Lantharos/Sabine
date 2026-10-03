@@ -1,5 +1,4 @@
 use std::path::Path;
-#[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::process::Stdio;
@@ -22,18 +21,24 @@ pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
         refresh_database(&directory);
     }
     #[cfg(target_os = "windows")]
-    install_windows_shortcut(app, executable, icon.as_deref())?;
+    {
+        register_windows_schemes(app, executable)?;
+        if app.listing.listed {
+            install_windows_shortcut(app, executable, icon.as_deref())?;
+        } else {
+            remove_windows_shortcut(&app.id)?;
+        }
+    }
     #[cfg(target_os = "macos")]
     install_macos_app(app, executable, icon.as_deref())?;
     Ok(())
 }
 
-pub fn link_macos_bundle(id: &str, bundle: &Path) -> Result<(), String> {
+pub fn install_macos_bundle(id: &str, bundle: &Path, listed: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
         let directory = Path::new(&home).join("Applications");
-        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         let path = directory.join(format!("{id}.app"));
         if path.is_symlink() {
             std::fs::remove_file(&path).map_err(|error| error.to_string())?;
@@ -43,14 +48,35 @@ pub fn link_macos_bundle(id: &str, bundle: &Path) -> Result<(), String> {
                 path.display()
             ));
         }
+        if !listed {
+            return register_with_launch_services(bundle);
+        }
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         std::os::unix::fs::symlink(bundle, path).map_err(|error| error.to_string())
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (id, bundle);
+        let _ = (id, bundle, listed);
         Err("macOS application bundles require macOS".into())
     }
 }
+
+#[cfg(target_os = "macos")]
+pub(crate) const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
+#[cfg(target_os = "macos")]
+fn register_with_launch_services(bundle: &Path) -> Result<(), String> {
+    let status = Command::new(LSREGISTER)
+        .arg("-f")
+        .arg(bundle)
+        .status()
+        .map_err(|error| error.to_string())?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| "failed to register the app with Launch Services".to_string())
+}
+
 #[cfg(target_os = "macos")]
 use crate::desktop::macos::xml;
 
@@ -208,6 +234,47 @@ pub fn install_macos_app(
         .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(launch, permissions).map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn remove_windows_shortcut(id: &str) -> Result<(), String> {
+    let programs =
+        std::path::PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?)
+            .join("Microsoft/Windows/Start Menu/Programs");
+    match std::fs::remove_file(programs.join(format!("{id}.lnk"))) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn register_windows_schemes(app: &SourceApp, executable: &Path) -> Result<(), String> {
+    let command = format!("\"{}\" \"%1\"", executable.display());
+    for scheme in crate::desktop::types::schemes(&app.mime_types) {
+        let key = format!(r"HKCU\Software\Classes\{scheme}");
+        set_registry_string(&key, None, &format!("URL:{scheme}"))?;
+        set_registry_string(&key, Some("URL Protocol"), "")?;
+        set_registry_string(&format!(r"{key}\shell\open\command"), None, &command)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn set_registry_string(key: &str, name: Option<&str>, value: &str) -> Result<(), String> {
+    let mut command = Command::new("reg");
+    command.args(["add", key]);
+    match name {
+        Some(name) => command.args(["/v", name]),
+        None => command.arg("/ve"),
+    };
+    let status = command
+        .args(["/t", "REG_SZ", "/d", value, "/f"])
+        .status()
+        .map_err(|error| error.to_string())?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| format!("failed to register {key}"))
 }
 
 #[cfg(target_os = "windows")]

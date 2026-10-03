@@ -111,7 +111,7 @@ pub fn install_bundle(
     .map_err(|error| error.to_string())?;
     if options.desktop {
         if format == BundleFormat::Macos {
-            desktop::link_macos_bundle(&desktop_app.id, &release)?;
+            desktop::install_macos_bundle(&desktop_app.id, &release, desktop_app.listing.listed)?;
         } else {
             desktop::install_entry(&desktop_app, &binary)?;
         }
