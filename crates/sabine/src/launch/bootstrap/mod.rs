@@ -1,6 +1,7 @@
 pub(crate) mod installer;
 mod ui;
 
+use crate::launch::executable::launch_executable;
 use crate::window::config::SabineWindowConfig;
 use crate::{SabineError, SabineResult};
 use sabine_runtime::{
@@ -144,7 +145,7 @@ fn relaunch_managed_update(config: &SabineWindowConfig) {
     let Ok(registered) = SabineService::default().app(id) else {
         return;
     };
-    let Ok(current) = std::env::current_exe() else {
+    let Ok(current) = launch_executable() else {
         return;
     };
     let desired = registered.manifest.executable;
@@ -191,10 +192,7 @@ fn offer_pending_update(config: &SabineWindowConfig) {
     let Ok(service_executable) = sabine_service::resolve_service_executable() else {
         return;
     };
-    let executable = std::env::var_os("APPIMAGE")
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_exe().ok());
-    let Some(executable) = executable else {
+    let Ok(executable) = launch_executable() else {
         return;
     };
     let mut command = background_command(service_executable);
@@ -252,7 +250,7 @@ fn run_bootstrap_install(
 
 pub(crate) fn app_manifest(config: &SabineWindowConfig) -> Option<AppManifest> {
     let id = config.app_id.as_ref()?;
-    let executable = std::env::current_exe().ok()?;
+    let executable = launch_executable().ok()?;
     Some(AppManifest {
         id: id.clone(),
         name: config.title.clone(),

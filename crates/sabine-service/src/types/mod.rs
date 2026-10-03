@@ -8,9 +8,9 @@ use std::{
 use thiserror::Error;
 
 pub use app::{
-    AppArtifact, AppArtifactKind, AppInstallMode, AppManifest, AppReleaseManifest, AppUpdateConfig,
-    AppUpdateSource, AppUpdateStatus, MaintenanceReport, PendingAppUpdate, RegisteredApp,
-    UpdatePolicy,
+    APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
+    AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, MaintenanceReport,
+    PendingAppUpdate, RegisteredApp, UpdatePolicy,
 };
 pub use system::{
     SabineVersion, SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest,

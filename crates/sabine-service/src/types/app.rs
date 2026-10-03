@@ -168,6 +168,8 @@ pub struct AppArtifact {
     pub executable: Option<PathBuf>,
 }
 
+pub const APPIMAGE_PROGRAM_ENV: &str = "SABINE_APPIMAGE_PROGRAM";
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AppArtifactKind {

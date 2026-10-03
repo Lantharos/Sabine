@@ -1,5 +1,6 @@
 pub(crate) mod bootstrap;
 pub(crate) mod browser;
+pub(crate) mod executable;
 
 pub(crate) use browser::apply_browser_launch_args;
 

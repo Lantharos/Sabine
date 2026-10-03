@@ -8,6 +8,7 @@ use sabine_platform::{
     PlatformEvent, SingleInstancePolicy, TrayIcon,
 };
 
+mod appimage;
 mod instance;
 mod links;
 mod shortcuts;
@@ -16,6 +17,7 @@ mod util;
 
 pub(super) type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
 
+pub(super) use appimage::native_host_program;
 use instance::SingleInstanceGuard;
 use links::{register_deep_links, write_autostart_entry};
 use shortcuts::{ShortcutRuntime, spawn_global_shortcut};

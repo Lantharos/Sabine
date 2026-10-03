@@ -38,10 +38,10 @@ pub(crate) use release::rollout::release_is_soaked;
 pub use release::signing::{public_key_from_private, sign_app_release, sign_system_release};
 pub(crate) use release::signing::{verify_app_release, verify_system_release};
 pub use types::{
-    AppArtifact, AppArtifactKind, AppInstallMode, AppManifest, AppReleaseManifest, AppUpdateConfig,
-    AppUpdateSource, AppUpdateStatus, SABINE_VERSION, SabineVersion, ServiceError,
-    SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest, UpdatePolicy,
-    service_data_dir, valid_app_id,
+    APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
+    AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, SABINE_VERSION,
+    SabineVersion, ServiceError, SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest,
+    UpdatePolicy, service_data_dir, valid_app_id,
 };
 pub(crate) use types::{
     RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,

@@ -90,7 +90,8 @@ pub(super) fn desktop_entry(app: &BundleApp, executable: &str, icon: Option<&str
 
 pub(super) fn app_run(executable: &str) -> String {
     format!(
-        "#!/bin/sh\nHERE=\"$(dirname \"$(readlink -f \"$0\")\")\"\nexec \"$HERE/usr/bin/{executable}\" \"$@\"\n"
+        "#!/bin/sh\nHERE=\"$(dirname \"$(readlink -f \"$0\")\")\"\nif [ -n \"${{{program}}}\" ]; then\n  PROGRAM=\"$HERE/${program}\"\n  unset {program}\n  exec \"$PROGRAM\" \"$@\"\nfi\nexec \"$HERE/usr/bin/{executable}\" \"$@\"\n",
+        program = sabine_service::APPIMAGE_PROGRAM_ENV
     )
 }
 
