@@ -659,13 +659,17 @@ no interface at all, so Sabine sets neither, and an app dragged from a disk imag
 `/Applications` is listed like any other. Development installs are always listed, since they
 register no handlers.
 
-Windows registers schemes for the current user when the app is installed and again whenever it runs,
-and its installer's uninstaller removes them. Linux creates a hidden desktop handler pointing to the
-running executable before updating `mimeapps.list`; unrelated associations are preserved and Sabine
-registrations are serialized. On macOS, URL schemes must be declared in the application bundle
-before signing. A runtime `.deep_link(...)` call checks those declarations and reports a missing
-scheme instead of writing an unused registration file. Run the bundled app when testing macOS URL
-handlers.
+Windows registers schemes for the current user when the app is installed and again whenever it runs.
+Linux creates a hidden desktop handler pointing to the running executable before updating
+`mimeapps.list`; unrelated associations are preserved and Sabine registrations are serialized.
+Windows installers remove the scheme keys when the app is uninstalled. `sabine uninstall` removes
+what the app registered on every platform: its scheme keys on Windows, the hidden handler and the
+`mimeapps.list` entries naming the app's desktop entries on Linux, and the bundle's Launch Services
+record on macOS. Both leave a scheme or handler alone once it launches a different executable, except
+MSI packages, which remove the registry values they installed. On macOS, URL schemes must be
+declared in the application bundle before signing. A runtime `.deep_link(...)` call checks those
+declarations and reports a missing scheme instead of writing an unused registration file. Run the
+bundled app when testing macOS URL handlers.
 
 Initial URL arguments and subsequent single-instance activations enter the same pending queue as
 macOS URL/document events. `SabineProcess::take_open_urls()` and the package's `app.takeOpenUrls()`
