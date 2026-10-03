@@ -11,8 +11,7 @@ use global_hotkey::{
     hotkey::{Code, HotKey, Modifiers},
 };
 use sabine_platform::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    Shortcut, TrayIcon,
+    AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, Shortcut, TrayIcon,
 };
 use tray_icon::{
     Icon, TrayIconBuilder,
@@ -252,34 +251,6 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> Result
         }
     }
     Ok(())
-}
-
-pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> Result<(), String> {
-    use crate::desktop::native_messaging::{Manifests, write_manifest};
-    let manifests = Manifests::new(host).map_err(|error| error.to_string())?;
-    let support = home_dir()?.join("Library/Application Support");
-    for browser in [
-        "Google/Chrome",
-        "Chromium",
-        "Microsoft Edge",
-        "BraveSoftware/Brave-Browser",
-    ] {
-        write_manifest(
-            &support
-                .join(browser)
-                .join("NativeMessagingHosts")
-                .join(format!("{}.json", host.id)),
-            &manifests.chromium,
-        )
-        .map_err(|error| error.to_string())?;
-    }
-    write_manifest(
-        &support
-            .join("Mozilla/NativeMessagingHosts")
-            .join(format!("{}.json", host.id)),
-        &manifests.firefox,
-    )
-    .map_err(|error| error.to_string())
 }
 
 pub(super) fn home_dir() -> Result<PathBuf, String> {

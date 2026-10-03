@@ -1,6 +1,6 @@
 #![cfg(target_os = "windows")]
 
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use global_hotkey::{
     GlobalHotKeyManager,
@@ -206,32 +206,19 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> Result
 }
 
 pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> Result<(), String> {
-    use crate::desktop::native_messaging::{Manifests, write_manifest};
-    let manifests = Manifests::new(host).map_err(|error| error.to_string())?;
-    let directory = local_app_data()?.join("sabine/native-messaging");
-    let chromium = directory.join("chromium").join(format!("{}.json", host.id));
-    let firefox = directory.join("firefox").join(format!("{}.json", host.id));
-    write_manifest(&chromium, &manifests.chromium).map_err(|error| error.to_string())?;
-    write_manifest(&firefox, &manifests.firefox).map_err(|error| error.to_string())?;
-    for browser in [
-        r"Software\Google\Chrome\NativeMessagingHosts",
-        r"Software\Chromium\NativeMessagingHosts",
-        r"Software\Microsoft\Edge\NativeMessagingHosts",
-        r"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts",
-    ] {
-        set_registry_string(
-            HKEY_CURRENT_USER,
-            &format!(r"{browser}\{}", host.id),
-            "",
-            &chromium.display().to_string(),
-        )?;
+    let manifests = crate::desktop::native_messaging::write_manifests(host)
+        .map_err(|error| error.to_string())?;
+    for (browser, manifest) in manifests {
+        for key in sabine_service::native_messaging_registry_keys(browser) {
+            set_registry_string(
+                HKEY_CURRENT_USER,
+                &format!(r"{key}\{}", host.id),
+                "",
+                &manifest.display().to_string(),
+            )?;
+        }
     }
-    set_registry_string(
-        HKEY_CURRENT_USER,
-        &format!(r"Software\Mozilla\NativeMessagingHosts\{}", host.id),
-        "",
-        &firefox.display().to_string(),
-    )
+    Ok(())
 }
 
 pub(super) fn set_registry_string(
@@ -302,12 +289,6 @@ pub(super) fn delete_registry_value(
     } else {
         Err(format!("RegDeleteKeyValueW failed: {result:?}"))
     }
-}
-
-pub(super) fn local_app_data() -> Result<PathBuf, String> {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .ok_or_else(|| "LOCALAPPDATA is required".to_string())
 }
 
 pub(super) fn sanitize_id(value: &str) -> String {

@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fs, io, path::PathBuf};
 
-use sabine_platform::{AutostartEntry, DeepLinkRegistration, NativeMessagingHost};
+use sabine_platform::{AutostartEntry, DeepLinkRegistration};
 
 use super::util::*;
 
@@ -44,8 +44,9 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> io::Re
         .map(|scheme| format!("x-scheme-handler/{scheme};"))
         .collect::<String>();
     let desktop = format!(
-        "[Desktop Entry]\nType=Application\nName={}\nExec={} %U\nTerminal=false\nNoDisplay=true\nMimeType={mime_types}\n",
+        "[Desktop Entry]\nType=Application\nName={}\nTryExec={}\nExec={} %U\nTerminal=false\nNoDisplay=true\nMimeType={mime_types}\n",
         registration.id,
+        desktop_value(executable),
         desktop_exec(executable)
     );
     let desktop_path = data_home()?.join("applications").join(&desktop_id);
@@ -72,31 +73,6 @@ fn desktop_exec(value: &str) -> String {
         .replace('$', "\\$")
         .replace('%', "%%");
     format!("\"{}\"", escaped.replace('\\', "\\\\"))
-}
-
-pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> io::Result<()> {
-    use crate::desktop::native_messaging::{Manifests, write_manifest};
-    let manifests = Manifests::new(host)?;
-    for browser in [
-        "google-chrome",
-        "chromium",
-        "microsoft-edge",
-        "BraveSoftware/Brave-Browser",
-    ] {
-        write_manifest(
-            &config_home()?
-                .join(browser)
-                .join("NativeMessagingHosts")
-                .join(format!("{}.json", host.id)),
-            &manifests.chromium,
-        )?;
-    }
-    write_manifest(
-        &home_dir()?
-            .join(".mozilla/native-messaging-hosts")
-            .join(format!("{}.json", host.id)),
-        &manifests.firefox,
-    )
 }
 
 pub(super) fn write_file(path: PathBuf, contents: &str) -> io::Result<()> {

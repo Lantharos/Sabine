@@ -17,7 +17,11 @@ pub fn remove_app_payload(root: &Path, id: &str) -> ServiceResult<()> {
     }
     let inventory = read_inventory(root, id)?;
     let mut directories = BTreeSet::new();
-    for file in inventory.files {
+    for file in inventory
+        .files
+        .into_iter()
+        .chain([PathBuf::from(INVENTORY)])
+    {
         for parent in file.ancestors().skip(1) {
             directories.insert(parent.to_path_buf());
         }
@@ -404,4 +408,41 @@ fn write_transaction(journal: &Path, transaction: &Transaction) -> ServiceResult
 
 fn invalid(message: &str) -> ServiceError {
     ServiceError::InvalidManifest(message.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removing_a_payload_keeps_only_unlisted_user_files() {
+        let root = std::env::temp_dir().join(format!("sabine-payload-test-{}", std::process::id()));
+        let install = |files: &[&str]| {
+            for file in files {
+                let path = root.join(file);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, "").unwrap();
+            }
+            fs::write(
+                root.join(INVENTORY),
+                r#"{"id":"com.example.notes","files":["notes","resources/Sabine.toml"]}"#,
+            )
+            .unwrap();
+        };
+
+        install(&["notes", "resources/Sabine.toml", "resources/notes.db"]);
+        remove_app_payload(&root, "com.example.notes").unwrap();
+        let mut left = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        left.sort();
+        assert_eq!(left, ["resources"]);
+        assert!(root.join("resources/notes.db").is_file());
+        fs::remove_dir_all(&root).unwrap();
+
+        install(&["notes", "resources/Sabine.toml"]);
+        remove_app_payload(&root, "com.example.notes").unwrap();
+        assert!(!root.exists());
+    }
 }

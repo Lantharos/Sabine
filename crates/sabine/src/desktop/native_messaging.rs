@@ -1,14 +1,30 @@
-use std::{fs, io, path::Path};
+use std::{fs, io, path::PathBuf};
 
 use sabine_platform::NativeMessagingHost;
+use sabine_service::NativeMessagingBrowser;
 
-pub(super) struct Manifests {
-    pub chromium: String,
-    pub firefox: String,
+pub(super) fn write_manifests(
+    host: &NativeMessagingHost,
+) -> io::Result<Vec<(NativeMessagingBrowser, PathBuf)>> {
+    let manifests = Manifests::new(host)?;
+    sabine_service::native_messaging_manifest_dirs()?
+        .into_iter()
+        .map(|(browser, directory)| {
+            fs::create_dir_all(&directory)?;
+            let path = directory.join(format!("{}.json", host.id));
+            fs::write(&path, manifests.for_browser(browser))?;
+            Ok((browser, path))
+        })
+        .collect()
+}
+
+struct Manifests {
+    chromium: String,
+    firefox: String,
 }
 
 impl Manifests {
-    pub fn new(host: &NativeMessagingHost) -> io::Result<Self> {
+    fn new(host: &NativeMessagingHost) -> io::Result<Self> {
         if host.id.split('.').any(|part| {
             part.is_empty()
                 || !part
@@ -75,11 +91,11 @@ impl Manifests {
             firefox: manifest("allowed_extensions", &host.allowed_extensions)?,
         })
     }
-}
 
-pub(super) fn write_manifest(path: &Path, manifest: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+    fn for_browser(&self, browser: NativeMessagingBrowser) -> &str {
+        match browser {
+            NativeMessagingBrowser::Chromium => &self.chromium,
+            NativeMessagingBrowser::Firefox => &self.firefox,
+        }
     }
-    fs::write(path, manifest)
 }

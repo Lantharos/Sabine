@@ -144,7 +144,7 @@ pub(super) mod windows {
     use ::windows::{
         Win32::{
             Foundation::ERROR_SUCCESS,
-            System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegDeleteTreeW, RegGetValueW},
+            System::Registry::{HKEY_CURRENT_USER, RegDeleteTreeW},
         },
         core::HSTRING,
     };
@@ -156,10 +156,12 @@ pub(super) mod windows {
         };
         for scheme in manifest_schemes(&manifest) {
             let key = format!(r"Software\Classes\{scheme}");
-            let launches_app = registry_string(&format!(r"{key}\shell\open\command"))
-                .as_deref()
-                .and_then(command_program)
-                .is_some_and(|program| inside(program, install));
+            let launches_app = sabine_service::windows_registry::current_user_string(&format!(
+                r"{key}\shell\open\command"
+            ))
+            .as_deref()
+            .and_then(command_program)
+            .is_some_and(|program| inside(program, install));
             if launches_app {
                 let status = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(&key)) };
                 if status != ERROR_SUCCESS {
@@ -168,44 +170,6 @@ pub(super) mod windows {
             }
         }
         Ok(())
-    }
-
-    fn registry_string(key: &str) -> Option<String> {
-        let key = HSTRING::from(key);
-        let mut size = 0u32;
-        let status = unsafe {
-            RegGetValueW(
-                HKEY_CURRENT_USER,
-                &key,
-                None,
-                RRF_RT_REG_SZ,
-                None,
-                None,
-                Some(&mut size),
-            )
-        };
-        if status != ERROR_SUCCESS {
-            return None;
-        }
-        let mut buffer = vec![0u16; size as usize / 2];
-        let status = unsafe {
-            RegGetValueW(
-                HKEY_CURRENT_USER,
-                &key,
-                None,
-                RRF_RT_REG_SZ,
-                None,
-                Some(buffer.as_mut_ptr().cast()),
-                Some(&mut size),
-            )
-        };
-        (status == ERROR_SUCCESS).then(|| {
-            let length = buffer
-                .iter()
-                .position(|&unit| unit == 0)
-                .unwrap_or(buffer.len());
-            String::from_utf16_lossy(&buffer[..length])
-        })
     }
 
     pub(super) fn manifest_schemes(manifest: &str) -> Vec<String> {

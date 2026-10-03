@@ -124,7 +124,7 @@ pub fn apply_desktop_services(
         register_deep_links(registration)?;
     }
     for host in native_messaging_hosts {
-        register_native_messaging_host(host)?;
+        super::native_messaging::write_manifests(host).map_err(|error| error.to_string())?;
     }
 
     Ok(state)
