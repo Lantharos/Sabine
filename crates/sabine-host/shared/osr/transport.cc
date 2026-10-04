@@ -21,7 +21,7 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
-#include <ws2tcpip.h>
+#include <afunix.h>
 #else
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -68,70 +68,34 @@ bool SabineOsrHandler::ConnectSocket() {
   if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
     return false;
   }
-  const size_t separator = endpoint_.rfind(':');
-  if (separator == std::string::npos) {
+  using NativeSocket = SOCKET;
+  constexpr NativeSocket kInvalidSocket = INVALID_SOCKET;
+  const auto close_socket = [](NativeSocket socket) { closesocket(socket); };
+#else
+  using NativeSocket = int;
+  constexpr NativeSocket kInvalidSocket = -1;
+  const auto close_socket = [](NativeSocket socket) { close(socket); };
+#endif
+  sockaddr_un address{};
+  address.sun_family = AF_UNIX;
+  if (endpoint_.size() >= sizeof(address.sun_path)) {
     return false;
   }
-  const std::string host = endpoint_.substr(0, separator);
-  const std::string port = endpoint_.substr(separator + 1);
-  addrinfo hints{};
-  hints.ai_family = AF_INET;
-  hints.ai_socktype = SOCK_STREAM;
-  addrinfo* addresses = nullptr;
-  if (getaddrinfo(host.c_str(), port.c_str(), &hints, &addresses) != 0) {
+  std::memcpy(address.sun_path, endpoint_.data(), endpoint_.size());
+  const NativeSocket connection = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (connection == kInvalidSocket) {
     return false;
   }
-  SOCKET connection = INVALID_SOCKET;
-  for (addrinfo* address = addresses; address; address = address->ai_next) {
-    connection =
-        socket(address->ai_family, address->ai_socktype, address->ai_protocol);
-    if (connection != INVALID_SOCKET &&
-        connect(connection, address->ai_addr,
-                static_cast<int>(address->ai_addrlen)) == 0) {
-      break;
-    }
-    if (connection != INVALID_SOCKET) {
-      closesocket(connection);
-      connection = INVALID_SOCKET;
-    }
-  }
-  freeaddrinfo(addresses);
-  if (connection == INVALID_SOCKET) {
+  const std::string authentication = authentication_token_ + "\n";
+  if (connect(connection, reinterpret_cast<sockaddr*>(&address),
+              sizeof(address)) != 0 ||
+      !SendAll(static_cast<intptr_t>(connection), authentication.data(),
+               authentication.size())) {
+    close_socket(connection);
     return false;
   }
   socket_fd_ = static_cast<intptr_t>(connection);
-  const std::string authentication = authentication_token_ + "\n";
-  if (!SendAll(socket_fd_, authentication.data(), authentication.size())) {
-    closesocket(connection);
-    socket_fd_ = -1;
-    return false;
-  }
   return true;
-#else
-  socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (socket_fd_ < 0) {
-    return false;
-  }
-  sockaddr_un addr{};
-  addr.sun_family = AF_UNIX;
-  if (endpoint_.size() >= sizeof(addr.sun_path)) {
-    return false;
-  }
-  std::strncpy(addr.sun_path, endpoint_.c_str(), sizeof(addr.sun_path) - 1);
-  if (connect(socket_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) !=
-      0) {
-    close(socket_fd_);
-    socket_fd_ = -1;
-    return false;
-  }
-  const std::string authentication = authentication_token_ + "\n";
-  if (!SendAll(socket_fd_, authentication.data(), authentication.size())) {
-    close(socket_fd_);
-    socket_fd_ = -1;
-    return false;
-  }
-  return true;
-#endif
 }
 
 void SabineOsrHandler::StartCommandReader() {

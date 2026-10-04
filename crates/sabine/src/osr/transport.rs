@@ -5,18 +5,16 @@ use std::path::{Path, PathBuf};
 pub(crate) type IpcListener = std::os::unix::net::UnixListener;
 #[cfg(unix)]
 pub(crate) type IpcStream = std::os::unix::net::UnixStream;
-#[cfg(not(unix))]
-pub(crate) type IpcListener = std::net::TcpListener;
-#[cfg(not(unix))]
-pub(crate) type IpcStream = std::net::TcpStream;
+#[cfg(windows)]
+pub(crate) type IpcListener = uds_windows::UnixListener;
+#[cfg(windows)]
+pub(crate) type IpcStream = uds_windows::UnixStream;
 
+/// The Unix domain socket a browser connects to. On Windows it lives in the
+/// user's own temporary directory, whose access control already keeps other
+/// accounts from connecting.
 #[derive(Clone, Debug)]
-pub(crate) enum IpcEndpoint {
-    #[cfg(unix)]
-    Unix(PathBuf),
-    #[cfg(not(unix))]
-    Tcp(std::net::SocketAddr),
-}
+pub(crate) struct IpcEndpoint(PathBuf);
 
 pub(crate) fn authentication_token() -> io::Result<String> {
     let mut bytes = [0_u8; 32];
@@ -72,13 +70,7 @@ fn peer_uid(fd: std::os::fd::RawFd) -> io::Result<u32> {
     Ok(uid)
 }
 
-#[cfg(not(unix))]
-pub(crate) fn authenticate_peer(_stream: &IpcStream) -> io::Result<()> {
-    Ok(())
-}
-
 const HEALTH_PROBE: &[u8] = b"sabine-osr-probe-v1";
-#[cfg(unix)]
 const HEALTH_PROBE_LINE: &[u8] = b"sabine-osr-probe-v1\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +80,7 @@ pub(crate) enum Authentication {
 }
 
 pub(crate) fn authenticate(stream: &mut IpcStream, expected: &str) -> io::Result<Authentication> {
+    #[cfg(unix)]
     authenticate_peer(stream)?;
     use std::io::Read;
 
@@ -120,88 +113,40 @@ pub(crate) fn authenticate(stream: &mut IpcStream, expected: &str) -> io::Result
 
 impl IpcEndpoint {
     pub(crate) fn bind(app_id: &str) -> io::Result<(Self, IpcListener)> {
+        let dir = runtime_ipc_dir(app_id)?;
+        ensure_ipc_dir(&dir)?;
+        sweep_stale_sockets(&dir);
+        let path = socket_path_in(&dir);
+        let _ = std::fs::remove_file(&path);
+        let listener = IpcListener::bind(&path)?;
         #[cfg(unix)]
         {
-            let dir = runtime_ipc_dir(app_id)?;
-            ensure_ipc_dir(&dir)?;
-            sweep_stale_sockets(&dir);
-            let path = socket_path_in(&dir)?;
-            let _ = std::fs::remove_file(&path);
-            let listener = IpcListener::bind(&path)?;
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-            }
-            Ok((Self::Unix(path), listener))
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
         }
-        #[cfg(not(unix))]
-        {
-            let _ = app_id;
-            let listener = IpcListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
-            Ok((Self::Tcp(listener.local_addr()?), listener))
-        }
+        Ok((Self(path), listener))
     }
 
     pub(crate) fn argument(&self) -> String {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(path) => path.display().to_string(),
-            #[cfg(not(unix))]
-            Self::Tcp(address) => address.to_string(),
-        }
+        self.0.display().to_string()
     }
 
     pub(crate) fn wake_listener(&self) {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(path) => {
-                let _ = std::os::unix::net::UnixStream::connect(path);
-            }
-            #[cfg(not(unix))]
-            Self::Tcp(address) => {
-                let _ = std::net::TcpStream::connect_timeout(
-                    address,
-                    std::time::Duration::from_millis(250),
-                );
-            }
-        }
+        let _ = IpcStream::connect(&self.0);
     }
 
     pub(crate) fn unlink(&self) {
-        #[cfg(unix)]
-        {
-            let Self::Unix(path) = self;
-            let _ = std::fs::remove_file(path);
-            let _ = std::fs::remove_file(token_file_for(path));
-        }
+        let _ = std::fs::remove_file(&self.0);
+        let _ = std::fs::remove_file(token_file_for(&self.0));
     }
 }
 
 /// Write the OSR auth token next to the endpoint so CEF process-singleton
 /// handoff can pass the path on argv without putting the secret in cmdline.
 pub(crate) fn write_token_file(endpoint: &IpcEndpoint, token: &str) -> io::Result<PathBuf> {
-    #[cfg(unix)]
-    {
-        let IpcEndpoint::Unix(socket) = endpoint;
-        let path = token_file_for(socket);
-        write_token_bytes(&path, token)?;
-        Ok(path)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = endpoint;
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default();
-        let path = std::env::temp_dir().join(format!(
-            "sabine-osr-token-{}-{nanos}.token",
-            std::process::id()
-        ));
-        write_token_bytes(&path, token)?;
-        Ok(path)
-    }
+    let path = token_file_for(&endpoint.0);
+    write_token_bytes(&path, token)?;
+    Ok(path)
 }
 
 fn write_token_bytes(path: &Path, token: &str) -> io::Result<()> {
@@ -217,36 +162,36 @@ fn write_token_bytes(path: &Path, token: &str) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 fn token_file_for(socket: &Path) -> PathBuf {
     socket.with_extension("token")
 }
 
-#[cfg(unix)]
 fn ensure_ipc_dir(dir: &Path) -> io::Result<()> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(dir)?;
-    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        builder.mode(0o700).create(dir)?;
+        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    }
+    #[cfg(windows)]
+    builder.create(dir)?;
     Ok(())
 }
 
-#[cfg(unix)]
-fn socket_path_in(dir: &Path) -> io::Result<PathBuf> {
+/// Socket names stay short because a socket path is limited to 108 bytes.
+fn socket_path_in(dir: &Path) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
+        .map(|duration| duration.as_nanos() as u64)
         .unwrap_or_default();
-    Ok(dir.join(format!("osr-{}-{nanos}.sock", std::process::id())))
+    dir.join(format!("osr-{:x}-{nanos:x}.sock", std::process::id()))
 }
 
 /// Remove socket files that are no longer accepting connections.
-#[cfg(unix)]
 pub(crate) fn sweep_stale_sockets(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -263,17 +208,20 @@ pub(crate) fn sweep_stale_sockets(dir: &Path) {
     }
 }
 
-#[cfg(unix)]
 fn socket_is_live(path: &Path) -> bool {
     use std::io::Write;
-    use std::os::unix::net::UnixStream;
     use std::time::Duration;
 
-    let Ok(mut stream) = UnixStream::connect(path) else {
+    let Ok(mut stream) = IpcStream::connect(path) else {
         return false;
     };
     let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
     stream.write_all(HEALTH_PROBE_LINE).is_ok()
+}
+
+#[cfg(windows)]
+fn runtime_ipc_dir(_app_id: &str) -> io::Result<PathBuf> {
+    Ok(std::env::temp_dir().join("sabine"))
 }
 
 #[cfg(unix)]
@@ -298,7 +246,7 @@ fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
         .join(sanitized))
 }
 
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) fn sanitize_app_id(app_id: &str) -> String {
     let sanitized = app_id
         .chars()
@@ -317,7 +265,7 @@ pub(crate) fn sanitize_app_id(app_id: &str) -> String {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
@@ -328,7 +276,6 @@ mod tests {
         assert_eq!(sanitize_app_id("@@@"), "___");
     }
 
-    #[cfg(unix)]
     #[test]
     fn authenticate_rejects_wrong_token() {
         let (mut client, mut server) = std::os::unix::net::UnixStream::pair().expect("pair");
@@ -340,7 +287,6 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     }
 
-    #[cfg(unix)]
     #[test]
     fn authenticate_accepts_matching_token_from_same_uid() {
         let (mut client, mut server) = std::os::unix::net::UnixStream::pair().expect("pair");
@@ -354,7 +300,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn authenticate_recognizes_health_probe_from_same_uid() {
         let (mut client, mut server) = std::os::unix::net::UnixStream::pair().expect("pair");
@@ -368,7 +313,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn sweep_removes_dead_socket_files() {
         let dir = std::env::temp_dir().join(format!(

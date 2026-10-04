@@ -94,6 +94,7 @@ ureq = "3.4.2"
 base64 = "0.23.1"
 ed25519-dalek = "3.0.0"
 url = "2.5.8"
+uds_windows = "1.2.1"
 wayland-backend = { version = "0.3.17", features = ["client_system"] }
 wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
