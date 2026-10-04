@@ -93,7 +93,7 @@ impl OsrNativeHost {
         let Some(state) = self.published_window_state else {
             return;
         };
-        self.send_control(&format!(
+        self.send_control(format!(
             "window_state\t{}\t{}\t{}\n",
             u8::from(state.shown),
             u8::from(state.occluded),

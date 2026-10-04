@@ -25,7 +25,7 @@ impl OsrNativeHost {
             ),
         };
         self.last_frame_rate.set(Some(frame_rate));
-        self.send_control(&format!(
+        self.send_control(format!(
             "lifecycle\t{name}\t{frame_rate}\t{}\n",
             encode_component(reason)
         ));

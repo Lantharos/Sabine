@@ -33,13 +33,11 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn render(&mut self) -> bool {
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(1.0, |window| window.scale_factor()) as f32;
-        let width = self.surface_size.width as f32 / scale.max(1.0);
-        let height = self.surface_size.height as f32 / scale.max(1.0);
-        let list = self.display_list(width.max(1.0), height.max(1.0));
+        let scale = self.scale() as f32;
+        let list = self.display_list(
+            self.logical_width().max(1.0),
+            self.logical_height().max(1.0),
+        );
         let Some(renderer) = self.renderer.as_mut() else {
             return false;
         };

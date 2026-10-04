@@ -15,6 +15,41 @@ use crate::osr::host::types::{
 use crate::osr::protocol::encode_component;
 
 const XKB_KEYCODE_OFFSET: u32 = 8;
+const WHEEL_DELTA_PER_LINE: f64 = 120.0;
+const PINCH_WHEEL_DELTA: f64 = 100.0;
+
+/// Fractions of a wheel step not yet sent, so slow trackpad motion adds up
+/// instead of being rounded away.
+#[derive(Default)]
+pub(in crate::osr::host) struct WheelRemainder {
+    scroll: AxisRemainder,
+    pinch: AxisRemainder,
+}
+
+#[derive(Default)]
+struct AxisRemainder {
+    x: f64,
+    y: f64,
+}
+
+impl AxisRemainder {
+    fn take(&mut self, dx: f64, dy: f64) -> (i32, i32) {
+        (whole_steps(&mut self.x, dx), whole_steps(&mut self.y, dy))
+    }
+}
+
+fn whole_steps(remainder: &mut f64, delta: f64) -> i32 {
+    if delta == 0.0 {
+        return 0;
+    }
+    if remainder.signum() != delta.signum() {
+        *remainder = 0.0;
+    }
+    let total = *remainder + delta;
+    let whole = total.trunc();
+    *remainder = total - whole;
+    whole as i32
+}
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn forward_mouse_move(&self, leave: bool) {
@@ -41,7 +76,7 @@ impl OsrNativeHost {
         let Some(button) = cef_mouse_button(button) else {
             return;
         };
-        self.send_control(&format!(
+        self.send_control(format!(
             "mouse_click\t{:.2}\t{:.2}\t{}\t{}\t{}\t{}\n",
             x,
             y,
@@ -61,7 +96,7 @@ impl OsrNativeHost {
             Some(MouseButton::Forward) => 4,
             _ => return,
         };
-        self.send_control(&format!(
+        self.send_control(format!(
             "mouse_navigation\t{:.2}\t{:.2}\t{}\t{}\n",
             x,
             y,
@@ -70,27 +105,47 @@ impl OsrNativeHost {
         ));
     }
 
-    pub(in crate::osr::host) fn forward_mouse_wheel(&self, delta: MouseScrollDelta) {
+    pub(in crate::osr::host) fn forward_mouse_wheel(&mut self, delta: MouseScrollDelta) {
+        let (dx, dy, precision) = match delta {
+            MouseScrollDelta::LineDelta(x, y) => (
+                f64::from(x) * WHEEL_DELTA_PER_LINE,
+                f64::from(y) * WHEEL_DELTA_PER_LINE,
+                0,
+            ),
+            MouseScrollDelta::PixelDelta(position) => {
+                (position.x, position.y, EVENTFLAG_PRECISION_SCROLLING_DELTA)
+            }
+            _ => return,
+        };
+        let modifiers = self.input_modifiers() | precision;
+        let (dx, dy) = self.wheel_remainder.scroll.take(dx, dy);
+        self.send_wheel(dx, dy, modifiers);
+    }
+
+    /// Pinches reach pages as Ctrl+wheel, as Chromium reports touchpad pinch.
+    pub(in crate::osr::host) fn forward_pinch(&mut self, delta: f64) {
+        let scale = 1.0 + delta;
+        if !scale.is_finite() || scale <= 0.0 {
+            return;
+        }
+        let modifiers =
+            self.input_modifiers() | EVENTFLAG_CONTROL_DOWN | EVENTFLAG_PRECISION_SCROLLING_DELTA;
+        let (_, dy) = self
+            .wheel_remainder
+            .pinch
+            .take(0.0, PINCH_WHEEL_DELTA * scale.ln());
+        self.send_wheel(0, dy, modifiers);
+    }
+
+    fn send_wheel(&self, dx: i32, dy: i32, modifiers: u32) {
+        if dx == 0 && dy == 0 {
+            return;
+        }
         let Some((x, y)) = self.content_position(self.cursor_x, self.cursor_y) else {
             return;
         };
-        let (dx, dy, precision) = match delta {
-            MouseScrollDelta::LineDelta(x, y) => ((x * 120.0) as i32, (y * 120.0) as i32, false),
-            MouseScrollDelta::PixelDelta(position) => (position.x as i32, position.y as i32, true),
-            _ => return,
-        };
-        self.send_control(&format!(
-            "mouse_wheel\t{:.2}\t{:.2}\t{}\t{}\t{}\n",
-            x,
-            y,
-            dx,
-            dy,
-            self.input_modifiers()
-                | if precision {
-                    EVENTFLAG_PRECISION_SCROLLING_DELTA
-                } else {
-                    0
-                }
+        self.send_control(format!(
+            "mouse_wheel\t{x:.2}\t{y:.2}\t{dx}\t{dy}\t{modifiers}\n"
         ));
     }
 
@@ -154,7 +209,7 @@ impl OsrNativeHost {
         repeat: bool,
         native_key_code: u32,
     ) {
-        self.send_control(&format!(
+        self.send_control(format!(
             "key\t{}\t{}\t{}\t{}\t{}\t{}\n",
             i32::from(pressed),
             encode_component(name),

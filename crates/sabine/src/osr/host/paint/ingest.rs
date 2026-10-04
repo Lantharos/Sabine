@@ -13,7 +13,7 @@ use crate::osr::host::types::{
 impl OsrNativeHost {
     pub(in crate::osr::host) fn send_resize(&self) {
         let (width, height, scale) = self.content_size_for_cef();
-        self.send_control(&format!("resize\t{width}\t{height}\t{scale:.4}\n"));
+        self.send_control(format!("resize\t{width}\t{height}\t{scale:.4}\n"));
     }
 
     pub(in crate::osr::host) fn queue_resize_paint(&mut self) {
@@ -66,18 +66,6 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn main_surface_ready(&self) -> bool {
         self.main_load_ready && self.main_surface.is_some()
-    }
-
-    pub(in crate::osr::host) fn frame_size_for_view(&self, size: (u32, u32)) -> (u32, u32) {
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(self.scale_factor, |window| window.scale_factor())
-            .max(1.0);
-        (
-            (f64::from(size.0) / scale).round().max(1.0) as u32,
-            (f64::from(size.1) / scale).round().max(1.0) as u32,
-        )
     }
 
     pub(in crate::osr::host) fn accepts_paint(&self) -> bool {
