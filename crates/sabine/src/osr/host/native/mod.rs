@@ -13,7 +13,6 @@ use std::{
 
 use sabine_platform::{WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect};
 use winit::{
-    cursor::CursorIcon,
     data_transfer::DataTransferId,
     event_loop::{ActiveEventLoop, DndAction, EventLoopProxy},
     window::{ActivationToken, Window as WinitWindow},
@@ -65,8 +64,7 @@ pub(super) struct OsrNativeHost {
     pub(super) page_drag_exclusion_regions: Vec<WindowRegionRect>,
     pub(super) hovered_control: Option<TitlebarControl>,
     pub(super) pressed_control: Option<TitlebarControl>,
-    pub(super) cursor: CursorIcon,
-    pub(super) native_cursor_override: bool,
+    pub(super) cursor: super::ui::cursor::CursorState,
     pub(super) modifiers: winit::keyboard::ModifiersState,
     pub(super) mouse: MouseButtons,
     pub(super) touch: super::input::TouchState,
@@ -170,8 +168,7 @@ impl OsrNativeHost {
             page_drag_exclusion_regions: Vec::new(),
             hovered_control: None,
             pressed_control: None,
-            cursor: CursorIcon::Default,
-            native_cursor_override: false,
+            cursor: Default::default(),
             modifiers: Default::default(),
             mouse: MouseButtons::default(),
             touch: Default::default(),

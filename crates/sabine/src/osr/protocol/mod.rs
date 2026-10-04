@@ -62,7 +62,7 @@ pub(crate) enum OsrMessage {
         drag: Vec<WindowRegionRect>,
         exclusion: Vec<WindowRegionRect>,
     },
-    Cursor(String),
+    Cursor(PageCursorMessage),
     CloseRequested,
     StartDragRequested,
     MinimizeRequested,
@@ -93,6 +93,22 @@ pub(crate) enum OsrMessage {
     },
     /// Full `SABINE_BRIDGE_REQUEST\t...` line from the owning CEF handler.
     BridgeRequest(crate::bridge::frame::Frame),
+}
+
+/// A cursor the page asked for: one of CEF's cursor types, or an image.
+#[derive(Debug)]
+pub(crate) enum PageCursorMessage {
+    Named(u32),
+    Custom(CursorImage),
+}
+
+#[derive(Debug, Hash)]
+pub(crate) struct CursorImage {
+    pub rgba: Vec<u8>,
+    pub width: u16,
+    pub height: u16,
+    pub hotspot_x: u16,
+    pub hotspot_y: u16,
 }
 
 #[derive(Clone, Debug)]

@@ -14,7 +14,7 @@ use std::io::{self, Read};
 
 #[cfg(target_os = "macos")]
 use crate::osr::accel::SurfaceRegistry;
-use crate::osr::protocol::OsrMessage;
+use crate::osr::protocol::{CursorImage, OsrMessage, PageCursorMessage};
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
@@ -247,7 +247,7 @@ impl WireReader {
                 let (drag, exclusion) = parse_draggable_regions(&payload)?;
                 OsrMessage::DraggableRegionsChanged { drag, exclusion }
             }
-            KIND_CURSOR => OsrMessage::Cursor(String::from_utf8(payload).unwrap_or_default()),
+            KIND_CURSOR => OsrMessage::Cursor(parse_cursor(width, height, x, y, payload)?),
             KIND_CLOSE_REQUESTED => OsrMessage::CloseRequested,
             KIND_START_DRAG_REQUESTED => OsrMessage::StartDragRequested,
             KIND_MINIMIZE_REQUESTED => OsrMessage::MinimizeRequested,
@@ -316,6 +316,51 @@ impl WireReader {
         };
         Ok(Some(message))
     }
+}
+
+const CEF_CURSOR_CUSTOM: u32 = 45;
+
+fn parse_cursor(
+    width: u32,
+    height: u32,
+    hotspot_x: i32,
+    hotspot_y: i32,
+    mut payload: Vec<u8>,
+) -> io::Result<PageCursorMessage> {
+    let kind = payload
+        .get(0..4)
+        .map(read_u32)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing cursor type"))?;
+    if kind != CEF_CURSOR_CUSTOM {
+        return Ok(PageCursorMessage::Named(kind));
+    }
+    let size = |value: u32| u16::try_from(value).ok().filter(|value| *value > 0);
+    let hotspot = |value: i32| u16::try_from(value).ok();
+    let (Some(width), Some(height), Some(hotspot_x), Some(hotspot_y)) = (
+        size(width),
+        size(height),
+        hotspot(hotspot_x),
+        hotspot(hotspot_y),
+    ) else {
+        return Ok(PageCursorMessage::Named(kind));
+    };
+    let mut rgba = payload.split_off(4);
+    if rgba.len() != usize::from(width) * usize::from(height) * 4 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "cursor image does not match its size",
+        ));
+    }
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        pixel.swap(0, 2);
+    }
+    Ok(PageCursorMessage::Custom(CursorImage {
+        rgba,
+        width,
+        height,
+        hotspot_x,
+        hotspot_y,
+    }))
 }
 
 fn parse_ime_surrounding(payload: &[u8]) -> io::Result<OsrMessage> {

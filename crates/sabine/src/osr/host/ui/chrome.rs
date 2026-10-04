@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use sabine_platform::WindowRegionRect;
 use winit::{
-    cursor::{Cursor, CursorIcon},
     event_loop::ActiveEventLoop,
     window::{ResizeDirection, Window as WinitWindow},
 };
@@ -79,34 +78,6 @@ impl OsrNativeHost {
         }
         self.hovered_control = next;
         true
-    }
-
-    pub(in crate::osr::host) fn set_cursor(&mut self, cursor: CursorIcon) {
-        if self.cursor == cursor {
-            return;
-        }
-        self.cursor = cursor;
-        if let Some(window) = &self.window {
-            window.set_cursor(Cursor::Icon(cursor));
-        }
-    }
-
-    pub(in crate::osr::host) fn set_native_cursor(&mut self, cursor: CursorIcon) {
-        self.native_cursor_override = true;
-        self.set_cursor(cursor);
-    }
-
-    pub(in crate::osr::host) fn set_content_cursor(&mut self, cursor: CursorIcon) {
-        self.native_cursor_override = false;
-        self.set_cursor(cursor);
-    }
-
-    pub(in crate::osr::host) fn clear_native_cursor(&mut self) {
-        if !self.native_cursor_override {
-            return;
-        }
-        self.native_cursor_override = false;
-        self.set_cursor(CursorIcon::Default);
     }
 
     pub(in crate::osr::host) fn control_at(
