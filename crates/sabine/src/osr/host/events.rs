@@ -169,8 +169,15 @@ impl OsrNativeHost {
                         eprintln!("failed to begin native window drag: {error}");
                     }
                 }
-                OsrHostEvent::Message(_, OsrMessage::FileDragRequested(request)) => {
-                    self.start_file_drag(event_loop, request);
+                OsrHostEvent::Message(
+                    _,
+                    OsrMessage::DragStarted {
+                        content,
+                        operations,
+                    },
+                ) => self.begin_page_drag(content, operations),
+                OsrHostEvent::Message(_, OsrMessage::DragOperation(operation)) => {
+                    self.update_drag_operation(event_loop, operation);
                 }
                 OsrHostEvent::Message(_, OsrMessage::MinimizeRequested) => {
                     if self.config.lifecycle.suspend_on_minimize {

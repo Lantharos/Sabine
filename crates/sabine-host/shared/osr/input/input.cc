@@ -130,7 +130,7 @@ void SabineOsrHandler::HandleControlLine(
     }
     return;
   }
-  if (TryHandleImeControl(host, parts)) {
+  if (TryHandleImeControl(host, parts) || TryHandleDragControl(parts)) {
     return;
   }
   if (parts[0] == "resize" && parts.size() >= 4) {
@@ -166,8 +166,6 @@ void SabineOsrHandler::HandleControlLine(
     const bool up = std::atoi(parts[5].c_str()) != 0;
     const int click_count = std::max(1, std::atoi(parts[6].c_str()));
     host->SendMouseClickEvent(event, button, up, click_count);
-  } else if (parts[0] == "file_drag" && parts.size() >= 2) {
-    EmitPrimaryEvent("window.fileDrag", parts[1]);
   } else if (parts[0] == "mouse_navigation" && parts.size() >= 5) {
     const int x = pointer_x;
     const int y = pointer_y;
@@ -297,8 +295,5 @@ void SabineOsrHandler::HandleControlLine(
     }
     close_requested_ = true;
     host->CloseBrowser(false);
-  } else if (parts[0] == "file_drag_ended" && parts.size() >= 4) {
-    FinishNativeFileDrag(std::atoi(parts[1].c_str()),
-                         std::atoi(parts[2].c_str()), parts[3]);
   }
 }

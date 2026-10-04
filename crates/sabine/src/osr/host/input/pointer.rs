@@ -11,6 +11,7 @@ use crate::osr::host::ui::chrome::{activate_control, resize_direction_at};
 impl OsrNativeHost {
     pub(super) fn pointer_moved(
         &mut self,
+        event_loop: &dyn ActiveEventLoop,
         position: PhysicalPosition<f64>,
         source: PointerSource,
         primary: bool,
@@ -21,13 +22,18 @@ impl OsrNativeHost {
                 self.touch_moved(finger_id, force, x, y);
             }
             PointerSource::TabletTool { kind, data } => self.pen_moved(kind, data, x, y),
-            PointerSource::Mouse | PointerSource::Unknown if primary => self.mouse_moved(x, y),
+            PointerSource::Mouse | PointerSource::Unknown
+                if primary && !self.move_page_drag(event_loop, x, y) =>
+            {
+                self.mouse_moved(x, y)
+            }
             _ => {}
         }
     }
 
     pub(super) fn pointer_left(
         &mut self,
+        event_loop: &dyn ActiveEventLoop,
         position: Option<PhysicalPosition<f64>>,
         kind: PointerKind,
         primary: bool,
@@ -38,7 +44,10 @@ impl OsrNativeHost {
         match kind {
             PointerKind::Touch(finger_id) => self.touch_left(finger_id, x, y),
             PointerKind::TabletTool(kind) => self.pen_left(kind, x, y),
-            PointerKind::Mouse | PointerKind::Unknown if primary => self.mouse_left(x, y),
+            PointerKind::Mouse | PointerKind::Unknown if primary => {
+                self.carry_page_drag_out(event_loop);
+                self.mouse_left(x, y);
+            }
             _ => {}
         }
     }
@@ -169,6 +178,9 @@ impl OsrNativeHost {
             return;
         }
         self.set_mouse_button(button, false);
+        if button == Some(MouseButton::Left) && self.drop_page_drag(self.cursor_x, self.cursor_y) {
+            return;
+        }
         self.forward_mouse_click(button, true, self.active_click_count);
     }
 }

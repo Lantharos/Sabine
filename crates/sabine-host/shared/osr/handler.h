@@ -48,7 +48,7 @@ constexpr uint32_t kMainBatch = 12;
 constexpr uint32_t kPopupBatch = 13;
 constexpr uint32_t kMainSharedBatch = 14;
 constexpr uint32_t kPopupSharedBatch = 15;
-constexpr uint32_t kFileDragRequested = 16;
+constexpr uint32_t kDragStarted = 16;
 constexpr uint32_t kGuestBatch = 18;
 constexpr uint32_t kGuestSharedBatch = 19;
 constexpr uint32_t kGuestHidden = 20;
@@ -67,6 +67,7 @@ constexpr uint32_t kMaximizeRequested = 35;
 constexpr uint32_t kRestoreRequested = 36;
 constexpr uint32_t kFatalError = 37;
 constexpr uint32_t kHostHello = 38;
+constexpr uint32_t kDragOperation = 40;
 constexpr char kClipboardCommandPrefix[] = "sabine.clipboard.";
 
 constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
@@ -244,7 +245,6 @@ class SabineOsrHandler : public CefClient,
   void HandleQueuedControl(const std::string& line,
                            const std::optional<std::string>& body);
   void CompleteQueuedControl(size_t bytes);
-  void FinishNativeFileDrag(int x, int y, const std::string& operation);
   void ApplyHostControl(const std::string& command, const std::string& value);
   void ResolveBridgeResponse(
       const std::string& browser_id,
@@ -298,6 +298,8 @@ class SabineOsrHandler : public CefClient,
   void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
 #endif
 
+  bool TryHandleDragControl(const std::vector<std::string>& parts);
+  void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
   bool ConnectSocket();
   bool QueueControl(std::string line, std::optional<std::string> body);
   void CloseTransport();
@@ -467,6 +469,9 @@ class SabineOsrHandler : public CefClient,
   bool closing_ = false;
   bool close_requested_ = false;
   CefRefPtr<CefBrowser> drag_source_browser_;
+  CefRefPtr<CefDragData> drag_source_data_;
+  cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;
+  cef_drag_operations_mask_t drag_operation_ = DRAG_OPERATION_NONE;
   bool dev_mode_ = false;
 
   IMPLEMENT_REFCOUNTING(SabineOsrHandler);

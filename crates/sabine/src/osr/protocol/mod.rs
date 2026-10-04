@@ -73,7 +73,12 @@ pub(crate) enum OsrMessage {
     ShowRequested,
     HideRequested,
     FocusRequested(Option<String>),
-    FileDragRequested(FileDragRequest),
+    DragStarted {
+        content: DragContent,
+        operations: u32,
+    },
+    /// The drop the page under the pointer would accept.
+    DragOperation(u32),
     MainLoadStarted,
     MainLoadReady,
     FatalError(String),
@@ -111,9 +116,14 @@ pub(crate) struct CursorImage {
     pub hotspot_y: u16,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct FileDragRequest {
-    pub paths: Vec<String>,
+/// Content dragged out of a page or dropped into one.
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub(crate) struct DragContent {
+    pub text: String,
+    pub html: String,
+    pub url: String,
+    pub files: Vec<std::path::PathBuf>,
 }
 
 #[derive(Clone, Debug)]

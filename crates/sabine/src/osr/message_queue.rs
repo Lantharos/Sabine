@@ -244,7 +244,9 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
             (drag.capacity() + exclusion.capacity())
                 * std::mem::size_of::<sabine_platform::WindowRegionRect>()
         }
-        OsrMessage::FileDragRequested(request) => request.paths.iter().map(String::capacity).sum(),
+        OsrMessage::DragStarted { content, .. } => {
+            content.text.capacity() + content.html.capacity() + content.url.capacity()
+        }
         OsrMessage::ImeSurroundingChanged { text, .. } => text.capacity(),
         _ => 0,
     }

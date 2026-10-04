@@ -622,12 +622,13 @@ Native screen-reader integration is not implemented. The off-screen browser's ac
 is not exposed through UI Automation, NSAccessibility, or AT-SPI. Semantic HTML remains useful for
 keyboard navigation, but it does not make Sabine windows accessible to desktop screen readers.
 
-HTML file drags from the primary page are promoted to native OS drags. Incoming URI-list drags,
-including self-drops, are accepted by the native host and emitted to the primary page as
-`window.fileDrag`. Each event carries its phase, absolute file paths, content coordinates, the
-negotiated copy/move/link action, and whether it originated from the same Sabine window. Apps use
-those coordinates to resolve their own semantic drop targets without exposing renderer internals to
-the native host.
+Drag and drop behaves as it does in a browser. A drag the page starts stays inside the window,
+so HTML drag events, draggable lists, and dragging text into inputs work as usual. When the pointer
+leaves the window, the drag continues as a desktop drag carrying the dragged files, links, text,
+and HTML, and the page learns how it ended. Files, links, text, and HTML dragged in from other
+applications arrive as ordinary drops, with the files in `dataTransfer.files`; while they pass over
+the window, the desktop shows whether the element under the pointer accepts them. On Wayland, drags
+from other applications are accepted when they carry files.
 
 CEF's default file chooser remains in place so file inputs use the operating system picker. Browser
 context-menu items are removed; development launches add only an `Inspect element` command, while

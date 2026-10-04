@@ -1,11 +1,9 @@
 use std::io;
 
 use sabine_platform::WindowRegionRect;
-use serde_json::Value;
 
 use super::BATCH_ENTRY_LEN;
 use super::header::{read_i32, read_u32};
-use crate::osr::protocol::FileDragRequest;
 
 pub(super) fn parse_draggable_regions(
     payload: &[u8],
@@ -41,20 +39,6 @@ pub(super) fn parse_draggable_regions(
         }
     }
     Ok((drag, exclusion))
-}
-
-pub(super) fn parse_file_drag_request(payload: &[u8]) -> Option<FileDragRequest> {
-    let value: Value = serde_json::from_slice(payload).ok()?;
-    let paths = value
-        .get("paths")?
-        .as_array()?
-        .iter()
-        .filter_map(|item| item.as_str().map(String::from))
-        .collect::<Vec<_>>();
-    if paths.is_empty() {
-        return None;
-    }
-    Some(FileDragRequest { paths })
 }
 
 pub(super) fn payload_count(payload: &[u8]) -> io::Result<usize> {
