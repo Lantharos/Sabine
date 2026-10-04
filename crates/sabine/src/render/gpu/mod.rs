@@ -131,7 +131,7 @@ impl GpuRenderer {
             alpha_mode,
             wgpu::CompositeAlphaMode::Opaque | wgpu::CompositeAlphaMode::Auto
         );
-        if std::env::var_os("SABINE_TRACE").is_some() {
+        if crate::launch::metrics::trace_enabled() {
             #[cfg(target_os = "windows")]
             let presentation = "DirectComposition";
             #[cfg(not(target_os = "windows"))]
