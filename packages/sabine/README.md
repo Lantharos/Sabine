@@ -15,7 +15,11 @@ bun add github:Lantharos/Sabine#v0.33
 import { invoke, listen, events, appWindow } from "@lantharos/sabine";
 
 const { version } = await invoke("app.version");
-listen("tray.click", () => appWindow.show());
+listen("notes.changed", (note) => console.log(note));
+
+events.trayActivate(({ itemId }) => {
+  if (itemId === null) appWindow.show();
+});
 
 events.guestDownload((download) => {
   console.log(download.filename, download.state);
@@ -52,6 +56,10 @@ controller.abort();
 The default deadline is one minute. Aborting, timing out, or leaving the page releases the pending
 request and ignores later responses. This does not interrupt a Rust handler that is already running;
 handlers remain responsible for bounding their own work. A page can retain at most 128 requests.
+
+`events` has typed listeners for everything Sabine sends: tray, global shortcut and second-launch
+activations, renderer crashes, file drags, and guest lifecycle, navigation, download, shortcut,
+wheel and favicon events.
 
 Bytes travel as they are, without JSON or base64. Send them with a call, and receive them from a
 handler that answers with `BridgeResponse::bytes` or from events sent with `emit_bytes`, as a
@@ -155,14 +163,24 @@ await tab.destroy();
 
 // Guest.create is also available directly:
 const preview = await Guest.create({ html: "<h1>Hi</h1>", bounds: { x: 0, y: 0, width: 320, height: 200 } });
+await preview.navigate({ html: "<h1>Updated</h1>" });
+
+for (const info of await guest.list()) {
+  console.log(info.id, info.url, info.loading);
+}
 ```
+
+`popupPolicy` decides what happens when a guest opens a window: `deny` (the default) emits
+`guest.newWindow` for the page to handle, `allow` lets Chromium open a popup, `navigateSame` loads
+the link in the same guest, and `openGuest` opens another guest in the same partition. Guest pages
+have no bridge access unless created with `allowBridge: true`, and even then cannot manage guests.
 
 ## Activity and popups
 
 ```js
 import { activity, popup } from "@lantharos/sabine";
 
-const busy = await activity.begin({ label: "Indexing" });
+const busy = await activity.begin({ name: "Indexing" });
 try {
   // …
 } finally {
@@ -172,6 +190,10 @@ try {
 await popup.open({ x: 40, y: 80, width: 280, height: 160, html: "<p>Menu</p>" });
 await popup.close();
 ```
+
+An activity keeps the window from hibernating while it runs, unless it is started with
+`preventsHibernation: false`. `activity.list()` returns the running activities and how many of them
+block hibernation. Rust code starts the same activities with `begin_activity`.
 
 ## Opening URLs and documents
 
@@ -213,8 +235,9 @@ These URLs work only inside the app's own pages.
 
 ## Native video
 
-Sabine's Chromium cannot decode H.264, HEVC or AAC. On Linux, `NativeVideo` plays those on a native
-surface beneath the page, with the page's own controls on top. It mirrors the parts of
+Sabine's Chromium cannot decode H.264, HEVC or AAC. `NativeVideo` plays those on a native surface
+beneath the page, with the page's own controls on top, on the platforms listed in the
+[implementation guide](../../docs/implementation-guide.md#native-media). It mirrors the parts of
 `HTMLVideoElement` a custom player uses, so a player can switch to it when a `<video>` cannot play
 its source:
 
@@ -230,8 +253,8 @@ video.addEventListener("error", async () => {
 ```
 
 The video fills `element`, follows its layout, scrolling and rounded corners, and letterboxes to
-its aspect ratio. It shows through the page, so the window must be transparent, and the element and
-everything painted beneath it must be transparent where the video is. When opaque content lies
+its aspect ratio. It shows through the page, so the window must be transparent, and
+`NativeVideo.isSupported()` is false in opaque windows. The element and everything painted beneath it must be transparent where the video is. When opaque content lies
 beneath, such as a dialog over the rest of the app, pass `cutout: container` to clip the video's
 shape out of that container; content inside it can then no longer draw over the video. Call
 `updateRect()` while moving the element with a transform, and `destroy()` when the player goes

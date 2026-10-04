@@ -1,6 +1,6 @@
-/** @typedef {import("./index.d.ts").NativeVideoOptions} NativeVideoOptions */
-/** @typedef {import("./index.d.ts").NativeVideoTrack} NativeVideoTrack */
-/** @typedef {import("./index.d.ts").NativeVideoCue} NativeVideoCue */
+/** @typedef {import("../types/media.js").NativeVideoOptions} NativeVideoOptions */
+/** @typedef {import("../types/media.js").NativeVideoTrack} NativeVideoTrack */
+/** @typedef {import("../types/media.js").NativeVideoCue} NativeVideoCue */
 
 import { LayoutTracker } from "./media-layout.js";
 
