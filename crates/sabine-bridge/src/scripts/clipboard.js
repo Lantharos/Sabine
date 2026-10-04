@@ -1,8 +1,11 @@
-// Connects a page to the desktop clipboard on Linux, where Chromium renders
-// offscreen and cannot reach the compositor's selections itself. The browser
-// host evaluates this file in every frame, calls the result with a private
-// transport and whether the frame shows the app's own pages, and hands the
-// function it returns each reply from the window.
+// Connects a page to the desktop clipboard through the window. On Linux,
+// where Chromium renders offscreen and cannot reach the compositor's
+// selections itself, it carries every copy and paste. Elsewhere Chromium
+// copies and pastes by itself, and the app's own pages gain
+// `window.sabine.clipboard` for any other type. The browser host evaluates
+// this file in every frame, calls the result with a private transport and
+// whether the frame shows the app's own pages, and hands the function it
+// returns each reply from the window.
 
 ((post, trusted) => {
   const { stringify, parse } = JSON;
@@ -64,96 +67,99 @@
     return items;
   };
 
-  const clipboard = navigator.clipboard;
+  const carriesCopyAndPaste = navigator.platform.startsWith("Linux");
+  const clipboard = carriesCopyAndPaste ? navigator.clipboard : null;
   const native = clipboard && {
     read: clipboard.read.bind(clipboard),
     write: clipboard.write.bind(clipboard),
     writeText: clipboard.writeText.bind(clipboard),
   };
 
-  const exportCopy = (event) => {
-    if (trusted) {
-      setTimeout(() => native.read().then(encodeClipboardItems).then((items) => write("clipboard", items)).catch(() => {}));
-      return;
-    }
-    const fallback = selectedItems();
-    let exported = false;
-    const complete = () => {
-      if (exported) return;
-      exported = true;
-      removeEventListener(event.type, complete);
-      const transfer = event.clipboardData;
-      const items = event.defaultPrevented
-        ? transfer.types.filter((type) => type !== "Files").map((type) => ({ type, text: transfer.getData(type) }))
-        : fallback;
-      if (items.length) write("clipboard", items).catch(() => {});
+  if (carriesCopyAndPaste) {
+    const exportCopy = (event) => {
+      if (trusted) {
+        setTimeout(() => native.read().then(encodeClipboardItems).then((items) => write("clipboard", items)).catch(() => {}));
+        return;
+      }
+      const fallback = selectedItems();
+      let exported = false;
+      const complete = () => {
+        if (exported) return;
+        exported = true;
+        removeEventListener(event.type, complete);
+        const transfer = event.clipboardData;
+        const items = event.defaultPrevented
+          ? transfer.types.filter((type) => type !== "Files").map((type) => ({ type, text: transfer.getData(type) }))
+          : fallback;
+        if (items.length) write("clipboard", items).catch(() => {});
+      };
+      addEventListener(event.type, complete);
+      setTimeout(complete);
     };
-    addEventListener(event.type, complete);
-    setTimeout(complete);
-  };
-  for (const type of ["copy", "cut"]) {
-    addEventListener(type, (event) => event.isTrusted && exportCopy(event), true);
+    for (const type of ["copy", "cut"]) {
+      addEventListener(type, (event) => event.isTrusted && exportCopy(event), true);
+    }
+
+    const exportPrimary = () => {
+      const text = selectedText();
+      if (text) write("primary", [{ type: "text/plain", text }]).catch(() => {});
+    };
+    const editable = () => {
+      const control = textControl();
+      return control ? !control.readOnly && !control.disabled : Boolean(document.activeElement?.isContentEditable);
+    };
+    const placeCaret = (event) => {
+      const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+      const control = textControl();
+      if (!position) return;
+      if (control && position.offsetNode === control) control.setSelectionRange(position.offset, position.offset);
+      else if (!control) getSelection()?.collapse(position.offsetNode, position.offset);
+    };
+    let middlePaste = false;
+    let plainPaste = false;
+    addEventListener("keydown", (event) => {
+      if (event.isTrusted) plainPaste = event.code === "KeyV" && event.shiftKey && (event.ctrlKey || event.metaKey);
+    }, true);
+    addEventListener("keyup", (event) => {
+      if (event.isTrusted && (event.shiftKey || event.key === "Shift" || ((event.ctrlKey || event.metaKey) && event.code === "KeyA"))) {
+        setTimeout(exportPrimary);
+      }
+    }, true);
+
+    const deliverPaste = (target, items, plain) => {
+      const transfer = new DataTransfer();
+      for (const item of items) {
+        if (plain && item.type !== "text/plain") continue;
+        if (item.text !== undefined) transfer.setData(item.type, item.text);
+        else transfer.items.add(new File([decode(item)], `clipboard.${item.type.split("/")[1]}`, { type: item.type }));
+      }
+      const paste = new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true, composed: true });
+      if (!target.dispatchEvent(paste)) return;
+      const html = transfer.getData("text/html");
+      const text = transfer.getData("text/plain");
+      if (html && document.activeElement?.isContentEditable) document.execCommand("insertHTML", false, html);
+      else if (text) document.execCommand("insertText", false, text);
+    };
+    addEventListener("paste", (event) => {
+      if (!event.isTrusted) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (middlePaste) return;
+      const { target } = event;
+      const plain = plainPaste;
+      read("clipboard").then((items) => deliverPaste(target, items, plain), () => {});
+    }, true);
+    addEventListener("mouseup", (event) => {
+      if (!event.isTrusted) return;
+      if (event.button === 0) setTimeout(exportPrimary);
+      if (event.button !== 1 || !editable()) return;
+      middlePaste = true;
+      setTimeout(() => { middlePaste = false; });
+      placeCaret(event);
+      const target = document.activeElement;
+      read("primary", ["text/plain"]).then((items) => deliverPaste(target, items, true), () => {});
+    }, true);
   }
-
-  const exportPrimary = () => {
-    const text = selectedText();
-    if (text) write("primary", [{ type: "text/plain", text }]).catch(() => {});
-  };
-  const editable = () => {
-    const control = textControl();
-    return control ? !control.readOnly && !control.disabled : Boolean(document.activeElement?.isContentEditable);
-  };
-  const placeCaret = (event) => {
-    const position = document.caretPositionFromPoint(event.clientX, event.clientY);
-    const control = textControl();
-    if (!position) return;
-    if (control && position.offsetNode === control) control.setSelectionRange(position.offset, position.offset);
-    else if (!control) getSelection()?.collapse(position.offsetNode, position.offset);
-  };
-  let middlePaste = false;
-  let plainPaste = false;
-  addEventListener("keydown", (event) => {
-    if (event.isTrusted) plainPaste = event.code === "KeyV" && event.shiftKey && (event.ctrlKey || event.metaKey);
-  }, true);
-  addEventListener("keyup", (event) => {
-    if (event.isTrusted && (event.shiftKey || event.key === "Shift" || ((event.ctrlKey || event.metaKey) && event.code === "KeyA"))) {
-      setTimeout(exportPrimary);
-    }
-  }, true);
-
-  const deliverPaste = (target, items, plain) => {
-    const transfer = new DataTransfer();
-    for (const item of items) {
-      if (plain && item.type !== "text/plain") continue;
-      if (item.text !== undefined) transfer.setData(item.type, item.text);
-      else transfer.items.add(new File([decode(item)], `clipboard.${item.type.split("/")[1]}`, { type: item.type }));
-    }
-    const paste = new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true, composed: true });
-    if (!target.dispatchEvent(paste)) return;
-    const html = transfer.getData("text/html");
-    const text = transfer.getData("text/plain");
-    if (html && document.activeElement?.isContentEditable) document.execCommand("insertHTML", false, html);
-    else if (text) document.execCommand("insertText", false, text);
-  };
-  addEventListener("paste", (event) => {
-    if (!event.isTrusted) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (middlePaste) return;
-    const { target } = event;
-    const plain = plainPaste;
-    read("clipboard").then((items) => deliverPaste(target, items, plain), () => {});
-  }, true);
-  addEventListener("mouseup", (event) => {
-    if (!event.isTrusted) return;
-    if (event.button === 0) setTimeout(exportPrimary);
-    if (event.button !== 1 || !editable()) return;
-    middlePaste = true;
-    setTimeout(() => { middlePaste = false; });
-    placeCaret(event);
-    const target = document.activeElement;
-    read("primary", ["text/plain"]).then((items) => deliverPaste(target, items, true), () => {});
-  }, true);
 
   if (clipboard) {
     Object.defineProperties(clipboard, {

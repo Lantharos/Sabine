@@ -1,6 +1,7 @@
-#[cfg(target_os = "linux")]
 mod clipboard;
 mod media;
+#[cfg(target_os = "linux")]
+mod paste_gesture;
 
 use sabine_bridge::{CONTROLS_OVERLAY_COMMAND, INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
 
@@ -65,7 +66,6 @@ impl OsrNativeHost {
             command if command.starts_with(sabine_bridge::media::COMMAND_PREFIX) => {
                 self.answer_media(&request)
             }
-            #[cfg(target_os = "linux")]
             command if command.starts_with(sabine_bridge::clipboard::COMMAND_PREFIX) => {
                 self.answer_clipboard(&request)
             }

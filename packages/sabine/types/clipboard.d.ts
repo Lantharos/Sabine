@@ -23,7 +23,7 @@ export interface SabineClipboardApi {
 }
 
 /**
- * The desktop clipboard with any MIME type, and the primary selection on
- * Linux. Elsewhere it uses the browser clipboard.
+ * The desktop clipboard with any MIME type on every desktop, and the primary
+ * selection on Linux.
  */
 export declare const clipboard: SabineClipboardApi;

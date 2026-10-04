@@ -922,8 +922,15 @@ The browser host evaluates a small script in every frame. It routes trusted `pas
 middle-click pastes and `navigator.clipboard` through the window host, and exports copies, cuts and
 selected text. Frames showing the app's own documents may read the clipboard at any time; other
 frames, such as guests, only while the user is pasting with Ctrl+V, Shift+Insert or a middle click.
-Chromium's clipboard permission is granted only to the app's own documents. Windows and macOS keep
-Chromium's own clipboard.
+Chromium's clipboard permission is granted only to the app's own documents.
+
+Windows and macOS keep Chromium's own copy and paste, and the window host adds every other type to
+`window.sabine.clipboard` for the app's pages, reading and writing on a thread of its own. Windows
+maps `text/plain` to Unicode text, `text/html` to the HTML clipboard format, `image/png` to PNG
+along with a bitmap for apps that do not read PNG (and reads a bitmap when no PNG is offered), and
+`text/uri-list` to the shell's file list; any other MIME type is a clipboard format registered
+under its name. macOS maps the common types to their pasteboard types, file URIs to one pasteboard
+item per file, and keeps any other MIME type under its own name.
 
 ## Bundles and installs
 
