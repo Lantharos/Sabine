@@ -23,10 +23,8 @@ use windows::{
     core::PCWSTR,
 };
 
-use super::{
-    EventQueue,
-    helpers::{sanitize_id, set_registry_string, wide_null},
-};
+use super::registry::{set_registry_string, wide_null};
+use crate::desktop::{EventQueue, sanitize_id};
 
 const INSTANCE_IO_TIMEOUT: Duration = Duration::from_secs(2);
 const INSTANCE_CONNECT_TIMEOUT: Duration = Duration::from_millis(250);
@@ -37,7 +35,7 @@ const MAX_ENDPOINT_BYTES: u32 = 4096;
 const INSTANCE_WORKERS: usize = 4;
 const MAX_PENDING_CONNECTIONS: usize = 32;
 
-pub(super) struct SingleInstanceGuard {
+pub(in crate::desktop) struct SingleInstanceGuard {
     mutex: HANDLE,
     endpoint_key: String,
     running: Arc<AtomicBool>,
@@ -46,7 +44,7 @@ pub(super) struct SingleInstanceGuard {
 }
 
 impl SingleInstanceGuard {
-    pub(super) fn acquire(
+    pub(in crate::desktop) fn acquire(
         instance_id: Option<&str>,
         policy: SingleInstancePolicy,
         events: EventQueue,

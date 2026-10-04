@@ -7,7 +7,7 @@ use std::{
 use sabine_runtime::{RuntimeInfo, resolve_runtime};
 
 use super::{SabineWindow, SabineWindowConfig};
-use crate::desktop::apply_desktop_services;
+use crate::desktop::{DesktopServiceState, TRAY_UPDATE_COMMAND, apply_desktop_services};
 use crate::error::{SabineError, SabineResult};
 use crate::host::SabineProcess;
 use crate::launch::metrics::LaunchMetrics;
@@ -65,6 +65,16 @@ impl SabineWindow {
             })?,
         );
         metrics.mark("desktop_services.ready");
+        if let Some(tray) = desktop_services
+            .as_ref()
+            .and_then(DesktopServiceState::tray)
+        {
+            self = self.bridge_handler(TRAY_UPDATE_COMMAND, move |command| {
+                tray.update_from_page(command.params)
+                    .map(|()| sabine_bridge::BridgeResponse::json(serde_json::Value::Null))
+                    .map_err(sabine_bridge::BridgeError::new)
+            });
+        }
         let open_urls = self.config.open_urls.clone();
         open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),

@@ -4,24 +4,22 @@ pub(super) fn desktop_value(value: &str) -> String {
     value.replace(['\n', '\r'], " ")
 }
 
-pub(super) fn sanitize_desktop_id(value: &str) -> String {
-    sanitize_with(value, |ch| {
-        ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_')
-    })
-}
-
-pub(super) fn sanitize_with(value: &str, valid: impl Fn(char) -> bool) -> String {
-    let sanitized = value
-        .chars()
-        .map(|ch| if valid(ch) { ch } else { '_' })
-        .collect::<String>()
-        .trim_matches('_')
-        .to_string();
-    if sanitized.is_empty() {
-        "app".to_string()
-    } else {
-        sanitized
-    }
+/// The directories desktops search for application entries, most specific
+/// first.
+pub(super) fn application_dirs() -> io::Result<Vec<PathBuf>> {
+    let system = env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string());
+    Ok(std::iter::once(data_home()?)
+        .chain(
+            system
+                .split(':')
+                .filter(|dir| !dir.is_empty())
+                .map(PathBuf::from),
+        )
+        .map(|dir| dir.join("applications"))
+        .collect())
 }
 
 pub(super) fn config_home() -> io::Result<PathBuf> {

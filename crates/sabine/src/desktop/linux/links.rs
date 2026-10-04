@@ -3,6 +3,11 @@ use std::{collections::BTreeSet, fs, io, path::PathBuf};
 use sabine_platform::{AutostartEntry, DeepLinkRegistration};
 
 use super::util::*;
+use crate::desktop::sanitize_id;
+
+/// Marks the hidden entry Sabine writes so the GlobalShortcuts portal can
+/// name an app that has no installed entry yet.
+const SHORTCUT_HOST_KEY: &str = "X-Sabine-Shortcut-Host=true";
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> io::Result<()> {
     let path = sabine_service::app_autostart_path(&entry.id)?;
@@ -14,6 +19,39 @@ pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> io::Result<()> {
         }
     }
     write_file(path, &desktop_entry(&entry.id, &entry.name, &entry.command))
+}
+
+/// The portal finds an app through the desktop entry named after its id. An
+/// installed entry is never touched; without one, a hidden entry stands in
+/// until the app is installed.
+pub(super) fn ensure_shortcut_host_entry(
+    app_id: &str,
+    name: &str,
+    command: &str,
+) -> io::Result<()> {
+    let file_name = format!("{}.desktop", sanitize_id(app_id));
+    let own = data_home()?.join("applications").join(&file_name);
+    let installed = application_dirs()?
+        .into_iter()
+        .map(|dir| dir.join(&file_name))
+        .any(|path| path.is_file() && !is_shortcut_host_entry(&path));
+    if !installed {
+        return write_file(
+            own,
+            &format!(
+                "{}{SHORTCUT_HOST_KEY}\n",
+                desktop_entry(app_id, name, command)
+            ),
+        );
+    }
+    if is_shortcut_host_entry(&own) {
+        fs::remove_file(own)?;
+    }
+    Ok(())
+}
+
+fn is_shortcut_host_entry(path: &std::path::Path) -> bool {
+    fs::read_to_string(path).is_ok_and(|entry| entry.lines().any(|line| line == SHORTCUT_HOST_KEY))
 }
 
 pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> io::Result<()> {

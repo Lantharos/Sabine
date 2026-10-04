@@ -19,7 +19,7 @@ use std::{
 
 use sabine_platform::{PlatformEvent, SingleInstanceActivation, SingleInstancePolicy};
 
-use super::{EventQueue, helpers::sanitize_id};
+use super::{EventQueue, sanitize_id};
 
 const INSTANCE_IO_TIMEOUT: Duration = Duration::from_secs(2);
 const INSTANCE_STARTUP_TIMEOUT: Duration = Duration::from_millis(750);
@@ -164,12 +164,13 @@ fn activation_from_json(
 }
 
 fn send_single_instance_activation(socket_path: &Path) -> io::Result<()> {
-    let body = serde_json::to_vec(&serde_json::json!({
+    let activation = serde_json::json!({
         "arguments": env::args().collect::<Vec<_>>(),
         "cwd": env::current_dir().ok().map(|path| path.display().to_string()),
-        "activationToken": startup_activation_token(),
-    }))
-    .map_err(io::Error::other)?;
+    });
+    #[cfg(target_os = "linux")]
+    let activation = with_startup_activation_token(activation);
+    let body = serde_json::to_vec(&activation).map_err(io::Error::other)?;
     if body.len() as u64 > MAX_ACTIVATION_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -195,22 +196,36 @@ fn notify_existing_instance(socket_path: &Path) -> io::Result<()> {
     }
 }
 
-fn startup_activation_token() -> Option<String> {
-    env::var("XDG_ACTIVATION_TOKEN")
+/// Passes on the token the launcher handed this process, which the running
+/// instance needs to raise its window on Wayland.
+#[cfg(target_os = "linux")]
+fn with_startup_activation_token(mut activation: serde_json::Value) -> serde_json::Value {
+    activation["activationToken"] = env::var("XDG_ACTIVATION_TOKEN")
         .or_else(|_| env::var("DESKTOP_STARTUP_ID"))
         .ok()
         .map(|token| token.trim().to_string())
         .filter(|token| !token.is_empty())
+        .into();
+    activation
+}
+
+#[cfg(target_os = "linux")]
+fn runtime_directory() -> Result<PathBuf, String> {
+    Ok(env::var_os("XDG_RUNTIME_DIR")
+        .map(|path| PathBuf::from(path).join("sabine"))
+        .unwrap_or_else(|| env::temp_dir().join(format!("sabine-{}", current_uid()))))
+}
+
+#[cfg(target_os = "macos")]
+fn runtime_directory() -> Result<PathBuf, String> {
+    Ok(super::platform::home_dir()?
+        .join("Library")
+        .join("Caches")
+        .join("sabine"))
 }
 
 fn single_instance_socket_path(instance_id: Option<&str>) -> Result<PathBuf, String> {
-    let runtime = match env::var_os("XDG_RUNTIME_DIR") {
-        Some(path) => PathBuf::from(path).join("sabine"),
-        None => super::helpers::home_dir()?
-            .join("Library")
-            .join("Caches")
-            .join("sabine"),
-    };
+    let runtime = runtime_directory()?;
     let id = instance_id
         .map(str::trim)
         .filter(|id| !id.is_empty())

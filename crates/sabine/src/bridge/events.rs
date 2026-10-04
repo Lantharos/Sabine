@@ -22,6 +22,7 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
                 "trayId": activation.tray_id,
                 "itemId": activation.item_id,
                 "action": activation.action,
+                "checked": activation.checked,
             }),
         ),
         PlatformEvent::GlobalShortcut(activation) => (
@@ -30,6 +31,14 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
                 "id": activation.id,
                 "action": activation.action,
                 "activationToken": activation.activation_token,
+            }),
+        ),
+        PlatformEvent::GlobalShortcutFailed(failure) => (
+            "globalShortcut.failed",
+            serde_json::json!({
+                "id": failure.id,
+                "action": failure.action,
+                "message": failure.message,
             }),
         ),
         PlatformEvent::SingleInstance(activation) => (

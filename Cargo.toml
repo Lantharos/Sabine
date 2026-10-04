@@ -40,7 +40,7 @@ sabine-host = { path = "crates/sabine-host", version = "0.33.0" }
 sabine = { path = "crates/sabine", version = "0.33.0" }
 sabine-service = { path = "crates/sabine-service", version = "0.33.0" }
 
-ashpd = { version = "0.13.13", features = ["global_shortcuts"] }
+ashpd = { version = "0.13.13", default-features = false, features = ["async-io", "global_shortcuts"] }
 bzip2 = "0.6.1"
 flate2 = "1.1.10"
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2", "deflate64", "bzip2", "lzma", "xz", "zstd"] }
@@ -53,12 +53,12 @@ dunce = "1.0.5"
 fontconfig = "0.11.0"
 futures-util = "0.3.34"
 getrandom = "0.4.3"
+global-hotkey = "0.8.0"
 glyphon = "0.12.0"
 glow = "0.18.0"
 icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
 khronos-egl = { version = "6.0.0", features = ["dynamic"] }
-ksni = { version = "0.3.6", features = ["blocking"] }
 libc = "0.2.189"
 libloading = "0.9.0"
 resvg = "0.48.1"
@@ -90,6 +90,7 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros"] }
 toml = "1.1.6"
+tray-icon = { version = "0.26.0", default-features = false }
 toml_edit = "0.25.15"
 ureq = "3.4.2"
 base64 = "0.23.1"
