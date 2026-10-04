@@ -157,29 +157,31 @@ mod platform {
         install_signal_cleanup();
         command.process_group(0);
         #[cfg(target_os = "linux")]
-        {
-            use std::io;
-            if !die_with_parent {
-                return;
-            }
-            // DIE if the parent process exits unexpectedly so OSR hosts do not
-            // outlive a crashed Sabine app. CEF itself is detachable so closing
-            // one window does not SIGTERM the shared browser process.
-            unsafe {
-                command.pre_exec(|| {
-                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
-                        return Err(io::Error::last_os_error());
-                    }
-                    if libc::getppid() == 1 {
-                        libc::raise(libc::SIGTERM);
-                    }
-                    Ok(())
-                });
-            }
+        if die_with_parent {
+            terminate_with_parent(command);
         }
         #[cfg(not(target_os = "linux"))]
         {
             let _ = die_with_parent;
+        }
+    }
+
+    /// Window hosts must not outlive a crashed app. The shared browser process
+    /// is started without this, so closing one window leaves it to the others.
+    #[cfg(target_os = "linux")]
+    fn terminate_with_parent(command: &mut Command) {
+        use std::{io, os::unix::process::CommandExt};
+
+        unsafe {
+            command.pre_exec(|| {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if libc::getppid() == 1 {
+                    libc::raise(libc::SIGTERM);
+                }
+                Ok(())
+            });
         }
     }
 
