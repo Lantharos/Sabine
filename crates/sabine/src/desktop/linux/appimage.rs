@@ -17,7 +17,7 @@ pub(crate) fn native_host_program(id: &str, executable: PathBuf) -> io::Result<P
     else {
         return Ok(executable);
     };
-    let directory = sabine_service::service_data_dir().join("native-messaging");
+    let directory = sabine_runtime::sabine_data_dir().join("native-messaging");
     fs::create_dir_all(&directory)?;
     let launcher = directory.join(id);
     fs::write(&launcher, launcher_script(&image.file, &program)?)?;

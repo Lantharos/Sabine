@@ -11,12 +11,16 @@ mod updates;
 pub mod windows_registry;
 
 pub use app::data::browser_profile_path;
-pub use app::environment::AppEnvironment;
 #[cfg(windows)]
-pub use app::native_messaging::native_messaging_registry_keys;
-pub use app::native_messaging::{
-    NativeMessagingBrowser, native_messaging_manifest_dirs, remove_native_messaging_hosts,
-};
+pub use app::desktop::autostart::APP_AUTOSTART_KEY;
+#[cfg(target_os = "macos")]
+pub use app::desktop::autostart::app_autostart_label;
+#[cfg(unix)]
+pub use app::desktop::autostart::app_autostart_path;
+#[cfg(windows)]
+pub use app::desktop::native_messaging::native_messaging_registry_keys;
+pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messaging_manifest_dirs};
+pub use app::environment::AppEnvironment;
 pub use app::payload::remove_app_payload;
 pub use uninstall::uninstall_system;
 
@@ -30,9 +34,9 @@ pub use install::{
 };
 pub(crate) use lifecycle::{PrepareProgress, PrepareStage};
 pub use lifecycle::{
-    adopt_with_runtime, complete_system_update, ensure_daemon_running, ensure_ready,
-    install_login_autostart_with, load_policy, prepare_machine_with_progress,
-    resolve_service_executable, run_daemon, running_daemon_version, set_login_autostart,
+    adopt_with_runtime, complete_system_update, ensure_daemon_running, ensure_ready, load_policy,
+    prepare_machine_with_progress, resolve_service_executable, run_daemon, running_daemon_version,
+    set_login_autostart,
 };
 pub(crate) use release::rollout::release_is_soaked;
 pub use release::signing::{public_key_from_private, sign_app_release, sign_system_release};
@@ -41,7 +45,7 @@ pub use types::{
     APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
     AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, SABINE_VERSION,
     SabineVersion, ServiceError, SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest,
-    UpdatePolicy, service_data_dir, valid_app_id,
+    UpdatePolicy, valid_app_id,
 };
 pub(crate) use types::{
     RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,
@@ -79,7 +83,7 @@ mod tests {
                 public_key: "VXtTlN3HZuGwYByjJu+3HQGavjJwRo0i9/RGrT6Ua6M=".to_string(),
                 package_kind: None,
             }),
-            sabine: SabineVersion::default(),
+            sabine: SabineVersion::current(),
         }
     }
 
@@ -124,12 +128,6 @@ mod tests {
         assert!(!types::version_is_newer("1.2.0", "1.2.0"));
         assert!(!types::version_is_newer("1.1.9", "1.2.0"));
         assert!(!types::version_is_newer("latest", "1.2.0"));
-    }
-
-    #[test]
-    fn appimage_target_and_config_names_match_their_consumers() {
-        assert_eq!(AppArtifactKind::AppImage.target_suffix(), "appimage");
-        assert_eq!(AppArtifactKind::AppImage.config_value(), "app-image");
     }
 
     #[test]

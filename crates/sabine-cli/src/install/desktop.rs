@@ -1,28 +1,36 @@
 use std::path::Path;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::process::Stdio;
 
-#[cfg(target_os = "linux")]
-use crate::commands::command_exists;
 use crate::install::source::SourceApp;
 
 pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
-    let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
     #[cfg(target_os = "linux")]
     {
-        let directory = crate::install::source::data_home()?.join("applications");
+        let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
+        let data = crate::install::source::data_home()?;
+        let directory = data.join("applications");
         std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         std::fs::write(
             directory.join(format!("{}.desktop", app.id)),
             entry(app, executable, icon.as_deref()),
         )
         .map_err(|error| error.to_string())?;
+        if let Some(package) = crate::desktop::mime_package::mime_package(&app.associations) {
+            let packages = data.join("mime/packages");
+            std::fs::create_dir_all(&packages).map_err(|error| error.to_string())?;
+            std::fs::write(packages.join(format!("{}.xml", app.id)), package)
+                .map_err(|error| error.to_string())?;
+            refresh_mime_database(&data.join("mime"));
+        }
         refresh_database(&directory);
     }
     #[cfg(target_os = "windows")]
     {
-        register_windows_schemes(app, executable)?;
+        let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
+        super::handlers::windows::register(app, executable)?;
         if app.listing.listed {
             install_windows_shortcut(app, executable, icon.as_deref())?;
         } else {
@@ -30,7 +38,7 @@ pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
         }
     }
     #[cfg(target_os = "macos")]
-    install_macos_app(app, executable, icon.as_deref())?;
+    install_macos_app(app, executable)?;
     Ok(())
 }
 
@@ -86,8 +94,8 @@ pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> Str
         id: &app.id,
         name: &app.name,
         exec: &wrapper.to_string_lossy(),
-        icon: Some(desktop_icon.unwrap_or(&app.id)),
-        mime_types: &app.mime_types,
+        icon: desktop_icon,
+        mime_types: &app.associations.mime_types,
         listing: &app.listing,
     }
     .render()
@@ -95,11 +103,21 @@ pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> Str
 
 #[cfg(target_os = "linux")]
 pub fn refresh_database(applications_dir: &Path) {
-    if !command_exists("update-desktop-database") {
+    refresh("update-desktop-database", applications_dir);
+}
+
+#[cfg(target_os = "linux")]
+pub fn refresh_mime_database(mime_dir: &Path) {
+    refresh("update-mime-database", mime_dir);
+}
+
+#[cfg(target_os = "linux")]
+fn refresh(tool: &str, directory: &Path) {
+    if sabine_runtime::find_program(tool).is_none() {
         return;
     }
-    let _ = Command::new("update-desktop-database")
-        .arg(applications_dir)
+    let _ = Command::new(tool)
+        .arg(directory)
         .stdin(Stdio::null())
         .status();
 }
@@ -107,48 +125,37 @@ pub fn refresh_database(applications_dir: &Path) {
 pub fn install_autostart(
     app: &SourceApp,
     wrapper: &Path,
-    _desktop_icon: Option<&str>,
+    desktop_icon: Option<&str>,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let directory = crate::install::source::autostart_dir()?;
-        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        std::fs::write(
-            directory.join(format!("{}.desktop", app.id)),
-            entry(app, wrapper, _desktop_icon),
-        )
-        .map_err(|error| error.to_string())
+        let path =
+            sabine_service::app_autostart_path(&app.id).map_err(|error| error.to_string())?;
+        std::fs::create_dir_all(path.parent().expect("the autostart folder has a parent"))
+            .map_err(|error| error.to_string())?;
+        std::fs::write(path, entry(app, wrapper, desktop_icon)).map_err(|error| error.to_string())
     }
     #[cfg(target_os = "windows")]
     {
-        let status = Command::new("reg")
-            .args([
-                "add",
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                "/v",
-                &app.id,
-                "/t",
-                "REG_SZ",
-                "/d",
-                &format!("\"{}\"", wrapper.display()),
-                "/f",
-            ])
-            .status()
-            .map_err(|error| error.to_string())?;
-        status
-            .success()
-            .then_some(())
-            .ok_or_else(|| "failed to register Windows autostart entry".to_string())
+        let _ = desktop_icon;
+        sabine_service::windows_registry::set_current_user_value(
+            sabine_service::APP_AUTOSTART_KEY,
+            &app.id,
+            &format!("\"{}\"", wrapper.display()),
+        )
+        .map_err(|error| error.to_string())
     }
     #[cfg(target_os = "macos")]
     {
-        let home = std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_string())?;
-        let directory = Path::new(&home).join("Library/LaunchAgents");
-        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        let label = xml(&app.id);
+        let _ = desktop_icon;
+        let path =
+            sabine_service::app_autostart_path(&app.id).map_err(|error| error.to_string())?;
+        std::fs::create_dir_all(path.parent().expect("LaunchAgents has a parent"))
+            .map_err(|error| error.to_string())?;
+        let label = xml(&sabine_service::app_autostart_label(&app.id));
         let executable = xml(&wrapper.display().to_string());
         std::fs::write(
-            directory.join(format!("{}.plist", app.id)),
+            path,
             format!(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{label}</string><key>ProgramArguments</key><array><string>{executable}</string></array><key>RunAtLoad</key><true/></dict></plist>\n"
             ),
@@ -161,11 +168,11 @@ pub fn install_autostart(
 pub fn install_windows_shortcut(
     app: &SourceApp,
     wrapper: &Path,
-    _desktop_icon: Option<&str>,
+    icon: Option<&str>,
 ) -> Result<(), String> {
     let name = powershell_string(&app.id);
     let target = powershell_string(&wrapper.display().to_string());
-    let icon = _desktop_icon
+    let icon = icon
         .map(|icon| format!("$shortcut.IconLocation='{}';", powershell_string(icon)))
         .unwrap_or_default();
     let description = app
@@ -177,7 +184,7 @@ pub fn install_windows_shortcut(
     let script = format!(
         "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}{description}$shortcut.Save()"
     );
-    let status = Command::new("powershell")
+    let status = std::process::Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .status()
         .map_err(|error| error.to_string())?;
@@ -188,11 +195,7 @@ pub fn install_windows_shortcut(
 }
 
 #[cfg(target_os = "macos")]
-pub fn install_macos_app(
-    app: &SourceApp,
-    wrapper: &Path,
-    _desktop_icon: Option<&str>,
-) -> Result<(), String> {
+pub fn install_macos_app(app: &SourceApp, wrapper: &Path) -> Result<(), String> {
     let home = std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_string())?;
     let root = Path::new(&home)
         .join("Applications")
@@ -208,7 +211,7 @@ pub fn install_macos_app(
             &app.version,
             "launch",
             app.icon.is_some(),
-            &app.mime_types,
+            &app.associations,
             &app.listing,
         )?,
     )
@@ -245,36 +248,6 @@ fn remove_windows_shortcut(id: &str) -> Result<(), String> {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
         _ => Ok(()),
     }
-}
-
-#[cfg(target_os = "windows")]
-fn register_windows_schemes(app: &SourceApp, executable: &Path) -> Result<(), String> {
-    let command = format!("\"{}\" \"%1\"", executable.display());
-    for scheme in crate::desktop::types::schemes(&app.mime_types) {
-        let key = format!(r"HKCU\Software\Classes\{scheme}");
-        set_registry_string(&key, None, &format!("URL:{scheme}"))?;
-        set_registry_string(&key, Some("URL Protocol"), "")?;
-        set_registry_string(&format!(r"{key}\shell\open\command"), None, &command)?;
-    }
-    Ok(())
-}
-
-#[cfg(target_os = "windows")]
-fn set_registry_string(key: &str, name: Option<&str>, value: &str) -> Result<(), String> {
-    let mut command = Command::new("reg");
-    command.args(["add", key]);
-    match name {
-        Some(name) => command.args(["/v", name]),
-        None => command.arg("/ve"),
-    };
-    let status = command
-        .args(["/t", "REG_SZ", "/d", value, "/f"])
-        .status()
-        .map_err(|error| error.to_string())?;
-    status
-        .success()
-        .then_some(())
-        .ok_or_else(|| format!("failed to register {key}"))
 }
 
 #[cfg(target_os = "windows")]

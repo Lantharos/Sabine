@@ -3,11 +3,10 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 use crate::app::registry::replace_file;
-use crate::types::{AppArtifact, AppArtifactKind, PendingAppUpdate, ServiceError, ServiceResult};
+use crate::types::{AppArtifact, AppArtifactKind, ServiceError, ServiceResult};
 
 pub(super) fn install_archive(
     root: &Path,
@@ -124,164 +123,6 @@ pub(super) fn verify_sha256(path: &Path, expected: &str) -> ServiceResult<()> {
             "artifact SHA-256 mismatch".to_string(),
         ))
     }
-}
-
-pub(super) fn run_package_installer(
-    update: &PendingAppUpdate,
-    install_target: Option<&Path>,
-) -> ServiceResult<()> {
-    let mut command = match update.kind {
-        AppArtifactKind::Deb => {
-            elevated_command("apt-get", &["install", "--yes"], &update.artifact)?
-        }
-        AppArtifactKind::Rpm => {
-            if command_exists("dnf") {
-                elevated_command("dnf", &["install", "--assumeyes"], &update.artifact)?
-            } else {
-                elevated_command("rpm", &["-U"], &update.artifact)?
-            }
-        }
-        AppArtifactKind::Msi => {
-            let mut command = Command::new("msiexec");
-            command
-                .arg("/i")
-                .arg(&update.artifact)
-                .args(["/passive", "/norestart"]);
-            command
-        }
-        AppArtifactKind::Exe => Command::new(&update.artifact),
-        AppArtifactKind::Dmg => return install_dmg(update, install_target),
-        AppArtifactKind::AppImage => return install_appimage(update, install_target),
-        AppArtifactKind::Archive => {
-            return Err(ServiceError::Update(
-                "archive updates do not use a package installer".to_string(),
-            ));
-        }
-    };
-    let status = command
-        .stdin(Stdio::null())
-        .status()
-        .map_err(|error| ServiceError::Update(format!("failed to start installer: {error}")))?;
-    let success = status.success()
-        || (matches!(update.kind, AppArtifactKind::Msi)
-            && status.code().is_some_and(|code| code == 3010));
-    success
-        .then_some(())
-        .ok_or_else(|| ServiceError::Update(format!("installer exited with {status}")))
-}
-
-pub(super) fn install_appimage(
-    update: &PendingAppUpdate,
-    target: Option<&Path>,
-) -> ServiceResult<()> {
-    if !cfg!(target_os = "linux") {
-        return Err(ServiceError::Update(
-            "AppImage updates are only supported on Linux".to_string(),
-        ));
-    }
-    let target = target.ok_or_else(|| {
-        ServiceError::Update("AppImage update is missing its installation path".to_string())
-    })?;
-    let temporary = target.with_extension("sabine-update");
-    std::fs::copy(&update.artifact, &temporary)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = std::fs::metadata(&temporary)?.permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&temporary, permissions)?;
-    }
-    replace_file(&temporary, target)?;
-    Ok(())
-}
-
-pub(super) fn install_dmg(update: &PendingAppUpdate, target: Option<&Path>) -> ServiceResult<()> {
-    if !cfg!(target_os = "macos") {
-        return Err(ServiceError::Update(
-            "DMG updates are only supported on macOS".to_string(),
-        ));
-    }
-    let executable = target.ok_or_else(|| {
-        ServiceError::Update("DMG update is missing its application path".to_string())
-    })?;
-    let app = executable
-        .ancestors()
-        .find(|path| path.extension().is_some_and(|extension| extension == "app"))
-        .ok_or_else(|| ServiceError::Update("could not locate installed macOS app".to_string()))?;
-    let mount = update.artifact.with_extension("mount");
-    if mount.exists() {
-        let _ = std::fs::remove_dir_all(&mount);
-    }
-    std::fs::create_dir_all(&mount)?;
-    let attach = Command::new("hdiutil")
-        .args(["attach", "-nobrowse", "-readonly", "-mountpoint"])
-        .arg(&mount)
-        .arg(&update.artifact)
-        .status()?;
-    if !attach.success() {
-        return Err(ServiceError::Update(
-            "could not mount app update".to_string(),
-        ));
-    }
-    let result = (|| {
-        let source = std::fs::read_dir(&mount)?
-            .flatten()
-            .map(|entry| entry.path())
-            .find(|path| path.extension().is_some_and(|extension| extension == "app"))
-            .ok_or_else(|| {
-                ServiceError::Update("DMG contains no application bundle".to_string())
-            })?;
-        let source = shell_single_quote(&source.display().to_string());
-        let destination = shell_single_quote(&app.display().to_string());
-        let staged = shell_single_quote(&format!("{}.sabine-new", app.display()));
-        let backup = shell_single_quote(&format!("{}.sabine-old", app.display()));
-        let script = format!(
-            "/bin/rm -rf {staged} {backup} && /usr/bin/ditto {source} {staged} && /bin/mv {destination} {backup} && (/bin/mv {staged} {destination} && /bin/rm -rf {backup} || (/bin/mv {backup} {destination}; exit 1))"
-        );
-        let status = Command::new("osascript")
-            .arg("-e")
-            .arg(format!(
-                "do shell script {} with administrator privileges",
-                apple_script_string(&script)
-            ))
-            .status()?;
-        status
-            .success()
-            .then_some(())
-            .ok_or_else(|| ServiceError::Update("macOS app installation was cancelled".to_string()))
-    })();
-    let _ = Command::new("hdiutil").arg("detach").arg(&mount).status();
-    let _ = std::fs::remove_dir_all(mount);
-    result
-}
-
-pub(super) fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-pub(super) fn apple_script_string(value: &str) -> String {
-    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-pub(super) fn elevated_command(
-    program: &str,
-    args: &[&str],
-    artifact: &Path,
-) -> ServiceResult<Command> {
-    if !cfg!(target_os = "linux") {
-        return Err(ServiceError::Update(
-            "this package installer is unsupported on the current platform".to_string(),
-        ));
-    }
-    let mut command = Command::new("pkexec");
-    command.arg(program).args(args).arg(artifact);
-    Ok(command)
-}
-
-pub(super) fn command_exists(name: &str) -> bool {
-    std::env::var_os("PATH").is_some_and(|paths| {
-        std::env::split_paths(&paths).any(|directory| directory.join(name).is_file())
-    })
 }
 
 pub(super) fn artifact_extension(kind: AppArtifactKind) -> &'static str {

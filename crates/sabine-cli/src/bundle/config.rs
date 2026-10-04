@@ -6,7 +6,7 @@ use std::{
 use sabine_service::{AppInstallMode, AppUpdateConfig, AppUpdateSource, UpdatePolicy};
 use serde::Deserialize;
 
-use crate::desktop::entry::Listing;
+use crate::desktop::{entry::Listing, types::Associations};
 
 #[derive(Debug)]
 pub(super) struct BundleApp {
@@ -16,8 +16,9 @@ pub(super) struct BundleApp {
     pub publisher: String,
     pub maintainer: Option<String>,
     pub license: Option<String>,
+    pub homepage: Option<String>,
     pub icon: Option<PathBuf>,
-    pub mime_types: Vec<String>,
+    pub associations: Associations,
     pub listing: Listing,
     pub cargo_manifest: PathBuf,
     pub source_dir: PathBuf,
@@ -89,9 +90,10 @@ struct AppSection {
     publisher: Option<String>,
     maintainer: Option<String>,
     license: Option<String>,
+    homepage: Option<String>,
     icon: Option<String>,
-    #[serde(default)]
-    mime_types: Vec<String>,
+    #[serde(flatten)]
+    associations: Associations,
     #[serde(flatten)]
     listing: Listing,
     cargo_manifest: Option<String>,
@@ -154,10 +156,16 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         })
         .unwrap_or_else(|| name.clone());
     let license = sabine.app.license.or_else(|| cargo.string("license").ok());
+    let homepage = sabine
+        .app
+        .homepage
+        .or_else(|| cargo.string("homepage").ok())
+        .or_else(|| cargo.string("repository").ok());
     for (field, value) in [
         ("publisher", Some(publisher.as_str())),
         ("maintainer", maintainer.as_deref()),
         ("license", license.as_deref()),
+        ("homepage", homepage.as_deref()),
     ] {
         if value.is_some_and(|value| value.trim().is_empty() || value.chars().any(char::is_control))
         {
@@ -188,7 +196,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         }
     }
     semver::Version::parse(&version).map_err(|error| format!("invalid app version: {error}"))?;
-    crate::desktop::types::validate(&sabine.app.mime_types)?;
+    sabine.app.associations.validate()?;
     sabine.app.listing.validate()?;
     Ok(BundleApp {
         id,
@@ -197,8 +205,9 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         publisher,
         maintainer,
         license,
+        homepage,
         icon,
-        mime_types: sabine.app.mime_types,
+        associations: sabine.app.associations,
         listing: sabine.app.listing,
         cargo_manifest,
         source_dir,

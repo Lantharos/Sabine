@@ -1,4 +1,5 @@
 use super::*;
+use sabine_runtime::sabine_data_dir;
 use serde::Deserialize;
 
 pub struct ComponentUpdate {
@@ -15,7 +16,7 @@ pub fn update_components(
     mut progress: impl FnMut(PrepareProgress),
 ) -> ServiceResult<ComponentUpdate> {
     let _lock = sabine_runtime::FileLock::acquire(
-        &service_data_dir().join("manual-update.lock"),
+        &sabine_data_dir().join("manual-update.lock"),
         std::time::Duration::from_secs(600),
         |_| {},
     )?;
@@ -94,7 +95,7 @@ fn stage_cli(
     if !artifact.url.starts_with("https://") {
         return Err(ServiceError::Update("CLI download must use HTTPS".into()));
     }
-    let directory = service_data_dir()
+    let directory = sabine_data_dir()
         .join("downloads/cli")
         .join(&manifest.version);
     fs::create_dir_all(&directory)?;

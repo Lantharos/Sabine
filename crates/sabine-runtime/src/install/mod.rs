@@ -266,12 +266,7 @@ pub fn prune_user_runtimes(keep_latest: usize) -> Result<usize, RuntimeError> {
     std::fs::create_dir_all(user_runtime_path())?;
     let _lock = RuntimeInstallLock::acquire(|_| {})?;
     let _mutation = runtime_mutation_lock()?;
-    let base = user_runtime_path();
-    if !base.is_dir() {
-        return Ok(0);
-    }
-
-    let mut runtimes = std::fs::read_dir(base)?
+    let mut runtimes = std::fs::read_dir(user_runtime_path())?
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| path.is_dir() && is_runtime_dir(path))
@@ -293,13 +288,8 @@ pub fn remove_user_runtime_version(version: &str) -> Result<bool, RuntimeError> 
     std::fs::create_dir_all(user_runtime_path())?;
     let _lock = RuntimeInstallLock::acquire(|_| {})?;
     let _mutation = runtime_mutation_lock()?;
-    let base = user_runtime_path();
-    if !base.is_dir() {
-        return Ok(false);
-    }
-
     let mut removed = false;
-    for path in std::fs::read_dir(base)?
+    for path in std::fs::read_dir(user_runtime_path())?
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| path.is_dir() && is_runtime_dir(path))

@@ -90,7 +90,7 @@ pub fn install_bundle(
         } else {
             app.icon
         },
-        mime_types: app.mime_types,
+        associations: app.associations,
         listing: app.listing,
         autostart: options.autostart,
     };
@@ -117,7 +117,7 @@ pub fn install_bundle(
         }
     }
     if options.autostart {
-        desktop::install_autostart(&desktop_app, &binary, Some(&app.id))?;
+        desktop::install_autostart(&desktop_app, &binary, Some(&desktop_app.id))?;
     }
     println!(
         "Installed {} {} at {}",

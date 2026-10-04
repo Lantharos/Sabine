@@ -1,6 +1,6 @@
 use crate::{
     PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult, SystemCompatibility,
-    SystemReleaseManifest, service_data_dir, verify_system_release,
+    SystemReleaseManifest, verify_system_release,
 };
 use std::{
     fs,
@@ -17,7 +17,7 @@ pub use manual::update_components;
 use artifacts::{
     copy_directory, download_file, extract_system_archive, fetch_system_manifest,
     sabine_host_relative_path, service_binary_name, service_daemon_binary_name, system_asset_name,
-    verify_sha256, which,
+    verify_sha256,
 };
 use state::{
     SystemInstallationState, clear_system_failure, compatibility_for_version, current_installation,
@@ -87,7 +87,7 @@ pub fn find_service_executable() -> Option<PathBuf> {
         return Some(path);
     }
 
-    if let Ok(path) = which(service_binary_name())
+    if let Some(path) = sabine_runtime::find_program(service_binary_name())
         && let Some(path) = complete_service_at(path)
     {
         return Some(path);
@@ -170,7 +170,7 @@ pub fn ensure_service_executable(
     if let Some(path) = adjacent_service() {
         return seed_managed_install(&path);
     }
-    if let Ok(path) = which(service_binary_name())
+    if let Some(path) = sabine_runtime::find_program(service_binary_name())
         && let Some(path) = complete_service_at(path)
     {
         return Ok(path);
@@ -419,15 +419,7 @@ fn normalized_release_compatibility(
             manifest.version
         ))
     })?;
-    let compatibility = if manifest.compatibility.build == 0 {
-        SystemCompatibility {
-            major: version.major,
-            build: version.build,
-            minimum_app_build: 1,
-        }
-    } else {
-        manifest.compatibility
-    };
+    let compatibility = manifest.compatibility;
     if compatibility.major != version.major
         || compatibility.build != version.build
         || compatibility.minimum_app_build > compatibility.build

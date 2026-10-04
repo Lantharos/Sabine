@@ -5,9 +5,7 @@
 // 152.0.7's bootstrap with 152.0.8's libcef crashes during initialization.
 
 use std::{
-    collections::hash_map::DefaultHasher,
     fs,
-    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -19,7 +17,7 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
         (binaries.join("chrome_elf.dll"), "chrome_elf.dll"),
         (host.with_extension("dll"), "sabine-host.dll"),
     ];
-    let mut fingerprint = DefaultHasher::new();
+    let mut fingerprint = sabine_runtime::Fingerprint::default();
     for source in files.iter().map(|(source, _)| source) {
         let source = source.canonicalize().map_err(|error| {
             format!(
@@ -27,17 +25,14 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
                 source.display()
             )
         })?;
-        let metadata = source.metadata().map_err(|error| error.to_string())?;
-        source.hash(&mut fingerprint);
-        metadata.len().hash(&mut fingerprint);
-        metadata
-            .modified()
-            .map_err(|error| error.to_string())?
-            .hash(&mut fingerprint);
+        fingerprint = fingerprint
+            .path(&source)
+            .file(&source.metadata().map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
     }
     let cache =
         sabine_runtime::runtime_execution_path(runtime).map_err(|error| error.to_string())?;
-    let directory = cache.join(format!("windows-1-{:016x}", fingerprint.finish()));
+    let directory = cache.join(format!("windows-1-{}", fingerprint.finish()));
     let executable = directory.join("sabine-host.exe");
     let ready = || directory.join("ready").is_file() && crate::host_is_complete(&executable);
     if ready() {

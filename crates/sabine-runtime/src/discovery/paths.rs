@@ -12,40 +12,46 @@ pub fn system_runtime_path() -> PathBuf {
     {
         PathBuf::from("/Library/Application Support/Sabine/runtimes/cef")
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     {
         PathBuf::from("/usr/lib/sabine/cef")
     }
 }
 
-pub fn user_runtime_path() -> PathBuf {
-    user_data_dir().join("sabine").join("runtimes").join("cef")
-}
-
-fn user_data_dir() -> PathBuf {
+/// The per-user directory that holds every piece of shared Sabine state:
+/// the service binaries, runtimes, app registry, downloads, and logs.
+pub fn sabine_data_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(local);
-        }
-        if let Some(profile) = std::env::var_os("USERPROFILE") {
-            return PathBuf::from(profile).join("AppData").join("Local");
-        }
+        std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home_dir().join("AppData").join("Local"))
+            .join("Sabine")
     }
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home)
-                .join("Library")
-                .join("Application Support");
-        }
+        home_dir().join("Library/Application Support/Sabine")
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    if let Some(path) = std::env::var_os("XDG_DATA_HOME").filter(|path| !path.is_empty()) {
-        return PathBuf::from(path);
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("XDG_DATA_HOME")
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home_dir().join(".local/share"))
+            .join("sabine")
     }
-    let home = std::env::var_os("HOME").unwrap_or_else(|| std::ffi::OsString::from("/tmp"));
-    PathBuf::from(home).join(".local").join("share")
+}
+
+fn home_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    let home = std::env::var_os("USERPROFILE");
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var_os("HOME");
+    home.map(PathBuf::from).unwrap_or_else(std::env::temp_dir)
+}
+
+pub fn user_runtime_path() -> PathBuf {
+    sabine_data_dir().join("runtimes").join("cef")
 }
 
 pub fn bundled_runtime_path(app_dir: &Path) -> PathBuf {
@@ -58,10 +64,8 @@ pub fn runtime_version_path(version: &str) -> PathBuf {
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn runtime_execution_path(runtime: &Path) -> std::io::Result<PathBuf> {
-    use std::hash::{Hash, Hasher};
-    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
-    runtime.canonicalize()?.hash(&mut fingerprint);
-    Ok(user_data_dir()
-        .join("sabine/executions")
-        .join(format!("{:016x}", fingerprint.finish())))
+    let fingerprint = crate::Fingerprint::default()
+        .path(&runtime.canonicalize()?)
+        .finish();
+    Ok(sabine_data_dir().join("executions").join(fingerprint))
 }

@@ -13,10 +13,7 @@ pub fn diagnostic_path(component: &str) -> PathBuf {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
         .collect();
-    crate::user_runtime_path()
-        .parent()
-        .and_then(|path| path.parent())
-        .unwrap_or_else(|| std::path::Path::new("."))
+    crate::sabine_data_dir()
         .join("logs")
         .join(format!("{name}.jsonl"))
 }

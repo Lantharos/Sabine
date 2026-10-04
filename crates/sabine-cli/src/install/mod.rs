@@ -16,7 +16,7 @@ pub(crate) fn bundle_install(id: &str) -> Result<Option<BundleInstall>, String> 
     if !sabine_service::valid_app_id(id) {
         return Err("invalid app identifier".into());
     }
-    let path = sabine_service::service_data_dir()
+    let path = sabine_runtime::sabine_data_dir()
         .join("apps")
         .join(id)
         .join("bundle-install.json");

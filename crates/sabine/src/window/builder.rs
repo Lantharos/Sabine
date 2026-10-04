@@ -287,7 +287,7 @@ impl SabineWindow {
         self
     }
 
-    pub fn deep_link(mut self, registration: DeepLinkRegistration) -> Self {
+    pub(crate) fn deep_link(mut self, registration: DeepLinkRegistration) -> Self {
         self.config.desktop_services.deep_links.push(registration);
         self
     }

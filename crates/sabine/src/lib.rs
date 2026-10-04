@@ -41,9 +41,9 @@ pub use sabine_bridge::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
 pub use sabine_platform::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy, TrayIcon, TrayMenuItem,
-    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions,
+    AutostartEntry, GlobalShortcutRegistration, NativeMessagingHost, PlatformEvent, Shortcut,
+    ShortcutModifiers, SingleInstancePolicy, TrayIcon, TrayMenuItem, WindowBackgroundEffect,
+    WindowRegion, WindowRegionRect, WindowRegions,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 

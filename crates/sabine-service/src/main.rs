@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use sabine_service::{
-    AppManifest, AppUpdateStatus, SabineService, ensure_ready, install_login_autostart_with,
-    load_policy, set_login_autostart,
+    AppManifest, AppUpdateStatus, SabineService, ensure_ready, load_policy, set_login_autostart,
 };
 use std::{path::PathBuf, process::ExitCode};
 
@@ -74,7 +73,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Install => {
             set_login_autostart(true)?;
-            install_login_autostart_with(&std::env::current_exe()?)?;
             println!("installed Sabine service at login");
         }
         Command::Uninstall => {
@@ -87,7 +85,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::PreferLogin => {
             set_login_autostart(true)?;
-            install_login_autostart_with(&std::env::current_exe()?)?;
             println!("Sabine will start at login");
         }
         Command::EnsureRuntime => {
@@ -199,12 +196,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(unix)]
 fn wait_for_process(pid: u32) {
-    loop {
-        let alive = unsafe { libc::kill(pid as i32, 0) } == 0
-            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
-        if !alive {
-            return;
-        }
+    while sabine_runtime::process_alive(pid) {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
@@ -222,6 +214,3 @@ fn wait_for_process(pid: u32) {
         }
     }
 }
-
-#[cfg(not(any(unix, target_os = "windows")))]
-fn wait_for_process(_pid: u32) {}

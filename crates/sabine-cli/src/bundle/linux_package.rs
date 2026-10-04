@@ -1,6 +1,21 @@
 use super::{config::BundleApp, stage::StagedBundle};
 use std::{fs, io::Read, path::Path, process::Command};
 
+const CEF_RPM_LIBRARIES: &[&str] = &[
+    "libgtk-3.so.0",
+    "libnss3.so",
+    "libnspr4.so",
+    "libasound.so.2",
+    "libcups.so.2",
+    "libXcomposite.so.1",
+    "libXdamage.so.1",
+    "libXrandr.so.2",
+    "libgbm.so.1",
+    "libxkbcommon.so.0",
+    "libudev.so.1",
+    "libwayland-client.so.0",
+];
+
 const CEF_DEB_DEPENDENCIES: &str = "libgtk-3-0t64 | libgtk-3-0, libnss3, libnspr4, libasound2t64 | libasound2, libcups2t64 | libcups2, libxcomposite1, libxdamage1, libxrandr2, libgbm1, libxkbcommon0, libudev1, libwayland-client0";
 
 pub(super) fn architecture(binary: &Path) -> Result<(&'static str, &'static str), String> {
@@ -49,7 +64,7 @@ pub(super) fn deb_control(
 }
 
 pub(super) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> {
-    if !crate::commands::command_exists("dpkg-shlibdeps") {
+    if sabine_runtime::find_program("dpkg-shlibdeps").is_none() {
         return Err("Debian packaging requires dpkg-dev on the target Debian/Ubuntu build environment to calculate library dependencies".into());
     }
     let debian = staged.root.join("debian");
@@ -79,7 +94,12 @@ pub(super) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> 
     })
 }
 
-pub(super) fn rpm_spec(app: &BundleApp, executable: &str, binary: &Path) -> Result<String, String> {
+pub(super) fn rpm_spec(
+    app: &BundleApp,
+    executable: &str,
+    binary: &Path,
+    share_files: &[String],
+) -> Result<String, String> {
     let license = app
         .license
         .as_deref()
@@ -93,7 +113,7 @@ Summary: {summary}
 License: {license}
 BuildArch: {architecture}
 %global source_date_epoch_from_changelog 0
-Requires: gtk3, nss, nspr, alsa-lib, cups-libs, libXcomposite, libXdamage, libXrandr, mesa-libgbm, libxkbcommon, systemd-libs, wayland-libs
+{requires}
 
 %description
 {summary}
@@ -108,14 +128,22 @@ cp -a "%{{sabine_source}}/." "%{{buildroot}}/"
 
 %files
 /usr/bin/{executable}
-/usr/share/applications/{id}.desktop
 /usr/lib/sabine/{id}
-"#,
+{share_files}"#,
         name = app.id.replace('.', "-"),
         version = package_version(&app.version)?.replace('-', "_"),
         summary = app.name.replace('%', "%%"),
         license = license.replace('%', "%%"),
-        id = app.id
+        id = app.id,
+        requires = CEF_RPM_LIBRARIES
+            .iter()
+            .map(|library| format!("Requires: {library}()(64bit)\n"))
+            .collect::<String>()
+            .trim_end(),
+        share_files = share_files
+            .iter()
+            .map(|file| format!("{file}\n"))
+            .collect::<String>(),
     ))
 }
 

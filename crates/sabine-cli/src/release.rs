@@ -110,10 +110,7 @@ pub(crate) fn write_manifest(
     if artifacts.is_empty() {
         return Err("at least one --artifact target=path is required".to_string());
     }
-    let published_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_string());
+    let published_at = unix_now();
     let mut manifest = AppReleaseManifest {
         schema: 1,
         app_id: config.app.id,
@@ -184,10 +181,7 @@ pub(crate) fn write_system_manifest(
     if artifacts.is_empty() {
         return Err("system release directory contains no artifacts".to_string());
     }
-    let published_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_string());
+    let published_at = unix_now();
     let mut manifest = SystemReleaseManifest {
         schema: 1,
         version: version.to_string(),
@@ -302,6 +296,14 @@ fn configure_app_updates(repository: &str, public_key: &str) -> Result<(), Strin
 
 pub(crate) fn signing_public_key() -> Result<String, String> {
     public_key_from_private(&signing_key()?).map_err(|error| error.to_string())
+}
+
+fn unix_now() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the system clock is after 1970")
+        .as_secs()
+        .to_string()
 }
 
 fn signing_key() -> Result<String, String> {

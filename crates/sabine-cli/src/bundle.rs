@@ -1,3 +1,4 @@
+mod appstream;
 mod cargo_metadata;
 use crate::environment;
 mod install;
@@ -106,6 +107,7 @@ impl BuildTarget {
             Self::Linux if cfg!(target_os = "linux") => None,
             Self::Linux if cfg!(target_arch = "aarch64") => Some("aarch64-unknown-linux-gnu"),
             Self::Linux => Some("x86_64-unknown-linux-gnu"),
+            Self::Windows if cfg!(target_arch = "aarch64") => Some("aarch64-pc-windows-msvc"),
             Self::Windows => Some("x86_64-pc-windows-msvc"),
             Self::Macos => Some("aarch64-apple-darwin"),
         }
@@ -294,6 +296,10 @@ fn bundle_json(
         "target": format.as_str(),
         "app": { "id": app.id, "name": app.name, "version": app.version },
         "path": staged.root,
+        "executable": staged
+            .root
+            .parent()
+            .and_then(|parent| staged.binary.strip_prefix(parent).ok()),
         "artifacts": packaged.artifacts,
         "notes": packaged.notes,
     })

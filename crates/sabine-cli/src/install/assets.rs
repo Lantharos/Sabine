@@ -8,7 +8,6 @@ pub struct SourceMetadata {
     pub name: Option<String>,
     pub command: Option<String>,
     pub icon: Option<PathBuf>,
-    pub mime_types: Vec<String>,
 }
 #[derive(Debug, Default)]
 pub struct StagedAssets {
@@ -73,14 +72,6 @@ fn merge_sabine_metadata(source: &Path, path: &Path, metadata: &mut SourceMetada
             .icon
             .take()
             .or_else(|| string_value(app, "icon").map(|path| source.join(path)));
-        if metadata.mime_types.is_empty() {
-            metadata.mime_types = string_array(app, "mime_types");
-        }
-    }
-    if let Some(desktop) = value.get("desktop").and_then(toml::Value::as_table)
-        && metadata.mime_types.is_empty()
-    {
-        metadata.mime_types = string_array(desktop, "mime_types");
     }
 }
 
@@ -95,22 +86,6 @@ fn string_value(table: &toml::Table, key: &str) -> Option<String> {
         .get(key)
         .and_then(toml::Value::as_str)
         .map(str::to_string)
-}
-
-fn string_array(table: &toml::Table, key: &str) -> Vec<String> {
-    table
-        .get(key)
-        .and_then(toml::Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(toml::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 fn detect_icon(source: &Path) -> Option<PathBuf> {

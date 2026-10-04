@@ -107,6 +107,19 @@ impl SabineWindowConfig {
                     .to_string(),
             });
         }
+        if let Some(entry) = self
+            .desktop_services
+            .autostart
+            .iter()
+            .find(|entry| entry.id != app_id)
+        {
+            return Err(SabineError::CreationFailed {
+                message: format!(
+                    "autostart entry `{}` must use the app id `{app_id}` so uninstalling the app removes it",
+                    entry.id
+                ),
+            });
+        }
         if self.title.trim().is_empty() {
             return Err(SabineError::CreationFailed {
                 message: "window title cannot be empty".to_string(),

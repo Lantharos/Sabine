@@ -283,7 +283,10 @@ fn doctor_runtime(json: bool) -> ExitCode {
                 println!("  Install with: sabine runtime install");
             }
             "outdated" => {
-                println!("CEF runtime: outdated (found versions below minimum 151)");
+                println!(
+                    "CEF runtime: outdated (found versions below minimum {})",
+                    sabine_runtime::MIN_CEF_MAJOR
+                );
                 println!("  Update with: sabine runtime install");
             }
             "quarantined" => {

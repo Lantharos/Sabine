@@ -7,10 +7,14 @@ use std::{
 
 use super::{
     BundleFormat,
+    appstream::metainfo,
     config::BundleApp,
     metadata::{app_run, desktop_entry, runtime_manifest, sanitize_path, windows_manifest},
 };
-use crate::{bundle::build_target_for_format, desktop::icons};
+use crate::{
+    bundle::build_target_for_format,
+    desktop::{icons, mime_package::mime_package},
+};
 use sabine_service::{AppArtifactKind, AppInstallMode};
 
 #[derive(Debug)]
@@ -156,7 +160,7 @@ fn stage_macos(
             &app.version,
             executable,
             app.icon.is_some(),
-            &app.mime_types,
+            &app.associations,
             &app.listing,
         )?,
     )
@@ -237,12 +241,24 @@ fn stage_appimage(
         AppInstallMode::Package,
         Some(AppArtifactKind::AppImage),
     )?;
-    let icon = stage_appimage_icon(app, &app_dir, &resources)?;
-    fs::write(
-        app_dir.join(format!("{}.desktop", app.id)),
-        desktop_entry(app, executable, icon.as_deref()),
+    let share = stage_linux_share(app, &app_dir, &resources, executable)?;
+    let desktop = format!("{}.desktop", app.id);
+    fs::copy(
+        share.join("applications").join(&desktop),
+        app_dir.join(desktop),
     )
     .map_err(|error| error.to_string())?;
+    if app.icon.is_some() {
+        let icons = resources.join("icons");
+        let scalable = icons.join(format!("scalable/apps/{}.svg", app.id));
+        let (source, extension) = if scalable.is_file() {
+            (scalable, "svg")
+        } else {
+            (icons.join(format!("512x512/apps/{}.png", app.id)), "png")
+        };
+        fs::copy(source, app_dir.join(format!("{}.{extension}", app.id)))
+            .map_err(|error| error.to_string())?;
+    }
     Ok(app_dir)
 }
 
@@ -255,14 +271,7 @@ fn stage_unix_root(
 ) -> Result<PathBuf, String> {
     let app_dir = root.join("root");
     let private_dir = stage_unix_binary(app, binary, &app_dir, executable)?;
-    let desktop_dir = app_dir.join("usr/share/applications");
     let resources = private_dir.join("resources");
-    fs::create_dir_all(&desktop_dir).map_err(|error| error.to_string())?;
-    fs::write(
-        desktop_dir.join(format!("{}.desktop", app.id)),
-        desktop_entry(app, executable, linux_icon_path(app, format).as_deref()),
-    )
-    .map_err(|error| error.to_string())?;
     let install_mode = if matches!(format, BundleFormat::Deb | BundleFormat::Rpm) {
         AppInstallMode::Package
     } else {
@@ -274,7 +283,50 @@ fn stage_unix_root(
         _ => None,
     };
     stage_resources(app, &resources, install_mode, package_kind)?;
+    stage_linux_share(app, &app_dir, &resources, executable)?;
     Ok(app_dir)
+}
+
+/// Writes the files desktops read from `usr/share`: the launcher entry, the
+/// icon theme, AppStream metadata and file extension globs.
+fn stage_linux_share(
+    app: &BundleApp,
+    app_dir: &Path,
+    resources: &Path,
+    executable: &str,
+) -> Result<PathBuf, String> {
+    let share = app_dir.join("usr/share");
+    let icon = app.icon.as_ref().filter(|icon| icon.is_file()).map(|_| {
+        copy_dir_recursive(&resources.join("icons"), &share.join("icons/hicolor"))
+            .map_err(|error| error.to_string())
+    });
+    let icon = icon.transpose()?.map(|()| app.id.as_str());
+    let files = [
+        (
+            share
+                .join("applications")
+                .join(format!("{}.desktop", app.id)),
+            Some(desktop_entry(app, executable, icon)),
+        ),
+        (
+            share
+                .join("metainfo")
+                .join(format!("{}.metainfo.xml", app.id)),
+            metainfo(app, executable),
+        ),
+        (
+            share.join("mime/packages").join(format!("{}.xml", app.id)),
+            mime_package(&app.associations),
+        ),
+    ];
+    for (path, contents) in files {
+        if let Some(contents) = contents {
+            fs::create_dir_all(path.parent().expect("share files have a parent"))
+                .map_err(|error| error.to_string())?;
+            fs::write(path, contents).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(share)
 }
 
 fn stage_unix_binary(
@@ -295,52 +347,6 @@ fn stage_unix_binary(
         format!("Linux bundle staging needs permission to create symlinks: {error}")
     })?;
     Ok(private_dir)
-}
-
-fn linux_icon_path(app: &BundleApp, format: BundleFormat) -> Option<String> {
-    if !matches!(
-        format,
-        BundleFormat::Linux | BundleFormat::Deb | BundleFormat::Rpm
-    ) {
-        return None;
-    }
-    let icon = app.icon.as_ref().filter(|icon| icon.is_file())?;
-    if icon
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
-    {
-        return Some(format!(
-            "/usr/lib/sabine/{}/resources/icons/scalable/apps/{}.svg",
-            app.id, app.id
-        ));
-    }
-    Some(format!(
-        "/usr/lib/sabine/{}/resources/icons/512x512/apps/{}.png",
-        app.id, app.id
-    ))
-}
-
-fn stage_appimage_icon(
-    app: &BundleApp,
-    app_dir: &Path,
-    resources: &Path,
-) -> Result<Option<String>, String> {
-    if app.icon.is_none() {
-        return Ok(None);
-    }
-    let icons = resources.join("icons");
-    let scalable = icons.join(format!("scalable/apps/{}.svg", app.id));
-    let (source, extension) = if scalable.is_file() {
-        (scalable, "svg")
-    } else {
-        (icons.join(format!("512x512/apps/{}.png", app.id)), "png")
-    };
-    fs::copy(source, app_dir.join(format!("{}.{extension}", app.id)))
-        .map_err(|error| error.to_string())?;
-    copy_dir_recursive(&icons, &app_dir.join("usr/share/icons/hicolor"))
-        .map_err(|error| error.to_string())?;
-    Ok(Some(app.id.clone()))
 }
 
 fn stage_resources(

@@ -15,10 +15,10 @@ use tray_icon::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
 };
 use windows::Win32::{
-    Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS},
+    Foundation::ERROR_SUCCESS,
     System::Registry::{
         HKEY_CURRENT_USER, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-        RegCreateKeyExW, RegDeleteKeyValueW, RegSetValueExW,
+        RegCreateKeyExW, RegSetValueExW,
     },
 };
 
@@ -176,14 +176,13 @@ pub(super) fn parse_key_code(key: &str) -> Result<Code, String> {
 }
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String> {
-    let name = sanitize_id(&entry.id);
-    let key_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Run".to_string();
+    let key = sabine_service::APP_AUTOSTART_KEY;
     if entry.enabled {
-        set_registry_string(HKEY_CURRENT_USER, &key_path, &name, &entry.command)?;
+        sabine_service::windows_registry::set_current_user_value(key, &entry.id, &entry.command)
     } else {
-        delete_registry_value(HKEY_CURRENT_USER, &key_path, &name)?;
+        sabine_service::windows_registry::delete_current_user_value(key, &entry.id)
     }
-    Ok(())
+    .map_err(|error| error.to_string())
 }
 
 pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> Result<(), String> {
@@ -265,30 +264,6 @@ pub(super) fn set_registry_string(
         return Err(format!("RegSetValueExW failed: {result:?}"));
     }
     Ok(())
-}
-
-pub(super) fn delete_registry_value(
-    root: windows::Win32::System::Registry::HKEY,
-    subkey: &str,
-    value_name: &str,
-) -> Result<(), String> {
-    let subkey = wide_null(subkey);
-    let value = wide_null(value_name);
-    let result = unsafe {
-        RegDeleteKeyValueW(
-            root,
-            windows::core::PCWSTR(subkey.as_ptr()),
-            windows::core::PCWSTR(value.as_ptr()),
-        )
-    };
-    if matches!(
-        result,
-        ERROR_SUCCESS | ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND
-    ) {
-        Ok(())
-    } else {
-        Err(format!("RegDeleteKeyValueW failed: {result:?}"))
-    }
 }
 
 pub(super) fn sanitize_id(value: &str) -> String {

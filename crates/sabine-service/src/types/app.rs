@@ -149,7 +149,6 @@ pub struct AppReleaseManifest {
     pub version: String,
     #[serde(default = "stable_channel")]
     pub channel: String,
-    #[serde(default)]
     pub published_at: String,
     #[serde(default)]
     pub requires_sabine: SabineVersion,

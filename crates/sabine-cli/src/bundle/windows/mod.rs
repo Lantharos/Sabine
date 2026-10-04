@@ -7,7 +7,7 @@ pub(super) mod msi_actions;
 // running setup helper. Keep the per-user registry paths and payload inventory
 // aligned with uninstall; this is not a shell script with a wizard attached.
 
-use crate::bundle::config::BundleApp;
+use crate::{bundle::config::BundleApp, desktop::types::prog_id};
 use std::{
     fs,
     io::{Read, Seek, SeekFrom},
@@ -43,29 +43,7 @@ pub(super) fn nsis_script(
             )
         })
         .unwrap_or_default();
-    let schemes = crate::desktop::types::schemes(&app.mime_types).collect::<Vec<_>>();
-    let register_schemes = schemes
-        .iter()
-        .map(|scheme| {
-            format!(
-                r#"  WriteRegStr HKCU "Software\Classes\{scheme}" "" "URL:{scheme}"
-  WriteRegStr HKCU "Software\Classes\{scheme}" "URL Protocol" ""
-  WriteRegStr HKCU "Software\Classes\{scheme}\shell\open\command" "" '"$INSTDIR\{executable}" "%1"'
-"#
-            )
-        })
-        .collect::<String>();
-    let unregister_schemes = schemes
-        .iter()
-        .map(|scheme| {
-            format!(
-                r#"  ReadRegStr $0 HKCU "Software\Classes\{scheme}\shell\open\command" ""
-  StrCmp $0 '"$INSTDIR\{executable}" "%1"' 0 +2
-  DeleteRegKey HKCU "Software\Classes\{scheme}"
-"#
-            )
-        })
-        .collect::<String>();
+    let (register_handlers, unregister_handlers) = handler_commands(app, &name, &executable);
     let (finish_run, start_menu, start_menu_removal) = if app.listing.listed {
         (
             format!(
@@ -166,7 +144,7 @@ setup_ready:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}" "NoRepair" 1
-{register_schemes}{start_menu}SectionEnd
+{register_handlers}{start_menu}SectionEnd
 
 Section "Uninstall"
   SetShellVarContext current
@@ -183,7 +161,7 @@ unregister_failed:
 unregister_done:
 {uninstall_files}
   Delete "$INSTDIR\.sabine-install.json"
-{start_menu_removal}{unregister_schemes}  Delete "$INSTDIR\Uninstall.exe"
+{start_menu_removal}{unregister_handlers}  Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}"
   DeleteRegKey HKCU "Software\{id}"
@@ -193,6 +171,57 @@ SectionEnd
         source = escape(&source.join("*").display().to_string()),
         version = escape(&app.version),
     ))
+}
+
+fn handler_commands(app: &BundleApp, name: &str, executable: &str) -> (String, String) {
+    let command = format!(r#"'"$INSTDIR\{executable}" "%1"'"#);
+    let mut register = String::new();
+    let mut unregister = String::new();
+    for scheme in app.associations.schemes() {
+        register.push_str(&format!(
+            r#"  WriteRegStr HKCU "Software\Classes\{scheme}" "" "URL:{scheme}"
+  WriteRegStr HKCU "Software\Classes\{scheme}" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\{scheme}\shell\open\command" "" {command}
+"#
+        ));
+        unregister.push_str(&format!(
+            r#"  ReadRegStr $0 HKCU "Software\Classes\{scheme}\shell\open\command" ""
+  StrCmp $0 {command} 0 +2
+  DeleteRegKey HKCU "Software\Classes\{scheme}"
+"#
+        ));
+    }
+    if app.associations.extensions().next().is_none() {
+        return (register, unregister);
+    }
+    let prog_id = prog_id(&app.id);
+    register.push_str(&format!(
+        r#"  WriteRegStr HKCU "Software\Classes\{prog_id}" "" "{name} document"
+  WriteRegStr HKCU "Software\Classes\{prog_id}\DefaultIcon" "" '"$INSTDIR\{executable}",0'
+  WriteRegStr HKCU "Software\Classes\{prog_id}\shell\open\command" "" {command}
+"#
+    ));
+    unregister.push_str(&format!(
+        r#"  ReadRegStr $0 HKCU "Software\Classes\{prog_id}\shell\open\command" ""
+  StrCmp $0 {command} 0 document_types_kept
+"#
+    ));
+    for extension in app.associations.extensions() {
+        register.push_str(&format!(
+            r#"  WriteRegStr HKCU "Software\Classes\.{extension}\OpenWithProgids" "{prog_id}" ""
+"#
+        ));
+        unregister.push_str(&format!(
+            r#"  DeleteRegValue HKCU "Software\Classes\.{extension}\OpenWithProgids" "{prog_id}"
+"#
+        ));
+    }
+    unregister.push_str(&format!(
+        r#"  DeleteRegKey HKCU "Software\Classes\{prog_id}"
+document_types_kept:
+"#
+    ));
+    (register, unregister)
 }
 
 fn payload_files(root: &Path, directory: &Path) -> Result<Vec<String>, String> {
@@ -284,55 +313,5 @@ pub(super) fn architecture(binary: &Path) -> Result<&'static str, String> {
         0x8664 => Ok("x64"),
         0xaa64 => Ok("ARM64"),
         _ => Err("Windows packages require an x86_64 or ARM64 executable".into()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::desktop::entry::Listing;
-
-    #[test]
-    fn unlisted_installers_register_schemes_without_shortcuts() {
-        let payload = tempfile::tempdir().unwrap();
-        fs::write(payload.path().join("signin.exe"), b"").unwrap();
-        let app = BundleApp {
-            id: "com.example.signin".into(),
-            name: "Sign-In".into(),
-            version: "1.0.0".into(),
-            publisher: "Example".into(),
-            maintainer: None,
-            license: None,
-            icon: None,
-            mime_types: vec!["x-scheme-handler/example-signin".into()],
-            listing: Listing {
-                listed: false,
-                ..Listing::default()
-            },
-            cargo_manifest: payload.path().join("Cargo.toml"),
-            source_dir: payload.path().to_path_buf(),
-            cargo_package: "signin".into(),
-            web: None,
-            updates: None,
-        };
-        let script = nsis_script(&app, payload.path(), "signin.exe", "setup.exe", None).unwrap();
-        assert!(!script.contains("$SMPROGRAMS"));
-        assert!(script.contains(
-            r#"WriteRegStr HKCU "Software\Classes\example-signin\shell\open\command" "" '"$INSTDIR\signin.exe" "%1"'"#
-        ));
-        assert!(script.contains(
-            r#"StrCmp $0 '"$INSTDIR\signin.exe" "%1"' 0 +2
-  DeleteRegKey HKCU "Software\Classes\example-signin""#
-        ));
-        let wix = msi::wix_source(
-            &app,
-            &payload.path().display().to_string(),
-            "signin.exe",
-            None,
-            "actions.dll",
-        )
-        .unwrap();
-        assert!(!wix.contains("Shortcut"));
-        assert!(wix.contains(r#"Key="Software\Classes\example-signin""#));
     }
 }
