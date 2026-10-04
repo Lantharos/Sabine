@@ -1,3 +1,6 @@
+mod click_through;
+mod mask;
+
 use std::sync::Arc;
 
 use objc2::rc::Retained;
@@ -10,9 +13,14 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
 use crate::{WindowBackgroundEffect, WindowOptions, WindowRegionRect};
+use click_through::ClickThrough;
 
+/// An `NSVisualEffectView` beneath the page, masked to the blur region, and
+/// click-through outside the input region.
 pub(super) struct Backend {
+    view: Retained<NSView>,
     material: Option<Retained<NSVisualEffectView>>,
+    click_through: Option<ClickThrough>,
 }
 
 impl Backend {
@@ -21,20 +29,40 @@ impl Backend {
         let RawWindowHandle::AppKit(handle) = window.window_handle().ok()?.as_raw() else {
             return None;
         };
-        let content_view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+        let view = unsafe { Retained::retain(handle.ns_view.cast::<NSView>().as_ptr()) }?;
         let material = options
             .wants_background_effect()
-            .then(|| install_material(main_thread, content_view, options.background_effect));
-        Some(Self { material })
+            .then(|| install_material(main_thread, &view, options.background_effect));
+        Some(Self {
+            view,
+            material,
+            click_through: None,
+        })
     }
 
     pub(super) fn update(
         &mut self,
-        _options: &WindowOptions,
-        _width: i32,
-        _height: i32,
-        _transparent_holes: &[WindowRegionRect],
+        options: &WindowOptions,
+        width: i32,
+        height: i32,
+        transparent_holes: &[WindowRegionRect],
     ) {
+        if let Some(material) = &self.material {
+            material.setMaskImage(
+                mask::material_mask(options, width, height, transparent_holes).as_deref(),
+            );
+        }
+        match &options.regions.input {
+            Some(input) => {
+                if self.click_through.is_none() {
+                    self.click_through = ClickThrough::new(self.view.clone());
+                }
+                if let Some(click_through) = &self.click_through {
+                    click_through.set_region(input.resolved_rects(width, height));
+                }
+            }
+            None => self.click_through = None,
+        }
     }
 }
 

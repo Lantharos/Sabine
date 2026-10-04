@@ -4,23 +4,22 @@
 // SetWindowCompositionAttribute entry point and its accent-policy ABI.
 // These are different contracts, not interchangeable names for one effect.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::{
     Foundation::HWND,
     Graphics::Dwm::{
-        DWM_SYSTEMBACKDROP_TYPE, DWMSBT_MAINWINDOW, DWMSBT_TABBEDWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
-        DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
+        DWM_SYSTEMBACKDROP_TYPE, DWMSBT_MAINWINDOW, DWMSBT_NONE, DWMSBT_TABBEDWINDOW,
+        DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
     },
     System::LibraryLoader::{GetProcAddress, LoadLibraryA},
 };
 use windows::core::s;
-use winit::window::{Theme, Window};
 
-use crate::{WindowBackgroundEffect, WindowOptions, WindowRegionRect};
+use crate::WindowBackgroundEffect;
 
 const COMPOSITION_ACCENT_POLICY: u32 = 0x13;
+const ACCENT_DISABLED: u32 = 0;
 const ACCENT_BLUR: u32 = 3;
 const ACCENT_ACRYLIC: u32 = 4;
 
@@ -42,50 +41,27 @@ struct CompositionAttributeData {
 type SetWindowCompositionAttribute =
     unsafe extern "system" fn(HWND, *mut CompositionAttributeData) -> i32;
 
-pub(super) struct Backend {
-    hwnd: HWND,
-    effect: WindowBackgroundEffect,
+/// Shows the material behind the whole window, tinted for the theme.
+pub(super) fn show(hwnd: HWND, effect: WindowBackgroundEffect, dark: bool) -> bool {
+    let applied = match effect {
+        WindowBackgroundEffect::None => return false,
+        WindowBackgroundEffect::Blur => set_accent(hwnd, ACCENT_BLUR, 0, dark),
+        WindowBackgroundEffect::Mica => set_backdrop(hwnd, DWMSBT_MAINWINDOW),
+        WindowBackgroundEffect::MicaAlt => set_backdrop(hwnd, DWMSBT_TABBEDWINDOW),
+        _ => set_accent(hwnd, ACCENT_ACRYLIC, 125, dark),
+    };
+    set_dark_mode(hwnd, dark);
+    applied
 }
 
-impl Backend {
-    pub(super) fn new(window: &Arc<dyn Window>, options: &WindowOptions) -> Option<Self> {
-        let backend = Self {
-            hwnd: hwnd(window)?,
-            effect: if options.wants_background_effect() {
-                options.background_effect
-            } else {
-                WindowBackgroundEffect::None
-            },
-        };
-        backend.apply(window.theme().unwrap_or(Theme::Light));
-        Some(backend)
-    }
-
-    pub(super) fn update(
-        &mut self,
-        _options: &WindowOptions,
-        _width: i32,
-        _height: i32,
-        _transparent_holes: &[WindowRegionRect],
-    ) {
-    }
-
-    pub(super) fn theme_changed(&mut self, theme: Theme) {
-        self.apply(theme);
-    }
-
-    fn apply(&self, theme: Theme) {
-        let dark = theme == Theme::Dark;
-        let applied = match self.effect {
-            WindowBackgroundEffect::None => return,
-            WindowBackgroundEffect::Blur => set_accent(self.hwnd, ACCENT_BLUR, 0, dark),
-            WindowBackgroundEffect::Mica => set_backdrop(self.hwnd, DWMSBT_MAINWINDOW),
-            WindowBackgroundEffect::MicaAlt => set_backdrop(self.hwnd, DWMSBT_TABBEDWINDOW),
-            _ => set_accent(self.hwnd, ACCENT_ACRYLIC, 125, dark),
-        };
-        set_dark_mode(self.hwnd, dark);
-        if !applied && std::env::var_os("SABINE_TRACE").is_some() {
-            eprintln!("Sabine window effect {:?} was not applied", self.effect);
+pub(super) fn hide(hwnd: HWND, effect: WindowBackgroundEffect) {
+    match effect {
+        WindowBackgroundEffect::None => {}
+        WindowBackgroundEffect::Mica | WindowBackgroundEffect::MicaAlt => {
+            set_backdrop(hwnd, DWMSBT_NONE);
+        }
+        _ => {
+            set_accent(hwnd, ACCENT_DISABLED, 0, false);
         }
     }
 }
@@ -143,12 +119,4 @@ fn set_window_composition_attribute() -> Option<SetWindowCompositionAttribute> {
             SetWindowCompositionAttribute,
         >(function))
     })
-}
-
-fn hwnd(window: &Arc<dyn Window>) -> Option<HWND> {
-    let handle = window.window_handle().ok()?;
-    let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-        return None;
-    };
-    Some(HWND(handle.hwnd.get() as *mut std::ffi::c_void))
 }
