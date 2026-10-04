@@ -53,6 +53,7 @@ SabineOsrHandler::SabineOsrHandler(std::string endpoint,
                                    CefRefPtr<CefDictionaryValue> bridge_policy,
                                    bool dev_mode,
                                    bool transparent_background,
+                                   bool retain_hidden_frame,
                                    int active_frame_rate,
                                    int background_frame_rate)
     : endpoint_(std::move(endpoint)),
@@ -62,6 +63,7 @@ SabineOsrHandler::SabineOsrHandler(std::string endpoint,
       scale_(std::max(0.25f, scale)),
       bridge_policy_(bridge_policy),
       transparent_background_(transparent_background),
+      retain_hidden_frame_(retain_hidden_frame),
       active_frame_rate_(std::max(1, active_frame_rate)),
       background_frame_rate_(std::max(1, background_frame_rate)) {
   dev_mode_ = dev_mode;
@@ -188,11 +190,12 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
   window_info.SetAsWindowless(parent_window);
   sabine_osr::ApplySharedTexture(&window_info,
                                  sabine_osr::PreferSharedTexture(command_line));
-  CefRefPtr<SabineOsrHandler> handler(
-      new SabineOsrHandler(endpoint, authentication_token, width, height, scale,
-                           policy, command_line->HasSwitch("sabine-dev-mode"),
-                           command_line->HasSwitch("sabine-transparent"),
-                           active_frame_rate, background_frame_rate));
+  CefRefPtr<SabineOsrHandler> handler(new SabineOsrHandler(
+      endpoint, authentication_token, width, height, scale, policy,
+      command_line->HasSwitch("sabine-dev-mode"),
+      command_line->HasSwitch("sabine-transparent"),
+      command_line->HasSwitch("sabine-retain-hidden-frame"), active_frame_rate,
+      background_frame_rate));
 #if defined(OS_MAC)
   handler->UseSurfaceService(
       command_line->GetSwitchValue("sabine-surface-service"));

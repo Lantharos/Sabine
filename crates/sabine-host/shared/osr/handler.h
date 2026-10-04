@@ -91,6 +91,7 @@ class SabineOsrHandler : public CefClient,
                    CefRefPtr<CefDictionaryValue> bridge_policy,
                    bool dev_mode,
                    bool transparent_background,
+                   bool retain_hidden_frame,
                    int active_frame_rate,
                    int background_frame_rate);
   ~SabineOsrHandler() override;
@@ -439,14 +440,15 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefDictionaryValue> bridge_policy_;
   CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
   bool transparent_background_ = false;
+  bool retain_hidden_frame_ = false;
   bool suspended_ = false;
   bool hibernating_ = false;
+  bool window_shown_ = true;
   bool window_visible_ = true;
   bool window_occluded_ = false;
   bool window_suspended_ = false;
-  // True only while hibernating or while the compositor reports the shown
-  // window as fully hidden. Blur only throttles frame rate — WasHidden there
-  // blanks OSR and flickers on resume (common after interactive move).
+  // Blur only lowers the frame rate: WasHidden blanks the view until the next
+  // paint, which flickers after an interactive move.
   bool view_hidden_ = false;
   bool resume_needs_paint_ = false;
   bool pending_guest_cover_ = false;

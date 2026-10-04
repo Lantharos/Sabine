@@ -44,6 +44,7 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
                                         bool occluded,
                                         bool suspended) {
   CEF_REQUIRE_UI_THREAD();
+  window_shown_ = shown;
   window_visible_ = shown && !occluded;
   window_occluded_ = shown && occluded;
   window_suspended_ = suspended;
@@ -54,7 +55,8 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
 }
 
 bool SabineOsrHandler::UpdateViewHidden() {
-  const bool hidden = hibernating_ || window_occluded_;
+  const bool hidden = hibernating_ || window_occluded_ ||
+                      (!window_shown_ && !retain_hidden_frame_);
   if (!browser_ || hidden == view_hidden_) {
     return false;
   }
