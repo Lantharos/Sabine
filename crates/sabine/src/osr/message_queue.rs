@@ -11,6 +11,22 @@ const MAX_MERGED_RECTS: usize = 256;
 const MAX_MERGED_BYTES: usize = 64 * 1024 * 1024;
 const MESSAGE_DISPATCH_BUDGET: usize = 32;
 
+/// What queueing a message did: whether the window must be woken, and which
+/// accelerated frame slot a newer frame for the same surface replaced.
+pub(super) struct Queued {
+    pub(super) wake: bool,
+    pub(super) replaced_slot: Option<u64>,
+}
+
+impl Queued {
+    fn woken(wake: bool) -> Self {
+        Self {
+            wake,
+            replaced_slot: None,
+        }
+    }
+}
+
 pub(super) struct MessageQueue {
     state: Mutex<MessageQueueState>,
     space_available: Condvar,
@@ -32,12 +48,12 @@ impl MessageQueue {
         }
     }
 
-    pub(super) fn push(&self, message: OsrMessage) -> bool {
+    pub(super) fn push(&self, message: OsrMessage) -> Queued {
         let Ok(mut state) = self.state.lock() else {
-            return false;
+            return Queued::woken(false);
         };
         if state.closed {
-            return false;
+            return Queued::woken(false);
         }
         let available = MAX_QUEUED_BYTES.saturating_sub(state.retained_bytes);
         let message = match message {
@@ -46,7 +62,7 @@ impl MessageQueue {
                     .messages
                     .iter_mut()
                     .rev()
-                    .take_while(|message| matches!(message, OsrMessage::PaintBatch(_)))
+                    .take_while(|message| is_frame(message))
                     .find_map(|message| match message {
                         OsrMessage::PaintBatch(queued) if queued.surface == incoming.surface => {
                             Some(queued)
@@ -60,13 +76,35 @@ impl MessageQueue {
                             let merged_bytes = batch_retained_bytes(queued);
                             state.retained_bytes =
                                 state.retained_bytes - previous_bytes + merged_bytes;
-                            return queue_wake(&mut state);
+                            return Queued::woken(queue_wake(&mut state));
                         }
                         Some(incoming) => OsrMessage::PaintBatch(incoming),
                     }
                 } else {
                     OsrMessage::PaintBatch(incoming)
                 }
+            }
+            #[cfg(any(windows, target_os = "macos"))]
+            OsrMessage::AccelFrame(incoming) => {
+                let queued = state
+                    .messages
+                    .iter_mut()
+                    .rev()
+                    .take_while(|message| is_frame(message))
+                    .find_map(|message| match message {
+                        OsrMessage::AccelFrame(queued) if queued.surface == incoming.surface => {
+                            Some(queued)
+                        }
+                        _ => None,
+                    });
+                if let Some(queued) = queued {
+                    let replaced = std::mem::replace(queued, incoming);
+                    return Queued {
+                        wake: queue_wake(&mut state),
+                        replaced_slot: Some(replaced.slot_token),
+                    };
+                }
+                OsrMessage::AccelFrame(incoming)
             }
             message => message,
         };
@@ -76,16 +114,16 @@ impl MessageQueue {
                 && state.retained_bytes.saturating_add(bytes) > MAX_QUEUED_BYTES)
         {
             let Ok(next) = self.space_available.wait(state) else {
-                return false;
+                return Queued::woken(false);
             };
             state = next;
             if state.closed {
-                return false;
+                return Queued::woken(false);
             }
         }
         state.retained_bytes += bytes;
         state.messages.push_back(message);
-        queue_wake(&mut state)
+        Queued::woken(queue_wake(&mut state))
     }
 
     pub(super) fn close(&self) {
@@ -110,6 +148,15 @@ impl MessageQueue {
         drop(state);
         self.space_available.notify_all();
         (messages, remaining)
+    }
+}
+
+fn is_frame(message: &OsrMessage) -> bool {
+    match message {
+        OsrMessage::PaintBatch(_) => true,
+        #[cfg(any(windows, target_os = "macos"))]
+        OsrMessage::AccelFrame(_) => true,
+        _ => false,
     }
 }
 
@@ -180,10 +227,6 @@ fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
 fn message_retained_bytes(message: &OsrMessage) -> usize {
     match message {
         OsrMessage::PaintBatch(batch) => batch_retained_bytes(batch),
-        #[cfg(any(windows, target_os = "macos"))]
-        OsrMessage::AccelFrame(frame) => {
-            frame.coded_width as usize * frame.coded_height as usize * 4
-        }
         OsrMessage::FatalError(text)
         | OsrMessage::GuestHidden(text)
         | OsrMessage::Cursor(text)

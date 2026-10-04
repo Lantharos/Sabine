@@ -169,7 +169,7 @@ pub(super) fn start_socket_reader(
         }
         if !state.send(
             &sender,
-            OsrHostEvent::Connected(generation, writer, control),
+            OsrHostEvent::Connected(generation, writer, Arc::clone(&control)),
         ) {
             return;
         }
@@ -177,7 +177,11 @@ pub(super) fn start_socket_reader(
         while !state.stopped() {
             match wire.read() {
                 Ok(Some(message)) => {
-                    if messages.push(message) {
+                    let queued = messages.push(message);
+                    if let Some(slot) = queued.replaced_slot {
+                        let _ = control.send(format!("accel_release\t{slot}\n"));
+                    }
+                    if queued.wake {
                         if !state.send(
                             &sender,
                             OsrHostEvent::MessagesReady(generation, Arc::clone(&messages)),
