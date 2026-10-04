@@ -16,6 +16,8 @@ export interface TrayActivateEvent {
   /** The menu item chosen, or `null` when the icon itself was activated. */
   itemId: string | null;
   action: string | null;
+  /** A checkbox item's new state. */
+  checked: boolean | null;
 }
 
 export interface GlobalShortcutEvent {
@@ -23,6 +25,13 @@ export interface GlobalShortcutEvent {
   action: string;
   /** Pass to `appWindow.focus` so the desktop lets the window take focus. */
   activationToken: string | null;
+}
+
+/** A global shortcut the desktop did not register, such as one another app holds. */
+export interface GlobalShortcutFailedEvent {
+  id: string;
+  action: string;
+  message: string;
 }
 
 export interface SingleInstanceEvent {
@@ -48,6 +57,7 @@ export declare const events: {
   openUrlsAvailable: Listen<null>;
   trayActivate: Listen<TrayActivateEvent>;
   globalShortcut: Listen<GlobalShortcutEvent>;
+  globalShortcutFailed: Listen<GlobalShortcutFailedEvent>;
   singleInstance: Listen<SingleInstanceEvent>;
   rendererCrashed: Listen<RendererCrashedEvent>;
   guestCreated: Listen<GuestInfo>;

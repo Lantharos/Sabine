@@ -120,6 +120,29 @@ await appWindow.setRegions({
 Rust code can do the same with `set_regions` or, for one window, `set_regions_of` on the app's
 `BridgeEventEmitter`.
 
+## Tray
+
+An app that configures a tray icon can change it while it runs. A left click on the icon arrives
+as `events.trayActivate` with `itemId: null`; the menu opens on a right click.
+
+```js
+import { events, tray } from "@lantharos/sabine";
+
+await tray.update({
+  tooltip: "Syncing",
+  menu: [
+    { id: "open", label: "Open" },
+    { id: "pause", label: "Pause sync", type: "checkbox", checked: false },
+    { id: "accounts", label: "Accounts", type: "submenu", items: [{ id: "work", label: "Work" }] },
+    { type: "separator" },
+    { id: "quit", label: "Quit" },
+  ],
+});
+
+events.trayActivate(({ itemId, checked }) => console.log(itemId, checked));
+events.globalShortcutFailed(({ id, message }) => console.warn(id, message));
+```
+
 ## Clipboard
 
 Copy, cut, paste and `navigator.clipboard` work with the desktop clipboard as they do in a browser,
