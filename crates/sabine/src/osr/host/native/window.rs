@@ -163,7 +163,7 @@ impl OsrNativeHost {
     }
 
     fn send_controls_overlay(&self) {
-        self.send_control(&format!(
+        self.send_control(format!(
             "SABINE_BRIDGE_EVENT\t\"{}\"\t{}\n",
             sabine_bridge::CONTROLS_OVERLAY_EVENT,
             self.controls_overlay()
@@ -252,7 +252,7 @@ impl OsrNativeHost {
             return;
         }
         self.published_appearance = Some(appearance);
-        self.send_control(&format!(
+        self.send_control(format!(
             "SABINE_BRIDGE_EVENT\t\"{}\"\t{}\n",
             sabine_bridge::APPEARANCE_EVENT,
             appearance_json(&appearance)

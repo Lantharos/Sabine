@@ -76,17 +76,14 @@ impl Document {
         max_scroll
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn label(
-        &mut self,
-        pixels: &mut [u32],
-        surface: (u32, u32),
-        bounds: Rect,
-        text: &str,
-        size: f32,
-        tint: u32,
-        center: bool,
-    ) {
+    fn label(&mut self, pixels: &mut [u32], surface: (u32, u32), label: Label) {
+        let Label {
+            bounds,
+            text,
+            size,
+            tint,
+            center,
+        } = label;
         self.label.set_metrics_and_size(
             Metrics::new(size, size + 6.0),
             Some(bounds.2 as f32),
@@ -109,6 +106,15 @@ impl Document {
             },
         );
     }
+}
+
+/// A line of text the dialog draws within its bounds.
+struct Label<'a> {
+    bounds: Rect,
+    text: &'a str,
+    size: f32,
+    tint: u32,
+    center: bool,
 }
 
 fn color(value: u32) -> Color {
@@ -152,21 +158,25 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
     app.document.label(
         pixels,
         surface,
-        (pad, unit(24.0), width - pad * 2, unit(66.0)),
-        &app.title,
-        24.0 * scale,
-        TEXT,
-        false,
+        Label {
+            bounds: (pad, unit(24.0), width - pad * 2, unit(66.0)),
+            text: &app.title,
+            size: 24.0 * scale,
+            tint: TEXT,
+            center: false,
+        },
     );
     if app.notice {
         app.document.label(
             pixels,
             surface,
-            (pad, unit(100.0), width - pad * 2, unit(24.0)),
-            "What happened",
-            14.0 * scale,
-            MUTED,
-            false,
+            Label {
+                bounds: (pad, unit(100.0), width - pad * 2, unit(24.0)),
+                text: "What happened",
+                size: 14.0 * scale,
+                tint: MUTED,
+                center: false,
+            },
         );
     }
     let panel_top = if app.notice { 134.0 } else { 100.0 };
@@ -219,11 +229,13 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
     app.document.label(
         pixels,
         surface,
-        (pad, height - unit(109.0), width - pad * 2, unit(28.0)),
-        hint,
-        12.0 * scale,
-        MUTED,
-        false,
+        Label {
+            bounds: (pad, height - unit(109.0), width - pad * 2, unit(28.0)),
+            text: hint,
+            size: 12.0 * scale,
+            tint: MUTED,
+            center: false,
+        },
     );
     for index in 0..2 {
         let rect = app.button_rect(index);
@@ -275,11 +287,13 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
         app.document.label(
             pixels,
             surface,
-            (rect.0, rect.1 + unit(10.0), rect.2, rect.3 - unit(10.0)),
-            label,
-            14.0 * scale,
-            if index == 1 { BG } else { TEXT },
-            true,
+            Label {
+                bounds: (rect.0, rect.1 + unit(10.0), rect.2, rect.3 - unit(10.0)),
+                text: label,
+                size: 14.0 * scale,
+                tint: if index == 1 { BG } else { TEXT },
+                center: true,
+            },
         );
     }
 }
