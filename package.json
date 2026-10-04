@@ -13,9 +13,7 @@
     }
   },
   "files": [
-    "packages/sabine/index.js",
-    "packages/sabine/index.d.ts",
-    "packages/sabine/README.md"
+    "packages/sabine"
   ],
   "sideEffects": false
 }

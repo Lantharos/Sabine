@@ -72,10 +72,10 @@ def prepare_changes(root, version):
         if metadata["name"] in members and "source" not in metadata:
             blocks[index] = re.sub(r'^version = "[^"]+"', f'version = "{package}"', block, count=1, flags=re.M)
     add("Cargo.lock", "[[package]]".join(blocks))
-    for name in ["package.json", "packages/sabine/package.json"]:
-        text = (root / name).read_text()
-        old = json.loads(text)["version"]
-        add(name, text.replace(f'"version": "{old}"', f'"version": "{package}"', 1))
+    name = "package.json"
+    text = (root / name).read_text()
+    old = json.loads(text)["version"]
+    add(name, text.replace(f'"version": "{old}"', f'"version": "{package}"', 1))
     major, build = version.split(".")
     name = "crates/sabine-service/src/types/mod.rs"
     text = (root / name).read_text()

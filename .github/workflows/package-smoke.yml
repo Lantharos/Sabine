@@ -99,7 +99,7 @@ jobs:
           $cargo = $cargo -replace '(?m)^sabine = .+$', "sabine = { path = `"$cargoPath`" }"
           [IO.File]::WriteAllText((Join-Path $PWD 'release-probe/Cargo.toml'), $cargo, [Text.UTF8Encoding]::new($false))
           $package = Get-Content release-probe/package.json -Raw | ConvertFrom-Json
-          $package.dependencies.'@lantharos/sabine' = 'file:' + (Join-Path $PWD 'packages/sabine').Replace('\', '/')
+          $package.dependencies.'@lantharos/sabine' = 'file:' + $PWD.Path.Replace('\', '/')
           [IO.File]::WriteAllText((Join-Path $PWD 'release-probe/package.json'), ($package | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
           $config = Get-Content release-probe/Sabine.toml -Raw
           $config = $config.Replace('[app]', "[app]`nmaintainer = `"Package Tests <packages@example.test>`"`nlicense = `"MIT`"")
