@@ -1,9 +1,5 @@
-// ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
-//
-// On Windows, Chromium's ANGLE device must match the compositor's adapter LUID.
-// A software compositor needs d3d11-warp, not ordinary d3d11. Picking a different
-// device can kill shared-texture import before the first browser frame.
-
+mod geometry;
+mod launch;
 mod window;
 
 use std::{
@@ -26,16 +22,16 @@ use winit::{
 use crate::bridge::frame::Frame;
 use crate::osr::control::{ControlRelay, ControlWriter};
 
+use crate::SabineWindowChrome;
 use crate::osr::transport::IpcStream;
 use crate::render::{BgraImage, GpuRenderer};
-use crate::{SabineWindowChrome, osr};
 use sabine_platform::WindowEffect;
 
 use super::config::OsrHostConfig;
-use super::socket::{SocketReader, start_socket_reader};
+use super::socket::SocketReader;
 use super::types::{
     ClickMemory, LifecycleState, MouseButtons, OsrHostEvent, OverlayLayer, PendingResizePaint,
-    SurfaceGeometry, TitlebarControl, uses_sabine_chrome,
+    SurfaceGeometry, TitlebarControl,
 };
 
 pub(super) struct OsrNativeHost {
@@ -73,6 +69,8 @@ pub(super) struct OsrNativeHost {
     pub(super) native_cursor_override: bool,
     pub(super) modifiers: winit::keyboard::ModifiersState,
     pub(super) mouse: MouseButtons,
+    pub(super) touch: super::input::TouchState,
+    pub(super) wheel_remainder: super::input::WheelRemainder,
     pub(super) last_click: Option<ClickMemory>,
     pub(super) active_click_count: i32,
     pub(super) cursor_x: f32,
@@ -176,6 +174,8 @@ impl OsrNativeHost {
             native_cursor_override: false,
             modifiers: Default::default(),
             mouse: MouseButtons::default(),
+            touch: Default::default(),
+            wheel_remainder: Default::default(),
             last_click: None,
             active_click_count: 1,
             cursor_x: 0.0,
@@ -218,171 +218,6 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn launch_child(&mut self) {
-        if self.failure.is_some()
-            || self.closing_deadline.is_some()
-            || self.socket.is_some()
-            || self.awaiting_connection
-        {
-            return;
-        }
-        let Some(app_id) = self
-            .config
-            .app_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            self.fail("Sabine OSR host requires a non-empty app_id".to_string());
-            return;
-        };
-        let (endpoint, listener) = match crate::osr::transport::IpcEndpoint::bind(app_id) {
-            Ok(connection) => connection,
-            Err(error) => {
-                self.fail(format!("Could not bind OSR transport: {error}"));
-                return;
-            }
-        };
-        let authentication_token = match crate::osr::transport::authentication_token() {
-            Ok(token) => token,
-            Err(error) => {
-                self.fail(format!("Could not secure OSR transport: {error}"));
-                return;
-            }
-        };
-        #[cfg(target_os = "macos")]
-        let surface_broker = match crate::osr::accel::SurfaceBroker::start(&authentication_token) {
-            Ok(broker) => broker,
-            Err(error) => {
-                self.fail(format!("Could not share browser surfaces: {error}"));
-                return;
-            }
-        };
-        self.socket_reader = None;
-        self.connection_generation = self.connection_generation.wrapping_add(1);
-        let generation = self.connection_generation;
-        self.awaiting_connection = true;
-        self.connection_deadline = Some(Instant::now() + std::time::Duration::from_secs(30));
-        self.main_load_ready = false;
-        self.cef_handed_off = false;
-        self.handoff_deadline = None;
-
-        let (width, height, scale) = self.content_size_for_cef();
-        let mut command = match osr::cef_osr_command(
-            &self.config.runtime_dir,
-            &self.config.host_binary,
-            &endpoint,
-            &authentication_token,
-            &self.config,
-            osr::CefViewport {
-                width,
-                height,
-                scale,
-                frame_rate: self.active_frame_rate(),
-                parent_window: self.window.as_ref().and_then(|window| {
-                    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-                    match window.window_handle().ok()?.as_raw() {
-                        RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as u64),
-                        _ => None,
-                    }
-                }),
-                accelerated_paint: cfg!(target_os = "macos")
-                    || (cfg!(windows) && self.renderer.is_some()),
-            },
-        ) {
-            Ok(command) => command,
-            Err(error) => {
-                self.awaiting_connection = false;
-                endpoint.unlink();
-                self.fail(format!("Could not prepare the browser: {error}"));
-                return;
-            }
-        };
-        #[cfg(target_os = "macos")]
-        command.arg(format!(
-            "--sabine-surface-service={}",
-            surface_broker.service_name()
-        ));
-        #[cfg(windows)]
-        if let Some(renderer) = &self.renderer {
-            let luid = crate::osr::accel::adapter_luid(renderer);
-            let angle = if renderer.uses_software_adapter() {
-                "d3d11-warp"
-            } else {
-                "d3d11"
-            };
-            command.arg(format!("--use-angle={angle}"));
-            command.arg(format!("--use-adapter-luid={luid}"));
-            if std::env::var_os("SABINE_TRACE").is_some() {
-                eprintln!("Sabine GPU: Chromium adapter LUID={luid} ANGLE={angle}");
-            }
-        }
-        let child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                self.awaiting_connection = false;
-                endpoint.unlink();
-                self.fail(format!("Could not launch the browser: {error}"));
-                return;
-            }
-        };
-        self.socket_reader = Some(start_socket_reader(
-            generation,
-            listener,
-            endpoint,
-            authentication_token,
-            self.sender.clone(),
-            self.proxy.clone(),
-            #[cfg(target_os = "macos")]
-            surface_broker.registry(),
-        ));
-        #[cfg(target_os = "macos")]
-        {
-            self.surface_broker = Some(surface_broker);
-        }
-        self.children.push((generation, child));
-    }
-
-    #[cfg(not(windows))]
-    pub(super) fn launch_child_before_window(&mut self, event_loop: &dyn ActiveEventLoop) {
-        self.scale_factor = crate::launch::launch_scale_factor(event_loop);
-        self.surface_size = winit::dpi::PhysicalSize::new(
-            (f64::from(self.config.width) * self.scale_factor).round() as u32,
-            (f64::from(self.config.height) * self.scale_factor).round() as u32,
-        );
-        self.launch_child();
-    }
-
-    pub(super) fn content_size_for_cef(&self) -> (u32, u32, f64) {
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(self.scale_factor, |window| window.scale_factor());
-        if !self.config.visible
-            && self.window.is_none()
-            && self.config.lifecycle.hibernate_after.is_some()
-        {
-            return (1, 1, scale);
-        }
-        let logical_width = f64::from(self.surface_size.width) / scale.max(1.0);
-        let logical_height = (f64::from(self.surface_size.height) / scale.max(1.0)
-            - f64::from(self.titlebar_height()))
-        .max(1.0);
-        (
-            logical_width.round().max(1.0) as u32,
-            logical_height.round().max(1.0) as u32,
-            scale,
-        )
-    }
-
-    pub(super) fn titlebar_height(&self) -> f32 {
-        if uses_sabine_chrome(self.config.chrome) {
-            super::types::TITLEBAR_HEIGHT
-        } else {
-            0.0
-        }
-    }
-
     pub(super) fn window_options(&self) -> WindowOptions {
         WindowOptions {
             title: self.config.title.clone(),
@@ -401,12 +236,12 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn send_control(&self, line: &str) {
+    pub(super) fn send_control(&self, line: impl Into<String>) {
         let Some(writer) = &self.control_writer else {
             return;
         };
-        if let Err(error) = writer.send(line.to_string()) {
-            eprintln!("Sabine native OSR control send failed: {error}");
+        if let Err(error) = writer.send(line.into()) {
+            sabine_runtime::report_error("window", format!("browser control send failed: {error}"));
         }
     }
 
@@ -415,34 +250,8 @@ impl OsrNativeHost {
             return;
         };
         if let Err(error) = writer.send_motion(line) {
-            eprintln!("Sabine native OSR pointer send failed: {error}");
+            sabine_runtime::report_error("window", format!("pointer send failed: {error}"));
         }
-    }
-
-    pub(super) fn content_surface_size(&self) -> (u32, u32) {
-        let (width, height, _) = self.content_size_for_cef();
-        (width, height)
-    }
-
-    pub(super) fn content_position(&self, x: f32, y: f32) -> Option<(f32, f32)> {
-        let titlebar_height = self.titlebar_height();
-        (y >= titlebar_height).then_some((x.max(0.0), (y - titlebar_height).max(0.0)))
-    }
-
-    pub(super) fn logical_width(&self) -> f32 {
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(1.0, |window| window.scale_factor()) as f32;
-        self.surface_size.width as f32 / scale.max(1.0)
-    }
-
-    pub(super) fn logical_height(&self) -> f32 {
-        let scale = self
-            .window
-            .as_ref()
-            .map_or(1.0, |window| window.scale_factor()) as f32;
-        self.surface_size.height as f32 / scale.max(1.0)
     }
 
     pub(super) fn begin_close(&mut self, event_loop: &dyn ActiveEventLoop) {

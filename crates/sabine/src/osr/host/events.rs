@@ -118,7 +118,7 @@ impl OsrNativeHost {
                         resize_frame_ready |= paint.resize_frame_ready;
                         needs_initial_present |= paint.initial_present;
                     } else {
-                        self.send_control(&format!("accel_release\t{}\n", frame.slot_token));
+                        self.send_control(format!("accel_release\t{}\n", frame.slot_token));
                     }
                 }
                 OsrHostEvent::Message(_, OsrMessage::PopupHidden) => {
@@ -387,7 +387,7 @@ impl OsrNativeHost {
         request_id: &str,
         result: Result<serde_json::Value, String>,
     ) {
-        self.send_control(&bridge_response_line(browser_id, request_id, result));
+        self.send_control(bridge_response_line(browser_id, request_id, result));
     }
 }
 
@@ -427,7 +427,6 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
         id: value.get("id")?.as_str()?.to_string(),
         prevents_hibernation: value
             .get("preventsHibernation")
-            .or_else(|| value.get("prevents_hibernation"))
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true),
     })

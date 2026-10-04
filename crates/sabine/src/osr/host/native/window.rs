@@ -148,7 +148,7 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn drop_presented_window(&mut self) {
         if let Some(window) = &self.window {
-            let scale = window.scale_factor().max(1.0);
+            let scale = crate::render::effective_scale(window.scale_factor());
             self.config.width = (f64::from(self.surface_size.width) / scale)
                 .round()
                 .max(f64::from(self.config.min_width)) as u32;

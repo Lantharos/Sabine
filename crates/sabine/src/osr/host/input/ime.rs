@@ -19,7 +19,7 @@ impl OsrNativeHost {
             Ime::Commit(text) => {
                 self.ime_preedit = None;
                 let encoded = encode_component(&text);
-                self.send_control(&format!("ime_commit\t{encoded}\n"));
+                self.send_control(format!("ime_commit\t{encoded}\n"));
             }
             Ime::Preedit(text, selection) => {
                 if text.is_empty() {
@@ -57,7 +57,7 @@ impl OsrNativeHost {
             })
             .map(|(start, end)| format!("\t{start}\t{end}"))
             .unwrap_or_default();
-        self.send_control(&format!("ime_composition\t{encoded}{selection}\n"));
+        self.send_control(format!("ime_composition\t{encoded}{selection}\n"));
     }
 
     fn delete_ime_surrounding(&self, before_bytes: usize, after_bytes: usize) {
@@ -77,7 +77,7 @@ impl OsrNativeHost {
         if self.ime_preedit.is_some() {
             self.send_control("ime_cancel\n");
         }
-        self.send_control(&format!(
+        self.send_control(format!(
             "ime_delete\t{}\t{}\n",
             surrounding.base_utf16 + start_utf16,
             surrounding.base_utf16 + end_utf16
@@ -201,10 +201,10 @@ impl OsrNativeHost {
             return;
         };
         let titlebar = self.titlebar_height();
-        let scale = window.scale_factor().max(1.0);
+        let scale = self.scale();
         let content_x = position.x;
         let content_y = position.y + (titlebar as f64 * scale).round() as i32;
-        self.send_control(&format!("screen_origin\t{content_x}\t{content_y}\n"));
+        self.send_control(format!("screen_origin\t{content_x}\t{content_y}\n"));
     }
 }
 

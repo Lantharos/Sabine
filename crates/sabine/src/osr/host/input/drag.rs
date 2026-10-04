@@ -91,7 +91,7 @@ impl OsrNativeHost {
             return;
         }
         let (x, y) = position
-            .map(|position| self.logical_drag_position(position))
+            .map(|position| self.logical_point(position))
             .unwrap_or((self.cursor_x, self.cursor_y));
         self.incoming_file_drag = Some(IncomingFileDrag {
             id: Some(id),
@@ -117,7 +117,7 @@ impl OsrNativeHost {
         position: winit::dpi::PhysicalPosition<f64>,
         action: Option<DndAction>,
     ) {
-        let (x, y) = self.logical_drag_position(position);
+        let (x, y) = self.logical_point(position);
         let Some(drag) = self
             .incoming_file_drag
             .as_mut()
@@ -204,11 +204,6 @@ impl OsrNativeHost {
         }
     }
 
-    fn logical_drag_position(&self, position: winit::dpi::PhysicalPosition<f64>) -> (f32, f32) {
-        let scale = self.scale_factor.max(1.0) as f32;
-        (position.x as f32 / scale, position.y as f32 / scale)
-    }
-
     fn emit_incoming_file_drag(&self, phase: &str) {
         let Some(drag) = self.incoming_file_drag.as_ref() else {
             return;
@@ -239,7 +234,7 @@ impl OsrNativeHost {
             "action": action,
             "internal": internal,
         });
-        self.send_control(&format!("file_drag\t{payload}\n"));
+        self.send_control(format!("file_drag\t{payload}\n"));
     }
 
     pub(in crate::osr::host) fn start_file_drag(
@@ -309,7 +304,7 @@ impl OsrNativeHost {
         let (x, y) = self
             .content_position(self.cursor_x, self.cursor_y)
             .unwrap_or((self.cursor_x, self.cursor_y));
-        self.send_control(&format!(
+        self.send_control(format!(
             "file_drag_ended\t{:.0}\t{:.0}\t{operation}\n",
             x, y
         ));
