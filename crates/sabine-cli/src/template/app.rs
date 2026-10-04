@@ -59,7 +59,7 @@ fn app_package_json(name: &str) -> String {
   }},
   "devDependencies": {{
     "typescript": "^7.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.2"
   }}
 }}
 "#,
