@@ -148,6 +148,7 @@ impl GpuRenderer {
             CachedTexture {
                 texture,
                 bind_group,
+                origin: (0, 0),
                 width,
                 height,
                 uv_origin: [0.0, 0.0],

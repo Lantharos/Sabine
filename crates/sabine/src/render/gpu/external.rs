@@ -68,6 +68,7 @@ impl GpuRenderer {
             CachedTexture {
                 texture: imported.texture,
                 bind_group: imported.bind_group,
+                origin: source_origin,
                 width,
                 height,
                 uv_origin: [
