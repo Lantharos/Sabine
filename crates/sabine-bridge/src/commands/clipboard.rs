@@ -1,4 +1,4 @@
-//! Clipboard requests from pages, which the window host answers on Linux.
+//! Clipboard requests from pages, which the window host answers.
 
 pub const COMMAND_PREFIX: &str = "sabine.clipboard.";
 pub const READ_COMMAND: &str = "sabine.clipboard.read";

@@ -21,6 +21,7 @@ pub(crate) enum Selection {
 }
 
 impl Selection {
+    #[cfg(target_os = "linux")]
     pub(crate) fn index(self) -> usize {
         match self {
             Self::Clipboard => 0,
@@ -51,6 +52,7 @@ impl ClipboardContent {
     }
 
     /// The types to advertise: every item, plus the older names of plain text.
+    #[cfg(target_os = "linux")]
     pub(crate) fn offered_types(&self) -> Vec<String> {
         let mut types = self
             .items
@@ -67,7 +69,7 @@ impl ClipboardContent {
         }
         types
     }
-
+    #[cfg(target_os = "linux")]
     pub(crate) fn bytes_for(&self, mime: &str) -> Option<Arc<[u8]>> {
         let wanted = if TEXT_ALIASES.contains(&mime) {
             TEXT

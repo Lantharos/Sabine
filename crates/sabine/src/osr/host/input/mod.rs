@@ -30,6 +30,8 @@ impl ApplicationHandler for OsrNativeHost {
         }
         #[cfg(target_os = "linux")]
         self.connect_clipboard(event_loop);
+        #[cfg(not(target_os = "linux"))]
+        self.connect_clipboard();
         if !self.config.visible {
             self.launch_child();
             return;

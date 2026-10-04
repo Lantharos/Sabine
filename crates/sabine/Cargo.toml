@@ -62,6 +62,9 @@ uds_windows.workspace = true
 windows-core.workspace = true
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
     "Win32_System_Registry",
     "Win32_System_Com",
     "Win32_System_RemoteDesktop",
@@ -84,8 +87,8 @@ windows = { version = "0.62.2", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "objc2-quartz-core"] }
-objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSPasteboard", "NSPasteboardItem", "objc2-quartz-core"] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true
 objc2-metal.workspace = true

@@ -105,7 +105,6 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "macos")]
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
     pub(super) media: crate::media::MediaHost,
-    #[cfg(target_os = "linux")]
     pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
@@ -208,7 +207,6 @@ impl OsrNativeHost {
             #[cfg(target_os = "macos")]
             surface_broker: None,
             media: Default::default(),
-            #[cfg(target_os = "linux")]
             clipboard: None,
             #[cfg(target_os = "linux")]
             paste_gesture: None,

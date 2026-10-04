@@ -160,8 +160,9 @@ const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
 const selected = await clipboard.read({ selection: "primary" });
 ```
 
-Text types arrive as strings and other types as `Uint8Array`s. The primary selection is Linux
-only; elsewhere these helpers use the browser clipboard.
+Text types arrive as strings and other types as `Uint8Array`s. Every desktop carries any MIME
+type, including files as `text/uri-list`, which Windows and macOS exchange as their own file lists.
+The primary selection is Linux only.
 
 ## Guests
 

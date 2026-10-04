@@ -1,27 +1,14 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sabine_bridge::clipboard::{READ_COMMAND, WRITE_COMMAND};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use winit::{
-    event::KeyEvent,
-    event_loop::ActiveEventLoop,
-    keyboard::{KeyCode, NamedKey, PhysicalKey},
-    window::Window,
-};
 
 use super::BridgeRequest;
-use crate::clipboard::{ClipboardContent, Selection, SystemClipboard};
+#[cfg(not(target_os = "linux"))]
+use crate::clipboard::SystemClipboard;
+use crate::clipboard::{ClipboardContent, Selection};
 use crate::osr::host::events::bridge_response_line;
 use crate::osr::host::native::OsrNativeHost;
-
-/// How long after the user asks to paste a page outside the app may read
-/// the clipboard.
-const PASTE_GESTURE: Duration = Duration::from_secs(2);
 
 #[derive(Deserialize)]
 struct ReadRequest {
@@ -47,41 +34,19 @@ struct Item {
 impl OsrNativeHost {
     /// Connects before the browser starts, so its pages know they can reach
     /// the clipboard.
-    pub(in crate::osr::host) fn connect_clipboard(&mut self, event_loop: &dyn ActiveEventLoop) {
-        if self.clipboard.is_some() {
-            return;
-        }
-        let proxy = self.proxy.clone();
-        match SystemClipboard::connect(
-            event_loop.rwh_06_handle(),
-            Arc::new(move || proxy.wake_up()),
-        ) {
-            Ok(clipboard) => {
-                self.clipboard = Some(clipboard);
-                self.config.bridge_policy["clipboard"] = true.into();
-            }
-            Err(error) => eprintln!("Sabine clipboard: {error}"),
+    #[cfg(not(target_os = "linux"))]
+    pub(in crate::osr::host) fn connect_clipboard(&mut self) {
+        if self.clipboard.is_none() {
+            self.clipboard = Some(SystemClipboard::connect());
+            self.config.bridge_policy["clipboard"] = true.into();
         }
     }
 
-    pub(in crate::osr::host) fn attach_clipboard(&self, window: &dyn Window) {
-        if let Some(clipboard) = &self.clipboard {
-            clipboard.attach(window);
-        }
-    }
-
-    pub(in crate::osr::host) fn note_paste_key(&mut self, event: &KeyEvent) {
-        let control = self.modifiers.control_key();
-        let shift = self.modifiers.shift_key();
-        let paste = (control && event.physical_key == PhysicalKey::Code(KeyCode::KeyV))
-            || (shift && event.logical_key == NamedKey::Insert);
-        if paste {
-            self.paste_gesture = Some(Instant::now());
-        }
-    }
-
-    pub(in crate::osr::host) fn note_middle_click(&mut self) {
-        self.paste_gesture = Some(Instant::now());
+    /// Chromium pastes by itself here, so only the app's own pages read the
+    /// clipboard through the window.
+    #[cfg(not(target_os = "linux"))]
+    fn pasting(&self) -> bool {
+        false
     }
 
     pub(super) fn answer_clipboard(&mut self, request: &BridgeRequest) {
@@ -115,10 +80,7 @@ impl OsrNativeHost {
                 return;
             }
         };
-        let pasting = self
-            .paste_gesture
-            .is_some_and(|at| at.elapsed() < PASTE_GESTURE);
-        let (Some(clipboard), true) = (&self.clipboard, read.trusted || pasting) else {
+        let (Some(clipboard), true) = (&self.clipboard, read.trusted || self.pasting()) else {
             self.send_bridge_response(
                 request.browser_id,
                 request.request_id,
@@ -160,7 +122,7 @@ impl OsrNativeHost {
             content.push(item.mime, bytes);
         }
         if !content.is_empty() {
-            clipboard.write(write.selection, content);
+            clipboard.write(write.selection, content)?;
         }
         Ok(())
     }
