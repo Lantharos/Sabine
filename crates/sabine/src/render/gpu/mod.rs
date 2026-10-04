@@ -76,6 +76,8 @@ pub struct GpuRenderer {
     #[cfg(windows)]
     software_adapter: bool,
     scale_factor: f32,
+    #[cfg(target_os = "macos")]
+    present_modes: Vec<wgpu::PresentMode>,
     surface_alpha_is_opaque: bool,
     window: Arc<dyn Window>,
 }
@@ -122,7 +124,7 @@ impl GpuRenderer {
             .copied()
             .find(wgpu::TextureFormat::is_srgb)
             .unwrap_or(capabilities.formats[0]);
-        let present_mode = select_present_mode(&capabilities.present_modes);
+        let present_mode = select_present_mode(&capabilities.present_modes, false);
         let alpha_mode = select_surface_alpha_mode(&capabilities.alpha_modes, transparent);
         let surface_alpha_is_opaque = matches!(
             alpha_mode,
@@ -255,6 +257,8 @@ impl GpuRenderer {
             #[cfg(windows)]
             software_adapter: adapter.get_info().device_type == wgpu::DeviceType::Cpu,
             scale_factor: window.scale_factor() as f32,
+            #[cfg(target_os = "macos")]
+            present_modes: capabilities.present_modes,
             surface_alpha_is_opaque,
             source,
             window,
