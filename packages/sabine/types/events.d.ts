@@ -11,15 +11,6 @@ import type {
   GuestWheelEvent,
 } from "./guest.js";
 
-export interface WindowFileDragEvent {
-  phase: "enter" | "over" | "leave" | "drop";
-  paths: string[];
-  x: number;
-  y: number;
-  action: "copy" | "move" | "link" | "none";
-  internal: boolean;
-}
-
 export interface TrayActivateEvent {
   trayId: string;
   /** The menu item chosen, or `null` when the icon itself was activated. */
@@ -55,7 +46,6 @@ type Listen<T> = (callback: (payload: T) => void) => () => void;
 
 export declare const events: {
   openUrlsAvailable: Listen<null>;
-  fileDrag: Listen<WindowFileDragEvent>;
   trayActivate: Listen<TrayActivateEvent>;
   globalShortcut: Listen<GlobalShortcutEvent>;
   singleInstance: Listen<SingleInstanceEvent>;

@@ -14,7 +14,7 @@ use std::io::{self, Read};
 
 #[cfg(target_os = "macos")]
 use crate::osr::accel::SurfaceRegistry;
-use crate::osr::protocol::{CursorImage, OsrMessage, PageCursorMessage};
+use crate::osr::protocol::{CursorImage, DragContent, OsrMessage, PageCursorMessage};
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
@@ -24,7 +24,7 @@ use accel::{KIND_ACCEL_RETIRE, parse_retired_resources};
 use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
 use header::{read_header, read_i32, read_u32};
 use paint::{BatchHeader, BatchSurface, parse_inline_batch};
-use regions::{parse_draggable_regions, parse_file_drag_request};
+use regions::parse_draggable_regions;
 
 pub(super) const HEADER_LEN: usize = 28;
 pub(super) const MAGIC: &[u8; 4] = b"SAB1";
@@ -44,7 +44,7 @@ pub(super) const KIND_MAIN_BATCH: u32 = 12;
 pub(super) const KIND_POPUP_BATCH: u32 = 13;
 pub(super) const KIND_MAIN_SHARED_BATCH: u32 = 14;
 pub(super) const KIND_POPUP_SHARED_BATCH: u32 = 15;
-pub(super) const KIND_FILE_DRAG_REQUESTED: u32 = 16;
+pub(super) const KIND_DRAG_STARTED: u32 = 16;
 pub(super) const KIND_GUEST_BATCH: u32 = 18;
 pub(super) const KIND_GUEST_SHARED_BATCH: u32 = 19;
 pub(super) const KIND_GUEST_HIDDEN: u32 = 20;
@@ -63,6 +63,7 @@ pub(super) const KIND_MAXIMIZE_REQUESTED: u32 = 35;
 pub(super) const KIND_RESTORE_REQUESTED: u32 = 36;
 pub(super) const KIND_FATAL_ERROR: u32 = 37;
 pub(super) const KIND_HOST_HELLO: u32 = 38;
+pub(super) const KIND_DRAG_OPERATION: u32 = 40;
 const MAX_HELLO_BYTES: usize = 64;
 pub(super) const BATCH_ENTRY_LEN: usize = 28;
 
@@ -263,15 +264,8 @@ impl WireReader {
                     .ok()
                     .filter(|token| !token.trim().is_empty()),
             ),
-            KIND_FILE_DRAG_REQUESTED => match parse_file_drag_request(&payload) {
-                Some(request) => OsrMessage::FileDragRequested(request),
-                None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "invalid file drag request payload",
-                    ));
-                }
-            },
+            KIND_DRAG_STARTED => parse_drag_start(&payload)?,
+            KIND_DRAG_OPERATION => OsrMessage::DragOperation(width),
             KIND_MAIN_LOAD_STARTED => OsrMessage::MainLoadStarted,
             KIND_MAIN_LOAD_READY => OsrMessage::MainLoadReady,
             KIND_FATAL_ERROR => OsrMessage::FatalError(
@@ -361,6 +355,21 @@ fn parse_cursor(
         hotspot_x,
         hotspot_y,
     }))
+}
+
+fn parse_drag_start(payload: &[u8]) -> io::Result<OsrMessage> {
+    #[derive(serde::Deserialize)]
+    struct DragStart {
+        #[serde(flatten)]
+        content: DragContent,
+        operations: u32,
+    }
+    let start: DragStart = serde_json::from_slice(payload)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(OsrMessage::DragStarted {
+        content: start.content,
+        operations: start.operations,
+    })
 }
 
 fn parse_ime_surrounding(payload: &[u8]) -> io::Result<OsrMessage> {

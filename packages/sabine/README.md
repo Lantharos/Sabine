@@ -36,10 +36,6 @@ events.guestWheel((event) => {
 events.guestFavicon((event) => {
   console.log(event.id, event.favicons);
 });
-
-events.fileDrag((event) => {
-  console.log(event.phase, event.paths, event.x, event.y, event.action);
-});
 ```
 
 Requests accept an `AbortSignal` and a deadline in milliseconds:

@@ -9,7 +9,6 @@ const on = (name) => (callback) => listen(name, callback);
 /** @type {typeof import("../types/events.js").events} */
 export const events = {
   openUrlsAvailable: on("app.openUrlsAvailable"),
-  fileDrag: on("window.fileDrag"),
   trayActivate: on("tray.activate"),
   globalShortcut: on("globalShortcut.activate"),
   singleInstance: on("singleInstance.activate"),

@@ -99,12 +99,7 @@ impl State {
         drag.x = x;
         drag.y = y;
         if drag.paths.is_some() {
-            let event = DropEvent::Motion {
-                x,
-                y,
-                action: drag.action,
-            };
-            self.emit(event);
+            self.emit(DropEvent::Motion { x, y });
         }
     }
 
@@ -179,9 +174,7 @@ impl State {
         let Some(drag) = self.drag.take() else {
             return;
         };
-        self.emit(DropEvent::Drop {
-            action: drag.action,
-        });
+        self.emit(DropEvent::Drop);
         if drag.action.is_some() && drag.offer.version() >= 3 {
             drag.offer.finish();
         }

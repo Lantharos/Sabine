@@ -1,4 +1,5 @@
 mod drag;
+mod drop;
 mod forward;
 mod ime;
 mod pointer;
@@ -6,13 +7,17 @@ mod shortcuts;
 mod surface;
 mod touch;
 
+pub(super) use drag::DragState;
 pub(super) use forward::WheelRemainder;
 #[cfg(not(target_os = "macos"))]
 pub(super) use shortcuts::ShortcutInhibition;
 pub(super) use touch::TouchState;
 
 use winit::{
-    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::ActiveEventLoop,
+    keyboard::{Key, NamedKey},
     window::WindowId,
 };
 
@@ -74,7 +79,10 @@ impl ApplicationHandler for OsrNativeHost {
             } => {
                 #[cfg(target_os = "linux")]
                 self.note_paste_key(&event);
-                self.send_key_event(&event);
+                let escape = event.logical_key == Key::Named(NamedKey::Escape);
+                if !(escape && event.state.is_pressed() && self.cancel_page_drag()) {
+                    self.send_key_event(&event);
+                }
             }
             WindowEvent::Ime(ime) => self.forward_ime(ime),
             WindowEvent::Moved(_) => {
@@ -89,13 +97,13 @@ impl ApplicationHandler for OsrNativeHost {
                 source,
                 primary,
                 ..
-            } => self.pointer_moved(position, source, primary),
+            } => self.pointer_moved(event_loop, position, source, primary),
             WindowEvent::PointerLeft {
                 position,
                 kind,
                 primary,
                 ..
-            } => self.pointer_left(position, kind, primary),
+            } => self.pointer_left(event_loop, position, kind, primary),
             WindowEvent::PointerButton {
                 state,
                 position,
@@ -106,32 +114,19 @@ impl ApplicationHandler for OsrNativeHost {
             WindowEvent::MouseWheel { delta, .. } => self.forward_mouse_wheel(delta),
             WindowEvent::PinchGesture { delta, .. } => self.forward_pinch(delta),
             WindowEvent::DragEntered { id, position } if !self.clipboard_owns_drops() => {
-                self.begin_incoming_file_drag(event_loop, id, position);
+                self.drag_entered(event_loop, id, position);
             }
-            WindowEvent::DragPosition {
-                id,
-                position,
-                proposed_action,
-            } => {
-                self.update_incoming_file_drag(id, position, proposed_action);
-            }
+            WindowEvent::DragPosition { id, position, .. } => self.drag_moved(id, position),
             WindowEvent::DataTransferReceived { id, value, .. } => {
-                self.receive_incoming_file_drag(id, value.as_ref());
+                self.drag_received(id, value.as_ref());
             }
-            WindowEvent::DragDropped {
-                id,
-                proposed_action,
-            } => {
-                self.drop_incoming_file_drag(id, proposed_action);
+            WindowEvent::DragDropped { id, .. } => self.drag_dropped(id),
+            WindowEvent::DragLeft { id } => self.drag_left(id),
+            WindowEvent::OutgoingDragDropped { id, action } if self.drag.outgoing() == Some(id) => {
+                self.end_page_drag(action);
             }
-            WindowEvent::DragLeft { id } => self.leave_incoming_file_drag(id),
-            WindowEvent::OutgoingDragDropped { id, action }
-                if self.active_file_drag == Some(id) =>
-            {
-                self.finish_file_drag(action);
-            }
-            WindowEvent::OutgoingDragCanceled { id } if self.active_file_drag == Some(id) => {
-                self.finish_file_drag(None);
+            WindowEvent::OutgoingDragCanceled { id } if self.drag.outgoing() == Some(id) => {
+                self.end_page_drag(None);
             }
             _ => {}
         }

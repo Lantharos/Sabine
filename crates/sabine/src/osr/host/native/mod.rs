@@ -5,7 +5,6 @@ mod window;
 use std::{
     cell::Cell,
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
-    path::PathBuf,
     process::Child,
     sync::{Arc, mpsc},
     time::Instant,
@@ -13,8 +12,7 @@ use std::{
 
 use sabine_platform::{WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect};
 use winit::{
-    data_transfer::DataTransferId,
-    event_loop::{ActiveEventLoop, DndAction, EventLoopProxy},
+    event_loop::{ActiveEventLoop, EventLoopProxy},
     window::{ActivationToken, Window as WinitWindow},
 };
 
@@ -94,8 +92,7 @@ pub(super) struct OsrNativeHost {
     pub(super) loading: Option<super::types::NativeLoading>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
     pub(super) pending_activation_token: Option<ActivationToken>,
-    pub(super) active_file_drag: Option<DataTransferId>,
-    pub(super) incoming_file_drag: Option<IncomingFileDrag>,
+    pub(super) drag: super::input::DragState,
     #[cfg(not(target_os = "macos"))]
     pub(super) shortcuts: super::input::ShortcutInhibition,
     /// CEF exited with process-singleton handoff (code 24). The existing
@@ -199,8 +196,7 @@ impl OsrNativeHost {
                 .then(|| super::types::NativeLoading::new(super::types::LoadingKind::Opening)),
             tooltip: None,
             pending_activation_token: None,
-            active_file_drag: None,
-            incoming_file_drag: None,
+            drag: Default::default(),
             #[cfg(not(target_os = "macos"))]
             shortcuts: Default::default(),
             cef_handed_off: false,
@@ -286,16 +282,6 @@ impl OsrNativeHost {
             self.surface_broker = None;
         }
     }
-}
-
-pub(super) struct IncomingFileDrag {
-    pub(super) id: Option<DataTransferId>,
-    pub(super) paths: Vec<PathBuf>,
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) action: Option<DndAction>,
-    pub(super) entered: bool,
-    pub(super) dropped: bool,
 }
 
 pub(super) fn platform_chrome(chrome: SabineWindowChrome) -> PlatformWindowChrome {
