@@ -3,7 +3,7 @@ function Wait-InstallerExit([Diagnostics.Process] $Process) {
     Get-CimInstance Win32_Process |
         Where-Object { $_.Name -match 'sabine|release-probe|setup|msiexec' } |
         Select-Object ProcessId, ParentProcessId, Name, CommandLine | Format-List
-    Get-ChildItem (Join-Path $env:LOCALAPPDATA 'sabine/logs') -Filter *.jsonl -ErrorAction SilentlyContinue |
+    Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Sabine/logs') -Filter *.jsonl -ErrorAction SilentlyContinue |
         ForEach-Object { Get-Content $_.FullName -Tail 30 }
     Get-ChildItem $env:RUNNER_TEMP -Filter 'sabine-msi-*.log' -ErrorAction SilentlyContinue |
         ForEach-Object { Get-Content $_.FullName -Tail 100 }

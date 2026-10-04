@@ -59,8 +59,8 @@ binaries into a versioned directory. The active pointer changes atomically and t
 is retained as the rollback installation until the next successful upgrade. The old binary supervises a single-daemon
 handoff; failed startup restores the previous pointer and daemon, records the failed release, and
 applies an exponential retry delay. A damaged active installation is silently replaced from signed
-release metadata. The host is compiled against CEF Stable API 15101, so the runtime service can
-independently install newer compatible CEF builds. Apps negotiate Sabine behavior and capabilities
+release metadata. The host is compiled against CEF Stable API 15401 and needs CEF 154 or newer, so the runtime
+service can independently install newer compatible CEF builds. Apps negotiate Sabine behavior and capabilities
 and never request a Chromium version.
 
 Registry writes, runtime installation, and shared-system installation use operating-system file
@@ -83,8 +83,7 @@ versioned manifest: its bundled bootstrap stages the required system, hands off 
 then registers the app. System release metadata declares its current build and the oldest app build
 it accepts. Apps older than that floor are not registered again and receive a native incompatibility
 notice. The service fetches their newest release right away instead of waiting for the soak period,
-and an app offers a downloaded update before showing that notice. Legacy registrations without compatibility metadata remain accepted until
-they next register with a current Sabine build.
+and an app offers a downloaded update before showing that notice.
 
 App releases are separate from Sabine releases. `[updates]` in `Sabine.toml` identifies a GitHub
 repository or HTTPS manifest endpoint. Sabine's reusable GitHub Actions workflow builds native
@@ -101,11 +100,13 @@ staging directory and their executable is checked before publication; failed rep
 preserve the installed directory. The original executable acts as
 a stable bootstrap and forwards the next launch to the executable recorded in the service registry.
 Native packages are also downloaded in the background, but activation is foreground: the next app
-launch offers Install or Later, exits after acceptance, invokes MSI, DMG replacement, AppImage
-replacement, or `pkexec` for deb/rpm, and relaunches after a successful installer exit. Store-owned
-installations remain owned by the store.
+launch offers Install or Later, exits after acceptance, invokes MSI with its progress window, the
+`.exe` installer silently, DMG replacement, AppImage replacement, or `pkexec` for deb/rpm, and
+relaunches after a successful installer exit. A DMG update asks for an administrator password only
+when the user cannot replace the installed bundle themselves. The downloaded package is deleted once
+it is installed. Store-owned installations remain owned by the store.
 
-CEF installation is a separate release stream. The daemon downloads the newest compatible Standard
+CEF installation is a separate release stream. The daemon downloads the newest compatible Minimal
 runtime into a side-by-side directory, initializes it with the installed host using a headless health
 probe, and only then leaves it selectable. The probe uses a throwaway profile with Chromium's mock keychain on
 macOS and basic password store on Linux, so validating a runtime never asks for the user's keychain
@@ -441,13 +442,16 @@ and internal framework symlinks.
 `sabine-service` owns the machine/user-level catalog. Its registry writes use a temporary file,
 `sync_all`, and atomic rename. Re-registering an app preserves its original registration timestamp.
 The dedicated `sabine-service-daemon` owns its PID file and maintenance loop. Linux starts it with a
-user systemd unit, macOS with a LaunchAgent, and Windows with a hidden per-user scheduled task; the
+user systemd unit, or with an XDG autostart entry in sessions without a user systemd instance, macOS
+with a LaunchAgent, and Windows with a hidden per-user scheduled task; the
 Windows binary uses the GUI subsystem and never creates a console host. The maintenance loop updates
 CEF to the newest compatible archive and keeps two runtime versions. Runtime failures
 are reported independently from app updates. Incompatible applications remain registered
 so their update source can deliver a compatible build. Maintenance reports retain each
-failure and identify when no usable runtime is available. Linux runtime storage honors
-`XDG_DATA_HOME`, using the same base directory as the service.
+failure and identify when no usable runtime is available. All shared state lives in one data folder:
+`%LOCALAPPDATA%\Sabine` on Windows, `~/Library/Application Support/Sabine` on macOS, and
+`$XDG_DATA_HOME/sabine` (by default `~/.local/share/sabine`) on Linux. Cache directories derived from
+file paths use SHA-256, so every Sabine build and the daemon agree on them.
 The user systemd unit follows `XDG_CONFIG_HOME` and preserves custom data, config, and cache paths.
 Executable paths containing spaces or systemd specifier characters are quoted.
 
@@ -513,7 +517,7 @@ Bridge commands are registered on the builder:
 
 Each window also accepts lifecycle settings (`lifecycle_policy`, frame rates, suspend, hibernation
 and memory saver), `on_visibility_changed` for the window's visibility and suspension, desktop
-services (`tray_icon`, `autostart`, `global_shortcut`, `deep_link`, `native_messaging_host`,
+services (`tray_icon`, `autostart`, `global_shortcut`, `native_messaging_host`,
 `single_instance`), content (`entry`, `url`, `dev_url`, `allowed_origin`, `local_files`) and
 `runtime(RuntimeConfig)`.
 
@@ -693,21 +697,37 @@ Current primitives cover tray menus, autostart, global shortcuts, deep links, na
 single-instance activation, hidden windows, always-on-top windows, and palette behavior. Native
 platform registration belongs in `sabine-platform` or `sabine-service`; CEF code must not own it.
 
-Autostart commands use the target platform's command-line syntax. macOS parses POSIX quoting into
-LaunchAgent arguments without invoking a shell; quoted empty arguments and escaped characters are
-preserved, and malformed quoting is rejected. Disabling autostart removes the registered entry and
-reports filesystem or registry errors.
+An app has one autostart entry, and its id must be the app id: an XDG autostart entry named
+`<app id>.desktop` on Linux, a `dev.sabine.<app id>` LaunchAgent on macOS, and a value named after
+the app id under the per-user `Run` key on Windows. Autostart commands use the target platform's
+command-line syntax. macOS parses POSIX quoting into LaunchAgent arguments without invoking a shell;
+quoted empty arguments and escaped characters are preserved, and malformed quoting is rejected.
+Disabling autostart removes the registered entry and reports filesystem or registry errors.
 
-Declare document MIME types and URL schemes in the app manifest:
+Declare document MIME types and URL schemes in the app manifest, along with the file extensions of
+each document type:
 
 ```toml
 [app]
-mime_types = ["text/plain", "x-scheme-handler/my-app"]
+mime_types = ["text/markdown", "application/vnd.example.notes", "x-scheme-handler/my-app"]
+
+[app.extensions]
+"text/markdown" = ["md", "markdown"]
+"application/vnd.example.notes" = ["notes"]
 ```
 
-The bundler includes these declarations in Linux desktop entries and macOS `CFBundleURLTypes` /
-`CFBundleDocumentTypes`, and preserves them in the installed runtime manifest. URL schemes start
-with a letter and contain lowercase letters, digits, `+`, `.` or `-`.
+URL schemes start with a letter and contain lowercase letters, digits, `+`, `.` or `-`. Extensions
+are lowercase, without the leading dot, and belong to a document type listed in `mime_types`. The
+manifest is the only source of URL schemes: the app registers exactly the schemes it declares, under
+its app id, so uninstalling it removes all of them.
+
+Each platform receives the same declarations. Linux desktop entries list them as `MimeType`, and
+packages install a shared-mime-info file so desktops recognize the extensions. macOS bundles list
+URL schemes in `CFBundleURLTypes` and document types in `CFBundleDocumentTypes` by type identifier:
+types macOS already knows, such as `public.plain-text` for `text/plain`, are used directly, and the
+others are declared as imported types with their MIME type and extensions. Windows installers and
+`sabine install` register a `<app id>.document` ProgID and add it to each extension's
+`OpenWithProgids`, so the app appears under Open with.
 
 Describe how launchers list and find the app with `generic_name`, `categories` and `keywords`:
 
@@ -750,8 +770,9 @@ Windows registers schemes for the current user when the app is installed and aga
 Linux creates a hidden desktop handler pointing to the running executable, or to the AppImage file
 when the app runs from one, before updating `mimeapps.list`; unrelated associations are preserved
 and Sabine registrations are serialized.
-Windows installers remove the scheme keys when the app is uninstalled. `sabine uninstall` removes
-what the app registered on every platform: its scheme keys on Windows, the hidden handler and the
+Windows installers remove the scheme keys and the document ProgID when the app is uninstalled.
+`sabine uninstall` removes what the app registered on every platform: its scheme keys and document
+ProgID on Windows, the hidden handler, shared-mime-info file and the
 `mimeapps.list` entries naming the app's desktop entries on Linux, and the bundle's Launch Services
 record on macOS. Both leave a scheme or handler alone once it launches a different executable,
 except MSI packages, which remove the registry values they installed. Linux handlers name the
@@ -759,7 +780,7 @@ executable in `TryExec` as well as `Exec`, so once a deb, rpm or AppImage is rem
 offering a handler whose program is gone. Package removal runs as root and cannot reach each user's
 files, so the handler file and its `mimeapps.list` entries stay until the app is installed and
 launched again, which rewrites them. On macOS, URL schemes must be declared in the application
-bundle before signing. A runtime `.deep_link(...)` call checks those declarations and reports a
+bundle before signing; the app checks that its bundle declares the manifest's schemes and reports a
 missing scheme instead of writing an unused registration file. Run the bundled app when testing
 macOS URL handlers.
 
@@ -778,9 +799,12 @@ absolute path.
 Set `allowed_origins` to the Chromium extensions' exact `chrome-extension://<id>/` origins, and
 `allowed_extensions` to Firefox add-on IDs such as `my-extension@example.org`. These produce
 separate browser manifests; an empty list grants no extensions access. Registrations are per-user
-for Chrome, Chromium, Edge, Brave, Vivaldi, Opera, Helium and Firefox. Zen reads Firefox's
-manifests, so it is covered too. On Windows, each browser's registry key points to its
-corresponding manifest; Vivaldi, Opera and Helium read Chrome's key, Helium after Chromium's.
+for Chrome and its beta, dev and canary channels, Chromium, Edge, Brave, Vivaldi, Opera, Helium,
+Firefox and LibreWolf. Zen reads Firefox's manifests, so it is covered too. On Linux, browsers
+installed from Flatpak or Snap also receive manifests in their sandboxed configuration folders
+(`~/.var/app/<app id>/` and `~/snap/<name>/common/`) when those folders exist. On Windows, each
+browser's registry key points to its corresponding manifest; Chrome's channels, Vivaldi, Opera and
+Helium read Chrome's key, Helium after Chromium's, and Firefox forks read Mozilla's.
 
 An app running from an AppImage only exists at its temporary mount while it runs, so a host
 executable inside the AppImage is registered through a small launcher in Sabine's data folder
@@ -795,6 +819,11 @@ point to them. A host name another installation has since registered keeps its m
 deb, rpm or AppImage package, or moving a macOS app to the Trash, leaves the manifests in each
 user's browser folders; browsers report the host as missing until the app is installed and launched
 again.
+
+These uninstallers also remove the app's autostart entry, its registration with the service, any
+update staged or downloaded for it, and the managed releases `sabine install --bundle` apps update
+into. Browser profiles stay unless `sabine uninstall --purge` is used. Upgrading an MSI package
+keeps all of this in place.
 
 ### Clipboard
 
@@ -830,7 +859,8 @@ implemented.
 `dev_port` are therefore never baked into production launch behavior.
 
 Supported targets are portable, Linux directory, deb, rpm, AppImage, Windows directory, exe, msi,
-macOS app, and dmg. Cross-host staging is allowed; signing and notarization remain deployment policy.
+macOS app, and dmg. Cross-host staging is allowed. `sabine bundle` signs Windows and macOS packages and notarizes disk
+images when signing is configured in the environment; see [Publishing](publishing.md#code-signing).
 Linux packages keep each application, its resources, and any offline runtime/service payload under
 `/usr/lib/sabine/<app-id>`. A relative symlink in `/usr/bin` launches the app. Runtime and manifest
 discovery follow the executable into its private directory, including in relocated portable bundles
@@ -838,21 +868,31 @@ and AppImages. Separate applications do not claim shared offline helper binaries
 Debian and RPM packages derive their architecture from the app's ELF binary. Build Debian packages
 on the target Debian/Ubuntu environment with `dpkg-dev`: `dpkg-shlibdeps` determines linked-library
 versions, supplemented by Chromium's desktop dependencies. RPM also declares the desktop libraries
-needed by downloaded runtimes and retains automatic ELF dependency generation.
+needed by downloaded runtimes by their sonames, such as `libgtk-3.so.0()(64bit)`, so Fedora,
+openSUSE and other RPM distributions resolve them from their own package names, and retains
+automatic ELF dependency generation.
+
+deb, rpm and AppImage packages install the app's icons into the hicolor theme and name them in the
+desktop entry as `Icon=<app id>`. Apps listed in launchers also ship AppStream metadata
+(`/usr/share/metainfo/<app id>.metainfo.xml`) with their name, generic name as summary, publisher,
+license, keywords, document types and release, so software centers can show them. AppStream needs a
+homepage: set `homepage` in `[app]`, or Sabine uses the Cargo package's `homepage` or `repository`;
+without one, no metadata is written.
 
 macOS bundles require a native Apple Silicon Mach-O executable, including when using `--binary`.
 Offline bundles must be assembled on the target operating system and CPU architecture so their service, CEF host and
 runtime match the application.
 
-`[app]` accepts `publisher`, `maintainer`, and `license`. Publisher and maintainer can come from Cargo
+`[app]` accepts `publisher`, `maintainer`, `license`, and `homepage`. Publisher and maintainer can come from Cargo
 `authors`, including inherited workspace authors; license can come from Cargo `license`. Debian
 packages require a maintainer in `Name <email>` form. RPM packages require a license identifier.
 These values describe your application; Sabine does not insert its own publisher or a placeholder
 email address. Prerelease SemVer versions use `~` in Debian/RPM metadata so they sort before the
 corresponding stable version.
 
-Windows builds statically link the Microsoft C runtime and select the GUI subsystem. MSI output is
-explicitly x64 and installs under the current user profile. Its wizard prepares the shared runtime,
+Windows builds statically link the Microsoft C runtime and select the GUI subsystem. Packages match
+the executable's architecture, x86_64 or ARM64, and install under the current user profile; bundling
+on an ARM64 Windows machine builds an ARM64 app. The MSI wizard prepares the shared runtime,
 supports repair, and rolls back app registration alongside packaged files on failure. Uninstall
 removes the app registration and preserves the shared Sabine system. MSI builds require WiX 7 with
 the UI and Util extensions. Local build machines accept the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/)

@@ -7,8 +7,8 @@ use std::{
 
 use super::{
     BundleFormat,
-    appstream::metainfo,
     config::BundleApp,
+    linux::appstream::metainfo,
     metadata::{app_run, desktop_entry, runtime_manifest, sanitize_path, windows_manifest},
 };
 use crate::{
@@ -242,6 +242,15 @@ fn stage_appimage(
         Some(AppArtifactKind::AppImage),
     )?;
     let share = stage_linux_share(app, &app_dir, &resources, executable)?;
+    let metainfo = share.join("metainfo");
+    let metainfo_file = metainfo.join(format!("{}.metainfo.xml", app.id));
+    if metainfo_file.is_file() {
+        fs::rename(
+            metainfo_file,
+            metainfo.join(format!("{}.appdata.xml", app.id)),
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let desktop = format!("{}.desktop", app.id);
     fs::copy(
         share.join("applications").join(&desktop),

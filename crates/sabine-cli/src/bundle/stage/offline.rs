@@ -16,7 +16,7 @@ pub(super) fn validate_platform(format: BundleFormat, binary: &Path) -> Result<(
         BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe => {
             windows_architecture(binary)?
         }
-        _ => super::super::linux_package::architecture(binary)?.1,
+        _ => super::super::linux::package::architecture(binary)?.1,
     };
     if architecture != std::env::consts::ARCH {
         return Err(format!(

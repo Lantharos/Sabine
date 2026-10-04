@@ -1,4 +1,4 @@
-use super::{config::BundleApp, stage::StagedBundle};
+use crate::bundle::{config::BundleApp, stage::StagedBundle};
 use std::{fs, io::Read, path::Path, process::Command};
 
 const CEF_RPM_LIBRARIES: &[&str] = &[
@@ -18,7 +18,9 @@ const CEF_RPM_LIBRARIES: &[&str] = &[
 
 const CEF_DEB_DEPENDENCIES: &str = "libgtk-3-0t64 | libgtk-3-0, libnss3, libnspr4, libasound2t64 | libasound2, libcups2t64 | libcups2, libxcomposite1, libxdamage1, libxrandr2, libgbm1, libxkbcommon0, libudev1, libwayland-client0";
 
-pub(super) fn architecture(binary: &Path) -> Result<(&'static str, &'static str), String> {
+pub(in crate::bundle) fn architecture(
+    binary: &Path,
+) -> Result<(&'static str, &'static str), String> {
     let mut header = [0; 20];
     fs::File::open(binary)
         .and_then(|mut file| file.read_exact(&mut header))
@@ -33,7 +35,7 @@ pub(super) fn architecture(binary: &Path) -> Result<(&'static str, &'static str)
     }
 }
 
-pub(super) fn deb_control(
+pub(in crate::bundle) fn deb_control(
     app: &BundleApp,
     binary: &Path,
     installed_size_kb: u64,
@@ -63,7 +65,7 @@ pub(super) fn deb_control(
     ))
 }
 
-pub(super) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> {
+pub(in crate::bundle) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> {
     if sabine_runtime::find_program("dpkg-shlibdeps").is_none() {
         return Err("Debian packaging requires dpkg-dev on the target Debian/Ubuntu build environment to calculate library dependencies".into());
     }
@@ -94,7 +96,7 @@ pub(super) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> 
     })
 }
 
-pub(super) fn rpm_spec(
+pub(in crate::bundle) fn rpm_spec(
     app: &BundleApp,
     executable: &str,
     binary: &Path,
