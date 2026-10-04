@@ -1,32 +1,10 @@
 #include "osr/handler.h"
 
 #include <algorithm>
-#include <cctype>
-#include <cerrno>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <set>
-#include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
-#include <vector>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
-#endif
 
 #include "guest/input.h"
 #include "guest/manager.h"
@@ -42,8 +20,6 @@
 #include "osr/input/ime.h"
 #include "osr/browser/screen.h"
 #include "osr/utilities.h"
-#if defined(OS_WIN)
-#endif
 
 using namespace sabine_osr;
 
@@ -276,8 +252,7 @@ void SabineOsrHandler::HandleControlLine(
     const std::string text = DecodeControlComponent(parts[3]);
     const uint32_t modifiers = std::strtoul(parts[4].c_str(), nullptr, 10);
     const bool repeat =
-        (parts.size() >= 6 && std::atoi(parts[5].c_str()) != 0) ||
-        (modifiers & kGuestModRepeat) != 0;
+        std::atoi(parts[5].c_str()) != 0 || (modifiers & kGuestModRepeat) != 0;
     const int native_key_code =
         parts.size() >= 7 ? std::atoi(parts[6].c_str()) : 0;
     GuestView* focused_guest =

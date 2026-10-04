@@ -1,32 +1,12 @@
 #include "osr/handler.h"
 
 #include <algorithm>
-#include <cctype>
-#include <cerrno>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fstream>
 #include <iostream>
-#include <limits>
-#include <set>
 #include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
-#endif
 
 #include "guest/input.h"
 #include "sabine_host_protocol.h"
@@ -138,7 +118,7 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   if (!primary_browser) {
     return;
   }
-  if (std::getenv("SABINE_TRACE")) {
+  if (TraceEnabled()) {
     std::fprintf(stderr, "Sabine CEF: primary browser ready windowless=%d\n",
                  host->IsWindowRenderingDisabled() ? 1 : 0);
     std::fflush(stderr);
@@ -409,7 +389,7 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
                                int width,
                                int height) {
   static bool traced_first_software_paint = false;
-  if (!traced_first_software_paint && std::getenv("SABINE_TRACE")) {
+  if (!traced_first_software_paint && TraceEnabled()) {
     traced_first_software_paint = true;
     std::fprintf(stderr, "Sabine CEF: first software paint size=%dx%d\n", width,
                  height);

@@ -229,7 +229,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   }
 
   static bool traced_first_callback = false;
-  if (!traced_first_callback && std::getenv("SABINE_TRACE")) {
+  if (!traced_first_callback && TraceEnabled()) {
     traced_first_callback = true;
     std::fprintf(stderr,
                  "Sabine CEF: first accelerated paint format=%d coded=%dx%d "
@@ -307,8 +307,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
         visible_bottom > coded_height) {
       visible = CefRect(0, 0, coded_width, coded_height);
     }
-    if (std::getenv("SABINE_TRACE") &&
-        (frame_w != coded_width || frame_h != coded_height)) {
+    if (TraceEnabled() && (frame_w != coded_width || frame_h != coded_height)) {
       std::fprintf(stderr,
                    "Sabine CEF: accelerated metadata mismatch reported=%dx%d "
                    "resource=%dx%d\n",
