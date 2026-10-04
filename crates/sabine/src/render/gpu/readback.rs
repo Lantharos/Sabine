@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::render::BgraImage;
+use crate::render::{BgraImage, ImageId};
 
 use super::GpuRenderer;
 
@@ -10,7 +10,7 @@ const READBACK_TIMEOUT: Duration = Duration::from_secs(2);
 impl GpuRenderer {
     /// Copies the visible part of image `id` back from the GPU, for keeping
     /// it while the renderer goes away or for capturing it.
-    pub(crate) fn read_bgra_image(&self, id: &str) -> Option<BgraImage> {
+    pub(crate) fn read_bgra_image(&self, id: &ImageId) -> Option<BgraImage> {
         if self.check_device().is_err() {
             return None;
         }

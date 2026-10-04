@@ -10,7 +10,7 @@ use winit::event::MouseButton;
 
 use crate::SabineWindowChrome;
 use crate::osr::control::ControlWriter;
-use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID, POPUP_TEXTURE_ID};
+use crate::osr::protocol::OsrMessage;
 use crate::osr::transport::IpcStream;
 
 pub(super) const TITLEBAR_HEIGHT: f32 = 38.0;
@@ -76,14 +76,6 @@ impl OverlayLayer {
     }
 }
 
-pub(super) fn overlay_texture_id(overlay_id: &str) -> String {
-    if overlay_id == POPUP_OVERLAY_ID {
-        POPUP_TEXTURE_ID.to_string()
-    } else {
-        format!("__sabine_guest_{overlay_id}")
-    }
-}
-
 pub(super) fn uses_sabine_chrome(chrome: SabineWindowChrome) -> bool {
     matches!(chrome, SabineWindowChrome::Sabine)
 }
@@ -127,7 +119,7 @@ pub(in crate::osr) struct NativeLoading {
 
 #[derive(Clone, Debug)]
 pub(super) struct NativeTooltip {
-    pub(super) text: String,
+    pub(super) text: Arc<str>,
     pub(super) x: f32,
     pub(super) y: f32,
     pub(super) reveal_at: Instant,
@@ -149,7 +141,7 @@ pub(super) struct ImePreedit {
 }
 
 impl NativeTooltip {
-    pub(super) fn new(text: String, x: f32, y: f32) -> Self {
+    pub(super) fn new(text: Arc<str>, x: f32, y: f32) -> Self {
         Self {
             text,
             x,

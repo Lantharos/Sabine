@@ -231,6 +231,9 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
         | OsrMessage::GuestHidden(text)
         | OsrMessage::TooltipChanged(text) => text.capacity(),
         OsrMessage::Cursor(PageCursorMessage::Custom(image)) => image.rgba.capacity(),
+        OsrMessage::ContextMenu { items, .. } => {
+            items.iter().map(|item| item.label.capacity()).sum()
+        }
         OsrMessage::BridgeRequest(frame) => {
             frame.line.capacity() + frame.body.as_ref().map_or(0, Vec::capacity)
         }

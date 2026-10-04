@@ -1,13 +1,15 @@
 use std::time::Instant;
 
 use crate::osr::paint_rects::surface_rects;
-use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrPaintBatch, OsrSurface};
-use crate::render::{GpuRenderer, RendererError};
+use std::sync::Arc;
+
+use crate::osr::protocol::{OsrPaintBatch, OsrSurface};
+use crate::render::{GpuRenderer, ImageId, RendererError};
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     LifecycleState, OverlayLayer, PendingResizePaint, RESIZE_REPAINT_GRACE, RESIZE_REPAINT_RETRY,
-    SurfaceGeometry, overlay_texture_id,
+    SurfaceGeometry,
 };
 
 impl OsrNativeHost {
@@ -104,22 +106,14 @@ impl OsrNativeHost {
             self.retry_resize_paint();
             return false;
         }
+        let image = self.image_id(&batch.surface);
         let Some(renderer) = self.renderer.as_mut() else {
             return false;
         };
-        let uploaded = match batch.surface.overlay_id() {
-            None => paint_surface(renderer, MAIN_TEXTURE_ID, &batch),
-            Some(overlay_id) => {
-                self.overlays
-                    .entry(overlay_id.to_string())
-                    .or_insert_with(|| OverlayLayer::new(geometry))
-                    .geometry = geometry;
-                paint_surface(renderer, &overlay_texture_id(overlay_id), &batch)
-            }
-        };
-        if !uploaded {
+        if !paint_surface(renderer, &image, &batch) {
             return false;
         }
+        self.place_overlay(&image, geometry);
         if batch.surface == OsrSurface::Main {
             self.main_surface = Some(geometry);
             if self.main_load_ready {
@@ -131,9 +125,36 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn clear_overlay(&mut self, overlay_id: &str) {
-        self.overlays.remove(overlay_id);
+        let Some((id, _)) = self.overlays.remove_entry(overlay_id) else {
+            return;
+        };
         if let Some(renderer) = &mut self.renderer {
-            renderer.remove_image(&overlay_texture_id(overlay_id));
+            renderer.remove_image(&ImageId::Overlay(id));
+        }
+    }
+
+    /// The image a surface paints into, sharing the overlay's existing id.
+    pub(in crate::osr::host) fn image_id(&self, surface: &OsrSurface) -> ImageId {
+        let Some(overlay_id) = surface.overlay_id() else {
+            return ImageId::Main;
+        };
+        ImageId::Overlay(
+            self.overlays
+                .get_key_value(overlay_id)
+                .map_or_else(|| Arc::from(overlay_id), |(id, _)| Arc::clone(id)),
+        )
+    }
+
+    pub(in crate::osr::host) fn place_overlay(
+        &mut self,
+        image: &ImageId,
+        geometry: SurfaceGeometry,
+    ) {
+        if let ImageId::Overlay(id) = image {
+            self.overlays
+                .entry(Arc::clone(id))
+                .or_insert_with(|| OverlayLayer::new(geometry))
+                .geometry = geometry;
         }
     }
 
@@ -143,15 +164,15 @@ impl OsrNativeHost {
         let Some(renderer) = &self.renderer else {
             return;
         };
-        let texture_ids = self
+        let images = self
             .main_surface
-            .map(|_| MAIN_TEXTURE_ID.to_string())
+            .map(|_| ImageId::Main)
             .into_iter()
-            .chain(self.overlays.keys().map(|id| overlay_texture_id(id)));
-        self.retained_frames = texture_ids
+            .chain(self.overlays.keys().cloned().map(ImageId::Overlay));
+        self.retained_frames = images
             .filter_map(|id| Some((id.clone(), renderer.read_bgra_image(&id)?)))
             .collect();
-        if !self.retained_frames.contains_key(MAIN_TEXTURE_ID) {
+        if !self.retained_frames.contains_key(&ImageId::Main) {
             self.main_surface = None;
         }
     }
@@ -168,10 +189,10 @@ impl OsrNativeHost {
     }
 }
 
-fn paint_surface(renderer: &mut GpuRenderer, texture_id: &str, batch: &OsrPaintBatch) -> bool {
+fn paint_surface(renderer: &mut GpuRenderer, image: &ImageId, batch: &OsrPaintBatch) -> bool {
     surface_rects(&batch.rects, batch.width, batch.height).is_some_and(|rects| {
         renderer
-            .write_bgra_rects(texture_id, (batch.width, batch.height), &rects)
+            .write_bgra_rects(image, (batch.width, batch.height), &rects)
             .is_ok()
     })
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::window::style::Color;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -6,12 +8,24 @@ pub struct DisplayList {
     pub commands: Vec<DisplayCommand>,
 }
 
+impl Default for DisplayList {
+    fn default() -> Self {
+        Self::new(Color::rgba(0.0, 0.0, 0.0, 0.0))
+    }
+}
+
 impl DisplayList {
     pub fn new(background: Color) -> Self {
         Self {
             background,
             commands: Vec::new(),
         }
+    }
+
+    /// Empties the list for the next frame while keeping its storage.
+    pub fn reset(&mut self, background: Color) {
+        self.background = background;
+        self.commands.clear();
     }
 
     pub fn push(&mut self, command: impl Into<DisplayCommand>) {
@@ -48,9 +62,17 @@ pub struct RoundedRectCommand {
     pub color: Color,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextCommand {
-    pub text: String,
+    pub text: Arc<str>,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -58,11 +80,20 @@ pub struct TextCommand {
     pub size: f32,
     pub line_height: f32,
     pub color: Color,
+    pub align: TextAlign,
+}
+
+/// A browser surface the window shows: the page, or one of the overlays
+/// drawn above it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ImageId {
+    Main,
+    Overlay(Arc<str>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImageCommand {
-    pub id: String,
+    pub id: ImageId,
     pub x: f32,
     pub y: f32,
     pub width: f32,

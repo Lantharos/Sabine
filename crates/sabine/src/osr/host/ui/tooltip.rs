@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::render::{DisplayList, RoundedRectCommand, TextCommand};
+use crate::render::{DisplayList, RoundedRectCommand, TextAlign, TextCommand};
 use crate::window::style::Color;
 
 use crate::osr::host::native::OsrNativeHost;
@@ -8,7 +8,7 @@ use crate::osr::host::types::NativeTooltip;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn update_tooltip(&mut self, text: String) -> bool {
-        let text = text.trim().to_string();
+        let text: std::sync::Arc<str> = text.trim().into();
         if text.is_empty() {
             return self.tooltip.take().is_some_and(|tooltip| tooltip.shown);
         }
@@ -67,6 +67,7 @@ impl OsrNativeHost {
             size: 12.0,
             line_height: 18.0,
             color: Color::rgb8(245, 245, 246),
+            align: TextAlign::Center,
         });
     }
 }

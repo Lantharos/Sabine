@@ -7,7 +7,7 @@ use winit::{
 };
 
 use crate::SabineWindowControlRegion;
-use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextCommand};
+use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
 use crate::window::style::Color;
 
 use crate::osr::host::native::OsrNativeHost;
@@ -54,6 +54,7 @@ impl OsrNativeHost {
             size: 14.0,
             line_height: 20.0,
             color: Color::TEXT,
+            align: TextAlign::Center,
         });
         for control in [
             TitlebarControl::Minimize,

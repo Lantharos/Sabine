@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use sabine_platform::{WindowBackgroundEffect, WindowRegionRect, WindowRegions};
 
@@ -16,7 +17,7 @@ pub(crate) struct OsrHostConfig {
     pub web_root: Option<PathBuf>,
     pub local_files: bool,
     pub app_id: Option<String>,
-    pub title: String,
+    pub title: Arc<str>,
     pub width: u32,
     pub height: u32,
     pub min_width: u32,
@@ -84,7 +85,7 @@ impl OsrHostConfig {
                 .get("title")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("Sabine")
-                .to_string(),
+                .into(),
             width: value
                 .get("width")
                 .and_then(serde_json::Value::as_u64)

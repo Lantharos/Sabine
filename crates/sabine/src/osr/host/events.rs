@@ -6,8 +6,10 @@ use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID};
 
 use super::native::OsrNativeHost;
 pub(super) use super::types::HostActivity;
-use super::types::{HostControl, OsrHostEvent, overlay_texture_id};
+use super::types::{HostControl, OsrHostEvent};
 use super::visibility::{activation_token_value, bool_control_value};
+use crate::render::ImageId;
+use std::sync::Arc;
 
 const HOST_EVENT_DISPATCH_BUDGET: usize = 16;
 
@@ -176,6 +178,12 @@ impl OsrNativeHost {
                         operations,
                     },
                 ) => self.begin_page_drag(content, operations),
+                OsrHostEvent::Message(_, OsrMessage::ContextMenu { x, y, items }) => {
+                    self.open_context_menu(x, y, items);
+                }
+                OsrHostEvent::Message(_, OsrMessage::ContextMenuDismissed) => {
+                    self.dismiss_context_menu();
+                }
                 OsrHostEvent::Message(_, OsrMessage::DragOperation(operation)) => {
                     self.update_drag_operation(event_loop, operation);
                 }
@@ -235,6 +243,7 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::Message(_, OsrMessage::MainLoadStarted) => {
                     super::trace_host(&self.config, "browser.load_started");
+                    self.dismiss_context_menu();
                     self.clear_media();
                     self.main_load_ready = false;
                     self.main_frame_presented = false;
@@ -371,8 +380,10 @@ impl OsrNativeHost {
         let result = self
             .renderer
             .as_ref()
-            .filter(|_| self.overlays.contains_key(guest_id))
-            .and_then(|renderer| renderer.read_bgra_image(&overlay_texture_id(guest_id)))
+            .zip(self.overlays.get_key_value(guest_id))
+            .and_then(|(renderer, (id, _))| {
+                renderer.read_bgra_image(&ImageId::Overlay(Arc::clone(id)))
+            })
             .ok_or_else(|| "guest has no frame to capture".to_string())
             .and_then(|frame| {
                 super::paint::guest_preview::guest_preview_data_url(

@@ -46,7 +46,7 @@ fn trace_host(config: &OsrHostConfig, stage: impl AsRef<str>) {
     if !crate::launch::metrics::trace_enabled() {
         return;
     }
-    let label = config.app_id.as_deref().unwrap_or(&config.title);
+    let label = config.app_id.as_deref().unwrap_or(&*config.title);
     eprintln!(
         "sabine trace [{label}] osr-host pid={} {}",
         std::process::id(),

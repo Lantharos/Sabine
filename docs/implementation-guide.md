@@ -630,9 +630,13 @@ applications arrive as ordinary drops, with the files in `dataTransfer.files`; w
 the window, the desktop shows whether the element under the pointer accepts them. On Wayland, drags
 from other applications are accepted when they carry files.
 
-CEF's default file chooser remains in place so file inputs use the operating system picker. Browser
-context-menu items are removed; development launches add only an `Inspect element` command, while
-production launches have no browser-style context menu. HTML title tooltips are presented by the
+CEF's default file chooser remains in place so file inputs use the operating system picker. Context
+menus keep only Chromium's editing commands: undo, redo, cut, copy, paste, delete, select all, and
+spelling suggestions, so editable fields and selections get the menu users expect while pages get no
+browser navigation or printing entries. Development launches add `Inspect element`. The window
+draws the menu itself, following the desktop's light or dark theme, with the platform's shortcut
+notation; it is keyboard navigable and closes on Escape, a click outside it, focus loss, or resize.
+Pages that cancel the `contextmenu` event get no menu. HTML title tooltips are presented by the
 native compositor after a short delay.
 
 The web bridge exposes:
