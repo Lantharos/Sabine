@@ -301,8 +301,12 @@ focused, and the native window host answers it without involving the app. Waylan
 applies and may ask the user first. Windows installs a low-level keyboard hook that takes Ctrl, Alt and the Windows keys from
 the OS while the window is in the foreground, forwards them to the page itself and writes their
 state into the thread's keyboard state, so every other key still arrives with the right modifiers
-and text. macOS rejects the request. The inhibitor is released when disabled or when the native
-window is dropped, and is recreated with the window.
+and text. macOS installs a keyboard event tap for the session: while the window is the key window
+of the active app, every key pressed with Command, Control or Option, Cmd+Tab and Cmd+Space among
+them, is taken from the system and posted to the app, where it reaches the page like any other key.
+Event taps need the Accessibility permission. Without it the request is rejected and macOS offers
+to open the Accessibility settings, where the app can be allowed. The inhibitor is released when
+disabled or when the native window is dropped, and is recreated with the window.
 
 Tray icons and global shortcuts start when the app launches, so an app that calls `launch()` and
 runs its own loop has them too. Linux and Windows keep them on a thread of their own, with its own

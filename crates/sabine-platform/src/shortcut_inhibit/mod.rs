@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(target_os = "linux")]
 mod wayland;
 #[cfg(target_os = "windows")]
@@ -18,9 +20,28 @@ pub struct ShortcutInhibitor {
     _wayland: wayland::WaylandInhibitor,
     #[cfg(target_os = "windows")]
     _hook: windows::WindowsInhibitor,
+    #[cfg(target_os = "macos")]
+    _tap: macos::MacInhibitor,
 }
 
 impl ShortcutInhibitor {
+    /// Fails without the Accessibility permission, after macOS offers to
+    /// open its settings.
+    #[cfg(target_os = "macos")]
+    pub fn new(window: &dyn Window) -> Result<Self, String> {
+        let RawWindowHandle::AppKit(handle) = window
+            .window_handle()
+            .map_err(|error| error.to_string())?
+            .as_raw()
+        else {
+            return Err("The window has no AppKit view".to_string());
+        };
+        let view = unsafe { handle.ns_view.cast::<objc2_app_kit::NSView>().as_ref() };
+        Ok(Self {
+            _tap: macos::MacInhibitor::new(view)?,
+        })
+    }
+
     #[cfg(target_os = "linux")]
     pub fn new(window: &dyn Window) -> Result<Self, String> {
         let RawDisplayHandle::Wayland(display) = window
