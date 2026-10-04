@@ -332,22 +332,11 @@ fn prebuilt_host_path() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         return None;
     }
-    let root = if cfg!(target_os = "windows") {
-        PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Sabine")
-    } else if cfg!(target_os = "macos") {
-        PathBuf::from(std::env::var_os("HOME")?)
-            .join("Library/Application Support")
-            .join("Sabine")
-    } else if let Some(path) = std::env::var_os("XDG_DATA_HOME").filter(|path| !path.is_empty()) {
-        PathBuf::from(path).join("sabine")
-    } else {
-        PathBuf::from(std::env::var_os("HOME")?).join(".local/share/sabine")
-    };
     #[derive(Deserialize)]
     struct CurrentSystem {
         active: String,
     }
-    let bin = root.join("bin");
+    let bin = sabine_runtime::sabine_data_dir().join("bin");
     let current =
         serde_json::from_slice::<CurrentSystem>(&std::fs::read(bin.join("current.json")).ok()?)
             .ok()?;

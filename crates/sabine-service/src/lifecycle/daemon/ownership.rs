@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf, time::Duration};
 
-use sabine_runtime::FileLock;
+use sabine_runtime::{FileLock, process_alive, sabine_data_dir};
 use serde::{Deserialize, Serialize};
 
-use super::{PID_FILE, process_alive, process_executable, same_executable};
-use crate::{ServiceResult, service_data_dir};
+use super::{PID_FILE, process_executable, same_executable};
+use crate::ServiceResult;
 
 pub(super) const DAEMON_STATE_FILE: &str = "daemon-state.json";
 
@@ -31,7 +31,7 @@ impl Drop for DaemonPid {
 }
 
 pub(super) fn claim_daemon_pid() -> ServiceResult<Option<DaemonPid>> {
-    let directory = service_data_dir();
+    let directory = sabine_data_dir();
     let lock = match FileLock::acquire(&directory.join("daemon.lock"), Duration::ZERO, |_| {}) {
         Ok(lock) => lock,
         Err(error) if error.kind() == std::io::ErrorKind::TimedOut => return Ok(None),
@@ -41,7 +41,7 @@ pub(super) fn claim_daemon_pid() -> ServiceResult<Option<DaemonPid>> {
     if let Some(pid) = fs::read_to_string(&path)
         .ok()
         .and_then(|value| value.trim().parse::<u32>().ok())
-        .filter(|pid| *pid <= i32::MAX as u32 && process_alive(*pid as i32))
+        .filter(|pid| *pid <= i32::MAX as u32 && process_alive(*pid))
         && let Some(actual) = process_executable(pid)
     {
         let current = std::env::current_exe()?;
@@ -83,5 +83,5 @@ pub(super) struct DaemonState {
 }
 
 pub(super) fn daemon_state() -> Option<DaemonState> {
-    serde_json::from_slice(&fs::read(service_data_dir().join(DAEMON_STATE_FILE)).ok()?).ok()
+    serde_json::from_slice(&fs::read(sabine_data_dir().join(DAEMON_STATE_FILE)).ok()?).ok()
 }

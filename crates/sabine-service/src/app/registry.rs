@@ -24,7 +24,7 @@ pub struct SabineService {
 
 impl Default for SabineService {
     fn default() -> Self {
-        Self::new(crate::types::service_data_dir())
+        Self::new(sabine_runtime::sabine_data_dir())
     }
 }
 
@@ -180,9 +180,6 @@ fn incompatibility_message(
     system: crate::SystemCompatibility,
 ) -> Option<String> {
     let required = app.sabine;
-    if required.build == 0 {
-        return None;
-    }
     if required.major != system.major || required.build < system.minimum_app_build {
         return Some(format!(
             "The developer of {} has not updated it to work with this version of Sabine. The app was not added to Sabine.",

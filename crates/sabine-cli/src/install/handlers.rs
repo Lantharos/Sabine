@@ -141,52 +141,98 @@ pub(super) mod macos {
 
 #[cfg(windows)]
 pub(super) mod windows {
-    use ::windows::{
-        Win32::{
-            Foundation::ERROR_SUCCESS,
-            System::Registry::{HKEY_CURRENT_USER, RegDeleteTreeW},
-        },
-        core::HSTRING,
+    use crate::{
+        desktop::types::{Associations, prog_id},
+        install::source::SourceApp,
+    };
+    use sabine_service::windows_registry::{
+        current_user_string, delete_current_user_key, delete_current_user_value, path_within,
+        set_current_user_value,
     };
     use std::path::Path;
+
+    pub(in crate::install) fn register(app: &SourceApp, executable: &Path) -> Result<(), String> {
+        let command = format!("\"{}\" \"%1\"", executable.display());
+        for scheme in app.associations.schemes() {
+            let key = format!(r"Software\Classes\{scheme}");
+            set(&key, "", &format!("URL:{scheme}"))?;
+            set(&key, "URL Protocol", "")?;
+            set(&format!(r"{key}\shell\open\command"), "", &command)?;
+        }
+        if app.associations.extensions().next().is_none() {
+            return Ok(());
+        }
+        let prog_id = prog_id(&app.id);
+        let key = format!(r"Software\Classes\{prog_id}");
+        set(&key, "", &format!("{} document", app.name))?;
+        set(
+            &format!(r"{key}\DefaultIcon"),
+            "",
+            &format!("\"{}\",0", executable.display()),
+        )?;
+        set(&format!(r"{key}\shell\open\command"), "", &command)?;
+        for extension in app.associations.extensions() {
+            set(
+                &format!(r"Software\Classes\.{extension}\OpenWithProgids"),
+                &prog_id,
+                "",
+            )?;
+        }
+        Ok(())
+    }
 
     pub(in crate::install) fn remove(install: &Path) -> Result<(), String> {
         let Ok(manifest) = std::fs::read_to_string(install.join("resources/Sabine.toml")) else {
             return Ok(());
         };
-        for scheme in manifest_schemes(&manifest) {
+        let Some((id, associations)) = manifest_associations(&manifest) else {
+            return Ok(());
+        };
+        for scheme in associations.schemes() {
             let key = format!(r"Software\Classes\{scheme}");
-            let launches_app = sabine_service::windows_registry::current_user_string(&format!(
-                r"{key}\shell\open\command"
-            ))
-            .as_deref()
-            .and_then(command_program)
-            .is_some_and(|program| inside(program, install));
-            if launches_app {
-                let status = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(&key)) };
-                if status != ERROR_SUCCESS {
-                    return Err(format!("could not remove HKCU\\{key}: {status:?}"));
-                }
+            if launches_from(&key, install) {
+                delete_current_user_key(&key).map_err(|error| error.to_string())?;
             }
+        }
+        let prog_id = prog_id(&id);
+        let key = format!(r"Software\Classes\{prog_id}");
+        if launches_from(&key, install) {
+            for extension in associations.extensions() {
+                delete_current_user_value(
+                    &format!(r"Software\Classes\.{extension}\OpenWithProgids"),
+                    &prog_id,
+                )
+                .map_err(|error| error.to_string())?;
+            }
+            delete_current_user_key(&key).map_err(|error| error.to_string())?;
         }
         Ok(())
     }
 
-    pub(super) fn manifest_schemes(manifest: &str) -> Vec<String> {
-        let mime_types: Vec<String> = toml::from_str::<toml::Table>(manifest)
-            .ok()
-            .and_then(|manifest| {
-                manifest
-                    .get("app")?
-                    .get("mime_types")?
-                    .clone()
-                    .try_into()
-                    .ok()
-            })
-            .unwrap_or_default();
-        crate::desktop::types::schemes(&mime_types)
-            .map(str::to_owned)
-            .collect()
+    fn set(key: &str, name: &str, value: &str) -> Result<(), String> {
+        set_current_user_value(key, name, value).map_err(|error| error.to_string())
+    }
+
+    fn launches_from(key: &str, install: &Path) -> bool {
+        current_user_string(&format!(r"{key}\shell\open\command"))
+            .as_deref()
+            .and_then(command_program)
+            .is_some_and(|program| path_within(Path::new(program), install))
+    }
+
+    pub(super) fn manifest_associations(manifest: &str) -> Option<(String, Associations)> {
+        #[derive(serde::Deserialize)]
+        struct Manifest {
+            app: App,
+        }
+        #[derive(serde::Deserialize)]
+        struct App {
+            id: String,
+            #[serde(flatten)]
+            associations: Associations,
+        }
+        let manifest = toml::from_str::<Manifest>(manifest).ok()?;
+        Some((manifest.app.id, manifest.app.associations))
     }
 
     pub(super) fn command_program(command: &str) -> Option<&str> {
@@ -196,31 +242,34 @@ pub(super) mod windows {
             .map(|(program, _)| program)
     }
 
-    pub(super) fn inside(program: &str, install: &Path) -> bool {
-        let lowercase = |path: &Path| {
-            std::path::PathBuf::from(dunce::simplified(path).to_string_lossy().to_lowercase())
-        };
-        lowercase(Path::new(program)).starts_with(lowercase(install))
-    }
-
     #[cfg(test)]
     mod tests {
         use super::*;
 
         #[test]
-        fn removes_only_schemes_that_launch_this_install() {
+        fn removes_only_handlers_that_launch_this_install() {
             let install =
                 Path::new(r"C:\Users\Ana\AppData\Local\Sabine\apps\com.example.signin\install");
             let ours = r#""c:\users\ana\appdata\local\sabine\apps\com.example.signin\install\signin.exe" "%1""#;
             let other = r#""C:\Program Files\Other\other.exe" "%1""#;
-            assert!(command_program(ours).is_some_and(|program| inside(program, install)));
-            assert!(!command_program(other).is_some_and(|program| inside(program, install)));
+            assert!(
+                command_program(ours)
+                    .is_some_and(|program| path_within(Path::new(program), install))
+            );
+            assert!(
+                !command_program(other)
+                    .is_some_and(|program| path_within(Path::new(program), install))
+            );
+            let (id, associations) = manifest_associations(
+                "[app]\nid = \"com.example.signin\"\nmime_types = [\"text/plain\", \"x-scheme-handler/example-signin\"]\n\n[app.extensions]\n\"text/plain\" = [\"txt\"]\n",
+            )
+            .unwrap();
+            assert_eq!(id, "com.example.signin");
             assert_eq!(
-                manifest_schemes(
-                    "[app]\nmime_types = [\"text/plain\", \"x-scheme-handler/example-signin\"]\n"
-                ),
+                associations.schemes().collect::<Vec<_>>(),
                 ["example-signin"]
             );
+            assert_eq!(associations.extensions().collect::<Vec<_>>(), ["txt"]);
         }
     }
 }

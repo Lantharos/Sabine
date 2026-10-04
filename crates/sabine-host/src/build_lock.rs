@@ -6,9 +6,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(unix)]
-use std::process::{Command, Stdio};
-
 const LOCK_TIMEOUT: Duration = Duration::from_secs(600);
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(30 * 60);
 
@@ -54,7 +51,7 @@ impl Drop for HostBuildLock {
 
 fn lock_is_stale(path: &Path) -> bool {
     if let Some(pid) = lock_holder_pid(path) {
-        return !process_alive(pid);
+        return !sabine_runtime::process_alive(pid);
     }
     std::fs::metadata(path)
         .and_then(|metadata| metadata.modified())
@@ -71,39 +68,6 @@ fn lock_holder_pid(path: &Path) -> Option<u32> {
             line.strip_prefix("pid=")
                 .and_then(|value| value.trim().parse().ok())
         })
-}
-
-fn process_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    #[cfg(unix)]
-    return Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    #[cfg(windows)]
-    {
-        use windows::Win32::{
-            Foundation::{CloseHandle, STILL_ACTIVE},
-            System::Threading::{
-                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-            },
-        };
-        let Ok(process) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) })
-        else {
-            return false;
-        };
-        let mut exit_code = 0;
-        let active = unsafe { GetExitCodeProcess(process, &mut exit_code) }.is_ok()
-            && exit_code == STILL_ACTIVE.0 as u32;
-        let _ = unsafe { CloseHandle(process) };
-        active
-    }
-    #[cfg(not(any(unix, windows)))]
-    false
 }
 
 fn unix_timestamp_secs() -> u64 {

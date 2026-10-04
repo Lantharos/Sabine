@@ -5,8 +5,6 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::commands::command_exists;
-
 #[derive(Debug, Clone)]
 pub struct DevProject {
     pub source: PathBuf,
@@ -163,7 +161,11 @@ pub fn package_manager(root: &Path, package: &serde_json::Value) -> &'static str
     {
         return "bun";
     }
-    if command_exists("bun") { "bun" } else { "npm" }
+    if sabine_runtime::find_program("bun").is_some() {
+        "bun"
+    } else {
+        "npm"
+    }
 }
 
 fn detect_dev_script(package: &serde_json::Value) -> Option<String> {
@@ -180,41 +182,21 @@ fn detect_dev_script(package: &serde_json::Value) -> Option<String> {
     None
 }
 
+const VITE_CONFIGS: [&str; 4] = [
+    "vite.config.ts",
+    "vite.config.js",
+    "vite.config.mjs",
+    "vite.config.cjs",
+];
+
 fn detect_vite_port(root: &Path) -> Option<u16> {
-    for name in [
-        "vite.config.ts",
-        "vite.config.js",
-        "vite.config.mjs",
-        "vite.config.cjs",
-    ] {
-        let path = root.join(name);
-        if !path.is_file() {
-            // Also check project root when package.json is in a parent with vite at source root
-            continue;
-        }
-        let text = fs::read_to_string(path).ok()?;
-        if let Some(port) = extract_port_from_vite_config(&text) {
-            return Some(port);
-        }
-    }
-    // Parent source dir configs (template puts vite.config.ts next to package.json at project root)
-    for name in [
-        "vite.config.ts",
-        "vite.config.js",
-        "vite.config.mjs",
-        "vite.config.cjs",
-    ] {
-        if let Some(parent) = root.parent() {
-            let path = parent.join(name);
-            if path.is_file()
-                && let Ok(text) = fs::read_to_string(path)
-                && let Some(port) = extract_port_from_vite_config(&text)
-            {
-                return Some(port);
-            }
-        }
-    }
-    None
+    let project_root = root.parent();
+    [Some(root), project_root]
+        .into_iter()
+        .flatten()
+        .flat_map(|directory| VITE_CONFIGS.iter().map(move |name| directory.join(name)))
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .find_map(|text| extract_port_from_vite_config(&text))
 }
 
 fn extract_port_from_vite_config(text: &str) -> Option<u16> {

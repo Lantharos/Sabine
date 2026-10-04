@@ -12,31 +12,16 @@ use crate::{
 
 use super::SERVICE_REPO;
 
-pub(super) fn system_target() -> String {
-    let os = if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "linux"
-    };
-    let arch = if cfg!(target_arch = "x86_64") {
-        "x86_64"
-    } else if cfg!(target_arch = "aarch64") {
-        "aarch64"
-    } else {
-        "unknown"
-    };
-    format!("{os}-{arch}")
-}
-
 pub(super) fn system_asset_name() -> String {
     let extension = if cfg!(target_os = "windows") {
         "zip"
     } else {
         "tar.gz"
     };
-    format!("sabine-system-{}.{}", system_target(), extension)
+    format!(
+        "sabine-system-{}.{extension}",
+        crate::types::PLATFORM_TARGET
+    )
 }
 
 pub(super) fn sabine_host_relative_path() -> PathBuf {
@@ -84,17 +69,6 @@ pub(super) fn service_daemon_binary_name() -> &'static str {
     } else {
         "sabine-service-daemon"
     }
-}
-
-pub(super) fn which(name: &str) -> Result<PathBuf, ()> {
-    let path = std::env::var_os("PATH").ok_or(())?;
-    for directory in std::env::split_paths(&path) {
-        let candidate = directory.join(name);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-    }
-    Err(())
 }
 
 pub(super) fn download_file(

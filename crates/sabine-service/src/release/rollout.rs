@@ -1,9 +1,7 @@
-use crate::{UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, service_data_dir};
+use crate::{UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK};
+use sabine_runtime::sabine_data_dir;
 
 pub(crate) fn release_is_soaked(published_at: &str) -> bool {
-    if published_at.is_empty() {
-        return true;
-    }
     let Ok(published_at) = published_at.parse::<u64>() else {
         return false;
     };
@@ -19,19 +17,15 @@ fn release_age_is_soaked(now: u64, published_at: u64, rollout_offset: u64) -> bo
 }
 
 fn update_rollout_offset() -> u64 {
-    let path = service_data_dir().join("update-rollout-offset");
+    let path = sabine_data_dir().join("update-rollout-offset");
     if let Ok(value) = std::fs::read_to_string(&path)
         && let Ok(value) = value.trim().parse::<u64>()
     {
         return value.min(UPDATE_ROLLOUT_WINDOW.as_secs());
     }
     let mut bytes = [0_u8; 8];
-    let random = if getrandom::fill(&mut bytes).is_ok() {
-        u64::from_le_bytes(bytes)
-    } else {
-        crate::types::unix_timestamp() ^ u64::from(std::process::id())
-    };
-    let offset = random % UPDATE_ROLLOUT_WINDOW.as_secs().max(1);
+    getrandom::fill(&mut bytes).expect("the operating system provides randomness");
+    let offset = u64::from_le_bytes(bytes) % UPDATE_ROLLOUT_WINDOW.as_secs();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

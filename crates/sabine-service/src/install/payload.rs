@@ -1,4 +1,5 @@
 use super::*;
+use sabine_runtime::sabine_data_dir;
 
 pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
     let _lock = lock_system_installation()?;
@@ -99,7 +100,7 @@ pub(super) fn install_system_archive(
             "Sabine system artifact SHA-256 is invalid".to_string(),
         ));
     }
-    let downloads = service_data_dir().join("downloads/system");
+    let downloads = sabine_data_dir().join("downloads/system");
     fs::create_dir_all(&downloads)?;
     let archive = downloads.join(format!("{}-{name}", manifest.version));
     download_file(&artifact.url, &archive, artifact.size, on_progress)?;

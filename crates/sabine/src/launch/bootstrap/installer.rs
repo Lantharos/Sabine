@@ -1,5 +1,5 @@
 use crate::window::config::SabineWindowConfig;
-use sabine_service::{SabineService, ServiceError, prepare_machine_with_progress};
+use sabine_service::{SabineService, prepare_machine_with_progress};
 use std::io::Write;
 
 pub(crate) const INSTALL_ARG: &str = "--sabine-install";
@@ -114,12 +114,9 @@ fn unregister(config: &SabineWindowConfig) -> Result<(), String> {
     let install = executable
         .parent()
         .ok_or("The app executable has no directory")?;
-    sabine_service::remove_native_messaging_hosts(install).map_err(|error| error.to_string())?;
-    match SabineService::default().unregister(id) {
-        Ok(_) | Err(ServiceError::AppNotFound(_)) => {
-            println!("Application registration removed.");
-            Ok(())
-        }
-        Err(error) => Err(error.to_string()),
-    }
+    SabineService::default()
+        .forget_app(id, install)
+        .map_err(|error| error.to_string())?;
+    println!("Application registration removed.");
+    Ok(())
 }

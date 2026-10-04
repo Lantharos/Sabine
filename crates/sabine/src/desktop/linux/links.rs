@@ -5,9 +5,7 @@ use sabine_platform::{AutostartEntry, DeepLinkRegistration};
 use super::util::*;
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> io::Result<()> {
-    let path = config_home()?
-        .join("autostart")
-        .join(format!("{}.desktop", sanitize_desktop_id(&entry.id)));
+    let path = sabine_service::app_autostart_path(&entry.id)?;
     if !entry.enabled {
         match fs::remove_file(path) {
             Ok(()) => return Ok(()),

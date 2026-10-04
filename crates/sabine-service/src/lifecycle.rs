@@ -1,15 +1,14 @@
 use sabine_runtime::RuntimeConfig;
+use sabine_runtime::sabine_data_dir;
 
-use crate::{AppManifest, SabineService, ServiceError, ServiceResult, service_data_dir};
+use crate::{AppManifest, SabineService, ServiceError, ServiceResult};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
 mod autostart;
 mod daemon;
 
-pub use autostart::{
-    install_login_autostart, install_login_autostart_with, uninstall_login_autostart,
-};
+use autostart::{install_login_autostart, uninstall_login_autostart};
 pub(crate) use daemon::stop_daemon;
 pub use daemon::{
     complete_system_update, ensure_daemon_running, resolve_service_executable, run_daemon,
@@ -42,7 +41,7 @@ pub struct ServiceReadyReport {
 }
 
 pub fn policy_path() -> PathBuf {
-    service_data_dir().join(POLICY_FILE)
+    sabine_data_dir().join(POLICY_FILE)
 }
 
 pub fn load_policy() -> ServicePolicy {
@@ -54,7 +53,7 @@ pub fn load_policy() -> ServicePolicy {
 }
 
 pub fn save_policy(policy: &ServicePolicy) -> ServiceResult<()> {
-    fs::create_dir_all(service_data_dir())?;
+    fs::create_dir_all(sabine_data_dir())?;
     let bytes = serde_json::to_vec_pretty(policy)
         .map_err(|error| ServiceError::Update(error.to_string()))?;
     fs::write(policy_path(), bytes)?;

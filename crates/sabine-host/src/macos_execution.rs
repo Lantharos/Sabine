@@ -1,7 +1,5 @@
 use std::{
-    collections::hash_map::DefaultHasher,
     fs,
-    hash::{Hash, Hasher},
     io::Read,
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
@@ -22,29 +20,19 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
         .map(|root| root.join("Chromium Embedded Framework.framework"))
         .find(|path| path.is_dir())
         .ok_or("Chromium framework is missing from the selected runtime")?;
-    let metadata = host.metadata().map_err(|error| error.to_string())?;
-    let mut fingerprint = DefaultHasher::new();
-    host.hash(&mut fingerprint);
-    metadata.len().hash(&mut fingerprint);
-    metadata
-        .modified()
+    let fingerprint = sabine_runtime::Fingerprint::default()
+        .path(host)
+        .file(&host.metadata().map_err(|error| error.to_string())?)
+        .and_then(|fingerprint| {
+            fingerprint.file(&framework.join("Chromium Embedded Framework").metadata()?)
+        })
         .map_err(|error| error.to_string())?
-        .hash(&mut fingerprint);
-    let framework_metadata = framework
-        .join("Chromium Embedded Framework")
-        .metadata()
-        .map_err(|error| error.to_string())?;
-    framework_metadata.len().hash(&mut fingerprint);
-    framework_metadata
-        .modified()
-        .map_err(|error| error.to_string())?
-        .hash(&mut fingerprint);
+        .finish();
     let cache =
         sabine_runtime::runtime_execution_path(runtime).map_err(|error| error.to_string())?;
     let directory = cache.join(format!(
-        "{}-{:016x}",
-        crate::host_source_fingerprint(),
-        fingerprint.finish()
+        "{}-{fingerprint}",
+        crate::host_source_fingerprint()
     ));
     let executable = directory.join("sabine-host.app").join(relative_host);
     if directory.join("ready").is_file() && executable.is_file() {

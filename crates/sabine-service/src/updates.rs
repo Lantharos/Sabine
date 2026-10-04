@@ -13,12 +13,14 @@ use crate::types::{
 use crate::{release_is_soaked, verify_app_release};
 
 pub(crate) mod installers;
+mod packages;
 
 pub(crate) use installers::safe_relative_path;
 use installers::{
-    artifact_extension, download_artifact, install_archive, pending_path, run_package_installer,
-    verify_sha256, write_json_atomic,
+    artifact_extension, download_artifact, install_archive, pending_path, verify_sha256,
+    write_json_atomic,
 };
+use packages::run_package_installer;
 
 impl SabineService {
     pub fn maintain(&self) -> ServiceResult<MaintenanceReport> {
@@ -258,6 +260,7 @@ impl SabineService {
         verify_sha256(&pending.artifact, &pending.sha256)?;
         run_package_installer(&pending, install_target)?;
         std::fs::remove_file(pending_path(&self.root, id))?;
+        std::fs::remove_file(&pending.artifact)?;
         Ok(true)
     }
 

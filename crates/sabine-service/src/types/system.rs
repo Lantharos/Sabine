@@ -72,10 +72,7 @@ impl SystemCompatibility {
     }
 
     pub fn accepts(self, app: SabineVersion) -> bool {
-        app.build == 0
-            || (app.major == self.major
-                && app.build >= self.minimum_app_build
-                && app.build <= self.build)
+        app.major == self.major && app.build >= self.minimum_app_build && app.build <= self.build
     }
 }
 

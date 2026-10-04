@@ -31,8 +31,8 @@ pub(crate) fn major_version(version: &str) -> u32 {
         .unwrap_or(0)
 }
 
-pub(crate) fn version_satisfies(found: &str, required: &str) -> bool {
-    found != "unknown" && major_version(found) >= major_version(required)
+pub(crate) fn version_satisfies(found: &str, required_major: u32) -> bool {
+    found != "unknown" && major_version(found) >= required_major
 }
 
 pub(crate) fn runtime_sort_key(path: &Path) -> Vec<u32> {

@@ -55,10 +55,6 @@ pub(crate) fn fetch_cef_index(index_url: &str) -> Result<CefIndex, RuntimeError>
 }
 
 pub(crate) fn archive_url(index_url: &str, archive_name: &str) -> String {
-    if archive_name.starts_with("https://") || archive_name.starts_with("http://") {
-        return archive_name.to_string();
-    }
-
     let base = index_url
         .rsplit_once('/')
         .map(|(base, _)| base)
@@ -146,16 +142,10 @@ pub fn latest_install_plan(config: &RuntimeConfig) -> Result<RuntimeInstallPlan,
     let platform_index = index.platforms.get(platform).ok_or_else(|| {
         RuntimeError::InstallationFailed(format!("CEF index does not contain platform {platform}"))
     })?;
-    let min_major = crate::MIN_CEF_MAJOR
-        .split('.')
-        .next()
-        .and_then(|major| major.parse::<u32>().ok())
-        .unwrap_or(0);
-
     let mut candidates = platform_index
         .versions
         .iter()
-        .filter(|version| major_version(&version.cef_version) >= min_major)
+        .filter(|version| major_version(&version.cef_version) >= crate::MIN_CEF_MAJOR)
         .filter_map(|version| {
             version
                 .files
@@ -253,17 +243,10 @@ mod tests {
             archive_url("https://example.com/cef/index.json", "cef.tar.bz2"),
             "https://example.com/cef/cef.tar.bz2"
         );
-        assert_eq!(
-            archive_url(
-                "https://example.com/cef/index.json",
-                "https://cdn.example/cef.tar.bz2"
-            ),
-            "https://cdn.example/cef.tar.bz2"
-        );
     }
 
     #[test]
-    fn runtime_download_uses_the_in_process_http_client() {
+    fn downloads_runtime_archives_with_progress() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let body = b"sabine-runtime";

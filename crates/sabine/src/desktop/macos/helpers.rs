@@ -171,10 +171,9 @@ pub(super) fn parse_key_code(key: &str) -> Result<Code, String> {
 }
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String> {
-    let agents = home_dir()?.join("Library").join("LaunchAgents");
-    fs::create_dir_all(&agents).map_err(|error| error.to_string())?;
-    let label = format!("dev.sabine.{}", sanitize_id(&entry.id));
-    let plist_path = agents.join(format!("{label}.plist"));
+    let plist_path =
+        sabine_service::app_autostart_path(&entry.id).map_err(|error| error.to_string())?;
+    let label = sabine_service::app_autostart_label(&entry.id);
     if !entry.enabled {
         return match fs::remove_file(&plist_path) {
             Ok(()) => Ok(()),
@@ -209,6 +208,8 @@ pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String
 </plist>
 "#
     );
+    let agents = plist_path.parent().expect("LaunchAgents has a parent");
+    fs::create_dir_all(agents).map_err(|error| error.to_string())?;
     fs::write(plist_path, plist).map_err(|error| error.to_string())
 }
 

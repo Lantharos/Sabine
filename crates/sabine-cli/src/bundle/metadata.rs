@@ -13,11 +13,22 @@ pub(super) fn runtime_manifest(
         quote(&app.name),
         quote(&app.version)
     );
-    if !app.mime_types.is_empty() {
+    let associations = &app.associations;
+    if !associations.mime_types.is_empty() {
         manifest.push_str(&format!(
             "mime_types = {}\n",
-            serde_json::to_string(&app.mime_types).map_err(|error| error.to_string())?
+            serde_json::to_string(&associations.mime_types).map_err(|error| error.to_string())?
         ));
+    }
+    if !associations.extensions.is_empty() {
+        manifest.push_str("\n[app.extensions]\n");
+        for (mime, extensions) in &associations.extensions {
+            manifest.push_str(&format!(
+                "\"{}\" = {}\n",
+                quote(mime),
+                serde_json::to_string(extensions).map_err(|error| error.to_string())?
+            ));
+        }
     }
     if let Some(web) = &app.web {
         manifest.push_str("\n[web]\n");
@@ -82,7 +93,7 @@ pub(super) fn desktop_entry(app: &BundleApp, executable: &str, icon: Option<&str
         name: &app.name,
         exec: executable,
         icon,
-        mime_types: &app.mime_types,
+        mime_types: &app.associations.mime_types,
         listing: &app.listing,
     }
     .render()

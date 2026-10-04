@@ -1,7 +1,7 @@
 use crate::{
     SabineVersion, ServiceResult, SystemCompatibility, UPDATE_SOAK, app::registry::replace_file,
-    service_data_dir,
 };
+use sabine_runtime::sabine_data_dir;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, io::Write, path::PathBuf};
 
@@ -31,11 +31,11 @@ struct SystemUpdateFailure {
 }
 
 pub(super) fn versions_dir() -> PathBuf {
-    service_data_dir().join("bin/versions")
+    sabine_data_dir().join("bin/versions")
 }
 
 fn installation_state_path() -> PathBuf {
-    service_data_dir().join("bin/current.json")
+    sabine_data_dir().join("bin/current.json")
 }
 
 pub(super) fn read_installation_state() -> Option<SystemInstallationState> {
@@ -109,7 +109,7 @@ pub(super) fn compatibility_for_version(version: &str) -> SystemCompatibility {
 }
 
 fn update_failures_path() -> PathBuf {
-    service_data_dir().join("bin/update-failures.json")
+    sabine_data_dir().join("bin/update-failures.json")
 }
 
 fn load_update_failures() -> SystemUpdateFailures {
@@ -166,7 +166,7 @@ pub(super) fn system_update_is_backed_off(version: &str) -> bool {
 
 pub(super) fn lock_system_installation() -> ServiceResult<sabine_runtime::FileLock> {
     let lock = sabine_runtime::FileLock::acquire(
-        &service_data_dir().join("bin/system.lock"),
+        &sabine_data_dir().join("bin/system.lock"),
         std::time::Duration::from_secs(600),
         |_| {},
     )?;

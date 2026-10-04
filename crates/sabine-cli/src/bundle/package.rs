@@ -12,7 +12,10 @@ use super::{
     stage::StagedBundle,
     windows::nsis_script,
 };
-use crate::commands::command_exists;
+
+fn command_exists(name: &str) -> bool {
+    sabine_runtime::find_program(name).is_some()
+}
 
 #[derive(Default)]
 pub(super) struct PackageResult {
@@ -98,30 +101,34 @@ fn package_rpm(
     result: &mut PackageResult,
 ) -> Result<(), String> {
     let spec = staged.root.join(format!("{}.spec", app.id));
-    fs::write(&spec, rpm_spec(app, &staged.executable, &staged.binary)?)
-        .map_err(|error| error.to_string())?;
+    fs::write(
+        &spec,
+        rpm_spec(
+            app,
+            &staged.executable,
+            &staged.binary,
+            &share_files(&staged.app_dir)?,
+        )?,
+    )
+    .map_err(|error| error.to_string())?;
     let artifact = artifact_path(app, staged, BundleFormat::Rpm, "rpm");
+    let rpm_dir = staged.root.join("rpms");
+    let buildroot = staged.root.join("rpm-buildroot");
+    let top_dir = staged.root.join("rpmbuild");
     if command_exists("rpmbuild") {
-        let rpm_dir = staged.root.join("rpms");
         fs::create_dir_all(&rpm_dir).map_err(|error| error.to_string())?;
         let spec = fs::canonicalize(&spec).map_err(|error| error.to_string())?;
         let rpm_dir = fs::canonicalize(&rpm_dir).map_err(|error| error.to_string())?;
         let source_dir = dunce::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
-        let buildroot = fs::canonicalize(&staged.root)
-            .map_err(|error| error.to_string())?
-            .join("rpm-buildroot");
         run(Command::new("rpmbuild")
             .arg("-bb")
             .arg(&spec)
             .arg("--buildroot")
-            .arg(buildroot)
+            .arg(&buildroot)
             .arg("--define")
             .arg(format!("_rpmdir {}", rpm_dir.display()))
             .arg("--define")
-            .arg(format!(
-                "_topdir {}",
-                staged.root.join("rpmbuild").display()
-            ))
+            .arg(format!("_topdir {}", top_dir.display()))
             .arg("--define")
             .arg(format!("sabine_source {}", source_dir.display())))?;
         let built = find_file_with_extension(&rpm_dir, "rpm")
@@ -130,24 +137,54 @@ fn package_rpm(
         fs::copy(built, &artifact).map_err(|error| error.to_string())?;
         result.artifacts.push(artifact);
     } else {
+        let quoted = |path: &Path| shell_quote(&path.display().to_string());
         write_script(
             &staged.root.join("build-rpm.sh"),
-            &shell_script(&[&format!(
-                "rpmbuild -bb {} --buildroot {} --define {} --define {}",
-                shell_quote(&spec.display().to_string()),
-                shell_quote(&staged.root.join("rpm-buildroot").display().to_string()),
-                shell_quote(&format!("sabine_source {}", staged.app_dir.display())),
-                shell_quote(&format!(
-                    "_topdir {}",
-                    staged.root.join("rpmbuild").display()
-                ))
-            )]),
+            &shell_script(&[
+                &mkdir_parent_line(&artifact),
+                &format!("mkdir -p {}", quoted(&rpm_dir)),
+                &format!(
+                    "rpmbuild -bb {} --buildroot {} --define {} --define {} --define {}",
+                    quoted(&spec),
+                    quoted(&buildroot),
+                    shell_quote(&format!("_rpmdir {}", rpm_dir.display())),
+                    shell_quote(&format!("_topdir {}", top_dir.display())),
+                    shell_quote(&format!("sabine_source {}", staged.app_dir.display()))
+                ),
+                &format!(
+                    "find {} -name '*.rpm' -exec cp {{}} {} \\;",
+                    quoted(&rpm_dir),
+                    quoted(&artifact)
+                ),
+            ]),
         )?;
         result
             .notes
             .push("rpmbuild not found; wrote build-rpm.sh".to_string());
     }
     Ok(())
+}
+
+/// The files staged under `usr/share`, as absolute paths on the target system.
+fn share_files(app_dir: &Path) -> Result<Vec<String>, String> {
+    fn walk(root: &Path, directory: &Path, files: &mut Vec<String>) -> io::Result<()> {
+        for entry in fs::read_dir(directory)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                walk(root, &path, files)?;
+            } else if let Ok(relative) = path.strip_prefix(root) {
+                files.push(format!(
+                    "/{}",
+                    relative.to_string_lossy().replace('\\', "/")
+                ));
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    walk(app_dir, &app_dir.join("usr/share"), &mut files).map_err(|error| error.to_string())?;
+    files.sort();
+    Ok(files)
 }
 
 fn find_file_with_extension(root: &Path, extension: &str) -> Option<PathBuf> {
@@ -232,7 +269,7 @@ fn package_dmg(
                 &format!(
                     "hdiutil create -volname {} -srcfolder {} -ov -format UDZO {}",
                     shell_quote(&app.name),
-                    shell_quote(&staged.app_dir.display().to_string()),
+                    shell_quote(&staged.root.display().to_string()),
                     shell_quote(&artifact.display().to_string())
                 ),
             ]),
@@ -341,13 +378,7 @@ fn package_exe(
             .arg("-WX")
             .current_dir(&staged.root)
             .arg(dunce::simplified(&script)))?;
-        if artifact.is_file() {
-            result.artifacts.push(artifact);
-        } else {
-            result.notes.push(
-                "ran makensis; setup exe was not found at the expected artifact path".to_string(),
-            );
-        }
+        result.artifacts.push(artifact);
     } else {
         write_script(
             &staged.root.join("build-exe.sh"),

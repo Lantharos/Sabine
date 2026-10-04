@@ -1,5 +1,4 @@
 mod bundle;
-mod commands;
 mod desktop;
 mod dev;
 mod environment;

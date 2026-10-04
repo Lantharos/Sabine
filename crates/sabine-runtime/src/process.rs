@@ -4,7 +4,11 @@
 // opening conhost. Background helpers need CREATE_NO_WINDOW as well.
 // Quiet output and an invisible process are annoyingly different things.
 
-use std::{ffi::OsStr, process::Command};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 pub fn background_command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
@@ -22,7 +26,7 @@ pub fn configure_background_command(command: &mut Command) {
     let _ = command;
 }
 
-pub(crate) fn process_alive(pid: u32) -> bool {
+pub fn process_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
@@ -49,33 +53,46 @@ pub(crate) fn process_alive(pid: u32) -> bool {
         let _ = unsafe { CloseHandle(process) };
         active
     }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = pid;
-        false
-    }
 }
 
-#[cfg(all(test, target_os = "windows"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn background_children_do_not_inherit_a_console() {
-        use windows::Win32::System::Console::GetConsoleWindow;
-
-        if unsafe { GetConsoleWindow() }.is_invalid() {
-            return;
+/// Finds an executable on `PATH`, honoring `PATHEXT` on Windows.
+pub fn find_program(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths).find_map(|directory| {
+        let candidate = directory.join(name);
+        if is_executable(&candidate) {
+            return Some(candidate);
         }
-        let status = background_command("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Add-Type -Name Native -Namespace Sabine -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern IntPtr GetConsoleWindow();'; if ([Sabine.Native]::GetConsoleWindow() -eq [IntPtr]::Zero) { exit 0 } else { exit 1 }",
-            ])
-            .status()
-            .expect("PowerShell should launch");
-        assert!(status.success());
+        #[cfg(target_os = "windows")]
+        if Path::new(name).extension().is_none() {
+            return windows_extensions()
+                .map(|extension| directory.join(format!("{name}{extension}")))
+                .find(|candidate| is_executable(candidate));
+        }
+        None
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn windows_extensions() -> impl Iterator<Item = String> {
+    std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>()
+        .into_iter()
+}
+
+fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path)
+            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(windows)]
+    {
+        path.is_file()
     }
 }

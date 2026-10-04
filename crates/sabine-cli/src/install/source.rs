@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    desktop::{entry::Listing, icons},
+    desktop::{entry::Listing, icons, types::Associations},
     install::{
         assets::{self as source_assets, StagedAssets},
         desktop as source_desktop,
@@ -32,7 +32,7 @@ pub struct SourceApp {
     pub source: PathBuf,
     pub command: Option<String>,
     pub icon: Option<PathBuf>,
-    pub mime_types: Vec<String>,
+    pub associations: Associations,
     pub listing: Listing,
     pub autostart: bool,
 }
@@ -47,7 +47,6 @@ pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
     )?;
     app.id = sabine_service::AppEnvironment::Development.app_id(&app.id);
     app.name = format!("{} (Development)", app.name);
-    app.mime_types.clear();
     app.listing.listed = true;
     register_app(&app, options.desktop)?;
     println!("installed {} from {}", app.name, app.source.display());
@@ -73,7 +72,6 @@ fn update_registered_app(app: &SourceApp) -> Result<(), String> {
         app.autostart,
     )?;
     app.name = format!("{} (Development)", app.name);
-    app.mime_types.clear();
     app.listing.listed = true;
     register_app(&app, true)?;
     println!("updated {} from {}", app.name, app.source.display());
@@ -89,7 +87,6 @@ pub(crate) fn detect_source_app(
 ) -> Result<SourceApp, String> {
     let source = absolute_path(source)?;
     let metadata = source_assets::metadata(&source);
-    crate::desktop::types::validate(&metadata.mime_types)?;
     let manifest = cargo_manifest(&source);
     let package_name = package_name(&manifest);
     let configured: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
@@ -128,7 +125,7 @@ pub(crate) fn detect_source_app(
         source,
         command: command.or(metadata.command),
         icon: metadata.icon,
-        mime_types: metadata.mime_types,
+        associations: Associations::default(),
         listing,
         autostart,
     })
@@ -183,7 +180,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     if desktop {
-        source_desktop::install_macos_app(app, &wrapper, desktop_icon.as_deref())?;
+        source_desktop::install_macos_app(app, &wrapper)?;
     }
     if app.autostart {
         source_desktop::install_autostart(app, &wrapper, desktop_icon.as_deref())?;
@@ -208,16 +205,6 @@ fn read_registry_record(path: &Path) -> Result<SourceApp, String> {
     let icon = registry_value(&text, "icon")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
-    let mime_types = registry_value(&text, "mime_types")
-        .map(|value| {
-            value
-                .split(';')
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     let autostart = registry_value(&text, "autostart")
         .map(|value| value == "true")
         .unwrap_or(false);
@@ -228,7 +215,7 @@ fn read_registry_record(path: &Path) -> Result<SourceApp, String> {
         source,
         command,
         icon,
-        mime_types,
+        associations: Associations::default(),
         listing: Listing::default(),
         autostart,
     })
@@ -246,9 +233,8 @@ fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> St
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    let mime_types = app.mime_types.join(";");
     format!(
-        "id = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsource = \"{}\"\ncommand = \"{}\"\nwrapper = \"{}\"\nicon = \"{}\"\nstaged_icon = \"{}\"\nmime_types = \"{}\"\nautostart = \"{}\"\n",
+        "id = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsource = \"{}\"\ncommand = \"{}\"\nwrapper = \"{}\"\nicon = \"{}\"\nstaged_icon = \"{}\"\nautostart = \"{}\"\n",
         quote_value(&app.id),
         quote_value(&app.name),
         quote_value(&app.version),
@@ -257,7 +243,6 @@ fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> St
         quote_value(&wrapper.display().to_string()),
         quote_value(&icon),
         quote_value(&staged_icon),
-        quote_value(&mime_types),
         app.autostart
     )
 }
@@ -359,7 +344,7 @@ fn absolute_path(path: &Path) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn apps_root() -> Result<PathBuf, String> {
-    Ok(sabine_service::service_data_dir().join("apps"))
+    Ok(sabine_runtime::sabine_data_dir().join("apps"))
 }
 
 pub(crate) fn app_dir(id: &str) -> Result<PathBuf, String> {
@@ -369,11 +354,6 @@ pub(crate) fn app_dir(id: &str) -> Result<PathBuf, String> {
 #[cfg(target_os = "linux")]
 fn applications_dir() -> Result<PathBuf, String> {
     Ok(data_home()?.join("applications"))
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn autostart_dir() -> Result<PathBuf, String> {
-    Ok(config_home()?.join("autostart"))
 }
 
 #[cfg(target_os = "linux")]

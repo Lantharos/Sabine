@@ -3,11 +3,12 @@
 // Stop the verified daemon before removing its binaries. A running Windows
 // uninstaller must move itself outside that directory before deleting it.
 
-use crate::{SabineService, ServiceError, ServiceResult, service_data_dir};
-use std::{fs, path::Path, time::Duration};
+use crate::{SabineService, ServiceError, ServiceResult, app::forget::remove_path};
+use sabine_runtime::sabine_data_dir;
+use std::time::Duration;
 
 pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
-    let root = service_data_dir();
+    let root = sabine_data_dir();
     let apps = SabineService::default().apps()?;
     if !apps.is_empty() {
         return Err(ServiceError::Update(format!(
@@ -18,7 +19,7 @@ pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
                 .join(", ")
         )));
     }
-    let _lock = sabine_runtime::FileLock::acquire(
+    let lock = sabine_runtime::FileLock::acquire(
         &root.join("manual-update.lock"),
         Duration::from_secs(600),
         |_| {},
@@ -37,42 +38,28 @@ pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
             )));
         }
     }
-    let executable = std::env::current_exe()?;
-    let bin = root.join("bin");
-    let removed_self = executable.starts_with(&bin);
+    let removed = if purge {
+        root.clone()
+    } else {
+        root.join("bin")
+    };
+    let removed_self = std::env::current_exe()?.starts_with(&removed);
     if removed_self {
-        self_replace::self_delete_outside_path(&bin)?;
-    }
-    for path in [
-        bin,
-        root.join("downloads/system"),
-        root.join("downloads/cli"),
-        root.join("executions"),
-    ] {
-        remove_path(&path)?;
+        self_replace::self_delete_outside_path(&removed)?;
     }
     if purge {
+        drop(lock);
         remove_path(&crate::app::data::browser_profiles_root())?;
-        for name in [
-            "logs",
-            "apps",
-            "downloads",
-            "apps.json",
-            "apps.json.bak",
-            "service-policy.json",
-            "update-rollout-offset",
+        remove_path(&root)?;
+    } else {
+        for path in [
+            removed,
+            root.join("downloads/system"),
+            root.join("downloads/cli"),
+            root.join("executions"),
         ] {
-            remove_path(&root.join(name))?;
+            remove_path(&path)?;
         }
     }
     Ok(removed_self)
-}
-
-fn remove_path(path: &Path) -> std::io::Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_dir() && !metadata.is_symlink() => fs::remove_dir_all(path),
-        Ok(_) => fs::remove_file(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
 }

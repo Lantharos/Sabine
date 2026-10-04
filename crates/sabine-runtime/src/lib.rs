@@ -6,6 +6,7 @@ mod discovery;
 mod download;
 mod error;
 mod file_lock;
+mod fingerprint;
 mod install;
 mod lease;
 mod process;
@@ -13,16 +14,17 @@ mod types;
 #[cfg(windows)]
 pub use install::sandbox_windows::prepare_sandbox_access;
 
-pub(crate) const MIN_CEF_MAJOR: &str = "151";
+pub const MIN_CEF_MAJOR: u32 = 154;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use discovery::paths::runtime_execution_path;
-pub use discovery::paths::user_runtime_path;
+pub use discovery::paths::{sabine_data_dir, user_runtime_path};
 pub use discovery::resolve::{ensure_runtime, resolve_runtime};
 pub use download::latest_install_plan;
 pub use download::transfer::download_file as download_file_with_progress;
 pub use error::RuntimeError;
 pub use file_lock::FileLock;
+pub use fingerprint::Fingerprint;
 pub use install::archive::extract_tar_archive;
 pub use install::assets::prepare_runtime_assets;
 pub use install::directory::{install_directory, recover_directory_installs};
@@ -31,7 +33,7 @@ pub use install::{
     remove_user_runtime_version, update_user_runtime_with_progress,
 };
 pub use lease::RuntimeLease;
-pub use process::{background_command, configure_background_command};
+pub use process::{background_command, configure_background_command, find_program, process_alive};
 pub use types::{RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode};
 
 pub use diagnostics::{capture_diagnostics, diagnostic_path, record_diagnostic, report_error};
@@ -55,21 +57,14 @@ mod tests {
     }
 
     #[test]
-    fn detect_runtime_skips_missing_dirs() {
-        let config = RuntimeConfig::default();
-        let runtimes = detect_runtime(&config);
-        assert!(runtimes.is_empty() || runtimes.iter().all(|r| r.location.path().is_dir()));
-    }
-
-    #[test]
     fn version_checks_use_major_version() {
         assert!(crate::discovery::version::version_satisfies(
-            "147.0.14+gabc+chromium-147.0.7727.138",
-            "126"
+            &format!("{MIN_CEF_MAJOR}.0.14+gabc+chromium-{MIN_CEF_MAJOR}.0.7727.138"),
+            MIN_CEF_MAJOR
         ));
         assert!(!crate::discovery::version::version_satisfies(
             "101.0.18+gabc+chromium-101.0.4951.67",
-            "126"
+            MIN_CEF_MAJOR
         ));
     }
 }

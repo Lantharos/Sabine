@@ -4,7 +4,7 @@
 // ordering are part of the install transaction. Keep setup after InstallFiles
 // and unregister before RemoveFiles; XML that builds can still fail at install.
 
-use crate::bundle::config::BundleApp;
+use crate::{bundle::config::BundleApp, desktop::types::prog_id};
 use std::{fs, path::Path};
 
 pub(in crate::bundle) fn wix_source(
@@ -67,8 +67,8 @@ pub(in crate::bundle) fn wix_source(
     <InstallExecuteSequence>
       <Custom Action="SabineRollbackPrepare" Before="SabinePrepare" Condition="NOT Installed"/>
       <Custom Action="SabinePrepare" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;"/>
-      <Custom Action="SabineRollbackUnregister" Before="SabineUnregister" Condition="REMOVE~=&quot;ALL&quot;"/>
-      <Custom Action="SabineUnregister" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;"/>
+      <Custom Action="SabineRollbackUnregister" Before="SabineUnregister" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE"/>
+      <Custom Action="SabineUnregister" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE"/>
     </InstallExecuteSequence>
   </Package>
 </Wix>
@@ -144,7 +144,7 @@ fn directory_inventory(
                 contents.push_str(&format!(r#"<Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="{}" Target="[#MainExecutableFile]" WorkingDirectory="INSTALLFOLDER"{icon}/>"#, xml(&app.name)));
             }
             if main {
-                contents.push_str(&scheme_registrations(app));
+                contents.push_str(&handler_registrations(app));
             }
         } else {
             return Err(format!(
@@ -165,14 +165,31 @@ fn directory_inventory(
     }
 }
 
-fn scheme_registrations(app: &BundleApp) -> String {
-    crate::desktop::types::schemes(&app.mime_types)
+fn handler_registrations(app: &BundleApp) -> String {
+    let command = "&quot;[#MainExecutableFile]&quot; &quot;%1&quot;";
+    let mut registrations = app
+        .associations
+        .schemes()
         .map(|scheme| {
             format!(
-                r#"<RegistryKey Root="HKCU" Key="Software\Classes\{scheme}"><RegistryValue Type="string" Value="URL:{scheme}"/><RegistryValue Name="URL Protocol" Type="string" Value=""/><RegistryValue Key="shell\open\command" Type="string" Value="&quot;[#MainExecutableFile]&quot; &quot;%1&quot;"/></RegistryKey>"#
+                r#"<RegistryKey Root="HKCU" Key="Software\Classes\{scheme}"><RegistryValue Type="string" Value="URL:{scheme}"/><RegistryValue Name="URL Protocol" Type="string" Value=""/><RegistryValue Key="shell\open\command" Type="string" Value="{command}"/></RegistryKey>"#
             )
         })
-        .collect()
+        .collect::<String>();
+    if app.associations.extensions().next().is_none() {
+        return registrations;
+    }
+    let prog_id = prog_id(&app.id);
+    registrations.push_str(&format!(
+        r#"<RegistryKey Root="HKCU" Key="Software\Classes\{prog_id}"><RegistryValue Type="string" Value="{} document"/><RegistryValue Key="DefaultIcon" Type="string" Value="&quot;[#MainExecutableFile]&quot;,0"/><RegistryValue Key="shell\open\command" Type="string" Value="{command}"/></RegistryKey>"#,
+        xml(&app.name)
+    ));
+    for extension in app.associations.extensions() {
+        registrations.push_str(&format!(
+            r#"<RegistryValue Root="HKCU" Key="Software\Classes\.{extension}\OpenWithProgids" Name="{prog_id}" Type="string" Value=""/>"#
+        ));
+    }
+    registrations
 }
 
 fn actions() -> String {
