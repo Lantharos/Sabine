@@ -6,7 +6,7 @@ use winit::{
 };
 
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::ui::chrome::{activate_control, resize_direction_at};
+use crate::osr::host::ui::chrome::activate_control;
 
 impl OsrNativeHost {
     pub(super) fn pointer_moved(
@@ -97,10 +97,7 @@ impl OsrNativeHost {
         self.cursor_x = x;
         self.cursor_y = y;
         let titlebar_changed = self.update_titlebar_hover();
-        if self.config.resizable
-            && let Some(direction) =
-                resize_direction_at(x, y, self.logical_width(), self.logical_height())
-        {
+        if let Some(direction) = self.resize_edge_under_cursor() {
             self.set_native_cursor(CursorIcon::from(direction));
         } else if self.hovered_control.is_some() {
             self.set_native_cursor(CursorIcon::Pointer);
@@ -136,10 +133,7 @@ impl OsrNativeHost {
         };
         let left = button == Some(MouseButton::Left);
         let (x, y, width) = (self.cursor_x, self.cursor_y, self.logical_width());
-        if left
-            && self.config.resizable
-            && let Some(direction) = resize_direction_at(x, y, width, self.logical_height())
-        {
+        if left && let Some(direction) = self.resize_edge_under_cursor() {
             if let Err(error) = window.drag_resize_window(direction) {
                 sabine_runtime::report_error(
                     "window",

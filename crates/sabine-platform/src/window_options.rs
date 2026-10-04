@@ -108,6 +108,12 @@ pub struct WindowOptions {
     pub regions: WindowRegions,
 }
 
+impl WindowOptions {
+    pub fn wants_background_effect(&self) -> bool {
+        self.transparent && self.background_effect != WindowBackgroundEffect::None
+    }
+}
+
 impl Default for WindowOptions {
     fn default() -> Self {
         Self {

@@ -90,6 +90,8 @@ impl ApplicationHandler for OsrNativeHost {
                 }
             }
             WindowEvent::Ime(ime) => self.forward_ime(ime),
+            #[cfg(target_os = "windows")]
+            WindowEvent::ThemeChanged(theme) => self.theme_changed(theme),
             WindowEvent::Moved(_) => {
                 self.send_screen_origin();
                 self.sync_active_frame_rate();

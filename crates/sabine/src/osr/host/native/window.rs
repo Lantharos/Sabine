@@ -7,9 +7,10 @@ use winit::platform::windows::WindowAttributesWindows;
 use winit::{
     dpi::LogicalSize,
     event_loop::ActiveEventLoop,
-    window::{Window as WinitWindow, WindowAttributes, WindowLevel},
+    window::{ResizeDirection, Window as WinitWindow, WindowAttributes, WindowLevel},
 };
 
+use crate::osr::host::ui::chrome::resize_direction_at;
 use crate::render::GpuRenderer;
 
 use super::OsrNativeHost;
@@ -172,22 +173,41 @@ impl OsrNativeHost {
         self.forward_ime(winit::event::Ime::Disabled);
     }
 
-    pub(in crate::osr::host) fn set_regions(&mut self, regions: sabine_platform::WindowRegions) {
-        self.config.regions = regions;
-        let Some(window) = self.window.clone().filter(|_| self.presented) else {
-            return;
-        };
-        if self.effect.is_none() {
-            self.effect = sabine_platform::request_window_effect(&window, &self.window_options());
-        }
-        self.update_effect_regions();
-        window.request_redraw();
+    /// The edge Sabine resizes the window from, for windows without system
+    /// decorations. AppKit resizes borderless windows from their edges itself.
+    pub(in crate::osr::host) fn resize_edge_under_cursor(&self) -> Option<ResizeDirection> {
+        let draws_edges = self.config.resizable
+            && !self.config.chrome.uses_native_decorations()
+            && !cfg!(target_os = "macos");
+        draws_edges
+            .then(|| {
+                resize_direction_at(
+                    self.cursor_x,
+                    self.cursor_y,
+                    self.logical_width(),
+                    self.logical_height(),
+                )
+            })
+            .flatten()
     }
 
-    pub(in crate::osr::host) fn update_effect_regions(&self) {
-        let Some(effect) = &self.effect else {
-            return;
-        };
+    #[cfg(target_os = "windows")]
+    pub(in crate::osr::host) fn theme_changed(&mut self, theme: winit::window::Theme) {
+        if let Some(effect) = &mut self.effect {
+            effect.theme_changed(theme);
+        }
+    }
+
+    pub(in crate::osr::host) fn set_regions(&mut self, regions: sabine_platform::WindowRegions) {
+        self.config.regions = regions;
+        self.update_effect_regions();
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    pub(in crate::osr::host) fn update_effect_regions(&mut self) {
+        let options = self.window_options();
         let width = self.logical_width().round().max(1.0) as i32;
         let height = self.logical_height().round().max(1.0) as i32;
         let holes = self
@@ -203,6 +223,8 @@ impl OsrNativeHost {
                 )
             })
             .collect::<Vec<_>>();
-        let _ = effect.update(&self.window_options(), width, height, &holes);
+        if let Some(effect) = &mut self.effect {
+            effect.update(&options, width, height, &holes);
+        }
     }
 }
