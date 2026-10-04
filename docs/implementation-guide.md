@@ -334,8 +334,17 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 | macOS | Unix domain socket + mach | CEF IOSurface → acknowledged IOSurface slots → wgpu Metal |
 | Windows | Unix domain socket | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
 
-Palette and tray windows use the same native host as other desktop windows, with frameless chrome,
-always-on-top placement, and hide-on-blur behavior when configured.
+Palette and tray windows use the same native host as other desktop windows, with frameless chrome
+and hide-on-blur behavior when configured. Wayland has no protocol for leaving a window out of the
+taskbar or keeping it above others, so on Linux `skip_taskbar` and `always_on_top` do nothing and a
+shown palette is listed in the taskbar or dock like any window; a `tray_app` window is only listed
+while it is shown. Windows and macOS honor both: `skip_taskbar` keeps a window off the Windows
+taskbar and gives a macOS app no Dock icon.
+
+Windows without system decorations can be resized from a 7-pixel band along their edges on Linux and
+Windows, where Sabine starts the system's interactive resize. macOS resizes borderless windows from
+their edges itself, and windows with system decorations always resize through them, so neither
+reserves that band and clicks there reach the page.
 
 ## Native media
 
@@ -513,8 +522,12 @@ Recipes set a window up for its role, and later builder calls refine them:
   `.tray_icon(...)` and `.single_instance_id(...)`
 
 `AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
-and close hit targets, and with a sidebar the blur, opaque and input regions of a glass sidebar
-layout. Region builders (`blur_region`, `opaque_region`, `input_region`, `drag_region`,
+and close hit targets at the right end, and with a sidebar the blur, opaque and input regions of a
+glass sidebar layout. On macOS the window keeps its own traffic lights instead: its titlebar turns
+transparent and the page extends under it, so the page draws no controls of its own and leaves the
+top-left corner free. `appWindow.controlsOverlay()` reports the corner the system's controls cover,
+and every page gets the same values as the `--sabine-controls-left`, `--sabine-controls-right` and
+`--sabine-controls-height` CSS properties, which are zero where the page draws its own controls. Region builders (`blur_region`, `opaque_region`, `input_region`, `drag_region`,
 `control_region`) remain available for layouts it does not cover.
 
 Bridge commands are registered on the builder:

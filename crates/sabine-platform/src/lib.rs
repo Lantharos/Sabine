@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod controls_overlay;
 mod desktop_integration;
 mod effect;
 mod regions;
@@ -7,6 +9,8 @@ mod shortcut_inhibit;
 mod wayland_client;
 mod window_options;
 
+#[cfg(target_os = "macos")]
+pub use controls_overlay::{ControlsOverlay, controls_overlay};
 pub use desktop_integration::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation, GlobalShortcutFailure,
     GlobalShortcutRegistration, NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers,

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowAttributesMacOS;
 #[cfg(target_os = "linux")]
 use winit::platform::wayland::WindowAttributesWayland;
 #[cfg(target_os = "windows")]
@@ -48,20 +50,18 @@ impl OsrNativeHost {
                 WindowLevel::Normal
             })
             .with_transparent(self.config.transparent);
-        // On Linux, Sabine applies `ext_background_effect_v1` itself (with
-        // blur/opaque/input regions). winit's `with_blur(true)` also creates an
-        // effect on the same surface, and a second bind is a protocol error that
-        // kills the Wayland connection.
         #[cfg(target_os = "linux")]
         {
-            let mut wayland_attributes = WindowAttributesWayland::default();
-            if let Some(app_id) = &self.config.app_id {
-                wayland_attributes = wayland_attributes.with_name(app_id, app_id);
-            }
-            if let Some(token) = self.pending_activation_token.take() {
-                wayland_attributes = wayland_attributes.with_activation_token(token);
-            }
-            attributes = attributes.with_platform_attributes(Box::new(wayland_attributes));
+            attributes = attributes.with_platform_attributes(Box::new(self.wayland_attributes()));
+        }
+        #[cfg(target_os = "macos")]
+        if self.config.titlebar_overlay {
+            attributes = attributes.with_platform_attributes(Box::new(
+                WindowAttributesMacOS::default()
+                    .with_titlebar_transparent(true)
+                    .with_title_hidden(true)
+                    .with_fullsize_content_view(true),
+            ));
         }
         #[cfg(target_os = "windows")]
         if self.config.transparent || self.config.skip_taskbar {
@@ -115,6 +115,7 @@ impl OsrNativeHost {
             );
         }
         self.send_screen_origin();
+        self.send_controls_overlay();
         self.launch_child();
         if let Err(error) = self.restore_retained_frames() {
             self.fail(format!("Could not restore window textures: {error}"));
@@ -130,6 +131,43 @@ impl OsrNativeHost {
         {
             window.request_redraw();
         }
+    }
+
+    /// Leaves blur to Sabine's own background effect: a surface has room for
+    /// one, and winit binding a second is a protocol error that ends the
+    /// Wayland connection.
+    #[cfg(target_os = "linux")]
+    fn wayland_attributes(&mut self) -> WindowAttributesWayland {
+        let mut attributes = WindowAttributesWayland::default();
+        if let Some(app_id) = &self.config.app_id {
+            attributes = attributes.with_name(app_id, app_id);
+        }
+        if let Some(token) = self.pending_activation_token.take() {
+            attributes = attributes.with_activation_token(token);
+        }
+        attributes
+    }
+
+    /// The corner of the page the system's window controls cover.
+    pub(in crate::osr::host) fn controls_overlay(&self) -> serde_json::Value {
+        #[cfg(target_os = "macos")]
+        if self.config.titlebar_overlay
+            && let Some(overlay) = self
+                .window
+                .as_ref()
+                .and_then(|window| sabine_platform::controls_overlay(window.as_ref()))
+        {
+            return serde_json::json!({ "left": overlay.left, "right": 0, "height": overlay.height });
+        }
+        serde_json::json!({ "left": 0, "right": 0, "height": 0 })
+    }
+
+    fn send_controls_overlay(&self) {
+        self.send_control(&format!(
+            "SABINE_BRIDGE_EVENT\t\"{}\"\t{}\n",
+            sabine_bridge::CONTROLS_OVERLAY_EVENT,
+            self.controls_overlay()
+        ));
     }
 
     pub(in crate::osr::host) fn drop_hidden_window(&mut self) {

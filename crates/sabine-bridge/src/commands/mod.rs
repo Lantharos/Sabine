@@ -9,12 +9,16 @@ pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
 pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
+pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
+/// Sent when the corner the system's window controls cover changes.
+pub const CONTROLS_OVERLAY_EVENT: &str = "window.controlsOverlay";
 
-const WINDOW_COMMANDS: [&str; 4] = [
+const WINDOW_COMMANDS: [&str; 5] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
+    CONTROLS_OVERLAY_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

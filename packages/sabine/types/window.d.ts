@@ -23,6 +23,15 @@ export interface SabineWindowApi {
    */
   setRegions(regions: WindowRegions): Promise<void>;
   /**
+   * The top corners the system's own window controls cover, which an
+   * app-drawn titlebar leaves free. With `AppChrome` on macOS the traffic
+   * lights sit at the left; elsewhere the page draws its controls and nothing
+   * is covered. The same values are set on the page as the
+   * `--sabine-controls-left`, `--sabine-controls-right` and
+   * `--sabine-controls-height` CSS properties.
+   */
+  controlsOverlay(): Promise<ControlsOverlay>;
+  /**
    * Whether people can see the window: it is shown and the desktop has not
    * reported it out of sight, as it does for minimized or fully covered
    * windows where it can.
@@ -34,6 +43,12 @@ export interface SabineWindowApi {
    * while it is not focused.
    */
   readonly suspended: boolean;
+}
+
+export interface ControlsOverlay {
+  left: number;
+  right: number;
+  height: number;
 }
 
 export interface WindowVisibility {

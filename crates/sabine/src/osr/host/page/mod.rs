@@ -2,7 +2,7 @@
 mod clipboard;
 mod media;
 
-use sabine_bridge::{INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
+use sabine_bridge::{CONTROLS_OVERLAY_COMMAND, INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
 
 use super::native::OsrNativeHost;
 
@@ -57,6 +57,11 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            CONTROLS_OVERLAY_COMMAND => self.send_bridge_response(
+                request.browser_id,
+                request.request_id,
+                Ok(self.controls_overlay()),
+            ),
             command if command.starts_with(sabine_bridge::media::COMMAND_PREFIX) => {
                 self.answer_media(&request)
             }

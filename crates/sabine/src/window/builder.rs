@@ -149,11 +149,15 @@ impl SabineWindow {
         self
     }
 
+    /// Keeps the window off the Windows taskbar and the app out of the macOS
+    /// Dock. Wayland offers no way to do this, so Linux lists it anyway.
     pub fn skip_taskbar(mut self, enabled: bool) -> Self {
         self.config.skip_taskbar = enabled;
         self
     }
 
+    /// Keeps the window above others on Windows and macOS. Wayland leaves
+    /// stacking to the compositor, so this does nothing on Linux.
     pub fn always_on_top(mut self, always_on_top: bool) -> Self {
         self.config.always_on_top = always_on_top;
         self
