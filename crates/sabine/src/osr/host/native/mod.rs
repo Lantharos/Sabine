@@ -142,8 +142,6 @@ impl OsrNativeHost {
                 .hibernate_after
                 .map(|delay| Instant::now() + delay)
         };
-        #[cfg(target_os = "linux")]
-        let media = crate::media::MediaHost::new(config.transparent);
         Self {
             config,
             sender,
@@ -214,7 +212,7 @@ impl OsrNativeHost {
             #[cfg(target_os = "macos")]
             surface_broker: None,
             #[cfg(target_os = "linux")]
-            media,
+            media: Default::default(),
             #[cfg(target_os = "linux")]
             clipboard: None,
             #[cfg(target_os = "linux")]

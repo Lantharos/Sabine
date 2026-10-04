@@ -5,7 +5,7 @@ use std::{
 
 use super::cues::cue_ready;
 use super::inbox::{Inbox, Message};
-use crate::media::gst::{self, CudaContext, Gst, Handle, types};
+use crate::media::backend::gstreamer::gst::{self, CudaContext, Gst, Handle, types};
 
 const PLAYBIN_FLAGS: &str = "video+audio+text+soft-volume+native-video";
 const VIDEO_SINK: &str = "glupload ! glcolorconvert ! appsink name=pictures \

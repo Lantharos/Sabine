@@ -64,7 +64,7 @@ pub(crate) struct SurfaceRect {
     pub(crate) height: i32,
 }
 
-/// How a player lays its video into its surface buffer.
+/// How a player lays its video into its surface buffer, in physical pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Frame {
     pub(super) buffer: (i32, i32),
@@ -77,6 +77,11 @@ pub(super) struct Frame {
 pub(super) struct Layout {
     pub(super) hole: MediaHole,
     pub(super) frame: Frame,
+    /// The whole element in window coordinates, of which `hole` is the visible part.
+    pub(super) bounds: Rect,
+    pub(super) radius: f64,
+    /// Physical pixels per window unit.
+    pub(super) scale: f64,
 }
 
 /// The page content area inside the window, and the window's scale.
@@ -118,6 +123,9 @@ impl PageRect {
                 ],
                 radius: (self.radius * scale) as f32,
             },
+            bounds,
+            radius: self.radius,
+            scale,
         })
     }
 }

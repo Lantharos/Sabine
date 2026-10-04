@@ -5,12 +5,13 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::inbox::{Command, Cue, Inbox, Message};
+use super::inbox::{Control, Cue, Inbox, Message};
 use super::pipeline::Pipeline;
-use super::tracks::Tracks;
-use super::{Events, PlayerOptions};
-use crate::media::gst::{self, Gst, types};
-use crate::media::present::Presenter;
+use super::streams;
+use crate::media::backend::gstreamer::gst::{self, Gst, types};
+use crate::media::backend::gstreamer::present::Presenter;
+use crate::media::command::{self, Command, Events, PlayerOptions};
+use crate::media::tracks::Tracks;
 
 const TIME_INTERVAL: Duration = Duration::from_millis(250);
 /// A paused pipeline keeps its decoder, and NVIDIA's driver then wakes
@@ -85,8 +86,8 @@ impl Session {
             if mail.stop {
                 return;
             }
-            for command in mail.commands {
-                self.apply(command);
+            for control in mail.controls {
+                self.control(control);
             }
             if mail.picture {
                 self.take_picture();
@@ -144,6 +145,15 @@ impl Session {
         }
     }
 
+    fn control(&mut self, control: Control) {
+        match control {
+            Control::Page(command) => self.apply(command),
+            Control::Frame(frame) => self.presenter.set_frame(frame),
+            Control::Target(target) => self.presenter.set_target(target),
+            Control::Occluded(occluded) => self.presenter.set_occluded(occluded),
+        }
+    }
+
     fn apply(&mut self, command: Command) {
         match command {
             Command::Play => {
@@ -185,18 +195,15 @@ impl Session {
             }
             Command::Loop(looping) => self.looping = looping,
             Command::Tracks(request) => {
-                if let (Some(selection), Some(pipeline)) =
-                    (self.tracks.request(request), &self.pipeline)
+                if self.tracks.request(request)
+                    && let Some(pipeline) = &self.pipeline
                 {
-                    pipeline.select_streams(&selection);
+                    pipeline.select_streams(&streams::selection(&self.tracks));
                 }
                 if !self.tracks.subtitles_enabled() {
                     self.emit("cue", json!({ "text": "", "start": 0, "end": 0 }));
                 }
             }
-            Command::Frame(frame) => self.presenter.set_frame(frame),
-            Command::Target(target) => self.presenter.set_target(target),
-            Command::Occluded(occluded) => self.presenter.set_occluded(occluded),
         }
     }
 
@@ -260,13 +267,16 @@ impl Session {
                 }
             }
             types::MESSAGE_STREAM_COLLECTION => {
-                let selection = unsafe { self.tracks.collect(gst, handle) };
+                if let Some(tracks) = unsafe { streams::collection(gst, handle) } {
+                    self.tracks.set(tracks);
+                }
                 if let Some(pipeline) = &self.pipeline {
-                    pipeline.select_streams(&selection);
+                    pipeline.select_streams(&streams::selection(&self.tracks));
                 }
             }
             types::MESSAGE_STREAMS_SELECTED => {
-                unsafe { self.tracks.selected(gst, handle) };
+                self.tracks
+                    .set_selected(unsafe { streams::selected(gst, handle) });
                 self.emit("tracks", self.tracks.to_json());
             }
             _ => {}
@@ -358,8 +368,7 @@ impl Session {
         }
     }
 
-    fn emit(&self, kind: &str, mut payload: Value) {
-        payload["type"] = kind.into();
-        (self.events)(payload);
+    fn emit(&self, kind: &str, payload: Value) {
+        command::emit(&self.events, kind, payload);
     }
 }

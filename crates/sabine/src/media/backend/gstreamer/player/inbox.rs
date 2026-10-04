@@ -3,30 +3,17 @@ use std::{
     time::Instant,
 };
 
+use crate::media::backend::gstreamer::gst::{Gst, Handle};
+use crate::media::backend::gstreamer::wayland::Target;
+use crate::media::command::Command;
 use crate::media::geometry::Frame;
-use crate::media::gst::{Gst, Handle};
-use crate::media::wayland::Target;
 
-pub(in crate::media) enum Command {
-    Play,
-    Pause,
-    Seek { time: f64, fast: bool },
-    Rate(f64),
-    Volume(f64),
-    Muted(bool),
-    Loop(bool),
-    Tracks(TrackRequest),
+/// What the window thread asks of a player.
+pub(in crate::media) enum Control {
+    Page(Command),
     Frame(Option<Frame>),
     Target(Option<Target>),
     Occluded(bool),
-}
-
-/// A track choice from the page: `None` keeps the current choice and
-/// `Some(None)` turns the track kind off.
-#[derive(Default)]
-pub(in crate::media) struct TrackRequest {
-    pub(in crate::media) audio: Option<Option<String>>,
-    pub(in crate::media) subtitle: Option<Option<String>>,
 }
 
 /// A bus message the player thread still has to handle; it owns the message.
@@ -55,14 +42,14 @@ pub(super) struct Cue {
 
 #[derive(Default)]
 pub(super) struct Mail {
-    pub(super) commands: Vec<Command>,
+    pub(super) controls: Vec<Control>,
     pub(super) messages: Vec<Message>,
     pub(super) cues: Vec<Cue>,
     pub(super) picture: bool,
     pub(super) stop: bool,
 }
 
-/// Everything that wakes a player thread: page commands, bus messages,
+/// Everything that wakes a player thread: window controls, bus messages,
 /// decoded pictures and subtitle cues.
 #[derive(Default)]
 pub(super) struct Inbox {
@@ -92,7 +79,7 @@ impl Inbox {
         loop {
             if mail.stop
                 || mail.picture
-                || !mail.commands.is_empty()
+                || !mail.controls.is_empty()
                 || !mail.messages.is_empty()
                 || !mail.cues.is_empty()
             {
