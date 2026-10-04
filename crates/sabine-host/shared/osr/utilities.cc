@@ -72,6 +72,11 @@ std::vector<SabineOsrHandler*> SnapshotHandlers() {
   return g_handlers;
 }
 
+bool TraceEnabled() {
+  static const bool enabled = std::getenv("SABINE_TRACE") != nullptr;
+  return enabled;
+}
+
 int SwitchInt(CefRefPtr<CefCommandLine> command_line,
               const std::string& name,
               int fallback) {

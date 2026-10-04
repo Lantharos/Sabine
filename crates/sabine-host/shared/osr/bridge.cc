@@ -1,32 +1,9 @@
 #include "osr/handler.h"
 
-#include <algorithm>
-#include <cctype>
-#include <cerrno>
-#include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <set>
-#include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
-#endif
 
 #include "guest/input.h"
 #include "guest/manager.h"

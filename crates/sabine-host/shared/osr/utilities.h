@@ -35,6 +35,7 @@ void UnregisterHandler(SabineOsrHandler* handler);
 bool HasRegisteredHandlers();
 std::vector<SabineOsrHandler*> SnapshotHandlers();
 
+bool TraceEnabled();
 int SwitchInt(CefRefPtr<CefCommandLine> command_line,
               const std::string& name,
               int fallback);

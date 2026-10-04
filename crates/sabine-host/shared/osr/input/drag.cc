@@ -2,31 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
-#include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <set>
 #include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
+#include <string_view>
 #include <vector>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
-#endif
 
 #include "guest/input.h"
 #include "guest/manager.h"
@@ -46,31 +26,31 @@ using namespace sabine_osr;
 namespace {
 
 std::string FileUriToPath(const std::string& value) {
-  const std::string prefix = "file://";
-  if (value.rfind(prefix, 0) != 0) {
+  constexpr std::string_view kScheme = "file://";
+  if (value.rfind(kScheme, 0) != 0) {
     return value;
   }
-  std::string path = value.substr(prefix.size());
-  const std::string host_prefix = "localhost/";
-  if (path.rfind(host_prefix, 0) == 0) {
-    path = path.substr(host_prefix.size());
+  const size_t path_start = value.find('/', kScheme.size());
+  if (path_start == std::string::npos) {
+    return std::string();
   }
-  std::string decoded;
-  decoded.reserve(path.size());
-  for (size_t i = 0; i < path.size(); ++i) {
-    if (path[i] == '%' && i + 2 < path.size()) {
-      char hex[3] = {path[i + 1], path[i + 2], 0};
-      char* end = nullptr;
-      const long byte = std::strtol(hex, &end, 16);
-      if (end == hex + 2) {
-        decoded.push_back(static_cast<char>(byte));
-        i += 2;
-        continue;
-      }
-    }
-    decoded.push_back(path[i] == '?' || path[i] == '#' ? '\0' : path[i]);
+  const std::string_view authority(value.data() + kScheme.size(),
+                                   path_start - kScheme.size());
+  if (!authority.empty() && authority != "localhost") {
+    return std::string();
   }
-  return decoded;
+  const size_t path_end = value.find_first_of("?#", path_start);
+  std::string path = DecodeControlComponent(value.substr(
+      path_start, path_end == std::string::npos ? std::string::npos
+                                                : path_end - path_start));
+#if defined(OS_WIN)
+  if (path.size() >= 3 && path[0] == '/' &&
+      std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':') {
+    path.erase(0, 1);
+  }
+  std::replace(path.begin(), path.end(), '/', '\\');
+#endif
+  return path;
 }
 
 std::string BuildFileDragPayload(const std::vector<std::string>& paths) {
