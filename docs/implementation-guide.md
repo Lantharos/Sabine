@@ -229,7 +229,9 @@ to benchmark the GPU in the background.
   never reuses a slot before that acknowledgement. Physical texture dimensions remain separate
   from the visible source rectangle and logical window dimensions at non-integer display scales.
   Mailbox saturation drops an intermediate GPU frame and requests the newest paint; it never falls
-  back to a synchronous CPU readback.
+  back to a synchronous CPU readback. When the window falls behind, a newer frame for the same
+  surface replaces the queued one and its slot is released at once. The window presents through
+  DirectComposition in mailbox mode, so presenting never waits for the display.
   Slots are isolated by browser and released when that browser closes. The compositor evicts
   retired guest and popup textures and clears page textures during hibernation.
 - **Linux** uses CEF software `OnPaint` on Wayland, with GPU composition in the native host. Sabine
@@ -241,7 +243,10 @@ to benchmark the GPU in the background.
 - **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
   returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
   surface, copying only the area that changed since that slot last received a frame, and waits for
-  the copy before publishing it. CEF's own pooled surfaces are wrapped as Metal textures once. Each owned IOSurface is handed to the native
+  the copy before publishing it. CEF's own pooled surfaces are wrapped as Metal textures once.
+  Windowed, the Metal layer presents without waiting for the display, since the window server
+  composites it at the display's pace anyway; fullscreen windows wait for vsync so a layer the
+  display scans out directly does not tear. Each owned IOSurface is handed to the native
   window once, as a mach port sent to a per-connection bootstrap service whose name travels on the
   browser command line; messages carry the window's socket token and are otherwise discarded. Frames
   then reference the surface by id, the compositor wraps each slot's surface as a Metal texture once
@@ -620,8 +625,15 @@ requested surrounding-text deletions to inputs, text areas, and content-editable
 Ordinary page focus does not keep the input method enabled.
 
 Touch and tablet input is forwarded as CEF touch input instead of being collapsed into mouse events,
-preserving pointer identity, pressure, and touch, pen, or eraser type. CEF's touch event API does not
+preserving pointer identity, pressure, and touch, pen, or eraser type. A pen hovering above the
+screen moves the pointer like a mouse, so pages get hover. Every touch the page saw ends with a
+release or cancellation, even when it is lifted over the titlebar. CEF's touch event API does not
 carry tablet tilt.
+
+Trackpad scrolling keeps the fractions of a pixel each event carries, so slow scrolls add up instead
+of being rounded away. Touchpad pinches reach pages as Ctrl+wheel events, as Chromium reports them.
+Pages can use every CSS cursor, including images and `cursor: none`. Window and page positions use
+the display's scale factor down to a quarter, matching the scale Chromium renders at.
 
 Native screen-reader integration is not implemented. The off-screen browser's accessibility tree
 is not exposed through UI Automation, NSAccessibility, or AT-SPI. Semantic HTML remains useful for
@@ -667,7 +679,9 @@ of sight, Chromium stops rendering it with `WasHidden`, which also throttles the
 the window ignores paints until it is seen again, then keeps showing its last frame while Chromium
 repaints. Wayland compositors report this with the xdg-shell `suspended` state, which Mutter-based
 compositors such as Kestrel set on minimized and fully covered windows, and winit turns it into an
-occlusion event. Hibernation hides the view too, and tears down its
+occlusion event. Windows reports neither, so a minimized window there counts as out of sight until
+it is restored. A window hidden to the tray stops painting the same way unless it keeps its frame
+for a quick return. Hibernation hides the view too, and tears down its
 browser. The shared CEF process stays alive when it still owns other windows. Waking creates a fresh
 browser through the same profile-singleton handoff path, and connection generations prevent a late
 disconnect from the old browser from clearing the new one.
