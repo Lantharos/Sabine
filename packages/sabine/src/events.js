@@ -14,6 +14,7 @@ export const events = {
   globalShortcutFailed: on("globalShortcut.failed"),
   singleInstance: on("singleInstance.activate"),
   rendererCrashed: on("runtime.renderer-crashed"),
+  appearanceChanged: on("system.appearance"),
   guestCreated: on("guest.created"),
   guestDestroyed: on("guest.destroyed"),
   guestLoading: on("guest.loading"),

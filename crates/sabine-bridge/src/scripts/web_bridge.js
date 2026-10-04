@@ -148,6 +148,19 @@
     window.sabine.window.controlsOverlay().then(showControlsOverlay, () => {});
   }
 
+  window.sabine.system = {
+    appearance() { return window.sabine.bridge.invoke("sabine.system.appearance"); },
+  };
+  const showAccent = (appearance) => {
+    const style = document.documentElement.style;
+    if (appearance?.accentColor) style.setProperty("--sabine-accent-color", appearance.accentColor);
+    else style.removeProperty("--sabine-accent-color");
+  };
+  if (window === window.top && commands.has("sabine.system.appearance")) {
+    window.sabine.bridge.listen("system.appearance", showAccent);
+    window.sabine.system.appearance().then(showAccent, () => {});
+  }
+
   window.addEventListener("pagehide", () => {
     for (const entry of pending.values()) {
       entry.cancel(new DOMException("Sabine page was hidden", "AbortError"));

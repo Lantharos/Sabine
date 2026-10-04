@@ -47,6 +47,8 @@ impl ApplicationHandler for OsrNativeHost {
         self.forward_system_keys();
         #[cfg(target_os = "linux")]
         self.deliver_clipboard_drops();
+        #[cfg(target_os = "linux")]
+        self.refresh_appearance();
         self.process_osr_events(event_loop);
     }
 
@@ -93,7 +95,12 @@ impl ApplicationHandler for OsrNativeHost {
             }
             WindowEvent::Ime(ime) => self.forward_ime(ime),
             #[cfg(target_os = "windows")]
-            WindowEvent::ThemeChanged(theme) => self.theme_changed(theme),
+            WindowEvent::ThemeChanged(theme) => {
+                self.retint_effect(theme);
+                self.refresh_appearance();
+            }
+            #[cfg(not(target_os = "windows"))]
+            WindowEvent::ThemeChanged(_) => self.refresh_appearance(),
             WindowEvent::Moved(_) => {
                 self.send_screen_origin();
                 self.sync_active_frame_rate();

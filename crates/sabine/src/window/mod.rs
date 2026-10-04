@@ -5,6 +5,7 @@ mod bridge;
 mod builder;
 pub(crate) mod config;
 mod launch;
+mod listeners;
 mod manifest;
 pub(crate) mod style;
 mod visibility;
@@ -14,6 +15,7 @@ use config::SabineWindowConfig;
 pub use config::{
     SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
 };
+pub(crate) use listeners::{AppearanceListener, WindowListeners, appearance_line};
 pub use style::Color as SabineColor;
 pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};

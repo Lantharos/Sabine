@@ -320,7 +320,18 @@ impl SabineWindow {
         mut self,
         listener: impl Fn(super::WindowVisibility) + Send + Sync + 'static,
     ) -> Self {
-        self.config.visibility_listener = Some(super::VisibilityListener::new(listener));
+        self.config.listeners.visibility = Some(super::VisibilityListener::new(listener));
+        self
+    }
+
+    /// Calls `listener` with the window's id whenever the desktop switches
+    /// between light and dark or its accent color changes, starting with the
+    /// appearance the window opens with.
+    pub fn on_appearance_changed(
+        mut self,
+        listener: impl Fn(crate::WindowId, sabine_platform::Appearance) + Send + Sync + 'static,
+    ) -> Self {
+        self.config.listeners.appearance = Some(super::AppearanceListener::new(listener));
         self
     }
 

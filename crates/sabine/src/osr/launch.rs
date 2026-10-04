@@ -69,7 +69,7 @@ pub(crate) fn launch_process(
         &mut child,
         BridgeRuntime::new(bridge_handlers.clone(), config.bridge.clone()),
         activity.clone(),
-        config.visibility_listener.clone(),
+        config.listeners.clone(),
     );
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let (command_sender, command_receiver) = crossbeam_channel::unbounded();
@@ -231,7 +231,7 @@ pub(crate) fn attach_open_window(
         BridgeRuntime::new(context.bridge_handlers.clone(), context.bridge.clone()),
         process.activity.clone(),
         &emitter,
-        window_config.visibility_listener.clone(),
+        window_config.listeners.clone(),
     );
     if let Some(thread) = thread {
         process.extra_bridge_threads.push(thread);

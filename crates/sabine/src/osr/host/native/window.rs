@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{io::Write, sync::Arc};
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowAttributesMacOS;
@@ -116,6 +116,7 @@ impl OsrNativeHost {
         }
         self.send_screen_origin();
         self.send_controls_overlay();
+        self.refresh_appearance();
         self.launch_child();
         if let Err(error) = self.restore_retained_frames() {
             self.fail(format!("Could not restore window textures: {error}"));
@@ -230,10 +231,45 @@ impl OsrNativeHost {
     }
 
     #[cfg(target_os = "windows")]
-    pub(in crate::osr::host) fn theme_changed(&mut self, theme: winit::window::Theme) {
+    pub(in crate::osr::host) fn retint_effect(&mut self, theme: winit::window::Theme) {
         if let Some(effect) = &mut self.effect {
             effect.theme_changed(theme);
         }
+    }
+
+    fn current_appearance(&self) -> Option<sabine_platform::Appearance> {
+        let window = self.window.as_ref()?;
+        #[cfg(target_os = "linux")]
+        return Some(self.appearance.appearance(window.as_ref()));
+        #[cfg(not(target_os = "linux"))]
+        return Some(sabine_platform::system_appearance(window.as_ref()));
+    }
+
+    /// Tells the page and the app when the desktop's appearance changed.
+    pub(in crate::osr::host) fn refresh_appearance(&mut self) {
+        let Some(appearance) = self.current_appearance() else {
+            return;
+        };
+        if self.published_appearance == Some(appearance) {
+            return;
+        }
+        self.published_appearance = Some(appearance);
+        self.send_control(&format!(
+            "SABINE_BRIDGE_EVENT\t\"{}\"\t{}\n",
+            sabine_bridge::APPEARANCE_EVENT,
+            appearance_json(&appearance)
+        ));
+        let mut output = std::io::stdout().lock();
+        let _ = writeln!(output, "{}", crate::window::appearance_line(&appearance));
+        let _ = output.flush();
+    }
+
+    pub(in crate::osr::host) fn appearance_json(&self) -> serde_json::Value {
+        self.published_appearance
+            .or_else(|| self.current_appearance())
+            .map_or(serde_json::Value::Null, |appearance| {
+                appearance_json(&appearance)
+            })
     }
 
     pub(in crate::osr::host) fn set_regions(&mut self, regions: sabine_platform::WindowRegions) {
@@ -265,4 +301,11 @@ impl OsrNativeHost {
             effect.update(&options, width, height, &holes);
         }
     }
+}
+
+fn appearance_json(appearance: &sabine_platform::Appearance) -> serde_json::Value {
+    serde_json::json!({
+        "colorScheme": if appearance.dark { "dark" } else { "light" },
+        "accentColor": appearance.accent_hex(),
+    })
 }

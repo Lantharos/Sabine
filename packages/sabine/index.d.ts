@@ -13,6 +13,7 @@ import type { clipboard } from "./types/clipboard.js";
 import type { events } from "./types/events.js";
 import type { Guest, guest } from "./types/guest.js";
 import type { NativeVideo } from "./types/media.js";
+import type { system } from "./types/system.js";
 import type { tray } from "./types/tray.js";
 import type { appWindow, popup, region } from "./types/window.js";
 
@@ -22,6 +23,7 @@ export * from "./types/clipboard.js";
 export * from "./types/events.js";
 export * from "./types/guest.js";
 export * from "./types/media.js";
+export * from "./types/system.js";
 export * from "./types/tray.js";
 export * from "./types/window.js";
 
@@ -48,6 +50,7 @@ declare const api: {
   clipboard: typeof clipboard;
   region: typeof region;
   NativeVideo: typeof NativeVideo;
+  system: typeof system;
   tray: typeof tray;
 };
 

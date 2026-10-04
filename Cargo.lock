@@ -2734,10 +2734,13 @@ dependencies = [
 name = "sabine-platform"
 version = "0.33.0"
 dependencies = [
+ "ashpd",
  "block2",
+ "futures-util",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
+ "pollster 1.0.1",
  "raw-window-handle",
  "windows",
  "winit",

@@ -1,3 +1,4 @@
+mod appearance;
 #[cfg(target_os = "macos")]
 mod controls_overlay;
 mod desktop_integration;
@@ -9,6 +10,11 @@ mod shortcut_inhibit;
 mod wayland_client;
 mod window_options;
 
+pub use appearance::Appearance;
+#[cfg(target_os = "linux")]
+pub use appearance::AppearanceWatcher;
+#[cfg(not(target_os = "linux"))]
+pub use appearance::system_appearance;
 #[cfg(target_os = "macos")]
 pub use controls_overlay::{ControlsOverlay, controls_overlay};
 pub use desktop_integration::{

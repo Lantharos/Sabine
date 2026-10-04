@@ -1,3 +1,4 @@
+import type { SystemAppearance } from "./system.js";
 import type {
   GuestDownloadEvent,
   GuestFaviconEvent,
@@ -60,6 +61,7 @@ export declare const events: {
   globalShortcutFailed: Listen<GlobalShortcutFailedEvent>;
   singleInstance: Listen<SingleInstanceEvent>;
   rendererCrashed: Listen<RendererCrashedEvent>;
+  appearanceChanged: Listen<SystemAppearance>;
   guestCreated: Listen<GuestInfo>;
   guestDestroyed: Listen<GuestIdEvent>;
   guestLoading: Listen<GuestLoadingEvent>;

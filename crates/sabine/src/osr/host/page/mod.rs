@@ -3,7 +3,9 @@ mod media;
 #[cfg(target_os = "linux")]
 mod paste_gesture;
 
-use sabine_bridge::{CONTROLS_OVERLAY_COMMAND, INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
+use sabine_bridge::{
+    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND,
+};
 
 use super::native::OsrNativeHost;
 
@@ -58,6 +60,11 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            APPEARANCE_COMMAND => self.send_bridge_response(
+                request.browser_id,
+                request.request_id,
+                Ok(self.appearance_json()),
+            ),
             CONTROLS_OVERLAY_COMMAND => self.send_bridge_response(
                 request.browser_id,
                 request.request_id,
