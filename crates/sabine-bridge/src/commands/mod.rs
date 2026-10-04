@@ -16,14 +16,19 @@ pub const APPEARANCE_COMMAND: &str = "sabine.system.appearance";
 /// Sent when the desktop switches between light and dark or its accent
 /// color changes.
 pub const APPEARANCE_EVENT: &str = "system.appearance";
+pub const NOTIFICATION_COMMAND_PREFIX: &str = "sabine.notification.";
+pub const NOTIFICATION_SHOW_COMMAND: &str = "sabine.notification.show";
+pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
 
-const WINDOW_COMMANDS: [&str; 6] = [
+const WINDOW_COMMANDS: [&str; 8] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
     APPEARANCE_COMMAND,
+    NOTIFICATION_SHOW_COMMAND,
+    NOTIFICATION_CLOSE_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

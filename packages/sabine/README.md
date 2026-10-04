@@ -145,6 +145,11 @@ events.trayActivate(({ itemId, checked }) => console.log(itemId, checked));
 events.globalShortcutFailed(({ id, message }) => console.warn(id, message));
 ```
 
+## Notifications
+
+`new Notification(title, { body, tag, silent })` shows a desktop notification from the app's own
+pages, without asking for permission. Clicks fire its `click` event.
+
 ## Appearance
 
 ```js

@@ -1,5 +1,6 @@
 mod clipboard;
 mod media;
+mod notifications;
 #[cfg(target_os = "linux")]
 mod paste_gesture;
 
@@ -72,6 +73,9 @@ impl OsrNativeHost {
             ),
             command if command.starts_with(sabine_bridge::media::COMMAND_PREFIX) => {
                 self.answer_media(&request)
+            }
+            command if command.starts_with(sabine_bridge::NOTIFICATION_COMMAND_PREFIX) => {
+                self.answer_notification(&request)
             }
             command if command.starts_with(sabine_bridge::clipboard::COMMAND_PREFIX) => {
                 self.answer_clipboard(&request)

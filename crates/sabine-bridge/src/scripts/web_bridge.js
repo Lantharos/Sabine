@@ -161,6 +161,53 @@
     window.sabine.system.appearance().then(showAccent, () => {});
   }
 
+  // Chromium has no notification service of its own here, so `Notification`
+  // shows the desktop's notifications through the window.
+  if (commands.has("sabine.notification.show")) {
+    const shown = new Map();
+    const relay = (type) => ({ id, message }) => shown.get(id)?.relay(type, message);
+    window.sabine.bridge.listen("notification.click", relay("click"));
+    window.sabine.bridge.listen("notification.close", relay("close"));
+    window.sabine.bridge.listen("notification.error", relay("error"));
+    class SabineNotification extends EventTarget {
+      static get permission() { return "granted"; }
+      static requestPermission(callback) {
+        callback?.("granted");
+        return Promise.resolve("granted");
+      }
+      static get maxActions() { return 0; }
+      constructor(title, options = {}) {
+        super();
+        this.title = String(title);
+        this.body = String(options.body ?? "");
+        this.tag = String(options.tag ?? "");
+        this.data = options.data ?? null;
+        this.silent = Boolean(options.silent);
+        this.onclick = this.onclose = this.onerror = this.onshow = null;
+        this.id = this.tag ? "tag:" + this.tag : crypto.randomUUID();
+        shown.set(this.id, this);
+        const { id, body, silent } = this;
+        window.sabine.bridge.invoke("sabine.notification.show", { id, title: this.title, body, silent }).then(
+          () => this.relay("show"),
+          (error) => this.relay("error", error.message),
+        );
+      }
+      close() {
+        window.sabine.bridge.invoke("sabine.notification.close", { id: this.id }).catch(() => {});
+      }
+      relay(type, message) {
+        if (type === "close" || type === "error") shown.delete(this.id);
+        const event = type === "error" ? new ErrorEvent(type, { message }) : new Event(type, { cancelable: true });
+        this["on" + type]?.call(this, event);
+        this.dispatchEvent(event);
+      }
+    }
+    // Chromium installs its own `Notification` once this script has run.
+    setTimeout(() => {
+      Object.defineProperty(window, "Notification", { value: SabineNotification, configurable: true, writable: true });
+    });
+  }
+
   window.addEventListener("pagehide", () => {
     for (const entry of pending.values()) {
       entry.cancel(new DOMException("Sabine page was hidden", "AbortError"));
