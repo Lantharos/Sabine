@@ -2,21 +2,14 @@ use sabine_bridge::media as commands;
 use serde::Deserialize;
 use serde_json::Value;
 
+use super::command::{Command, TrackRequest};
 use super::geometry::{PageRect, Rect};
-use super::player::TrackRequest;
 
 pub(super) enum Request {
     Create(Create),
     Destroy(u64),
     SetRect(u64, Option<PageRect>),
-    Play(u64),
-    Pause(u64),
-    Seek { id: u64, time: f64, fast: bool },
-    Rate(u64, f64),
-    Volume(u64, f64),
-    Muted(u64, bool),
-    Loop(u64, bool),
-    Tracks(u64, TrackRequest),
+    Command(u64, Command),
 }
 
 #[derive(Deserialize)]
@@ -107,34 +100,36 @@ impl Request {
                     });
                 Self::SetRect(placement.id, rect)
             }
-            commands::PLAY_COMMAND => Self::Play(id(params)?),
-            commands::PAUSE_COMMAND => Self::Pause(id(params)?),
+            commands::PLAY_COMMAND => Self::Command(id(params)?, Command::Play),
+            commands::PAUSE_COMMAND => Self::Command(id(params)?, Command::Pause),
             commands::SEEK_COMMAND => {
                 let seek: Seek = serde_json::from_value(params).map_err(invalid)?;
-                Self::Seek {
-                    id: seek.id,
-                    time: seek.time,
-                    fast: seek.fast,
-                }
+                Self::Command(
+                    seek.id,
+                    Command::Seek {
+                        time: seek.time,
+                        fast: seek.fast,
+                    },
+                )
             }
             commands::SET_RATE_COMMAND => {
                 let rate: Number = serde_json::from_value(params).map_err(invalid)?;
                 if !(rate.value > 0.0 && rate.value <= 16.0) {
                     return Err("playback rate must be above 0 and at most 16".to_string());
                 }
-                Self::Rate(rate.id, rate.value)
+                Self::Command(rate.id, Command::Rate(rate.value))
             }
             commands::SET_VOLUME_COMMAND => {
                 let volume: Number = serde_json::from_value(params).map_err(invalid)?;
-                Self::Volume(volume.id, volume.value)
+                Self::Command(volume.id, Command::Volume(volume.value))
             }
             commands::SET_MUTED_COMMAND => {
                 let muted: Flag = serde_json::from_value(params).map_err(invalid)?;
-                Self::Muted(muted.id, muted.value)
+                Self::Command(muted.id, Command::Muted(muted.value))
             }
             commands::SET_LOOP_COMMAND => {
                 let looping: Flag = serde_json::from_value(params).map_err(invalid)?;
-                Self::Loop(looping.id, looping.value)
+                Self::Command(looping.id, Command::Loop(looping.value))
             }
             commands::SELECT_TRACKS_COMMAND => {
                 let choice = |name: &str| {
@@ -146,7 +141,7 @@ impl Request {
                     audio: choice("audio"),
                     subtitle: choice("subtitle"),
                 };
-                Self::Tracks(id(params)?, request)
+                Self::Command(id(params)?, Command::Tracks(request))
             }
             _ => return Err(format!("unknown media command {command}")),
         })

@@ -6,9 +6,9 @@ pub(super) use egl::terminate;
 use glow::HasContext;
 use khronos_egl as khronos;
 
-use super::geometry::Frame;
 use super::gst::{self, Gst, Handle, types};
 use super::wayland::Target;
+use crate::media::geometry::Frame;
 use shader::{Picture, VideoProgram};
 
 /// Draws a player's newest decoded picture into its video surface on the

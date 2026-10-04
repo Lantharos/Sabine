@@ -2,53 +2,33 @@ mod cues;
 mod inbox;
 mod pipeline;
 mod session;
-mod tracks;
+mod streams;
 
 use std::{sync::Arc, thread::JoinHandle};
 
-use serde_json::Value;
-
+pub(super) use inbox::Control;
 use inbox::Inbox;
-pub(super) use inbox::{Command, TrackRequest};
 use session::Session;
 
 use super::gst::{self, Handle};
 use super::present::Presenter;
-use super::wayland::Target;
-
-/// Reports an event about one player to its page.
-pub(crate) type Events = Arc<dyn Fn(Value) + Send + Sync>;
-
-pub(super) struct PlayerOptions {
-    pub(super) uri: String,
-    pub(super) autoplay: bool,
-    pub(super) looping: bool,
-    pub(super) volume: f64,
-    pub(super) muted: bool,
-    pub(super) rate: f64,
-}
+use crate::media::command::{Events, PlayerOptions};
 
 /// A media pipeline and its presenter, running on their own thread.
-pub(super) struct Player {
+pub(super) struct Worker {
     inbox: Arc<Inbox>,
     thread: JoinHandle<()>,
 }
 
-impl Player {
-    pub(super) fn spawn(
-        options: PlayerOptions,
-        target: Option<Target>,
-        wayland: Handle,
-        events: Events,
-    ) -> Self {
+impl Worker {
+    pub(super) fn spawn(options: PlayerOptions, wayland: Handle, events: Events) -> Self {
         let inbox = Arc::new(Inbox::default());
         let thread_inbox = Arc::clone(&inbox);
         let thread = std::thread::Builder::new()
             .name("sabine-media".into())
             .spawn(move || {
                 let session = gst::gst().and_then(|gst| {
-                    let mut presenter = Presenter::new(gst, wayland)?;
-                    presenter.set_target(target);
+                    let presenter = Presenter::new(gst, wayland)?;
                     Session::new(gst, options, presenter, thread_inbox, Arc::clone(&events))
                 });
                 match session {
@@ -62,8 +42,8 @@ impl Player {
         Self { inbox, thread }
     }
 
-    pub(super) fn send(&self, command: Command) {
-        self.inbox.post(|mail| mail.commands.push(command));
+    pub(super) fn send(&self, control: Control) {
+        self.inbox.post(|mail| mail.controls.push(control));
     }
 
     /// Asks the player to wind down, returning its thread to join.

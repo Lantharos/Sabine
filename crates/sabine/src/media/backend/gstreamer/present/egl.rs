@@ -6,7 +6,7 @@ use std::{
 use khronos_egl as egl;
 use libloading::Library;
 
-use crate::media::gst::{self, Gst, Handle};
+use crate::media::backend::gstreamer::gst::{self, Gst, Handle};
 
 type Egl = egl::DynamicInstance<egl::EGL1_5>;
 

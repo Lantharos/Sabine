@@ -1,7 +1,7 @@
 use std::ffi::{CStr, c_int, c_void};
 
 use super::inbox::{Cue, Inbox};
-use crate::media::gst::{self, Gst, types};
+use crate::media::backend::gstreamer::gst::{self, Gst, types};
 
 /// Subtitle text arriving at its presentation time on the text sink.
 pub(super) unsafe extern "C" fn cue_ready(sink: *mut c_void, inbox: *mut c_void) -> c_int {
