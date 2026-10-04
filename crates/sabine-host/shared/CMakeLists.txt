@@ -77,6 +77,7 @@ set(SABINE_HOST_SOURCES
   osr/utilities.cc
   osr/window_state.cc
   osr/utilities.h
+  osr/accelerated/damage.h
   osr/accelerated/paint.cc
   osr/accelerated/paint.h
   osr/accelerated/protocol.cc

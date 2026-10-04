@@ -216,7 +216,9 @@ to benchmark the GPU in the background.
 - **Windows** uses accelerated `OnAcceleratedPaint`. CEF owns and pools the callback texture, so the
   CEF host first opens it on D3D11 and copies it into one of four Sabine-owned D3D12 shared textures
   before returning. Each destination is opened on the producer's D3D11 device for the copy and on
-  wgpu's D3D12 device for composition. The host waits for its GPU copy before publishing the frame.
+  wgpu's D3D12 device for composition. Each slot remembers the area that changed since it last
+  received a frame, so only that area is copied. The host waits for its GPU copy before returning,
+  because CEF hands its texture to the next frame as soon as the callback ends.
   Each destination's handle is duplicated into the window once, with the first frame that uses it,
   and the window keeps it until the host retires that texture on resize or browser close. The
   compositor imports each slot's texture once, samples it directly, and sends a release acknowledgement only
@@ -238,7 +240,8 @@ to benchmark the GPU in the background.
   from presenting until input arrived.
 - **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
   returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
-  surface and waits for the copy before publishing it. Each owned IOSurface is handed to the native
+  surface, copying only the area that changed since that slot last received a frame, and waits for
+  the copy before publishing it. CEF's own pooled surfaces are wrapped as Metal textures once. Each owned IOSurface is handed to the native
   window once, as a mach port sent to a per-connection bootstrap service whose name travels on the
   browser command line; messages carry the window's socket token and are otherwise discarded. Frames
   then reference the surface by id, the compositor wraps each slot's surface as a Metal texture once
@@ -270,8 +273,10 @@ uploads them again when it returns, so it reappears with its last frame:
 - popup overlay
 - one texture per guest (including guest `<select>` popups)
 
-The display list damages the union of the old and new bounds when a primitive changes. GPU vertex
-buffers grow geometrically and are reused across redraws. Native surface resize is presented
+Each redraw composites the whole window, which is a handful of textured quads; changed pixels only
+travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip, or
+a menu changes. Its display list, vertex data, and surface ids are reused between redraws, and GPU
+vertex buffers grow geometrically, so a redraw allocates nothing. Native surface resize is presented
 synchronously with the last frame at its original logical size while CEF catches up. Resize control
 messages coalesce to the newest size on CEF's UI thread. Main paints must exactly match that logical
 size, and accelerated paints with transitional coded/content/source metadata are discarded. This

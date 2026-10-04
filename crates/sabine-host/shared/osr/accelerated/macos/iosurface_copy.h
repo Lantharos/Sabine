@@ -4,8 +4,9 @@
 #include <IOSurface/IOSurfaceRef.h>
 
 #include <cstdint>
-#include <string>
 #include <vector>
+
+#include "osr/accelerated/damage.h"
 
 namespace sabine_osr {
 
@@ -22,9 +23,11 @@ struct AccelIOSurfaceCopiedFrame {
 
 // CEF recycles its IOSurface as soon as OnAcceleratedPaint returns, so each
 // frame is copied on the GPU into a Sabine-owned surface that stays valid until
-// the compositor releases its slot.
-bool CopyAcceleratedIOSurfaceFrame(const std::string& slot_key,
+// the compositor releases its slot. Only the pixels that changed since the
+// chosen slot last received a frame are copied.
+bool CopyAcceleratedIOSurfaceFrame(const AcceleratedSurfaceKey& surface,
                                    void* cef_io_surface,
+                                   const PixelRegion& damage,
                                    AccelIOSurfaceCopiedFrame* out);
 void ReleaseAcceleratedIOSurfaceFrame(uint64_t slot_token);
 std::vector<uint64_t> RetireAcceleratedIOSurfaceBrowser(int browser_id);
