@@ -1,4 +1,5 @@
 use super::{GpuRenderer, RendererError};
+use crate::render::effective_scale;
 
 pub(super) fn select_surface_alpha_mode(
     modes: &[wgpu::CompositeAlphaMode],
@@ -22,14 +23,24 @@ pub(super) fn select_surface_alpha_mode(
         .unwrap_or(modes[0])
 }
 
-#[cfg(target_os = "linux")]
-const PREFERRED_PRESENT_MODES: &[wgpu::PresentMode] =
-    &[wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo];
-#[cfg(not(target_os = "linux"))]
-const PREFERRED_PRESENT_MODES: &[wgpu::PresentMode] = &[wgpu::PresentMode::Fifo];
-
-pub(super) fn select_present_mode(modes: &[wgpu::PresentMode]) -> wgpu::PresentMode {
-    PREFERRED_PRESENT_MODES
+/// Presenting never blocks the window thread: Wayland and DirectComposition
+/// show the newest frame from a mailbox, and a windowed Metal layer presents
+/// without waiting for the display while the window server composites it.
+/// Fullscreen Metal layers can scan out directly, so they wait for vsync to
+/// avoid tearing.
+pub(super) fn select_present_mode(
+    modes: &[wgpu::PresentMode],
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] fullscreen: bool,
+) -> wgpu::PresentMode {
+    #[cfg(target_os = "macos")]
+    let preferred: &[wgpu::PresentMode] = if fullscreen {
+        &[wgpu::PresentMode::Fifo]
+    } else {
+        &[wgpu::PresentMode::Immediate, wgpu::PresentMode::Fifo]
+    };
+    #[cfg(not(target_os = "macos"))]
+    let preferred = &[wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo];
+    preferred
         .iter()
         .copied()
         .find(|mode| modes.contains(mode))
@@ -44,9 +55,7 @@ impl GpuRenderer {
         if width == 0 || height == 0 {
             return;
         }
-        let scale_factor = scale_factor.max(0.25);
-        // Wayland often emits a configure after interactive move with the same
-        // size. Reconfiguring the swapchain there flashes a blank frame.
+        let scale_factor = effective_scale(f64::from(scale_factor)) as f32;
         if self.surface_config.width == width
             && self.surface_config.height == height
             && (self.scale_factor - scale_factor).abs() < f32::EPSILON
@@ -63,13 +72,10 @@ impl GpuRenderer {
     pub(super) fn acquire_surface_texture(
         &mut self,
     ) -> Result<Option<wgpu::SurfaceTexture>, RendererError> {
-        // After interactive move Wayland often returns Outdated. Reconfigure and
-        // retry in-place — returning without a present flashes transparent glass.
         for attempt in 0..3 {
             match self.surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
                 wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                    // Still present this buffer; refresh config for the next frame.
                     self.surface.configure(&self.device, &self.surface_config);
                     return Ok(Some(frame));
                 }
@@ -100,5 +106,16 @@ impl GpuRenderer {
             }
         }
         Ok(None)
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl GpuRenderer {
+    pub(crate) fn set_fullscreen(&mut self, fullscreen: bool) {
+        let present_mode = select_present_mode(&self.present_modes, fullscreen);
+        if present_mode != self.surface_config.present_mode {
+            self.surface_config.present_mode = present_mode;
+            self.surface.configure(&self.device, &self.surface_config);
+        }
     }
 }
