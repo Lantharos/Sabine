@@ -110,10 +110,6 @@ impl Globals {
         Some(globals)
     }
 
-    pub(crate) fn contains(&self, interface: &WlInterface) -> bool {
-        self.find(interface).is_some()
-    }
-
     pub(crate) unsafe fn bind(
         &self,
         interface: &WlInterface,

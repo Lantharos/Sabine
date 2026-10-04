@@ -1,4 +1,4 @@
-use sabine_platform::request_window_effect;
+use sabine_platform::WindowEffect;
 
 use std::sync::Arc;
 
@@ -24,7 +24,7 @@ impl OsrNativeHost {
         // Drop any prior effect before binding a new one; Wayland allows only one
         // `ext_background_effect` resource per surface.
         self.effect = None;
-        self.effect = request_window_effect(&window, &self.window_options());
+        self.effect = WindowEffect::new(&window, &self.window_options());
         self.update_effect_regions();
         if self.config.visible {
             window.set_visible(true);

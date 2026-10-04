@@ -18,7 +18,7 @@ use windows::Win32::{
 use windows::core::s;
 use winit::window::{Theme, Window};
 
-use crate::WindowBackgroundEffect;
+use crate::{WindowBackgroundEffect, WindowOptions, WindowRegionRect};
 
 const COMPOSITION_ACCENT_POLICY: u32 = 0x13;
 const ACCENT_BLUR: u32 = 3;
@@ -42,26 +42,52 @@ struct CompositionAttributeData {
 type SetWindowCompositionAttribute =
     unsafe extern "system" fn(HWND, *mut CompositionAttributeData) -> i32;
 
-pub(super) fn apply(window: &Arc<dyn Window>, effect: WindowBackgroundEffect) -> bool {
-    let Some(hwnd) = hwnd(window) else {
-        return false;
-    };
-    let dark = window.theme() == Some(Theme::Dark);
-    set_dark_mode(hwnd, dark);
-    let applied = match effect {
-        WindowBackgroundEffect::None => false,
-        WindowBackgroundEffect::Blur => set_accent(hwnd, ACCENT_BLUR, 0, dark),
-        WindowBackgroundEffect::Mica => set_backdrop(hwnd, DWMSBT_MAINWINDOW),
-        WindowBackgroundEffect::MicaAlt => set_backdrop(hwnd, DWMSBT_TABBEDWINDOW),
-        _ => set_accent(hwnd, ACCENT_ACRYLIC, 125, dark),
-    };
-    if std::env::var_os("SABINE_TRACE").is_some() {
-        eprintln!(
-            "Sabine window effect: effect={effect:?} theme={:?} applied={applied}",
-            window.theme()
-        );
+pub(super) struct Backend {
+    hwnd: HWND,
+    effect: WindowBackgroundEffect,
+}
+
+impl Backend {
+    pub(super) fn new(window: &Arc<dyn Window>, options: &WindowOptions) -> Option<Self> {
+        let backend = Self {
+            hwnd: hwnd(window)?,
+            effect: if options.wants_background_effect() {
+                options.background_effect
+            } else {
+                WindowBackgroundEffect::None
+            },
+        };
+        backend.apply(window.theme().unwrap_or(Theme::Light));
+        Some(backend)
     }
-    applied
+
+    pub(super) fn update(
+        &mut self,
+        _options: &WindowOptions,
+        _width: i32,
+        _height: i32,
+        _transparent_holes: &[WindowRegionRect],
+    ) {
+    }
+
+    pub(super) fn theme_changed(&mut self, theme: Theme) {
+        self.apply(theme);
+    }
+
+    fn apply(&self, theme: Theme) {
+        let dark = theme == Theme::Dark;
+        let applied = match self.effect {
+            WindowBackgroundEffect::None => return,
+            WindowBackgroundEffect::Blur => set_accent(self.hwnd, ACCENT_BLUR, 0, dark),
+            WindowBackgroundEffect::Mica => set_backdrop(self.hwnd, DWMSBT_MAINWINDOW),
+            WindowBackgroundEffect::MicaAlt => set_backdrop(self.hwnd, DWMSBT_TABBEDWINDOW),
+            _ => set_accent(self.hwnd, ACCENT_ACRYLIC, 125, dark),
+        };
+        set_dark_mode(self.hwnd, dark);
+        if !applied && std::env::var_os("SABINE_TRACE").is_some() {
+            eprintln!("Sabine window effect {:?} was not applied", self.effect);
+        }
+    }
 }
 
 fn set_dark_mode(hwnd: HWND, dark: bool) {
