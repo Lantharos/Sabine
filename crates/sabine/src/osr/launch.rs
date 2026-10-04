@@ -23,7 +23,10 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
         return false;
     };
     let Some(config_path) = args.get(index + 1).map(PathBuf::from) else {
-        eprintln!("missing Sabine OSR host config path");
+        sabine_runtime::report_error(
+            "window",
+            "the window host was started without its configuration",
+        );
         std::process::exit(1);
     };
     if let Err(error) = crate::osr::host::run(config_path) {

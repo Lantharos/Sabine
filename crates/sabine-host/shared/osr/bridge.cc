@@ -16,7 +16,6 @@
 #include "common/bytes_message.h"
 #include "common/json.h"
 #include "common/bridge_policy.h"
-#include "osr/utilities.h"
 
 using namespace sabine_osr;
 
@@ -96,8 +95,6 @@ void SabineOsrHandler::ReceiveNativeMessage(
 void SabineOsrHandler::HandleWindowCommand(const std::string& command,
                                            const std::string& value) {
   if (command == "close") {
-    // Ask the native host to tear down its window; it replies with "close\n"
-    // which CloseBrowsers this surface. Do not quit the shared CEF process.
     RequestNativeClose();
   } else if (command == "start-drag" || command == "drag") {
     SendMessage(kStartDragRequested, 0, 0, 0, 0, nullptr, 0);

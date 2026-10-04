@@ -20,7 +20,9 @@
 #include "include/wrapper/cef_helpers.h"
 #include "common/json.h"
 #include "sabine_bridge_js.h"
-#include "osr/utilities.h"
+#include "osr/common/registry.h"
+#include "osr/common/strings.h"
+#include "osr/transport/wire.h"
 
 using namespace sabine_osr;
 
@@ -172,8 +174,6 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
         g_instance = remaining.front();
       }
     }
-    // Only quit when every OSR window/handler is gone — multi-window apps share
-    // one CEF process via the profile singleton handoff path.
     if (!HasRegisteredHandlers()) {
       CefQuitMessageLoop();
     }
@@ -345,7 +345,6 @@ void SabineOsrHandler::OnPopupSize(CefRefPtr<CefBrowser> browser,
     if (guest_popup_rect_.x != rect.x || guest_popup_rect_.y != rect.y ||
         guest_popup_rect_.width != rect.width ||
         guest_popup_rect_.height != rect.height) {
-      // Force compositor to drop the previous guest popup overlay bounds.
       if (GuestView* guest = GuestForBrowser(browser)) {
         const std::string popup_id = guest->id + "/popup";
         SendMessage(kGuestHidden, 0, 0, guest->bounds.x + guest_popup_rect_.x,

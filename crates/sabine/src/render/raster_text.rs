@@ -28,40 +28,18 @@ impl RasterText {
         size: f32,
         color: [u8; 4],
     ) {
-        self.draw_text(
-            pixels,
-            surface,
-            bounds,
-            text,
-            size,
-            color,
-            (Align::Left, Wrap::WordOrGlyph),
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn draw_text(
-        &mut self,
-        pixels: &mut [u8],
-        surface: (u32, u32),
-        bounds: (i32, i32, u32, u32),
-        text: &str,
-        size: f32,
-        color: [u8; 4],
-        layout: (Align, Wrap),
-    ) {
         let (left, top, width, height) = bounds;
         self.buffer.set_metrics_and_size(
             Metrics::new(size, size + 6.0),
             Some(width as f32),
             Some(height as f32),
         );
-        self.buffer.set_wrap(layout.1);
+        self.buffer.set_wrap(Wrap::WordOrGlyph);
         self.buffer.set_text(
             text,
             &Attrs::new().family(Family::SansSerif),
             Shaping::Advanced,
-            Some(layout.0),
+            Some(Align::Left),
         );
         self.buffer.draw(
             &mut self.font_system,

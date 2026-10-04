@@ -19,7 +19,8 @@
 #include "sabine_bridge_js.h"
 #include "osr/input/ime.h"
 #include "osr/browser/screen.h"
-#include "osr/utilities.h"
+#include "osr/common/strings.h"
+#include "osr/input/key_codes.h"
 
 using namespace sabine_osr;
 
@@ -296,8 +297,6 @@ void SabineOsrHandler::HandleControlLine(
   } else if (parts[0] == "window_state" && parts.size() >= 4) {
     ApplyWindowState(parts[1] == "1", parts[2] == "1", parts[3] == "1");
   } else if (parts[0] == "close") {
-    // Close only this browser. CefQuitMessageLoop runs from OnBeforeClose
-    // when the last OSR handler is gone so sibling windows stay alive.
     if (close_requested_) {
       return;
     }

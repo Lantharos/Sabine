@@ -17,7 +17,6 @@
 #include "common/json.h"
 #include "common/bridge_policy.h"
 #include "sabine_bridge_js.h"
-#include "osr/utilities.h"
 
 using namespace sabine_osr;
 

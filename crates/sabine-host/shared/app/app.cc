@@ -18,7 +18,7 @@
 #include "include/cef_process_message.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/handler.h"
-#include "osr/utilities.h"
+#include "osr/common/registry.h"
 
 namespace {
 const char kImeStateScript[] = R"JS(

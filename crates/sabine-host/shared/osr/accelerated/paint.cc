@@ -6,7 +6,7 @@
 
 #include "osr/handler.h"
 #include "osr/accelerated/protocol.h"
-#include "osr/utilities.h"
+#include "osr/common/registry.h"
 
 #if defined(OS_WIN)
 #include "osr/accelerated/windows/d3d11_copy.h"

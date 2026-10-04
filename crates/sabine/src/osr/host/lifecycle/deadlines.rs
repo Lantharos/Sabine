@@ -2,11 +2,11 @@ use std::time::{Duration, Instant};
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
-use super::native::OsrNativeHost;
-use super::types::LifecycleState;
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::LifecycleState;
 
 impl OsrNativeHost {
-    pub(super) fn drive_deadlines(&mut self, event_loop: &dyn ActiveEventLoop) {
+    pub(in crate::osr::host) fn drive_deadlines(&mut self, event_loop: &dyn ActiveEventLoop) {
         event_loop.set_control_flow(ControlFlow::Wait);
         let mut handoff = false;
         let mut exited = Vec::new();
@@ -37,7 +37,7 @@ impl OsrNativeHost {
             self.cef_handed_off = true;
             self.handoff_deadline =
                 Some(Instant::now() + Duration::from_secs(HANDOFF_CONNECT_TIMEOUT_SECS));
-            super::trace_host(&self.config, "cef.handed_off.waiting_for_primary");
+            crate::osr::host::trace_host(&self.config, "cef.handed_off.waiting_for_primary");
         }
         if !exited.is_empty() && self.socket.is_none() {
             self.awaiting_connection = false;
@@ -48,7 +48,10 @@ impl OsrNativeHost {
                 self.lifecycle_state = LifecycleState::Hibernated;
             } else {
                 for status in exited {
-                    eprintln!("Sabine OSR host: CEF child exited ({status}); recovering surface");
+                    sabine_runtime::report_error(
+                        "window",
+                        format!("the browser exited ({status}); restarting it"),
+                    );
                 }
                 self.begin_recovery();
             }

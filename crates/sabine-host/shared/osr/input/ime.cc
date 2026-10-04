@@ -6,7 +6,7 @@
 #include "include/internal/cef_types.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/handler.h"
-#include "osr/utilities.h"
+#include "osr/common/strings.h"
 
 namespace sabine_osr {
 

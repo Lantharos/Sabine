@@ -2,13 +2,13 @@ use std::time::{Duration, Instant};
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
-use super::{
+use crate::osr::host::{
     native::OsrNativeHost,
     types::{LifecycleState, LoadingKind, NativeLoading},
 };
 
 impl OsrNativeHost {
-    pub(super) fn fail(&mut self, message: String) {
+    pub(in crate::osr::host) fn fail(&mut self, message: String) {
         if self.failure.is_none() {
             sabine_runtime::report_error("osr", &message);
             self.failure = Some(message);
@@ -16,7 +16,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn begin_recovery(&mut self) {
+    pub(in crate::osr::host) fn begin_recovery(&mut self) {
         if self.closing_deadline.is_some()
             || self.failure.is_some()
             || self.awaiting_connection
@@ -55,7 +55,10 @@ impl OsrNativeHost {
         self.proxy.wake_up();
     }
 
-    pub(super) fn drive_recovery(&mut self, event_loop: &dyn ActiveEventLoop) -> bool {
+    pub(in crate::osr::host) fn drive_recovery(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+    ) -> bool {
         if self.failure.is_some() {
             self.force_close(event_loop);
             return true;
