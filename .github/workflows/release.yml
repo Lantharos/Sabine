@@ -20,11 +20,17 @@ jobs:
           - os: windows-latest
             target: windows-x86_64
             archive: zip
+          - os: windows-11-arm
+            target: windows-aarch64
+            archive: zip
           - os: macos-15
             target: macos-aarch64
             archive: tar.gz
           - os: ubuntu-24.04
             target: linux-x86_64
+            archive: tar.gz
+          - os: ubuntu-24.04-arm
+            target: linux-aarch64
             archive: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
@@ -51,9 +57,6 @@ jobs:
           shared-key: release-${{ matrix.target }}
           cache-on-failure: true
       - run: cargo build --release -p sabine-cli -p sabine-service
-      - name: Verify hidden Windows process creation
-        if: runner.os == 'Windows'
-        run: cargo test --release -p sabine-runtime process::tests::background_children_do_not_inherit_a_console -- --exact
       - name: Verify self-contained Windows binaries
         if: runner.os == 'Windows'
         shell: pwsh

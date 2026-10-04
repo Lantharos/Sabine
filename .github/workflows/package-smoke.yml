@@ -62,8 +62,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm
           if [ "${{ matrix.target }}" = "appimage" ]; then
-            sudo curl --fail --location --output /usr/local/bin/appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-            sudo chmod +x /usr/local/bin/appimagetool
+            curl --fail --location --output "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+            echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum --check
+            sudo install -m 755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
           fi
       - name: Install MSI packaging dependencies
         if: matrix.target == 'msi'
@@ -231,7 +232,7 @@ jobs:
           $appId = 'dev.sabine.release-probe'
           $appDir = Join-Path $env:LOCALAPPDATA "Programs/$appId"
           $registry = Join-Path $env:LOCALAPPDATA 'Sabine/apps.json'
-          $logs = Join-Path $env:LOCALAPPDATA 'sabine/logs/installer.jsonl'
+          $logs = Join-Path $env:LOCALAPPDATA 'Sabine/logs/installer.jsonl'
           $app = $null
           try {
             Test-SetupCancellation $setup.FullName (Join-Path $env:RUNNER_TEMP 'cancelled-application')

@@ -79,8 +79,7 @@ jobs:
     uses: Lantharos/Sabine/.github/workflows/release-app.yml@v{version}
     with:
       sabine_version: v{version}
-    secrets:
-      SABINE_UPDATE_SIGNING_KEY: ${{{{ secrets.SABINE_UPDATE_SIGNING_KEY }}}}
+    secrets: inherit
 "#,
             version = sabine_service::SABINE_VERSION
         ),

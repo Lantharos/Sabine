@@ -1,12 +1,12 @@
-mod appstream;
 mod cargo_metadata;
 use crate::environment;
 mod install;
 pub use install::install_bundle;
 mod config;
-mod linux_package;
+mod linux;
 mod metadata;
 mod package;
+mod signing;
 mod stage;
 mod windows;
 
@@ -116,8 +116,11 @@ impl BuildTarget {
 
 pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
     let json = options.json;
+    let signing = signing::Signing::from_env()?;
     let (app, format, staged) = prepare_bundle(options)?;
+    signing.sign_payload(format, &staged)?;
     let packaged = package_bundle(&app, format, &staged)?;
+    signing.sign_artifacts(format, &packaged.artifacts)?;
     if json {
         println!("{}", bundle_json(&app, format, &staged, &packaged));
     } else {

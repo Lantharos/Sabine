@@ -7,7 +7,7 @@ use std::{
 use super::{
     BundleFormat,
     config::BundleApp,
-    linux_package::{deb_control, deb_dependencies, rpm_spec},
+    linux::package::{deb_control, deb_dependencies, rpm_spec},
     metadata::shell_script,
     stage::StagedBundle,
     windows::nsis_script,
@@ -210,7 +210,7 @@ fn package_appimage(
     result: &mut PackageResult,
 ) -> Result<(), String> {
     let artifact = artifact_path(app, staged, BundleFormat::AppImage, "AppImage");
-    let (_, architecture) = super::linux_package::architecture(&staged.binary)?;
+    let (_, architecture) = super::linux::package::architecture(&staged.binary)?;
     if command_exists("appimagetool") {
         ensure_parent(&artifact)?;
         run(Command::new("appimagetool")

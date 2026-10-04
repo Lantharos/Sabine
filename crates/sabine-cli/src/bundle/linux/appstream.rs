@@ -1,8 +1,8 @@
-use super::config::BundleApp;
+use crate::bundle::config::BundleApp;
 
 /// AppStream metadata that lets software centers describe the app, written
 /// for apps that appear in launchers and name a homepage.
-pub(super) fn metainfo(app: &BundleApp, executable: &str) -> Option<String> {
+pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<String> {
     if !app.listing.listed {
         return None;
     }
