@@ -53,6 +53,10 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
 #endif
+  if (parts.size() >= 2 && parts[0] == "file_dialog") {
+    FinishFileDialog(parts);
+    return;
+  }
   if (parts.size() == 2 && parts[0] == "context_menu") {
     ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;

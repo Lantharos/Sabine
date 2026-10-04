@@ -21,6 +21,7 @@
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
 #include "include/cef_context_menu_handler.h"
+#include "include/cef_dialog_handler.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_keyboard_handler.h"
@@ -70,6 +71,7 @@ constexpr uint32_t kHostHello = 38;
 constexpr uint32_t kDragOperation = 40;
 constexpr uint32_t kContextMenu = 41;
 constexpr uint32_t kContextMenuDismissed = 42;
+constexpr uint32_t kFileDialog = 43;
 constexpr char kClipboardCommandPrefix[] = "sabine.clipboard.";
 
 constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
@@ -78,6 +80,7 @@ enum class PaintSurface { kMain, kPopup, kGuest };
 
 class SabineOsrHandler : public CefClient,
                          public CefContextMenuHandler,
+                         public CefDialogHandler,
                          public CefDisplayHandler,
                          public CefDownloadHandler,
                          public CefDragHandler,
@@ -108,6 +111,7 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
     return this;
   }
+  CefRefPtr<CefDialogHandler> GetDialogHandler() override { return this; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
@@ -155,6 +159,14 @@ class SabineOsrHandler : public CefClient,
                             EventFlags event_flags) override;
   void OnContextMenuDismissed(CefRefPtr<CefBrowser> browser,
                               CefRefPtr<CefFrame> frame) override;
+  bool OnFileDialog(CefRefPtr<CefBrowser> browser,
+                    FileDialogMode mode,
+                    const CefString& title,
+                    const CefString& default_file_path,
+                    const std::vector<CefString>& accept_filters,
+                    const std::vector<CefString>& accept_extensions,
+                    const std::vector<CefString>& accept_descriptions,
+                    CefRefPtr<CefFileDialogCallback> callback) override;
   bool OnCursorChange(CefRefPtr<CefBrowser> browser,
                       CefCursorHandle cursor,
                       cef_cursor_type_t type,
@@ -309,6 +321,7 @@ class SabineOsrHandler : public CefClient,
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
   void ChooseContextMenuCommand(int command_id);
+  void FinishFileDialog(const std::vector<std::string>& parts);
   void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
   bool ConnectSocket();
   bool QueueControl(std::string line, std::optional<std::string> body);
@@ -479,6 +492,8 @@ class SabineOsrHandler : public CefClient,
   bool closing_ = false;
   bool close_requested_ = false;
   CefRefPtr<CefRunContextMenuCallback> context_menu_callback_;
+  uint32_t file_dialog_serial_ = 0;
+  std::map<uint32_t, CefRefPtr<CefFileDialogCallback>> file_dialogs_;
   CefRefPtr<CefBrowser> drag_source_browser_;
   CefRefPtr<CefDragData> drag_source_data_;
   cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;

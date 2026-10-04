@@ -83,6 +83,7 @@ pub(crate) enum OsrMessage {
         items: Vec<ContextMenuItem>,
     },
     ContextMenuDismissed,
+    FileDialog(FileDialogRequest),
     MainLoadStarted,
     MainLoadReady,
     FatalError(String),
@@ -128,6 +129,35 @@ pub(crate) struct ContextMenuItem {
     pub label: String,
     pub enabled: bool,
     pub separator: bool,
+}
+
+/// A page's request to choose files, as Chromium describes its file input.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FileDialogRequest {
+    pub id: u32,
+    pub mode: FileDialogMode,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub default_path: Option<std::path::PathBuf>,
+    #[serde(default)]
+    pub filters: Vec<FileDialogFilter>,
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum FileDialogMode {
+    Open,
+    OpenMultiple,
+    OpenFolder,
+    Save,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct FileDialogFilter {
+    pub description: String,
+    pub extensions: Vec<String>,
 }
 
 /// Content dragged out of a page or dropped into one.

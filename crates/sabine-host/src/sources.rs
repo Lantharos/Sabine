@@ -60,6 +60,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/browser/context_menu.cc"),
     ),
     (
+        "osr/browser/file_dialog.cc",
+        include_str!("../shared/osr/browser/file_dialog.cc"),
+    ),
+    (
         "osr/browser/clipboard.cc",
         include_str!("../shared/osr/browser/clipboard.cc"),
     ),
