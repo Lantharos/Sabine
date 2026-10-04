@@ -109,7 +109,7 @@ impl OsrNativeHost {
             };
             command.arg(format!("--use-angle={angle}"));
             command.arg(format!("--use-adapter-luid={luid}"));
-            if std::env::var_os("SABINE_TRACE").is_some() {
+            if crate::launch::metrics::trace_enabled() {
                 eprintln!("Sabine GPU: Chromium adapter LUID={luid} ANGLE={angle}");
             }
         }
