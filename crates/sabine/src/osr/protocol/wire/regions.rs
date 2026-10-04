@@ -24,7 +24,7 @@ pub(super) fn parse_draggable_regions(
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "truncated drag regions"))?;
     let mut drag = Vec::new();
     let mut exclusion = Vec::new();
-    for entry in entries.chunks_exact(ENTRY_LEN) {
+    for entry in entries.as_chunks::<ENTRY_LEN>().0 {
         let rect = WindowRegionRect::new(
             read_i32(&entry[0..4]),
             read_i32(&entry[4..8]),

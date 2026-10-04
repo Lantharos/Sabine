@@ -17,7 +17,7 @@ pub(crate) fn guest_preview_data_url(
         return Err("guest has no frame to capture".to_string());
     }
     let mut rgb = Vec::with_capacity(expected_len / 4 * 3);
-    for pixel in bytes.chunks_exact(4) {
+    for pixel in bytes.as_chunks::<4>().0 {
         let inverse_alpha = 255_u16 - u16::from(pixel[3]);
         let composite =
             |channel: u8| (u16::from(channel) + (10 * inverse_alpha + 127) / 255).min(255) as u8;
