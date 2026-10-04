@@ -85,6 +85,7 @@ pub struct GpuRenderer {
 pub(super) struct CachedTexture {
     pub(super) texture: wgpu::Texture,
     pub(super) bind_group: wgpu::BindGroup,
+    pub(super) origin: (u32, u32),
     pub(super) width: u32,
     pub(super) height: u32,
     pub(super) uv_origin: [f32; 2],

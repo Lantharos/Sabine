@@ -8,13 +8,13 @@ use super::GpuRenderer;
 const READBACK_TIMEOUT: Duration = Duration::from_secs(2);
 
 impl GpuRenderer {
-    /// Copies the dynamic image `id` back from the GPU, for keeping it while
-    /// the renderer goes away or for capturing it.
+    /// Copies the visible part of image `id` back from the GPU, for keeping
+    /// it while the renderer goes away or for capturing it.
     pub(crate) fn read_bgra_image(&self, id: &str) -> Option<BgraImage> {
         if self.check_device().is_err() {
             return None;
         }
-        let entry = self.texture_cache.get(id).filter(|entry| !entry.external)?;
+        let entry = self.texture_cache.get(id)?;
         let (width, height) = (entry.width, entry.height);
         let row_bytes = width * 4;
         let padded_row_bytes = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
@@ -30,7 +30,16 @@ impl GpuRenderer {
                 label: Some("sabine-image-readback"),
             });
         encoder.copy_texture_to_buffer(
-            entry.texture.as_image_copy(),
+            wgpu::TexelCopyTextureInfo {
+                texture: &entry.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: entry.origin.0,
+                    y: entry.origin.1,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
             wgpu::TexelCopyBufferInfo {
                 buffer: &buffer,
                 layout: wgpu::TexelCopyBufferLayout {
@@ -63,6 +72,14 @@ impl GpuRenderer {
         let mut bytes = Vec::with_capacity(row_bytes as usize * height as usize);
         for row in mapped.chunks_exact(padded_row_bytes as usize) {
             bytes.extend_from_slice(&row[..row_bytes as usize]);
+        }
+        if matches!(
+            entry.texture.format(),
+            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb
+        ) {
+            for pixel in bytes.as_chunks_mut::<4>().0 {
+                pixel.swap(0, 2);
+            }
         }
         Some(BgraImage {
             width,
