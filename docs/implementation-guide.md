@@ -263,6 +263,7 @@ Every window presents into a visual of
 its own DirectComposition tree, and transparent windows have no HWND redirection bitmap, allowing
 premultiplied OSR pixels to reveal the native backdrop. Sabine applies Acrylic, blur, Mica, and Mica Alt directly through Win32 composition APIs.
 On macOS, Sabine installs its own semantic `NSVisualEffectView` beneath the Metal content view.
+The Windows material follows the system's light or dark theme as it changes.
 
 CEF delivers BGRA dirty rectangles on the software path. Paints of 256 KiB or more are copied into
 one of at most four reusable shared-memory slots per browser; each slot is mapped once by the native
@@ -564,6 +565,23 @@ Blur, opaque and input regions can change while the window runs, from Rust throu
 `BridgeEventEmitter::set_regions` or `set_regions_of`, and from pages through
 `appWindow.setRegions`. A region left out returns to its default: blur behind the whole window,
 nothing opaque, and input everywhere. Regions follow the window's size as before.
+
+Each desktop applies regions with its own compositor:
+
+- **Wayland** sets the surface's input and opaque regions through `wl_compositor` and the blur
+  region through `ext_background_effect_v1`. Compositors without that protocol, such as GNOME's,
+  show no blur but still honor the input and opaque regions. The globals are bound once per window,
+  the first time it asks for blur or a region.
+- **macOS** masks the material's `NSVisualEffectView` to the blur region, minus the opaque region,
+  which the page covers anyway, so the window server blurs nothing it would not show. Outside the
+  input region the window ignores the mouse, so clicks reach whatever is beneath it; AppKit only
+  offers that for a whole window, so Sabine follows the pointer and switches as it crosses the
+  region's edge. AppKit decides opacity from the layers themselves, so the opaque region has no
+  further effect.
+- **Windows** composes the material behind the whole window, and the page's transparency decides
+  where it shows; an empty blur region removes it. The input region becomes the window's shape:
+  outside it the window neither draws nor takes clicks, which then reach the window beneath.
+  Windows with system decorations keep their frame and are not shaped. DWM has no opaque region.
 
 ## Bridge security
 
