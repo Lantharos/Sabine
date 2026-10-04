@@ -316,6 +316,9 @@ impl OsrNativeHost {
                 OsrHostEvent::HostControl(HostControl::Regions(regions)) => {
                     self.set_regions(regions)
                 }
+                OsrHostEvent::HostControl(HostControl::Notify(notification)) => {
+                    self.show_notification(notification)
+                }
                 OsrHostEvent::HostControl(HostControl::Quit) => {
                     self.begin_close(event_loop);
                     return;
@@ -437,6 +440,7 @@ pub(super) fn host_control_from_parts(command: &str, value: &str) -> Option<Host
         "focus" => Some(HostControl::Focus(activation_token_value(Some(
             value.to_string(),
         )))),
+        "notify" => crate::osr::protocol::notification_from_json(value).map(HostControl::Notify),
         "activity.begin" => activity_control_value(value).map(HostControl::ActivityBegin),
         "activity.end" => activity_control_value(value).map(HostControl::ActivityEnd),
         "regions" => serde_json::from_str(value).ok().map(|regions| {

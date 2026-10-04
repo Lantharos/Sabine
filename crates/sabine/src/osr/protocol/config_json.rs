@@ -1,9 +1,35 @@
-use sabine_platform::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+use sabine_platform::{
+    Notification, WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions,
+};
 use serde_json::Value;
 
 use crate::{SabineLifecyclePolicy, SabineWindowControlAction, SabineWindowControlRegion};
 
 use std::time::Duration;
+
+pub(crate) fn notification_to_json(notification: &Notification) -> Value {
+    serde_json::json!({
+        "id": notification.id,
+        "title": notification.title,
+        "body": notification.body,
+        "silent": notification.silent,
+    })
+}
+
+pub(crate) fn notification_from_json(value: &str) -> Option<Notification> {
+    let value = serde_json::from_str::<Value>(value).ok()?;
+    let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default();
+    Some(
+        Notification::new(value.get("id")?.as_str()?, value.get("title")?.as_str()?)
+            .body(text("body"))
+            .silent(
+                value
+                    .get("silent")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            ),
+    )
+}
 
 pub(crate) fn regions_to_json(regions: &WindowRegions) -> Value {
     serde_json::json!({

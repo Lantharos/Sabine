@@ -105,6 +105,19 @@ impl BridgeEventEmitter {
         self.deliver(Some(window), regions_control(regions), None)
     }
 
+    /// Shows a desktop notification from one window. Its pages hear about
+    /// clicks through `notification.click` events carrying its id.
+    pub fn notify(&self, window: WindowId, notification: &sabine_platform::Notification) -> bool {
+        self.deliver(
+            Some(window),
+            format!(
+                "{HOST_CONTROL_PREFIX}\tnotify\t{}",
+                crate::osr::protocol::notification_to_json(notification)
+            ),
+            None,
+        )
+    }
+
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool {
         self.emit_host_control(
             "focus",

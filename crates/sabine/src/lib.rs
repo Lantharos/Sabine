@@ -42,9 +42,9 @@ pub use sabine_bridge::{
 };
 pub use sabine_platform::{
     Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy,
-    TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, WindowBackgroundEffect, WindowRegion,
-    WindowRegionRect, WindowRegions,
+    NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
+    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind,
+    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 

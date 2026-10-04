@@ -230,6 +230,13 @@ impl SabineProcess {
             .is_some_and(BridgeEventEmitter::hide)
     }
 
+    /// Shows a desktop notification from the app's first window.
+    pub fn notify(&self, notification: &sabine_platform::Notification) -> bool {
+        self.bridge_emitter
+            .as_ref()
+            .is_some_and(|emitter| emitter.notify(self.child.id(), notification))
+    }
+
     pub fn focus_window(&self) -> bool {
         self.bridge_emitter
             .as_ref()

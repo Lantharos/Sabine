@@ -108,6 +108,7 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) appearance: sabine_platform::AppearanceWatcher,
     pub(super) published_appearance: Option<sabine_platform::Appearance>,
+    pub(super) notifier: Option<sabine_platform::Notifier>,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
 }
@@ -216,6 +217,7 @@ impl OsrNativeHost {
                 appearance_proxy.wake_up()
             }),
             published_appearance: None,
+            notifier: None,
             #[cfg(target_os = "linux")]
             paste_gesture: None,
         }

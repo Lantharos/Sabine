@@ -594,6 +594,18 @@ documents. Camera and microphone requests are denied by CEF's off-screen policy,
 notification/geolocation requests return a denial instead of remaining pending for an unavailable
 prompt. Sabine does not currently expose a browser permission grant API.
 
+The app's own pages still have notifications: their `Notification` shows the desktop's notifications
+through the window, with permission always granted, and fires `show`, `click`, `close` and `error`
+like a browser's. Notifications with the same `tag` replace each other. Linux uses
+`org.freedesktop.Notifications` while a notification server runs and otherwise the XDG desktop
+portal, which names the app through its installed desktop entry. Windows shows toasts under the app
+id as its AppUserModelID, registering the app's name for it per user. macOS uses the user
+notification center, which only serves bundled apps, asks for permission the first time, and
+reports no notifications the person dismisses. Rust shows the same notifications with
+`SabineProcess::notify` or `BridgeEventEmitter::notify`; clicks reach that window's pages as
+`notification.click` events with the notification's id. Service worker notifications are not
+supported.
+
 Bridge commands must be registered before launch. The host rejects commands that were not
 registered, commands whose descriptor targets another platform, and documents outside the app's
 own pages and allowed origins. A descriptor's `allowed_origin` lets one more origin call that

@@ -23,7 +23,8 @@ pub use commands::activity::{
 };
 pub use commands::{
     APPEARANCE_COMMAND, APPEARANCE_EVENT, CONTROLS_OVERLAY_COMMAND, CONTROLS_OVERLAY_EVENT,
-    INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND, clipboard, media, page_commands,
+    INHIBIT_SHORTCUTS_COMMAND, NOTIFICATION_CLOSE_COMMAND, NOTIFICATION_COMMAND_PREFIX,
+    NOTIFICATION_SHOW_COMMAND, SET_REGIONS_COMMAND, clipboard, media, page_commands,
 };
 pub use guest::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
