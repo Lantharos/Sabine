@@ -157,14 +157,7 @@ impl SabineWindowConfig {
 
     /// Whether pages in this window can play video on native surfaces.
     pub(crate) fn native_media(&self) -> bool {
-        #[cfg(target_os = "linux")]
-        {
-            crate::media::supported(self)
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            false
-        }
+        crate::media::supported(self)
     }
 }
 

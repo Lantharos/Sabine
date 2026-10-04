@@ -1,8 +1,18 @@
+#[cfg(target_os = "macos")]
+mod avfoundation;
+#[cfg(target_os = "linux")]
 mod gstreamer;
+#[cfg(windows)]
+mod mediafoundation;
 
 use winit::window::Window;
 
+#[cfg(target_os = "macos")]
+pub(super) use avfoundation::AvFoundation as Native;
+#[cfg(target_os = "linux")]
 pub(super) use gstreamer::GStreamer as Native;
+#[cfg(windows)]
+pub(super) use mediafoundation::MediaFoundation as Native;
 
 use super::command::{Command, Events, PlayerOptions};
 use super::geometry::Layout;

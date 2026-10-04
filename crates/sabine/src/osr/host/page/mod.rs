@@ -1,6 +1,5 @@
 #[cfg(target_os = "linux")]
 mod clipboard;
-#[cfg(target_os = "linux")]
 mod media;
 
 use sabine_bridge::{INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND};
@@ -58,7 +57,6 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
-            #[cfg(target_os = "linux")]
             command if command.starts_with(sabine_bridge::media::COMMAND_PREFIX) => {
                 self.answer_media(&request)
             }

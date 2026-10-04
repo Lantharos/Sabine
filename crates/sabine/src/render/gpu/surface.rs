@@ -85,11 +85,10 @@ impl GpuRenderer {
                     }
                 }
                 wgpu::CurrentSurfaceTexture::Lost => {
-                    self.surface = self
-                        .instance
-                        .create_surface(self.window.clone())
-                        .map_err(|error| RendererError::Surface(error.to_string()))?;
+                    self.surface = self.source.create(&self.instance)?;
                     self.surface.configure(&self.device, &self.surface_config);
+                    #[cfg(windows)]
+                    self.source.commit();
                     if attempt + 1 == 3 {
                         self.window.request_redraw();
                         return Ok(None);

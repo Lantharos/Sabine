@@ -27,7 +27,8 @@ export interface NativeVideoTrack {
 export interface NativeVideoCue {
   text: string;
   start: number;
-  end: number;
+  /** `null` when the cue shows until the next cue replaces or clears it. */
+  end: number | null;
 }
 
 export interface NativeVideoError {

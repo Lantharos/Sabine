@@ -228,7 +228,6 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::Message(_, OsrMessage::MainLoadStarted) => {
                     super::trace_host(&self.config, "browser.load_started");
-                    #[cfg(target_os = "linux")]
                     self.clear_media();
                     self.main_load_ready = false;
                     self.main_frame_presented = false;
@@ -313,7 +312,6 @@ impl OsrNativeHost {
                     return;
                 }
                 OsrHostEvent::Disconnected(_) => {
-                    #[cfg(target_os = "linux")]
                     self.clear_media();
                     self.drop_connection();
                     self.awaiting_connection = false;
