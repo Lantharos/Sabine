@@ -5,6 +5,7 @@ import { events } from "./src/events.js";
 import { Guest, guest } from "./src/guest.js";
 import { NativeVideo } from "./src/media.js";
 import { region } from "./src/regions.js";
+import { tray } from "./src/tray.js";
 import { appWindow, popup } from "./src/window.js";
 
 export {
@@ -24,6 +25,7 @@ export {
   popup,
   region,
   sabine,
+  tray,
 };
 
 export default {
@@ -43,4 +45,5 @@ export default {
   clipboard,
   region,
   NativeVideo,
+  tray,
 };

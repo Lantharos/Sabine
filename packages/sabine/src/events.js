@@ -11,6 +11,7 @@ export const events = {
   openUrlsAvailable: on("app.openUrlsAvailable"),
   trayActivate: on("tray.activate"),
   globalShortcut: on("globalShortcut.activate"),
+  globalShortcutFailed: on("globalShortcut.failed"),
   singleInstance: on("singleInstance.activate"),
   rendererCrashed: on("runtime.renderer-crashed"),
   guestCreated: on("guest.created"),

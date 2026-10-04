@@ -303,11 +303,13 @@ state into the thread's keyboard state, so every other key still arrives with th
 and text. macOS rejects the request. The inhibitor is released when disabled or when the native
 window is dropped, and is recreated with the window.
 
-On Windows and macOS, `SabineProcess::wait()` runs the parent process's native event loop. Tray
-icons and global shortcuts are created on that thread after the loop starts; process exits and
-window commands wake it without polling. Use `SabineWindow::main` or call `wait()` on the main
-thread when managing the process yourself. Update confirmation runs in a separate native prompt
-process so it cannot consume the application's event loop before launch.
+Tray icons and global shortcuts start when the app launches, so an app that calls `launch()` and
+runs its own loop has them too. Linux and Windows keep them on a thread of their own, with its own
+message loop on Windows. macOS needs them on the main thread, so there they appear once the main
+thread runs its event loop, which `SabineProcess::wait()` does: call `wait()` on the main thread, or
+run an AppKit loop there, when managing the process yourself. Process exits and window commands
+wake the loop without polling. Update confirmation runs in a separate native prompt process so it
+cannot consume the application's event loop before launch.
 
 Every desktop connects a window to its browser over a Unix domain socket. On Linux and macOS,
 sockets live under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`) with socket mode `0600`, and
@@ -724,6 +726,28 @@ model.
 Current primitives cover tray menus, autostart, global shortcuts, deep links, native messaging,
 single-instance activation, hidden windows, always-on-top windows, and palette behavior. Native
 platform registration belongs in `sabine-platform` or `sabine-service`; CEF code must not own it.
+
+The tray icon behaves the same on every desktop: a left click activates the app (`tray.activate`
+with no `itemId`) and a right click opens its menu, which can hold separators, checkbox items and
+submenus. Linux publishes it as a StatusNotifierItem with the image itself, not an icon theme name.
+macOS shows only the image in the menu bar, not the title, and draws black-and-white icons, or any
+icon marked `template`, as template images that follow the menu bar's appearance. Without an image,
+or when it cannot be read, every desktop shows a plain dot. `SabineProcess::tray()` returns a
+`TrayHandle` that changes the icon, tooltip and menu while the app runs, and pages do the same with
+the package's `tray.update`.
+
+Global shortcut keys are named the same way everywhere: a single character, a common key name such
+as `Space`, `Enter`, `PageDown` or `F13`, or a `KeyboardEvent.code` value such as `NumpadAdd` or
+`MediaPlayPause`. Linux binds all of an app's shortcuts in one GlobalShortcuts portal session, so
+the desktop asks about them together, and also accepts XKB key names. A shortcut the desktop
+refuses, for example because another app holds it, is recorded in the app's diagnostics and
+reported as `globalShortcut.failed`; the app and its other shortcuts keep working. The portal names
+an app through the desktop entry named after its id. An installed entry is left alone; until the app
+is installed, Sabine writes a hidden stand-in entry and removes it again once a real one exists.
+
+On macOS, clicking the Dock icon or opening the app from Finder while it runs reaches the app as a
+`singleInstance.activate` with the `focusExisting` policy, which shows and focuses its window, also
+a hidden tray app's.
 
 An app has one autostart entry, and its id must be the app id: an XDG autostart entry named
 `<app id>.desktop` on Linux, a `dev.sabine.<app id>` LaunchAgent on macOS, and a value named after
