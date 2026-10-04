@@ -20,30 +20,16 @@ pub const SELECT_TRACKS_COMMAND: &str = "sabine.media.selectTracks";
 /// Event every media surface reports through, tagged with its `id` and `type`.
 pub const EVENT: &str = "sabine.media";
 
-const INTERNAL_COMMANDS: &[&str] = if cfg!(target_os = "linux") {
-    &[
-        CREATE_COMMAND,
-        DESTROY_COMMAND,
-        SET_RECT_COMMAND,
-        PLAY_COMMAND,
-        PAUSE_COMMAND,
-        SEEK_COMMAND,
-        SET_RATE_COMMAND,
-        SET_VOLUME_COMMAND,
-        SET_MUTED_COMMAND,
-        SET_LOOP_COMMAND,
-        SELECT_TRACKS_COMMAND,
-    ]
-} else {
-    &[]
-};
-
-/// Append the media commands this platform supports to an allow-list.
-pub fn bridge_commands_with_media(mut commands: Vec<String>) -> Vec<String> {
-    for command in INTERNAL_COMMANDS {
-        if !commands.iter().any(|existing| existing == command) {
-            commands.push(command.to_string());
-        }
-    }
-    commands
-}
+pub(super) const COMMANDS: [&str; 11] = [
+    CREATE_COMMAND,
+    DESTROY_COMMAND,
+    SET_RECT_COMMAND,
+    PLAY_COMMAND,
+    PAUSE_COMMAND,
+    SEEK_COMMAND,
+    SET_RATE_COMMAND,
+    SET_VOLUME_COMMAND,
+    SET_MUTED_COMMAND,
+    SET_LOOP_COMMAND,
+    SELECT_TRACKS_COMMAND,
+];

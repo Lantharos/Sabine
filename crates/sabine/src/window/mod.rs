@@ -1,6 +1,7 @@
 use sabine_bridge::BridgeHandlers;
 
 mod app_chrome;
+mod bridge;
 mod builder;
 pub(crate) mod config;
 mod launch;

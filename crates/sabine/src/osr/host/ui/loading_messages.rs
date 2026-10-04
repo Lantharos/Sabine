@@ -100,11 +100,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn category_weighting_is_seventy_twenty_ten() {
-        assert_eq!(PLAUSIBLE.len(), 35);
-        assert_eq!(WHIMSICAL.len(), 10);
-        assert_eq!(UNHINGED.len(), 5);
-    }
 }

@@ -7,30 +7,11 @@ use serde_json::{Value, json};
 
 use crate::bridge::{BridgeCommand, BridgeError, BridgeResponse, BridgeResult};
 
-pub const BEGIN_COMMAND: &str = "sabine.activity.begin";
-pub const END_COMMAND: &str = "sabine.activity.end";
-pub const LIST_COMMAND: &str = "sabine.activity.list";
-pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
-pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
-pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
-pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
+const BEGIN_COMMAND: &str = "sabine.activity.begin";
+const END_COMMAND: &str = "sabine.activity.end";
+const LIST_COMMAND: &str = "sabine.activity.list";
 
-const INTERNAL_COMMANDS: [&str; 7] = [
-    BEGIN_COMMAND,
-    END_COMMAND,
-    LIST_COMMAND,
-    POPUP_OPEN_COMMAND,
-    POPUP_CLOSE_COMMAND,
-    INHIBIT_SHORTCUTS_COMMAND,
-    SET_REGIONS_COMMAND,
-];
-
-/// Activity, popup, guest, and media internal bridge commands.
-pub fn bridge_commands_with_all_internal(commands: Vec<String>) -> Vec<String> {
-    crate::media::bridge_commands_with_media(crate::guest::bridge_commands_with_guest(
-        bridge_commands_with_internal(commands),
-    ))
-}
+pub(super) const COMMANDS: [&str; 3] = [BEGIN_COMMAND, END_COMMAND, LIST_COMMAND];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityOptions {
@@ -152,8 +133,10 @@ impl ActivityRegistry {
                 .and_then(Value::as_str)
                 .map(normalize_name)
                 .unwrap_or_else(|| "activity".to_string()),
-            prevents_hibernation: bool_param(&command.params, "preventsHibernation")
-                .or_else(|| bool_param(&command.params, "prevents_hibernation"))
+            prevents_hibernation: command
+                .params
+                .get("preventsHibernation")
+                .and_then(Value::as_bool)
                 .unwrap_or(true),
         };
         let record = self.begin(options);
@@ -228,41 +211,20 @@ impl Drop for SabineActivityLease {
     }
 }
 
-pub fn bridge_commands_with_internal(commands: Vec<String>) -> Vec<String> {
-    let mut commands = commands;
-    for command in INTERNAL_COMMANDS {
-        if !commands.iter().any(|existing| existing == command) {
-            commands.push(command.to_string());
-        }
-    }
-    commands
-}
-
 pub fn host_update_json(update: &ActivityHostUpdate) -> Value {
-    match update {
-        ActivityHostUpdate::Begin(record) => json!({
-            "id": record.id,
-            "name": record.name,
-            "preventsHibernation": record.prevents_hibernation,
-            "active": true,
-        }),
-        ActivityHostUpdate::End(record) => json!({
-            "id": record.id,
-            "name": record.name,
-            "preventsHibernation": record.prevents_hibernation,
-            "active": false,
-        }),
-    }
+    let (record, active) = match update {
+        ActivityHostUpdate::Begin(record) => (record, true),
+        ActivityHostUpdate::End(record) => (record, false),
+    };
+    let mut value = record_json(record);
+    value["active"] = json!(active);
+    value
 }
 
 /// Activity event emitter implemented by the native CEF host. It knows how to push
 /// `sabine.activity.begin` / `sabine.activity.end` events to the page.
 pub trait ActivityEventEmitter: Send + Sync {
     fn emit_activity_update(&self, update: &ActivityHostUpdate) -> bool;
-}
-
-fn bool_param(value: &Value, key: &str) -> Option<bool> {
-    value.get(key).and_then(Value::as_bool)
 }
 
 fn normalize_name(name: &str) -> String {
@@ -303,15 +265,6 @@ mod tests {
             body: None,
             window: None,
         }
-    }
-
-    #[test]
-    fn bridge_commands_include_activity_commands() {
-        let commands = bridge_commands_with_internal(vec!["notes.list".to_string()]);
-        assert!(commands.iter().any(|command| command == "notes.list"));
-        assert!(commands.iter().any(|command| command == BEGIN_COMMAND));
-        assert!(commands.iter().any(|command| command == END_COMMAND));
-        assert!(commands.iter().any(|command| command == LIST_COMMAND));
     }
 
     #[test]

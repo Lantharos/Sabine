@@ -1,9 +1,6 @@
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
-use sabine_bridge::{
-    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeResponse, BridgeResult,
-    ContentSecurity,
-};
+use sabine_bridge::ContentSecurity;
 use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
     SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegion, WindowRegionRect,
@@ -404,86 +401,6 @@ impl SabineWindow {
 
     pub fn allowed_origin(mut self, origin: impl Into<String>) -> Self {
         allow_origin(&mut self.config.security, origin.into());
-        self
-    }
-
-    pub fn bridge_command_descriptor(mut self, descriptor: BridgeCommandDescriptor) -> Self {
-        self.config.bridge.register_descriptor(descriptor);
-        self
-    }
-
-    pub fn bridge_handler<F>(mut self, command_name: impl Into<String>, handler: F) -> Self
-    where
-        F: Fn(BridgeCommand) -> BridgeResult + Send + Sync + 'static,
-    {
-        let name = command_name.into();
-        self.config.bridge.register(name.clone());
-        self.bridge_handlers.register(name, handler);
-        self
-    }
-
-    /// Registers a bridge command that deserializes params into `Req` and
-    /// serializes the handler return value as JSON.
-    pub fn bridge_typed<Req, Res, F>(self, command_name: impl Into<String>, handler: F) -> Self
-    where
-        Req: serde::de::DeserializeOwned,
-        Res: serde::Serialize,
-        F: Fn(Req) -> Result<Res, BridgeError> + Send + Sync + 'static,
-    {
-        self.bridge_handler(command_name, move |command| {
-            let request = serde_json::from_value(command.params)
-                .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")))?;
-            let response = handler(request)?;
-            let value = serde_json::to_value(response).map_err(|error| {
-                BridgeError::new(format!("failed to encode bridge result: {error}"))
-            })?;
-            Ok(BridgeResponse::json(value))
-        })
-    }
-
-    pub fn bridge_descriptor_handler<F>(
-        mut self,
-        descriptor: BridgeCommandDescriptor,
-        handler: F,
-    ) -> Self
-    where
-        F: Fn(BridgeCommand) -> BridgeResult + Send + Sync + 'static,
-    {
-        let name = descriptor.name.clone();
-        self.config.bridge.register_descriptor(descriptor);
-        self.bridge_handlers.register(name, handler);
-        self
-    }
-
-    pub fn bridge_handler_async<F, Fut>(
-        mut self,
-        command_name: impl Into<String>,
-        handler: F,
-    ) -> Self
-    where
-        F: Fn(BridgeCommand) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = BridgeResult> + Send + 'static,
-    {
-        let name = command_name.into();
-        self.config.bridge.register(name.clone());
-        self.bridge_handlers
-            .register(name, move |command| pollster::block_on(handler(command)));
-        self
-    }
-
-    pub fn bridge_descriptor_handler_async<F, Fut>(
-        mut self,
-        descriptor: BridgeCommandDescriptor,
-        handler: F,
-    ) -> Self
-    where
-        F: Fn(BridgeCommand) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = BridgeResult> + Send + 'static,
-    {
-        let name = descriptor.name.clone();
-        self.config.bridge.register_descriptor(descriptor);
-        self.bridge_handlers
-            .register(name, move |command| pollster::block_on(handler(command)));
         self
     }
 }

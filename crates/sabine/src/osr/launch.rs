@@ -7,13 +7,14 @@ use std::{
 #[cfg(target_os = "linux")]
 use crate::host::ld_library_path;
 use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
+use crate::launch::metrics::LaunchMetrics;
 use crate::osr::transport::IpcEndpoint;
 use crate::window::config::SabineWindowConfig;
 use crate::{
     SabineError, SabineProcess, SabineResult, prepare_bridge_command, spawn_bridge_dispatch,
     spawn_bridge_dispatch_for_window,
 };
-use sabine_bridge::{BridgeHandlers, BridgeRuntime, LaunchMetrics};
+use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
 pub(crate) const OSR_HOST_ARG: &str = "--sabine-osr-host";
 
@@ -63,11 +64,7 @@ pub(crate) fn launch_process(
     let activity = sabine_bridge::ActivityRegistry::default();
     let bridge_dispatch = spawn_bridge_dispatch(
         &mut child,
-        BridgeRuntime::new(
-            bridge_handlers.clone(),
-            config.bridge.clone(),
-            config.security.clone(),
-        ),
+        BridgeRuntime::new(bridge_handlers.clone(), config.bridge.clone()),
         activity.clone(),
         config.visibility_listener.clone(),
     );
@@ -152,12 +149,11 @@ pub(crate) fn spawn_osr_host_child(
             "enabled": true,
             "documentPrefix": if url.starts_with(crate::launch::APP_URL_PREFIX) { crate::launch::APP_URL_PREFIX } else { "" },
             "origins": if config.security.remote_content { config.security.allowed_origins.clone() } else { Vec::new() },
-            "commandOrigins": config.bridge.commands().iter().filter_map(|name| {
-                config.bridge.descriptor(name)
-                    .filter(|descriptor| !descriptor.allowed_origins.is_empty())
-                    .map(|descriptor| (name.clone(), serde_json::json!(descriptor.allowed_origins)))
-            }).collect::<serde_json::Map<String, serde_json::Value>>(),
-            "commands": sabine_bridge::bridge_commands_with_all_internal(config.bridge.commands()),
+            "commandOrigins": config.bridge.descriptors().iter()
+                .filter(|descriptor| !descriptor.allowed_origins.is_empty())
+                .map(|descriptor| (descriptor.name.clone(), serde_json::json!(descriptor.allowed_origins)))
+                .collect::<serde_json::Map<String, serde_json::Value>>(),
+            "commands": sabine_bridge::page_commands(config.bridge.commands(), config.native_media()),
             "bytes": true,
         },
         "regions": crate::osr::protocol::regions_to_json(&config.regions),
@@ -185,7 +181,7 @@ pub(crate) fn spawn_osr_host_child(
         .arg(OSR_HOST_ARG)
         .arg(&host_config_path)
         .stderr(Stdio::piped());
-    prepare_bridge_command(&mut command, &BridgeHandlers::default());
+    prepare_bridge_command(&mut command);
     prepare_child_command(&mut command);
     let mut child = command
         .spawn()
@@ -224,11 +220,7 @@ pub(crate) fn attach_open_window(
     };
     let thread = spawn_bridge_dispatch_for_window(
         &mut child,
-        BridgeRuntime::new(
-            context.bridge_handlers.clone(),
-            context.bridge.clone(),
-            window_config.security.clone(),
-        ),
+        BridgeRuntime::new(context.bridge_handlers.clone(), context.bridge.clone()),
         process.activity.clone(),
         &emitter,
         window_config.visibility_listener.clone(),

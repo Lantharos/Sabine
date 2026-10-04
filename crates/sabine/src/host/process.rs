@@ -1,14 +1,12 @@
 use std::{process::ExitStatus, thread::JoinHandle, time::Duration};
 
-use sabine_bridge::{
-    ActivityOptions, ActivityRecord, LaunchMetrics, SabineActivityLease,
-    SabineLaunchMetricsSnapshot,
-};
+use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
 use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
 use crate::bridge::{BridgeEventEmitter, platform_event_payload};
 use crate::desktop::{DesktopServiceState, start_desktop_event_forwarder};
 use crate::host::process_tree::ManagedChild;
+use crate::launch::metrics::{LaunchMetrics, SabineLaunchMetricsSnapshot};
 use crate::osr::launch::OpenWindowContext;
 use crate::{SabineResult, SabineWindow};
 

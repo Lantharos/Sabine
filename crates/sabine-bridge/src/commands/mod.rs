@@ -1,0 +1,35 @@
+//! Commands Sabine answers itself, which every page may call next to the
+//! app's own.
+
+pub(crate) mod activity;
+pub mod clipboard;
+pub mod media;
+
+pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
+pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
+pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
+pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
+
+const WINDOW_COMMANDS: [&str; 4] = [
+    POPUP_OPEN_COMMAND,
+    POPUP_CLOSE_COMMAND,
+    INHIBIT_SHORTCUTS_COMMAND,
+    SET_REGIONS_COMMAND,
+];
+
+/// Every command a window's pages may call: the app's own, Sabine's, and the
+/// native media commands when the window can show native media.
+pub fn page_commands(mut commands: Vec<String>, native_media: bool) -> Vec<String> {
+    let media: &[&str] = if native_media { &media::COMMANDS } else { &[] };
+    let builtin = activity::COMMANDS
+        .iter()
+        .chain(&WINDOW_COMMANDS)
+        .chain(&crate::guest::COMMANDS)
+        .chain(media);
+    for command in builtin {
+        if !commands.iter().any(|existing| existing == command) {
+            commands.push(command.to_string());
+        }
+    }
+    commands
+}

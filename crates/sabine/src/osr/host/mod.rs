@@ -43,13 +43,7 @@ pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
 }
 
 fn trace_host(config: &OsrHostConfig, stage: impl AsRef<str>) {
-    let enabled = std::env::var(sabine_bridge::SABINE_TRACE_ENV).is_ok_and(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on" | "trace"
-        )
-    });
-    if !enabled {
+    if !crate::launch::metrics::trace_enabled() {
         return;
     }
     let label = config.app_id.as_deref().unwrap_or(&config.title);

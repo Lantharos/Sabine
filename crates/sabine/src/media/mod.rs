@@ -25,6 +25,12 @@ use player::{Command, Player, PlayerOptions};
 use request::Request;
 use wayland::{MediaWayland, Placement};
 
+/// Whether a window with this configuration can show media surfaces: they
+/// show through the page, so the window must be transparent.
+pub(crate) fn supported(config: &crate::window::config::SabineWindowConfig) -> bool {
+    config.transparent
+}
+
 pub(crate) struct MediaHost {
     transparent: bool,
     wayland: Option<MediaWayland>,
