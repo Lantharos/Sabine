@@ -122,7 +122,8 @@ pub(crate) fn spawn_osr_host_child(
     let _ = require_app_id(config)?;
     let host_config_path =
         std::env::temp_dir().join(format!("sabine-osr-{}.json", osr_instance_key()));
-    let body = serde_json::json!({
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut body = serde_json::json!({
         "runtime_dir": runtime_dir,
         "host_binary": host_binary,
         "url": url,
@@ -164,8 +165,11 @@ pub(crate) fn spawn_osr_host_child(
         "dev_mode": config.dev_mode(),
         "remote_devtools_port": config.effective_remote_devtools_port(),
         "remote_devtools_disabled": config.browser.remote_devtools_disabled,
-        "vaapi_hardware_decode": config.browser.hardware_decode_enabled(),
     });
+    #[cfg(target_os = "linux")]
+    {
+        body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
+    }
     std::fs::write(&host_config_path, body.to_string()).map_err(|error| {
         SabineError::CreationFailed {
             message: format!("failed to write Sabine OSR host config: {error}"),

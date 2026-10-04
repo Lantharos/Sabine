@@ -102,7 +102,9 @@ fn parse_rects(
     bytes: impl Fn(std::ops::Range<usize>) -> FrameBytes,
 ) -> io::Result<Vec<PaintRect>> {
     entries
-        .chunks_exact(BATCH_ENTRY_LEN)
+        .as_chunks::<BATCH_ENTRY_LEN>()
+        .0
+        .iter()
         .map(|entry| {
             let width = read_u32(&entry[8..12]);
             let height = read_u32(&entry[12..16]);

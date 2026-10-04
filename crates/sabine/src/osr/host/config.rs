@@ -169,7 +169,6 @@ impl OsrHostConfig {
             #[cfg(target_os = "linux")]
             vaapi_hardware_decode: value
                 .get("vaapi_hardware_decode")
-                .or_else(|| value.get("hardware_decode"))
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
         })

@@ -45,17 +45,6 @@ impl BrowserOptions {
             .or(self.remote_devtools_port)
             .or(dev_mode.then_some(DEFAULT_REMOTE_DEVTOOLS_PORT))
     }
-
-    pub fn hardware_decode_enabled(&self) -> bool {
-        #[cfg(target_os = "linux")]
-        {
-            self.vaapi_hardware_decode
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            true
-        }
-    }
 }
 
 pub(crate) fn apply_browser_launch_args(
