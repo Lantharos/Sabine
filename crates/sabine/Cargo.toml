@@ -57,6 +57,7 @@ wayland-protocols.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey = "0.8.0"
 tray-icon = { version = "0.25.1", default-features = false }
+uds_windows.workspace = true
 windows-core.workspace = true
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",

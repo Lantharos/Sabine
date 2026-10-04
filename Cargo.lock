@@ -2503,6 +2503,7 @@ dependencies = [
  "tokio",
  "toml",
  "tray-icon",
+ "uds_windows",
  "url",
  "wayland-backend",
  "wayland-client",
