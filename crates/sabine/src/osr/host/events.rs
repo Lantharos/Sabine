@@ -181,6 +181,10 @@ impl OsrNativeHost {
                 OsrHostEvent::Message(_, OsrMessage::ContextMenu { x, y, items }) => {
                     self.open_context_menu(x, y, items);
                 }
+                OsrHostEvent::Message(_, OsrMessage::FileDialog(request)) => {
+                    self.show_file_dialog(request);
+                }
+                OsrHostEvent::FileDialogClosed(_, id, paths) => self.finish_file_dialog(id, paths),
                 OsrHostEvent::Message(_, OsrMessage::ContextMenuDismissed) => {
                     self.dismiss_context_menu();
                 }

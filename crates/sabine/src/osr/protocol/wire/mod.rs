@@ -66,6 +66,7 @@ pub(super) const KIND_HOST_HELLO: u32 = 38;
 pub(super) const KIND_DRAG_OPERATION: u32 = 40;
 pub(super) const KIND_CONTEXT_MENU: u32 = 41;
 pub(super) const KIND_CONTEXT_MENU_DISMISSED: u32 = 42;
+pub(super) const KIND_FILE_DIALOG: u32 = 43;
 const MAX_HELLO_BYTES: usize = 64;
 pub(super) const BATCH_ENTRY_LEN: usize = 28;
 
@@ -275,6 +276,10 @@ impl WireReader {
                     .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
             },
             KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
+            KIND_FILE_DIALOG => OsrMessage::FileDialog(
+                serde_json::from_slice(&payload)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
             KIND_MAIN_LOAD_STARTED => OsrMessage::MainLoadStarted,
             KIND_MAIN_LOAD_READY => OsrMessage::MainLoadReady,
             KIND_FATAL_ERROR => OsrMessage::FatalError(

@@ -630,7 +630,9 @@ applications arrive as ordinary drops, with the files in `dataTransfer.files`; w
 the window, the desktop shows whether the element under the pointer accepts them. On Wayland, drags
 from other applications are accepted when they carry files.
 
-CEF's default file chooser remains in place so file inputs use the operating system picker. Context
+File inputs open the desktop's own file dialog, attached to the window that asked: the XDG desktop
+portal on Linux, the common item dialog on Windows, and a sheet on macOS. The input's accepted types
+become the dialog's filters. Color inputs keep Chromium's picker. Context
 menus keep only Chromium's editing commands: undo, redo, cut, copy, paste, delete, select all, and
 spelling suggestions, so editable fields and selections get the menu users expect while pages get no
 browser navigation or printing entries. Development launches add `Inspect element`. The window

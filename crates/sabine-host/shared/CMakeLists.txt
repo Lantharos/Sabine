@@ -58,6 +58,7 @@ set(SABINE_HOST_SOURCES
   osr/bridge.cc
   osr/browser/callbacks.cc
   osr/browser/context_menu.cc
+  osr/browser/file_dialog.cc
   osr/browser/clipboard.cc
   osr/browser/recovery.cc
   osr/browser/downloads.cc

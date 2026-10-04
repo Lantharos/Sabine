@@ -87,6 +87,7 @@ pub(super) enum OsrHostEvent {
     HostControl(HostControl),
     Disconnected(u64),
     IncompatibleHost(u64),
+    FileDialogClosed(u64, u32, Option<Vec<std::path::PathBuf>>),
 }
 
 impl OsrHostEvent {
@@ -96,7 +97,8 @@ impl OsrHostEvent {
             | Self::Message(generation, _)
             | Self::MessagesReady(generation, _)
             | Self::Disconnected(generation)
-            | Self::IncompatibleHost(generation) => Some(*generation),
+            | Self::IncompatibleHost(generation)
+            | Self::FileDialogClosed(generation, ..) => Some(*generation),
             Self::HostControl(_) => None,
         }
     }
