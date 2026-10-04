@@ -3,6 +3,57 @@
 - Sabine runs only on Wayland on Linux. X11 sessions are no longer supported: the X11 clipboard and
   keyboard grab are gone, Chromium always uses its Wayland backend, and packages no longer depend
   on `libxkbcommon-x11`.
+- Play native video on macOS through AVFoundation and on Windows through Media Foundation, with the
+  page's own controls, subtitles, audio tracks and rounded corners, in transparent windows. On
+  Windows, video frames reach the screen without redrawing the window. A subtitle's `end` is `null`
+  on macOS, where it shows until the next one replaces or clears it.
+- Drag and drop works like in a browser: drag within the window, drag out to other apps, and drop
+  files, links and text in, with files in `dataTransfer.files`. The `window.fileDrag` event is gone;
+  use the standard drag and drop events instead.
+- Editable fields show a context menu with cut, copy, paste, select all and spelling suggestions.
+- File inputs open the desktop's file dialog, attached to the window.
+- Every CSS cursor works, including custom images and `cursor: none`.
+- Command shortcuts for copy, cut, paste, undo, redo and select all work on macOS.
+- Trackpad scrolling keeps sub-pixel motion, and pinching reaches pages as Ctrl+wheel. Pens hover
+  pages, and touches lifted outside the page end properly.
+- Minimized windows on Windows suspend their pages like covered windows on Wayland.
+- Windows on Windows and macOS present without waiting for the display, and windows connect to
+  their browser over a local socket instead of TCP.
+- Hidden windows stop painting unless they keep their last frame, and GPU-shared frames copy only
+  the area that changed.
+- Guest previews can be captured on Windows and macOS.
+- Async bridge handlers no longer occupy a bridge worker while they wait, so a slow handler cannot
+  stall other commands, and Tokio timers and I/O work inside them.
+- `NativeVideo.isSupported()` is false in windows that cannot show native video.
+- The TypeScript helpers type every Sabine event, activity and guest result, and add listeners for
+  tray, global shortcut, second-launch, renderer-crash and guest lifecycle events.
+- Guests can navigate to inline HTML, `guest.list()` returns the guests themselves, and Rust can
+  cover and uncover guests with `GuestHostControl::SetCovered`.
+- The single-instance event reports its policy as `allowMultiple`, `reuseExisting` or
+  `focusExisting`.
+- The npm package includes the native video modules it imports.
+- `cargo run` finds the app's `Sabine.toml` from anywhere in a workspace.
+- Remove bridge command permissions, which the app granted to itself and so protected nothing.
+- Uninstalling an app removes its login item, browser extension hosts, staged updates and
+  downloads, on every platform, and installed update packages are deleted once applied.
+- Upgrading an MSI package no longer removes the app's browser extension hosts.
+- Apps can list file extensions for their document types under `[app.extensions]`: Windows offers
+  them under Open with, macOS declares them by type identifier, and Linux packages teach the desktop
+  the extensions.
+- deb, rpm and AppImage packages install themed icons and AppStream metadata, and RPMs install on
+  openSUSE and other RPM distributions.
+- `.exe` updates install silently, and macOS asks for an administrator only when the app cannot be
+  replaced otherwise.
+- `sabine bundle` signs and notarizes macOS apps and signs Windows apps and installers when signing
+  is configured.
+- Releases include ARM64 Linux and Windows builds, Windows setup executables, and updates for apps
+  installed with `sabine install --bundle`.
+- Register browser native messaging hosts for Chrome Beta, Dev and Canary, Edge and Brave channels,
+  Vivaldi Snapshot, LibreWolf, and Flatpak and Snap browsers.
+- The Sabine service starts at login on Linux sessions without systemd.
+- Sabine requires CEF 154 or newer.
+- Apps built before Sabine recorded compatibility metadata, and release metadata signed in the old
+  format, are no longer accepted. Rebuild such apps with this version.
 - Keep apps that only open from their URL schemes or documents out of launchers with
   `listed = false` under `[app]` in `Sabine.toml`. They stay installed and keep their handlers:
   Linux desktop entries are marked `NoDisplay`, Windows installs skip the Start menu shortcut, and
