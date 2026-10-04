@@ -30,6 +30,9 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
+#if defined(OS_WIN) || defined(OS_MAC)
+#include "osr/accelerated/damage.h"
+#endif
 #if defined(OS_MAC)
 #include <memory>
 
@@ -309,10 +312,9 @@ class SabineOsrHandler : public CefClient,
     uint64_t slot_token = 0;
   };
 
-  bool CopyAcceleratedFrame(const std::string& slot_key,
+  bool CopyAcceleratedFrame(const sabine_osr::AcceleratedSurfaceKey& surface,
+                            const sabine_osr::PixelRegion& damage,
                             const CefAcceleratedPaintInfo& info,
-                            int width,
-                            int height,
                             CopiedAccelFrame* out);
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);

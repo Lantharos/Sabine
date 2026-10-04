@@ -84,15 +84,15 @@ void CloseHandleInParent(uint64_t remote_value) {
 using namespace sabine_osr;
 
 #if defined(OS_WIN)
-bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
-                                            const CefAcceleratedPaintInfo& info,
-                                            int width,
-                                            int height,
-                                            CopiedAccelFrame* out) {
+bool SabineOsrHandler::CopyAcceleratedFrame(
+    const AcceleratedSurfaceKey& surface,
+    const PixelRegion& damage,
+    const CefAcceleratedPaintInfo& info,
+    CopiedAccelFrame* out) {
   AccelD3d11CopiedFrame copied{};
-  const bool copied_frame = CopyAcceleratedD3d11Frame(
-      slot_key, info.shared_texture_handle, width, height,
-      static_cast<uint32_t>(info.format), &copied);
+  const bool copied_frame =
+      CopyAcceleratedD3d11Frame(surface, info.shared_texture_handle, damage,
+                                static_cast<uint32_t>(info.format), &copied);
   RetireAcceleratedResources(copied.retired_resource_ids);
   if (!copied_frame) {
     return false;
@@ -151,19 +151,17 @@ void SabineOsrHandler::UseSurfaceService(const std::string& service_name) {
   }
 }
 
-bool SabineOsrHandler::CopyAcceleratedFrame(const std::string& slot_key,
-                                            const CefAcceleratedPaintInfo& info,
-                                            int width,
-                                            int height,
-                                            CopiedAccelFrame* out) {
-  (void)width;
-  (void)height;
+bool SabineOsrHandler::CopyAcceleratedFrame(
+    const AcceleratedSurfaceKey& surface,
+    const PixelRegion& damage,
+    const CefAcceleratedPaintInfo& info,
+    CopiedAccelFrame* out) {
   if (!surface_broker_) {
     return false;
   }
   AccelIOSurfaceCopiedFrame copied{};
   const bool copied_frame = CopyAcceleratedIOSurfaceFrame(
-      slot_key, info.shared_texture_io_surface, &copied);
+      surface, info.shared_texture_io_surface, damage, &copied);
   RetireAcceleratedResources(copied.retired_surface_ids);
   if (!copied_frame) {
     return false;
@@ -223,7 +221,6 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   (void)info;
   return;
 #else
-  (void)dirtyRects;
   if (!browser) {
     return;
   }
@@ -285,12 +282,19 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
+  PixelRegion damage;
+  for (const CefRect& rect : dirtyRects) {
+    damage.Unite(PixelRegion{rect.x, rect.y, rect.width, rect.height});
+  }
+  if (damage.empty()) {
+    damage = PixelRegion::Whole(frame_w, frame_h);
+  }
+  const AcceleratedSurfaceKey surface{browser->GetIdentifier(),
+                                      type == PET_POPUP};
   auto send_accel = [&](uint32_t accel_kind, const std::string& guest_id,
                         int32_t x, int32_t y) -> bool {
-    const std::string slot_key = std::to_string(browser->GetIdentifier()) +
-                                 (type == PET_POPUP ? "/popup" : "/view");
     CopiedAccelFrame copied{};
-    if (!CopyAcceleratedFrame(slot_key, info, frame_w, frame_h, &copied)) {
+    if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
       dropped_accelerated_paints_.emplace_back(browser, type);
       EmitBridgeEvent("\"osr.accel_copy_dropped\"", "{}");
       return false;

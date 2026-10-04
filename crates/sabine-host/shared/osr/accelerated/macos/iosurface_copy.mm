@@ -6,6 +6,7 @@
 #include <CoreVideo/CVPixelBuffer.h>
 #include <IOSurface/IOSurface.h>
 
+#include <array>
 #include <cstdio>
 #include <map>
 
@@ -13,6 +14,7 @@ namespace sabine_osr {
 namespace {
 
 constexpr uint32_t kSlotsPerSurface = 4;
+constexpr size_t kMaxCachedSources = 8;
 
 struct OwnedSurfaceSlot {
   OwnedSurfaceSlot() = default;
@@ -25,6 +27,7 @@ struct OwnedSurfaceSlot {
   uint64_t surface_id = 0;
   bool in_use = false;
   uint64_t token = 0;
+  PixelRegion stale;
 
   void Reset() {
     [texture release];
@@ -36,13 +39,26 @@ struct OwnedSurfaceSlot {
     surface_id = 0;
     in_use = false;
     token = 0;
+    stale = {};
   }
+};
+
+struct SurfaceSlots {
+  std::array<OwnedSurfaceSlot, kSlotsPerSurface> slots;
+  uint32_t next = 0;
+};
+
+// CEF hands out the same few pooled surfaces frame after frame, so each one
+// is wrapped as a Metal texture once and kept while it stays in the pool.
+struct CachedSource {
+  IOSurfaceRef surface = nullptr;
+  id<MTLTexture> texture = nil;
 };
 
 id<MTLDevice> g_device = nil;
 id<MTLCommandQueue> g_queue = nil;
-std::map<std::string, OwnedSurfaceSlot> g_slots;
-std::map<std::string, uint32_t> g_next_slot;
+std::map<AcceleratedSurfaceKey, SurfaceSlots> g_surfaces;
+std::map<IOSurfaceRef, CachedSource> g_sources;
 uint64_t g_next_token = 1;
 uint64_t g_next_surface_id = 1;
 
@@ -105,6 +121,38 @@ id<MTLTexture> WrapSurface(IOSurfaceRef surface, MTLPixelFormat format) {
                                       plane:0];
 }
 
+void ReleaseSources() {
+  for (auto& [surface, source] : g_sources) {
+    [source.texture release];
+    CFRelease(source.surface);
+  }
+  g_sources.clear();
+}
+
+id<MTLTexture> SourceTexture(IOSurfaceRef surface, MTLPixelFormat format) {
+  const auto cached = g_sources.find(surface);
+  if (cached != g_sources.end() &&
+      cached->second.texture.pixelFormat == format &&
+      cached->second.texture.width == IOSurfaceGetWidth(surface) &&
+      cached->second.texture.height == IOSurfaceGetHeight(surface)) {
+    return cached->second.texture;
+  }
+  const bool resized =
+      !g_sources.empty() &&
+      g_sources.begin()->second.texture.width != IOSurfaceGetWidth(surface);
+  if (cached != g_sources.end() || resized ||
+      g_sources.size() >= kMaxCachedSources) {
+    ReleaseSources();
+  }
+  id<MTLTexture> texture = WrapSurface(surface, format);
+  if (!texture) {
+    return nil;
+  }
+  CFRetain(surface);
+  g_sources[surface] = CachedSource{surface, texture};
+  return texture;
+}
+
 bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
                      IOSurfaceRef source,
                      MTLPixelFormat format,
@@ -134,46 +182,63 @@ bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
   slot->surface = surface;
   slot->texture = texture;
   slot->surface_id = g_next_surface_id++;
+  slot->stale =
+      PixelRegion::Whole(static_cast<int>(width), static_cast<int>(height));
   return true;
 }
 
 bool CopyIntoSlot(id<MTLTexture> source,
                   IOSurfaceRef source_surface,
                   MTLPixelFormat format,
-                  const std::string& slot_key,
+                  OwnedSurfaceSlot* slot,
                   AccelIOSurfaceCopiedFrame* out) {
-  OwnedSurfaceSlot& slot = g_slots[slot_key];
-  if (slot.in_use || !EnsureOwnedSlot(&slot, source_surface, format,
-                                      &out->retired_surface_ids)) {
+  if (!EnsureOwnedSlot(slot, source_surface, format,
+                       &out->retired_surface_ids)) {
     return false;
   }
-  id<MTLCommandBuffer> commands = [g_queue commandBuffer];
-  id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
-  [blit copyFromTexture:source toTexture:slot.texture];
-  [blit endEncoding];
-  [commands commit];
-  [commands waitUntilCompleted];
-  if (commands.status != MTLCommandBufferStatusCompleted) {
-    std::fprintf(stderr, "Sabine CEF: shared paint copy failed\n");
-    return false;
+  const int width = static_cast<int>(IOSurfaceGetWidth(slot->surface));
+  const int height = static_cast<int>(IOSurfaceGetHeight(slot->surface));
+  const PixelRegion region = slot->stale.Within(width, height);
+  if (!region.empty()) {
+    id<MTLCommandBuffer> commands = [g_queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
+    const MTLOrigin origin = MTLOriginMake(region.x, region.y, 0);
+    [blit copyFromTexture:source
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:origin
+               sourceSize:MTLSizeMake(region.width, region.height, 1)
+                toTexture:slot->texture
+         destinationSlice:0
+         destinationLevel:0
+        destinationOrigin:origin];
+    [blit endEncoding];
+    [commands commit];
+    [commands waitUntilCompleted];
+    if (commands.status != MTLCommandBufferStatusCompleted) {
+      std::fprintf(stderr, "Sabine CEF: shared paint copy failed\n");
+      return false;
+    }
   }
-  slot.in_use = true;
-  slot.token = g_next_token++;
-  out->surface = slot.surface;
-  out->surface_id = slot.surface_id;
-  out->slot_token = slot.token;
-  out->width = static_cast<uint32_t>(IOSurfaceGetWidth(slot.surface));
-  out->height = static_cast<uint32_t>(IOSurfaceGetHeight(slot.surface));
+  slot->stale = {};
+  slot->in_use = true;
+  slot->token = g_next_token++;
+  out->surface = slot->surface;
+  out->surface_id = slot->surface_id;
+  out->slot_token = slot->token;
+  out->width = static_cast<uint32_t>(width);
+  out->height = static_cast<uint32_t>(height);
   return true;
 }
 
 }  // namespace
 
-bool CopyAcceleratedIOSurfaceFrame(const std::string& slot_key,
+bool CopyAcceleratedIOSurfaceFrame(const AcceleratedSurfaceKey& surface,
                                    void* cef_io_surface,
+                                   const PixelRegion& damage,
                                    AccelIOSurfaceCopiedFrame* out) {
   IOSurfaceRef source_surface = static_cast<IOSurfaceRef>(cef_io_surface);
-  if (!source_surface || !out || !EnsureDevice()) {
+  if (!source_surface || !EnsureDevice()) {
     return false;
   }
   const MTLPixelFormat format =
@@ -182,55 +247,59 @@ bool CopyAcceleratedIOSurfaceFrame(const std::string& slot_key,
     return false;
   }
   @autoreleasepool {
-    id<MTLTexture> source = WrapSurface(source_surface, format);
+    id<MTLTexture> source = SourceTexture(source_surface, format);
     if (!source) {
       return false;
     }
-    const uint32_t first_slot = g_next_slot[slot_key]++ % kSlotsPerSurface;
-    bool copied = false;
-    for (uint32_t offset = 0; offset < kSlotsPerSurface && !copied; ++offset) {
-      const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
-      copied = CopyIntoSlot(source, source_surface, format,
-                            slot_key + "#" + std::to_string(slot_index), out);
-      if (copied) {
-        out->slot_index = slot_index;
-      }
+    SurfaceSlots& slots = g_surfaces[surface];
+    for (OwnedSurfaceSlot& slot : slots.slots) {
+      slot.stale.Unite(damage);
     }
-    [source release];
-    return copied;
+    const uint32_t first_slot = slots.next++ % kSlotsPerSurface;
+    for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
+      const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
+      OwnedSurfaceSlot& slot = slots.slots[slot_index];
+      if (slot.in_use) {
+        continue;
+      }
+      if (!CopyIntoSlot(source, source_surface, format, &slot, out)) {
+        return false;
+      }
+      out->slot_index = slot_index;
+      return true;
+    }
+    return false;
   }
 }
 
 void ReleaseAcceleratedIOSurfaceFrame(uint64_t slot_token) {
-  for (auto& [key, slot] : g_slots) {
-    (void)key;
-    if (slot.in_use && slot.token == slot_token) {
-      slot.in_use = false;
-      slot.token = 0;
-      return;
+  for (auto& [surface, slots] : g_surfaces) {
+    for (OwnedSurfaceSlot& slot : slots.slots) {
+      if (slot.in_use && slot.token == slot_token) {
+        slot.in_use = false;
+        slot.token = 0;
+        return;
+      }
     }
   }
 }
 
 std::vector<uint64_t> RetireAcceleratedIOSurfaceBrowser(int browser_id) {
-  const std::string prefix = std::to_string(browser_id) + "/";
   std::vector<uint64_t> retired;
-  for (auto it = g_slots.begin(); it != g_slots.end();) {
-    if (it->first.rfind(prefix, 0) == 0) {
-      if (it->second.surface_id != 0) {
-        retired.push_back(it->second.surface_id);
+  for (auto it = g_surfaces.begin(); it != g_surfaces.end();) {
+    if (it->first.browser_id != browser_id) {
+      ++it;
+      continue;
+    }
+    for (const OwnedSurfaceSlot& slot : it->second.slots) {
+      if (slot.surface_id != 0) {
+        retired.push_back(slot.surface_id);
       }
-      it = g_slots.erase(it);
-    } else {
-      ++it;
     }
+    it = g_surfaces.erase(it);
   }
-  for (auto it = g_next_slot.begin(); it != g_next_slot.end();) {
-    if (it->first.rfind(prefix, 0) == 0) {
-      it = g_next_slot.erase(it);
-    } else {
-      ++it;
-    }
+  if (g_surfaces.empty()) {
+    ReleaseSources();
   }
   return retired;
 }

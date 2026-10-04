@@ -128,6 +128,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/window_state.cc"),
     ),
     (
+        "osr/accelerated/damage.h",
+        include_str!("../shared/osr/accelerated/damage.h"),
+    ),
+    (
         "osr/accelerated/paint.cc",
         include_str!("../shared/osr/accelerated/paint.cc"),
     ),
