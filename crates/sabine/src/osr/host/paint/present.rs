@@ -1,9 +1,7 @@
 use sabine_platform::request_window_effect;
 
 use crate::osr::protocol::{MAIN_TEXTURE_ID, POPUP_OVERLAY_ID};
-#[cfg(target_os = "linux")]
-use crate::render::DisplayCommand;
-use crate::render::{DisplayList, ImageCommand, RectCommand, RoundedRectCommand};
+use crate::render::{DisplayCommand, DisplayList, ImageCommand, RectCommand, RoundedRectCommand};
 use crate::window::style::Color;
 
 use crate::osr::host::native::OsrNativeHost;
@@ -107,7 +105,6 @@ impl OsrNativeHost {
                 });
             }
         }
-        #[cfg(target_os = "linux")]
         for hole in self.media.holes() {
             list.push(DisplayCommand::Cutout(RoundedRectCommand {
                 x: hole.bounds.x as f32,

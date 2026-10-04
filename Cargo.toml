@@ -65,10 +65,16 @@ resvg = "0.48.1"
 pollster = "1.0.1"
 clap = { version = "4.6.7", features = ["derive"] }
 objc2 = "0.6.4"
+block2 = "0.6.2"
+dispatch2 = { version = "0.3.1", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSGraphics", "NSResponder", "NSView", "NSVisualEffectView"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSGeometry", "NSObject"] }
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
 objc2-io-surface = { version = "0.3.2", default-features = false, features = ["std", "IOSurfaceRef", "libc", "objc2", "objc2-core-foundation"] }
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "block2", "dispatch2", "objc2-core-foundation", "objc2-core-media", "objc2-quartz-core", "AVAnimation", "AVAsset", "AVAssetTrack", "AVMediaFormat", "AVMediaSelection", "AVMediaSelectionGroup", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVPlayerItemTrack", "AVPlayerLayer"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGColor"] }
+objc2-core-media = { version = "0.3.2", default-features = false, features = ["std", "CMBase", "CMTime"] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "CALayer", "CAMetalLayer", "CATransaction"] }
 objc2-metal = { version = "0.3.2", default-features = false, features = ["std", "MTLAllocation", "MTLDevice", "MTLPixelFormat", "MTLResource", "MTLTexture", "objc2-io-surface"] }
 mach2 = "0.7.0"
 raw-window-handle = "0.6.2"
@@ -91,6 +97,7 @@ wayland-protocols = { version = "0.32.13", features = ["client", "staging", "uns
 wgpu = "30.0.1"
 winit = { git = "https://github.com/Lantharos/winit", rev = "207dc9e55467f9af10868d7d0d241c1145af2906", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
 windows = "0.62.2"
+windows-core = "0.62.2"
 
 [patch.crates-io]
 dpi = { git = "https://github.com/Lantharos/winit", rev = "207dc9e55467f9af10868d7d0d241c1145af2906" }

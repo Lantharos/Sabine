@@ -254,7 +254,8 @@ video.addEventListener("error", async () => {
 
 The video fills `element`, follows its layout, scrolling and rounded corners, and letterboxes to
 its aspect ratio. It shows through the page, so the window must be transparent, and
-`NativeVideo.isSupported()` is false in opaque windows. The element and everything painted beneath it must be transparent where the video is. When opaque content lies
+`NativeVideo.isSupported()` is false in opaque windows. The element and everything painted beneath
+it must be transparent where the video is. When opaque content lies
 beneath, such as a dialog over the rest of the app, pass `cutout: container` to clip the video's
 shape out of that container; content inside it can then no longer draw over the video. Call
 `updateRect()` while moving the element with a transform, and `destroy()` when the player goes
@@ -264,7 +265,8 @@ It supports `play()`, `pause()`, `currentTime`, `fastSeek()`, `playbackRate`, `v
 `loop`, `duration`, `paused`, `ended`, `videoWidth` and `videoHeight`, and dispatches the usual
 media events. Tracks are listed in `audioTracks` and `subtitleTracks` and chosen with
 `selectAudioTrack(id)` and `selectSubtitleTrack(id)`; `activeCue` holds the subtitle showing now
-and changes with `cuechange`. Sources can be `http(s)` URLs, app files, or `fileUrl` paths in apps
+and changes with `cuechange`. On macOS a cue's `end` is `null`, since it shows until the next cue
+replaces or clears it. Sources can be `http(s)` URLs, app files, or `fileUrl` paths in apps
 with local file access.
 
 ## Availability

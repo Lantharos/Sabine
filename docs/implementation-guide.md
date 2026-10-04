@@ -250,9 +250,9 @@ Windows uses wgpu D3D12. Chromium receives the compositor device’s DXGI adapte
 ANGLE D3D11 on that adapter. The copy device is created from the adapter that owns Chromium’s
 shared texture, so hybrid-GPU systems do not depend on independently selected default adapters.
 `SABINE_TRACE=1` reports the compositor adapter and the LUID passed to Chromium.
-Transparent windows use a DirectComposition
-visual without an HWND redirection bitmap, allowing premultiplied OSR pixels to reveal the native
-backdrop. Sabine applies Acrylic, blur, Mica, and Mica Alt directly through Win32 composition APIs.
+Every window presents into a visual of
+its own DirectComposition tree, and transparent windows have no HWND redirection bitmap, allowing
+premultiplied OSR pixels to reveal the native backdrop. Sabine applies Acrylic, blur, Mica, and Mica Alt directly through Win32 composition APIs.
 On macOS, Sabine installs its own semantic `NSVisualEffectView` beneath the Metal content view.
 
 CEF delivers BGRA dirty rectangles on the software path. Paints of 256 KiB or more are copied into
@@ -328,17 +328,40 @@ Sabine's Chromium runtime has no H.264, HEVC or AAC decoders. Pages can play suc
 surface instead, through `NativeVideo` in `@lantharos/sabine`. The page decides when: typically
 after a `<video>` reports that it cannot play a source.
 
-Native media is available on:
+Native media is available in transparent windows on Linux under Wayland, macOS and Windows. A
+window offers the `sabine.media.*` commands only when it can show native media, so
+`NativeVideo.isSupported()` is false in opaque windows.
 
-- Linux on Wayland, in transparent windows
+The window host answers `sabine.media.*` bridge requests itself, since it owns the window. Command
+parsing, layout, track choice and the events pages receive are shared; each platform plays media
+with its own framework and shows it on a native surface stacked beneath the window's page:
 
-A window offers the `sabine.media.*` commands only when it can show native media, so
-`NativeVideo.isSupported()` is false everywhere else.
+| Platform | Playback | Surface beneath the page |
+| --- | --- | --- |
+| Linux | GStreamer `playbin3` on its own thread | Wayland subsurface |
+| macOS | AVFoundation `AVPlayer` on the main thread | `AVPlayerLayer` beneath the Metal layer |
+| Windows | Media Foundation Media Engine on its own thread | DirectComposition visual beneath the page swapchain |
 
-The window host answers `sabine.media.*` bridge requests itself, since it owns the window. Each
-media surface gets its own thread running a GStreamer `playbin3`. GStreamer is loaded when a page
-first creates a surface, so apps that never play native media do not load it and do not need it
-installed. Decoding uses the hardware decoders GStreamer selects: VA-API on AMD and Intel, NVDEC
+The page keeps drawing its own controls above the video. Everything the page paints beneath the
+element must be transparent where the video shows, which requires a transparent window; CSS has no
+way to erase what is already painted, so a page with opaque content there clips the video's shape
+out of a container instead (`cutout`), giving up drawing over the video inside it. The window leaves
+the surface's area out of its background, blur and opaque regions so the video shows through it.
+`NativeVideo` follows the element's layout, scrolling, overflow clipping, resizes and finished
+animations; the surface moves together with the window's next frame. The video fills the element,
+letterboxed on black and clipped to its rounded corners and to any scrolling container around it.
+
+Time updates arrive four times a second while playing; nothing runs while a video is paused. Pages
+can open `http(s)` URLs, their own `sabine://app/` files, and, with local file access,
+`sabine://file/` URLs. Audio plays through the system's default output. Audio tracks follow the
+file's default until the page picks one. Subtitle tracks stay off until the page picks one and are
+delivered as text cues for the page to render.
+
+### Linux
+
+Each media surface gets its own thread running a GStreamer `playbin3`. GStreamer is loaded when a
+page first creates a surface, so apps that never play native media do not load it and do not need
+it installed. Decoding uses the hardware decoders GStreamer selects: VA-API on AMD and Intel, NVDEC
 on NVIDIA. NVDEC receives a CUDA context that sleeps while it waits for the GPU instead of spinning
 a core.
 
@@ -347,22 +370,31 @@ them with the surface's presenter, which draws the newest picture into a Wayland
 stacked beneath the window, scaled to fit and clipped to the element's rounded corners. The
 subsurface is desynchronized, so video frames reach the compositor without redrawing the window.
 Its buffer is sized in physical pixels and shown at logical size, so video stays sharp at any
-display scale.
+display scale. A video paused for five seconds releases its decoder, which NVIDIA's driver
+otherwise keeps polling, and resumes from the same position.
 
-The page keeps drawing its own controls above the video. Everything the page paints beneath the
-element must be transparent where the video shows, which requires a transparent window; CSS has no
-way to erase what is already painted, so a page with opaque content there clips the video's shape
-out of a container instead (`cutout`), giving up drawing over the video inside it. The window leaves
-the surface's area out of its background, blur and opaque regions so the compositor shows the video
-through it. `NativeVideo` follows the element's layout, scrolling, overflow clipping, resizes and
-finished animations; the window position of the surface changes together with the window's next
-frame.
+### macOS
 
-Audio plays through the desktop's default sink. Time updates arrive four times a second while
-playing; nothing runs while a video is paused. A video paused for five seconds releases its
-decoder, which NVIDIA's driver otherwise keeps polling, and resumes from the same position.
-Subtitle tracks are delivered as text cues for the page to render. Pages can open `http(s)` URLs,
-their own `sabine://app/` files, and, with local file access, `sabine://file/` URLs.
+Each video is an `AVPlayer` shown by an `AVPlayerLayer`. The window keeps one layer for media
+inside its content view, directly beneath the Metal layer the window renders into, and each video
+sits in a clipping layer there; layer changes are applied without implicit animations. AVFoundation
+decodes in hardware and composites the video itself, so frames never redraw the window. Player
+state, time and track changes are observed and handled on the main thread. Audio and subtitle
+choices use the asset's media selection groups, with automatic selection by system preferences
+turned off. Subtitles arrive through an `AVPlayerItemLegibleOutput` that keeps AVFoundation from
+drawing them; each cue lasts until the next one replaces or clears it, so its end is unknown.
+
+### Windows
+
+Sabine owns each window's DirectComposition tree: the page swapchain is presented into one visual
+and native media into another beneath it. The tree belongs to the window, so it outlives a renderer
+rebuilt after GPU recovery. Each video runs a Media Foundation Media Engine on its own thread, in a
+multithreaded COM apartment, decoding on a hardware D3D11 device shared through a DXGI device
+manager. The engine presents into a windowless swapchain sized to the element in physical pixels
+and letterboxes inside it; the swapchain is the content of a visual with rounded corners, inside a
+visual clipped to the element's visible part. Frames reach the compositor without redrawing the
+window. Audio tracks are Media Engine streams, and subtitles come from the engine's timed-text
+tracks.
 
 ## Runtime ownership
 

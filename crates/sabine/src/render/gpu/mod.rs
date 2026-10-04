@@ -53,6 +53,7 @@ pub struct GpuRenderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
+    source: instance::SurfaceSource,
     surface_config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     cutout_pipeline: Option<wgpu::RenderPipeline>,
@@ -96,11 +97,12 @@ impl GpuRenderer {
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, RendererError> {
         let size = window.surface_size();
+        let source = instance::SurfaceSource::new(window.clone())?;
         let instance::GpuConnection {
             instance,
             surface,
             adapter,
-        } = instance::connect(window.clone()).await?;
+        } = instance::connect(&source).await?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("sabine-gpu"),
@@ -152,6 +154,8 @@ impl GpuRenderer {
             desired_maximum_frame_latency: 1,
         };
         surface.configure(&device, &surface_config);
+        #[cfg(windows)]
+        source.commit();
 
         let globals_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sabine globals"),
@@ -252,6 +256,7 @@ impl GpuRenderer {
             software_adapter: adapter.get_info().device_type == wgpu::DeviceType::Cpu,
             scale_factor: window.scale_factor() as f32,
             surface_alpha_is_opaque,
+            source,
             window,
         })
     }
@@ -409,7 +414,6 @@ impl GpuRenderer {
                     push_rounded_rect_command(&mut vertices, command, self.scale_factor);
                     false
                 }
-                #[cfg(target_os = "linux")]
                 DisplayCommand::Cutout(command) => {
                     push_rounded_rect_command(&mut vertices, command, self.scale_factor);
                     true

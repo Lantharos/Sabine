@@ -400,7 +400,7 @@ export class NativeVideo extends EventTarget {
 
   #expireCue(cue) {
     clearTimeout(this.#cueTimer);
-    if (!this.#playing) return;
+    if (!this.#playing || cue.end === null) return;
     const remaining = (cue.end - this.currentTime) / this.#rate;
     this.#cueTimer = setTimeout(() => {
       if (this.#cue !== cue) return;

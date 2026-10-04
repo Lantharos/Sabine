@@ -101,13 +101,11 @@ impl OsrNativeHost {
         };
         self.renderer = Some(renderer);
         self.window = Some(window.clone());
-        #[cfg(target_os = "linux")]
-        {
-            if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
-                eprintln!("Sabine media: {error}");
-            }
-            self.attach_clipboard(window.as_ref());
+        if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
+            eprintln!("Sabine media: {error}");
         }
+        #[cfg(target_os = "linux")]
+        self.attach_clipboard(window.as_ref());
         self.restore_ime_state();
         #[cfg(not(target_os = "macos"))]
         if let Err(error) = self.restore_shortcut_inhibitor() {
@@ -158,7 +156,6 @@ impl OsrNativeHost {
                 .round()
                 .max(f64::from(self.config.min_height)) as u32;
         }
-        #[cfg(target_os = "linux")]
         self.media.detach();
         #[cfg(not(target_os = "macos"))]
         self.release_shortcut_inhibitor();
@@ -192,7 +189,6 @@ impl OsrNativeHost {
         };
         let width = self.logical_width().round().max(1.0) as i32;
         let height = self.logical_height().round().max(1.0) as i32;
-        #[cfg(target_os = "linux")]
         let holes = self
             .media
             .holes()
@@ -206,8 +202,6 @@ impl OsrNativeHost {
                 )
             })
             .collect::<Vec<_>>();
-        #[cfg(not(target_os = "linux"))]
-        let holes = Vec::new();
         let _ = effect.update(&self.window_options(), width, height, &holes);
     }
 }

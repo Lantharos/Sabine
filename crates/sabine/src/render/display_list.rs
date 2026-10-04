@@ -24,7 +24,6 @@ pub enum DisplayCommand {
     Rect(RectCommand),
     RoundedRect(RoundedRectCommand),
     /// Clears what earlier rectangles drew, so surfaces beneath the window show through.
-    #[cfg(target_os = "linux")]
     Cutout(RoundedRectCommand),
     Text(TextCommand),
     Image(ImageCommand),

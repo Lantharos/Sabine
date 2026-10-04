@@ -57,6 +57,7 @@ wayland-protocols.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey = "0.8.0"
 tray-icon = { version = "0.25.1", default-features = false }
+windows-core.workspace = true
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_System_Registry",
@@ -67,18 +68,31 @@ windows = { version = "0.62.2", features = [
     "Win32_Security",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_DirectComposition",
     "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication"] }
-objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSDictionary", "NSString", "NSURL"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "objc2-quartz-core"] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSDictionary", "NSError", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true
 objc2-metal.workspace = true
+objc2-av-foundation.workspace = true
+objc2-core-graphics.workspace = true
+objc2-core-media.workspace = true
+objc2-quartz-core.workspace = true
+block2.workspace = true
+dispatch2.workspace = true
 mach2.workspace = true
 global-hotkey = "0.8.0"
 tray-icon = { version = "0.25.1", default-features = false }

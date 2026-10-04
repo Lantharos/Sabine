@@ -6,7 +6,6 @@ mod desktop;
 mod error;
 mod host;
 mod launch;
-#[cfg(target_os = "linux")]
 mod media;
 mod osr;
 mod render;

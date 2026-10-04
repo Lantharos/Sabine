@@ -109,7 +109,6 @@ pub(super) struct OsrNativeHost {
     pub(super) handoff_deadline: Option<Instant>,
     #[cfg(target_os = "macos")]
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
-    #[cfg(target_os = "linux")]
     pub(super) media: crate::media::MediaHost,
     #[cfg(target_os = "linux")]
     pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
@@ -211,7 +210,6 @@ impl OsrNativeHost {
             handoff_deadline: None,
             #[cfg(target_os = "macos")]
             surface_broker: None,
-            #[cfg(target_os = "linux")]
             media: Default::default(),
             #[cfg(target_os = "linux")]
             clipboard: None,
