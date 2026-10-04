@@ -85,11 +85,11 @@ pub(super) fn parse_accel_frame(
 
 #[cfg(windows)]
 pub(super) fn parse_retired_resources(payload: &[u8]) -> io::Result<Vec<u64>> {
-    if !payload.len().is_multiple_of(8) {
+    let (resources, []) = payload.as_chunks::<8>() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "invalid accelerated resource retirement",
         ));
-    }
-    Ok(payload.chunks_exact(8).map(read_u64).collect())
+    };
+    Ok(resources.iter().copied().map(u64::from_le_bytes).collect())
 }
