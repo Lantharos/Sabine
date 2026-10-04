@@ -2,10 +2,6 @@
 
 This document describes the current architecture and the boundaries contributors should preserve.
 
-The maintenance daemon holds an operating-system file lock for its lifetime. Its PID and version
-files are diagnostic metadata; simultaneous launches cannot become competing owners, and a killed
-daemon releases the lock automatically so the next launch can replace stale metadata.
-
 ## Generated applications
 
 `sabine new` creates a Vite app with TypeScript checking in `bun run build` and a separate
@@ -328,9 +324,16 @@ always-on-top placement, and hide-on-blur behavior when configured.
 
 ## Native media
 
-Sabine's Chromium runtime has no H.264, HEVC or AAC decoders. On Linux under Wayland, pages can play
-such media on a native surface instead, through `NativeVideo` in `@lantharos/sabine`. The page
-decides when: typically after a `<video>` reports that it cannot play a source.
+Sabine's Chromium runtime has no H.264, HEVC or AAC decoders. Pages can play such media on a native
+surface instead, through `NativeVideo` in `@lantharos/sabine`. The page decides when: typically
+after a `<video>` reports that it cannot play a source.
+
+Native media is available on:
+
+- Linux on Wayland, in transparent windows
+
+A window offers the `sabine.media.*` commands only when it can show native media, so
+`NativeVideo.isSupported()` is false everywhere else.
 
 The window host answers `sabine.media.*` bridge requests itself, since it owns the window. Each
 media surface gets its own thread running a GStreamer `playbin3`. GStreamer is loaded when a page
@@ -416,6 +419,10 @@ failure and identify when no usable runtime is available. Linux runtime storage 
 The user systemd unit follows `XDG_CONFIG_HOME` and preserves custom data, config, and cache paths.
 Executable paths containing spaces or systemd specifier characters are quoted.
 
+The maintenance daemon holds an operating-system file lock for its lifetime. Its PID and version
+files are diagnostic metadata; simultaneous launches cannot become competing owners, and a killed
+daemon releases the lock automatically so the next launch can replace stale metadata.
+
 Browser profiles live under the native per-user cache location: `LOCALAPPDATA` on Windows,
 `~/Library/Caches` on macOS, and `XDG_CACHE_HOME` on Linux. Chromium protects its cookie and password key
 with DPAPI on Windows and the desktop keyring on Linux. On macOS it uses a fixed key instead of the
@@ -429,22 +436,66 @@ prints as `DevTools listening on ws://…`.
 
 ## Public API
 
-The primary API is a fluent `SabineWindow` builder. Configuration is grouped by concern even though
-the builder keeps common cases one method away:
+Apps build one `SabineWindow` and hand it to `SabineWindow::main`, which runs Sabine's internal
+child modes, loads `Sabine.toml`, applies the app's builder, launches the window and exits with it:
 
-- content: local entry, production URL, or a dev URL already owned by the CLI
-- window: size, chrome, visibility, natural background color, transparency, blur and control regions
-- browser: Chromium flags, devtools, profiles and security
-- bridge: descriptors, sync handlers and async handlers
-- lifecycle: foreground/background rates, suspend, hibernate and memory-saver policy
-- services: tray, autostart, shortcuts, deep links, native messaging and single instance
-- runtime: minimum version and bundled/shared policy
+```rust
+SabineWindow::main(|window| {
+    Ok(window
+        .app()
+        .app_chrome(AppChrome::default())
+        .bridge_typed("notes.save", save_note))
+});
+```
 
-The API deliberately avoids backend types. Apps do not select paint transports or Chromium launch
-flags. The primary surface is `SabineWindow`, its recipes, typed background effects and regions,
-bridge handlers, lifecycle policy, desktop integrations, and `RuntimeConfig`. Runtime maintenance,
-service policy, and native-host build helpers stay in their owning crates instead of being re-exported
-through `sabine`.
+`main` finds `Sabine.toml` through `SABINE_MANIFEST_PATH` (which `sabine dev` sets), next to a
+bundled executable, in the working directory, or in the Cargo package directory when the app is
+started with `cargo run`. `with_manifest(path)` applies another manifest explicitly. The manifest
+supplies identity, version, update source, URL schemes and the production web entry; settings made
+in Rust afterwards take precedence. `main_with_process` and `main_with_process_mut` also hand over
+the launched `SabineProcess` before waiting on it.
+
+Recipes set a window up for its role, and later builder calls refine them:
+
+- `.app()`: system chrome, opaque, browser-tab lifecycle
+- `.palette()`: frameless glass, hidden on blur, out of the taskbar, hidden-window lifecycle
+- `.tray_app()`: starts hidden, out of the taskbar, hidden-window lifecycle; pair it with
+  `.tray_icon(...)` and `.single_instance_id(...)`
+
+`AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
+and close hit targets, and with a sidebar the blur, opaque and input regions of a glass sidebar
+layout. Region builders (`blur_region`, `opaque_region`, `input_region`, `drag_region`,
+`control_region`) remain available for layouts it does not cover.
+
+Bridge commands are registered on the builder:
+
+- `bridge_typed` deserializes params into a request type and serializes the result as JSON.
+- `bridge_handler` receives the raw `BridgeCommand`, including `body` bytes and the calling
+  `window`, and answers with `BridgeResponse::json` or `BridgeResponse::bytes`.
+- `bridge_handler_async` registers a handler whose future is awaited on a Tokio runtime the bridge
+  starts on first use, so a handler waiting on I/O or timers holds no thread. Synchronous handlers
+  run on four worker threads per window and should not wait on slow work.
+- `bridge_descriptor_handler` and `bridge_descriptor_handler_async` take a
+  `BridgeCommandDescriptor`, which can limit a command to targets (`desktop`, `linux`, `windows`,
+  `macos`) and allow extra origins to call that command only.
+
+Each window also accepts lifecycle settings (`lifecycle_policy`, frame rates, suspend, hibernation
+and memory saver), `on_visibility_changed` for the window's visibility and suspension, desktop
+services (`tray_icon`, `autostart`, `global_shortcut`, `deep_link`, `native_messaging_host`,
+`single_instance`), content (`entry`, `url`, `dev_url`, `allowed_origin`, `local_files`) and
+`runtime(RuntimeConfig)`.
+
+The launched `SabineProcess` opens and closes further windows with `open_window` and
+`close_window`, starts activities that keep windows from hibernating with `begin_activity` or
+`begin_activity_with`, drives guests from Rust with `guest_control`, and reports launch stages
+through `metrics`. Its `BridgeEventEmitter` sends events to every window with `emit` and
+`emit_bytes`, or to one with `emit_to` and `emit_bytes_to`, and changes regions with `set_regions`
+and `set_regions_of`. Guest controls take effect without an answer; the page observes the results
+through guest events.
+
+The API avoids backend types. Apps do not select paint transports or Chromium launch flags.
+Runtime maintenance, service policy, and native-host build helpers stay in their owning crates
+instead of being re-exported through `sabine`.
 
 Blur, opaque and input regions can change while the window runs, from Rust through
 `BridgeEventEmitter::set_regions` or `set_regions_of`, and from pages through
@@ -458,8 +509,11 @@ documents. Camera and microphone requests are denied by CEF's off-screen policy,
 notification/geolocation requests return a denial instead of remaining pending for an unavailable
 prompt. Sabine does not currently expose a browser permission grant API.
 
-Bridge commands must be registered before launch. Each command can constrain targets and origins.
-The host rejects unknown commands, invalid targets, and origins outside the configured allowlist.
+Bridge commands must be registered before launch. The host rejects commands that were not
+registered, commands whose descriptor targets another platform, and documents outside the app's
+own pages and allowed origins. A descriptor's `allowed_origin` lets one more origin call that
+command only. Sabine has no separate permission layer for commands: anything a page in an allowed
+document can call is something the app chose to expose.
 
 A local entry is served from its directory at `sabine://app/`, a secure origin that only that
 directory's files can use, so the page cannot read other local files and remote pages cannot embed
@@ -549,6 +603,8 @@ window.sabine.bridge
 window.sabine.window
 window.sabine.activity
 window.sabine.guest
+window.sabine.popup
+window.sabine.clipboard   (Linux)
 ```
 
 ## Lifecycle and performance
