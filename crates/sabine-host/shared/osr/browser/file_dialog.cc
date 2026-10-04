@@ -6,7 +6,7 @@
 
 #include "common/json.h"
 #include "include/wrapper/cef_helpers.h"
-#include "osr/utilities.h"
+#include "osr/common/strings.h"
 
 using namespace sabine_osr;
 

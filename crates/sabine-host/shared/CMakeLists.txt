@@ -71,12 +71,21 @@ set(SABINE_HOST_SOURCES
   osr/input/input.cc
   osr/browser/screen.cc
   osr/browser/screen.h
-  osr/tasks.cc
-  osr/tasks.h
-  osr/transport.cc
-  osr/utilities.cc
   osr/window_state.cc
-  osr/utilities.h
+  osr/common/registry.cc
+  osr/common/registry.h
+  osr/common/strings.cc
+  osr/common/strings.h
+  osr/input/key_codes.cc
+  osr/input/key_codes.h
+  osr/transport/control.cc
+  osr/transport/message_kinds.h
+  osr/transport/paint_batch.cc
+  osr/transport/socket.cc
+  osr/transport/tasks.cc
+  osr/transport/tasks.h
+  osr/transport/wire.cc
+  osr/transport/wire.h
   osr/accelerated/damage.h
   osr/accelerated/paint.cc
   osr/accelerated/paint.h

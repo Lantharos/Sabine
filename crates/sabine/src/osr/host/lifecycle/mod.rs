@@ -1,3 +1,7 @@
+mod deadlines;
+mod recovery;
+pub(super) mod visibility;
+
 use std::time::Instant;
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -5,14 +9,14 @@ use winit::monitor::MonitorHandle;
 
 use crate::osr::protocol::encode_component;
 
-use super::native::OsrNativeHost;
-use super::types::{
+use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{
     FALLBACK_ACTIVE_FRAME_RATE, HostActivity, LIFECYCLE_SUSPEND_DEBOUNCE, LifecycleState,
     LoadingKind, NativeLoading,
 };
 
 impl OsrNativeHost {
-    pub(super) fn send_lifecycle(&self, state: LifecycleState, reason: &str) {
+    pub(in crate::osr::host) fn send_lifecycle(&self, state: LifecycleState, reason: &str) {
         let (name, frame_rate) = match state {
             LifecycleState::Active => ("active", self.active_frame_rate()),
             LifecycleState::Suspended => (
@@ -29,13 +33,13 @@ impl OsrNativeHost {
             "lifecycle\t{name}\t{frame_rate}\t{}\n",
             encode_component(reason)
         ));
-        super::trace_host(
+        crate::osr::host::trace_host(
             &self.config,
             format!("lifecycle.{name}.{reason}.fps.{frame_rate}"),
         );
     }
 
-    pub(super) fn active_frame_rate(&self) -> u32 {
+    pub(in crate::osr::host) fn active_frame_rate(&self) -> u32 {
         if self.config.lifecycle.active_frame_rate > 0 {
             return self.config.lifecycle.active_frame_rate;
         }
@@ -46,7 +50,7 @@ impl OsrNativeHost {
             .unwrap_or(FALLBACK_ACTIVE_FRAME_RATE)
     }
 
-    pub(super) fn sync_active_frame_rate(&self) {
+    pub(in crate::osr::host) fn sync_active_frame_rate(&self) {
         if self.lifecycle_state == LifecycleState::Active
             && self.last_frame_rate.get() != Some(self.active_frame_rate())
         {
@@ -60,7 +64,7 @@ impl OsrNativeHost {
             || (!self.focused && self.config.lifecycle.suspend_on_blur)
     }
 
-    pub(super) fn sync_lifecycle(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn sync_lifecycle(&mut self, reason: &str) {
         if self.closing_deadline.is_some() {
             return;
         }
@@ -71,13 +75,11 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn schedule_lifecycle_sync(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn schedule_lifecycle_sync(&mut self, reason: &str) {
         if self.closing_deadline.is_some() {
             return;
         }
         if self.should_suspend() {
-            // Debounce blur/occlusion — interactive move briefly unfocuses the
-            // secondary window and suspending immediately causes a drag-end flash.
             self.pending_suspend_at = Some(Instant::now() + LIFECYCLE_SUSPEND_DEBOUNCE);
             return;
         }
@@ -85,7 +87,10 @@ impl OsrNativeHost {
         self.sync_lifecycle(reason);
     }
 
-    pub(super) fn drive_pending_suspend(&mut self, event_loop: &dyn ActiveEventLoop) -> bool {
+    pub(in crate::osr::host) fn drive_pending_suspend(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+    ) -> bool {
         let Some(deadline) = self.pending_suspend_at else {
             return false;
         };
@@ -102,7 +107,7 @@ impl OsrNativeHost {
         true
     }
 
-    pub(super) fn suspend(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn suspend(&mut self, reason: &str) {
         self.pending_suspend_at = None;
         if matches!(
             self.lifecycle_state,
@@ -116,7 +121,7 @@ impl OsrNativeHost {
         self.send_lifecycle(LifecycleState::Suspended, reason);
     }
 
-    pub(super) fn resume(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn resume(&mut self, reason: &str) {
         self.pending_suspend_at = None;
         if self.lifecycle_state == LifecycleState::Active {
             return;
@@ -131,8 +136,7 @@ impl OsrNativeHost {
             self.launch_child();
         }
         self.send_lifecycle(LifecycleState::Active, reason);
-        // Avoid redraw-on-focus after interactive move: Wayland often marks the
-        // surface outdated and a bare redraw flashes transparent glass.
+        // Wayland marks a moved surface outdated; a bare redraw flashes the glass.
         if self.config.visible
             && self.main_surface.is_none()
             && let Some(window) = &self.window
@@ -141,7 +145,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn begin_hibernate(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn begin_hibernate(&mut self, reason: &str) {
         if self.lifecycle_state != LifecycleState::Suspended
             || self.socket.is_none()
             || self.has_hibernation_blockers()
@@ -155,7 +159,7 @@ impl OsrNativeHost {
         self.send_lifecycle(LifecycleState::Hibernating, reason);
     }
 
-    pub(super) fn commit_hibernate(&mut self) {
+    pub(in crate::osr::host) fn commit_hibernate(&mut self) {
         if !matches!(self.lifecycle_state, LifecycleState::Hibernating) {
             return;
         }
@@ -176,7 +180,7 @@ impl OsrNativeHost {
         self.presented = false;
     }
 
-    pub(super) fn send_current_lifecycle(&self) {
+    pub(in crate::osr::host) fn send_current_lifecycle(&self) {
         match self.lifecycle_state {
             LifecycleState::Active => self.send_lifecycle(LifecycleState::Active, "connect"),
             LifecycleState::Suspended => self.send_lifecycle(LifecycleState::Suspended, "connect"),
@@ -184,7 +188,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn begin_activity(&mut self, activity: HostActivity) {
+    pub(in crate::osr::host) fn begin_activity(&mut self, activity: HostActivity) {
         if !activity.prevents_hibernation {
             return;
         }
@@ -197,7 +201,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn end_activity(&mut self, activity: HostActivity) {
+    pub(in crate::osr::host) fn end_activity(&mut self, activity: HostActivity) {
         if !activity.prevents_hibernation {
             return;
         }
@@ -207,11 +211,11 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn has_hibernation_blockers(&self) -> bool {
+    pub(in crate::osr::host) fn has_hibernation_blockers(&self) -> bool {
         !self.activity_hibernation_blockers.is_empty()
     }
 
-    pub(super) fn schedule_hibernate_deadline(&mut self) {
+    pub(in crate::osr::host) fn schedule_hibernate_deadline(&mut self) {
         self.hibernate_deadline = if self.has_hibernation_blockers() {
             None
         } else {

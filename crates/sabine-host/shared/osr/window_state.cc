@@ -3,7 +3,6 @@
 
 #include "include/wrapper/cef_helpers.h"
 #include "osr/handler.h"
-#include "osr/utilities.h"
 
 using namespace sabine_osr;
 

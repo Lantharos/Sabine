@@ -54,6 +54,12 @@ fn host_release_binary(runtime_dir: &Path) -> PathBuf {
     }
 }
 
+/// CMake strings treat backslashes as escapes, so `\U` in a Windows path would
+/// break CEF's build macros.
+fn to_cmake_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 pub fn ensure_host(runtime_dir: &Path) -> Result<PathBuf, String> {
     sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
     if let Some(host) = available_host(runtime_dir) {
@@ -107,13 +113,8 @@ Use a Minimal or Standard CEF SDK to compile sabine-host; packaged apps should u
         .arg("-B")
         .arg(&build_dir);
     apply_cmake_generator(&mut configure)?;
-    // Forward slashes so CEF's ADD_LOGICAL_TARGET does not treat \U as an escape.
-    let cef_root = runtime_dir.to_string_lossy().replace('\\', "/");
-    let output_dir = runtime_dir
-        .join(".sabine-hosts")
-        .join(expected_stamp)
-        .to_string_lossy()
-        .replace('\\', "/");
+    let cef_root = to_cmake_path(runtime_dir);
+    let output_dir = to_cmake_path(&runtime_dir.join(".sabine-hosts").join(expected_stamp));
     configure
         .arg("-DCMAKE_BUILD_TYPE=Release")
         .arg(format!("-DCEF_ROOT={cef_root}"))

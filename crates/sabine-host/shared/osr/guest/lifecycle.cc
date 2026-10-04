@@ -21,7 +21,6 @@
 #include "common/bridge_policy.h"
 #include "sabine_bridge_js.h"
 #include "osr/accelerated/paint.h"
-#include "osr/utilities.h"
 
 using namespace sabine_osr;
 

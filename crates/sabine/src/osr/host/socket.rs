@@ -108,20 +108,29 @@ pub(super) fn start_socket_reader(
                 return;
             }
             if let Err(error) = candidate.set_read_timeout(Some(Duration::from_millis(750))) {
-                eprintln!("Sabine OSR could not configure authentication socket: {error}");
+                sabine_runtime::report_error(
+                    "transport",
+                    format!("could not configure the browser socket: {error}"),
+                );
                 continue;
             }
             match crate::osr::transport::authenticate(&mut candidate, &authentication_token) {
                 Ok(crate::osr::transport::Authentication::Accepted) => {
                     if let Err(error) = candidate.set_read_timeout(None) {
-                        eprintln!("Sabine OSR could not clear authentication deadline: {error}");
+                        sabine_runtime::report_error(
+                            "transport",
+                            format!("could not clear the browser socket deadline: {error}"),
+                        );
                         continue;
                     }
                     break candidate;
                 }
                 Ok(crate::osr::transport::Authentication::Probe) => continue,
                 Err(error) => {
-                    eprintln!("Sabine OSR reject connect: {error}");
+                    sabine_runtime::report_error(
+                        "transport",
+                        format!("rejected a browser connection: {error}"),
+                    );
                 }
             }
         };
@@ -132,7 +141,10 @@ pub(super) fn start_socket_reader(
         let (writer, control, owned) = match connection {
             Ok(connection) => connection,
             Err(error) => {
-                eprintln!("Sabine OSR could not set up the browser connection: {error}");
+                sabine_runtime::report_error(
+                    "transport",
+                    format!("could not set up the browser connection: {error}"),
+                );
                 let _ = stream.shutdown(std::net::Shutdown::Both);
                 endpoint.unlink();
                 state.send(&sender, OsrHostEvent::Disconnected(generation));
@@ -201,7 +213,10 @@ pub(super) fn start_socket_reader(
                     break;
                 }
                 Err(error) => {
-                    eprintln!("Sabine OSR socket read failed: {error}");
+                    sabine_runtime::report_error(
+                        "transport",
+                        format!("reading from the browser failed: {error}"),
+                    );
                     break;
                 }
             }

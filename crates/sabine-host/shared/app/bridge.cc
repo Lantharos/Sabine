@@ -5,7 +5,6 @@
 #include <vector>
 #include "common/bridge_policy.h"
 #include "common/bytes_message.h"
-#include "osr/utilities.h"
 
 namespace sabine_bridge {
 namespace {

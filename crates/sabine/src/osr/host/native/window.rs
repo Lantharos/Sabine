@@ -101,14 +101,17 @@ impl OsrNativeHost {
         self.renderer = Some(renderer);
         self.window = Some(window.clone());
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
-            eprintln!("Sabine media: {error}");
+            sabine_runtime::report_error("media", error);
         }
         #[cfg(target_os = "linux")]
         self.attach_clipboard(window.as_ref());
         self.restore_ime_state();
         #[cfg(not(target_os = "macos"))]
         if let Err(error) = self.restore_shortcut_inhibitor() {
-            eprintln!("Sabine could not inhibit desktop shortcuts: {error}");
+            sabine_runtime::report_error(
+                "input",
+                format!("could not inhibit desktop shortcuts: {error}"),
+            );
         }
         self.send_screen_origin();
         self.launch_child();

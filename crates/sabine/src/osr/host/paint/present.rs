@@ -53,7 +53,7 @@ impl OsrNativeHost {
             return false;
         };
         if let Err(error) = rendered {
-            eprintln!("Sabine OSR render failed: {error}");
+            sabine_runtime::report_error("render", format!("drawing the window failed: {error}"));
             return false;
         }
         if !self.main_frame_presented && self.main_surface_ready() && self.loading.is_none() {

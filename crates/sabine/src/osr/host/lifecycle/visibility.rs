@@ -2,12 +2,12 @@ use std::io::Write;
 
 use winit::event_loop::ActiveEventLoop;
 
-use super::native::{OsrNativeHost, present_window};
-use super::types::{LifecycleState, WindowState};
+use crate::osr::host::native::{OsrNativeHost, present_window};
+use crate::osr::host::types::{LifecycleState, WindowState};
 use crate::window::VISIBILITY_LINE;
 
 impl OsrNativeHost {
-    pub(super) fn show_window(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn show_window(&mut self, reason: &str) {
         self.config.visible = true;
         if let Some(window) = &self.window {
             if self.presented {
@@ -22,7 +22,7 @@ impl OsrNativeHost {
         self.send_resize();
     }
 
-    pub(super) fn hide_window(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn hide_window(&mut self, reason: &str) {
         self.cancel_context_menu();
         self.config.visible = false;
         self.focused = false;
@@ -32,7 +32,7 @@ impl OsrNativeHost {
         self.suspend(reason);
     }
 
-    pub(super) fn focus_window(&mut self, reason: &str) {
+    pub(in crate::osr::host) fn focus_window(&mut self, reason: &str) {
         self.config.visible = true;
         self.focused = true;
         if let Some(window) = &self.window {
@@ -47,7 +47,7 @@ impl OsrNativeHost {
         self.send_resize();
     }
 
-    pub(super) fn activate_window(
+    pub(in crate::osr::host) fn activate_window(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
         token: Option<String>,
@@ -74,7 +74,7 @@ impl OsrNativeHost {
 
     /// Tells the page and the app when the window's visibility or lifecycle
     /// changed since they last heard.
-    pub(super) fn sync_window_state(&mut self) {
+    pub(in crate::osr::host) fn sync_window_state(&mut self) {
         let state = self.window_state();
         let Some(previous) = self.published_window_state.replace(state) else {
             self.send_window_state();
@@ -90,7 +90,7 @@ impl OsrNativeHost {
         }
     }
 
-    pub(super) fn send_window_state(&self) {
+    pub(in crate::osr::host) fn send_window_state(&self) {
         let Some(state) = self.published_window_state else {
             return;
         };
@@ -114,7 +114,7 @@ impl OsrNativeHost {
     }
 }
 
-pub(super) fn bool_control_value(value: &str) -> Option<bool> {
+pub(in crate::osr::host) fn bool_control_value(value: &str) -> Option<bool> {
     match value {
         "1" | "true" | "yes" | "show" | "visible" => Some(true),
         "0" | "false" | "no" | "hide" | "hidden" => Some(false),
@@ -122,7 +122,7 @@ pub(super) fn bool_control_value(value: &str) -> Option<bool> {
     }
 }
 
-pub(super) fn activation_token_value(token: Option<String>) -> Option<String> {
+pub(in crate::osr::host) fn activation_token_value(token: Option<String>) -> Option<String> {
     token
         .map(|token| token.trim().to_string())
         .filter(|token| !token.is_empty())

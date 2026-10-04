@@ -1,16 +1,13 @@
 mod config;
-mod deadlines;
 mod events;
 mod input;
 mod lifecycle;
 mod native;
 mod page;
 mod paint;
-mod recovery;
 mod socket;
 pub(in crate::osr) mod types;
 mod ui;
-mod visibility;
 
 use std::path::PathBuf;
 use std::sync::mpsc;

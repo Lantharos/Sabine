@@ -4,10 +4,10 @@ use winit::event_loop::ActiveEventLoop;
 
 use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID};
 
+use super::lifecycle::visibility::{activation_token_value, bool_control_value};
 use super::native::OsrNativeHost;
 pub(super) use super::types::HostActivity;
 use super::types::{HostControl, OsrHostEvent};
-use super::visibility::{activation_token_value, bool_control_value};
 use crate::render::ImageId;
 use std::sync::Arc;
 
@@ -168,7 +168,10 @@ impl OsrNativeHost {
                     if let Some(window) = &self.window
                         && let Err(error) = window.drag_window()
                     {
-                        eprintln!("failed to begin native window drag: {error}");
+                        sabine_runtime::report_error(
+                            "window",
+                            format!("could not begin moving: {error}"),
+                        );
                     }
                 }
                 OsrHostEvent::Message(

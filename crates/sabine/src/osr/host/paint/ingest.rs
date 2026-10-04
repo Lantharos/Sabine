@@ -21,8 +21,6 @@ impl OsrNativeHost {
     pub(in crate::osr::host) fn queue_resize_paint(&mut self) {
         let size = self.content_surface_size();
         if self.main_surface_matches(size) {
-            // Content size unchanged — do not poke CEF (WasResized/Invalidate
-            // blanks OSR until the next paint, which shows as a drag-end flash).
             self.pending_resize_paint = None;
             return;
         }
@@ -71,8 +69,6 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn accepts_paint(&self) -> bool {
-        // Keep compositing while FPS-throttled (blur/occlusion suspend). Only
-        // stop accepting paints when the view is actually gone.
         (self.config.visible || self.config.lifecycle.retain_hidden_frame)
             && !self.occluded
             && !matches!(

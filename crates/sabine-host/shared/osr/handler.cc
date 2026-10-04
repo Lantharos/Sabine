@@ -41,7 +41,7 @@
 #include "common/bridge_policy.h"
 #include "sabine_bridge_js.h"
 #include "osr/accelerated/paint.h"
-#include "osr/utilities.h"
+#include "osr/common/registry.h"
 
 using namespace sabine_osr;
 
@@ -135,16 +135,13 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
     std::ifstream input(token_file.c_str(), std::ios::in | std::ios::binary);
     if (input) {
       std::getline(input, authentication_token);
-      // Strip trailing CR from Windows files.
       while (!authentication_token.empty() &&
              (authentication_token.back() == '\r' ||
               authentication_token.back() == '\n')) {
         authentication_token.pop_back();
       }
     }
-    // Remove after read so the secret does not linger. Handoff still works
-    // because the secondary process writes a fresh file and the primary
-    // reads it from the relaunch command line before this unlink.
+    // The secret must not linger; a relaunch hands over a fresh file.
     std::remove(token_file.c_str());
   }
   if (authentication_token.empty()) {

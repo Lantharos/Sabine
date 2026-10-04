@@ -3,7 +3,7 @@
 #include <cstring>
 #include <limits>
 
-#include "osr/utilities.h"
+#include "osr/transport/wire.h"
 
 namespace sabine_osr {
 

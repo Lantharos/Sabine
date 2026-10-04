@@ -103,7 +103,10 @@ impl OsrNativeHost {
         if let Err(error) =
             window.request_ime_update(ImeRequest::Update(self.ime_request_data(purpose)))
         {
-            eprintln!("failed to update Sabine IME surrounding text: {error}");
+            sabine_runtime::report_error(
+                "input",
+                format!("could not update the input method text: {error}"),
+            );
         }
     }
 
@@ -119,13 +122,19 @@ impl OsrNativeHost {
         match (was_enabled, ime_purpose(mode)) {
             (_, None) if was_enabled => {
                 if let Err(error) = window.request_ime_update(ImeRequest::Disable) {
-                    eprintln!("failed to disable Sabine IME: {error}");
+                    sabine_runtime::report_error(
+                        "input",
+                        format!("could not disable the input method: {error}"),
+                    );
                 }
             }
             (true, Some(purpose)) => {
                 let update = self.ime_request_data(purpose);
                 if let Err(error) = window.request_ime_update(ImeRequest::Update(update)) {
-                    eprintln!("failed to update Sabine IME: {error}");
+                    sabine_runtime::report_error(
+                        "input",
+                        format!("could not update the input method: {error}"),
+                    );
                 }
             }
             (false, Some(_)) => self.restore_ime_state(),
@@ -149,7 +158,10 @@ impl OsrNativeHost {
         };
         let update = self.ime_request_data(purpose);
         if let Err(error) = window.request_ime_update(ImeRequest::Update(update)) {
-            eprintln!("failed to position Sabine IME: {error}");
+            sabine_runtime::report_error(
+                "input",
+                format!("could not position the input method: {error}"),
+            );
         }
     }
 
@@ -168,7 +180,10 @@ impl OsrNativeHost {
         let enable = ImeEnableRequest::new(capabilities, request_data)
             .expect("Sabine IME capabilities and initial data must match");
         if let Err(error) = window.request_ime_update(ImeRequest::Enable(enable)) {
-            eprintln!("failed to enable Sabine IME: {error}");
+            sabine_runtime::report_error(
+                "input",
+                format!("could not enable the input method: {error}"),
+            );
         }
     }
 

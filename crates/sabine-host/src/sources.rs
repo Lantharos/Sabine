@@ -112,20 +112,65 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "osr/browser/screen.h",
         include_str!("../shared/osr/browser/screen.h"),
     ),
-    ("osr/tasks.cc", include_str!("../shared/osr/tasks.cc")),
-    ("osr/tasks.h", include_str!("../shared/osr/tasks.h")),
-    (
-        "osr/transport.cc",
-        include_str!("../shared/osr/transport.cc"),
-    ),
-    (
-        "osr/utilities.cc",
-        include_str!("../shared/osr/utilities.cc"),
-    ),
-    ("osr/utilities.h", include_str!("../shared/osr/utilities.h")),
     (
         "osr/window_state.cc",
         include_str!("../shared/osr/window_state.cc"),
+    ),
+    (
+        "osr/common/registry.cc",
+        include_str!("../shared/osr/common/registry.cc"),
+    ),
+    (
+        "osr/common/registry.h",
+        include_str!("../shared/osr/common/registry.h"),
+    ),
+    (
+        "osr/common/strings.cc",
+        include_str!("../shared/osr/common/strings.cc"),
+    ),
+    (
+        "osr/common/strings.h",
+        include_str!("../shared/osr/common/strings.h"),
+    ),
+    (
+        "osr/input/key_codes.cc",
+        include_str!("../shared/osr/input/key_codes.cc"),
+    ),
+    (
+        "osr/input/key_codes.h",
+        include_str!("../shared/osr/input/key_codes.h"),
+    ),
+    (
+        "osr/transport/control.cc",
+        include_str!("../shared/osr/transport/control.cc"),
+    ),
+    (
+        "osr/transport/message_kinds.h",
+        include_str!("../shared/osr/transport/message_kinds.h"),
+    ),
+    (
+        "osr/transport/paint_batch.cc",
+        include_str!("../shared/osr/transport/paint_batch.cc"),
+    ),
+    (
+        "osr/transport/socket.cc",
+        include_str!("../shared/osr/transport/socket.cc"),
+    ),
+    (
+        "osr/transport/tasks.cc",
+        include_str!("../shared/osr/transport/tasks.cc"),
+    ),
+    (
+        "osr/transport/tasks.h",
+        include_str!("../shared/osr/transport/tasks.h"),
+    ),
+    (
+        "osr/transport/wire.cc",
+        include_str!("../shared/osr/transport/wire.cc"),
+    ),
+    (
+        "osr/transport/wire.h",
+        include_str!("../shared/osr/transport/wire.h"),
     ),
     (
         "osr/accelerated/damage.h",
