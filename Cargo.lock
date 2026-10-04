@@ -2504,7 +2504,7 @@ name = "sabine-notes"
 version = "0.1.0"
 dependencies = [
  "sabine",
- "serde_json",
+ "serde",
 ]
 
 [[package]]
