@@ -107,7 +107,6 @@ impl OsrNativeHost {
         #[cfg(target_os = "linux")]
         self.attach_clipboard(window.as_ref());
         self.restore_ime_state();
-        #[cfg(not(target_os = "macos"))]
         if let Err(error) = self.restore_shortcut_inhibitor() {
             sabine_runtime::report_error(
                 "input",
@@ -199,7 +198,6 @@ impl OsrNativeHost {
                 .max(f64::from(self.config.min_height)) as u32;
         }
         self.media.detach();
-        #[cfg(not(target_os = "macos"))]
         self.release_shortcut_inhibitor();
         self.retain_frames();
         self.window = None;

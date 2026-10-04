@@ -9,7 +9,6 @@ mod touch;
 
 pub(super) use drag::DragState;
 pub(super) use forward::WheelRemainder;
-#[cfg(not(target_os = "macos"))]
 pub(super) use shortcuts::ShortcutInhibition;
 pub(super) use touch::TouchState;
 

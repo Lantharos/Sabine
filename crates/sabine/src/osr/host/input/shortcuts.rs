@@ -1,7 +1,6 @@
 #[cfg(windows)]
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
-#[cfg(not(target_os = "macos"))]
 use sabine_platform::ShortcutInhibitor;
 #[cfg(windows)]
 use sabine_platform::SystemKey;
@@ -10,7 +9,6 @@ use serde_json::Value;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::page::BridgeRequest;
 
-#[cfg(not(target_os = "macos"))]
 #[derive(Default)]
 pub(in crate::osr::host) struct ShortcutInhibition {
     requested: bool,
@@ -35,12 +33,6 @@ impl OsrNativeHost {
         );
     }
 
-    #[cfg(target_os = "macos")]
-    fn set_shortcuts_inhibited(&mut self, _enabled: bool) -> Result<(), String> {
-        Err("macOS does not let apps inhibit its keyboard shortcuts".to_string())
-    }
-
-    #[cfg(not(target_os = "macos"))]
     fn set_shortcuts_inhibited(&mut self, enabled: bool) -> Result<(), String> {
         self.shortcuts.requested = enabled;
         if !enabled {
@@ -50,7 +42,6 @@ impl OsrNativeHost {
         self.restore_shortcut_inhibitor()
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub(in crate::osr::host) fn restore_shortcut_inhibitor(&mut self) -> Result<(), String> {
         if !self.shortcuts.requested || self.shortcuts.inhibitor.is_some() {
             return Ok(());
@@ -58,7 +49,7 @@ impl OsrNativeHost {
         let Some(window) = self.window.clone() else {
             return Ok(());
         };
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "windows"))]
         let inhibitor = ShortcutInhibitor::new(window.as_ref());
         #[cfg(windows)]
         let inhibitor = {
@@ -81,7 +72,6 @@ impl OsrNativeHost {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub(in crate::osr::host) fn release_shortcut_inhibitor(&mut self) {
         self.shortcuts.inhibitor = None;
     }

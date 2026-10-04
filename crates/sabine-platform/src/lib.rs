@@ -4,7 +4,6 @@ mod controls_overlay;
 mod desktop_integration;
 mod effect;
 mod regions;
-#[cfg(not(target_os = "macos"))]
 mod shortcut_inhibit;
 #[cfg(target_os = "linux")]
 mod wayland_client;
@@ -25,7 +24,6 @@ pub use desktop_integration::{
 };
 pub use effect::WindowEffect;
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
-#[cfg(not(target_os = "macos"))]
 pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]
 pub use shortcut_inhibit::SystemKey;

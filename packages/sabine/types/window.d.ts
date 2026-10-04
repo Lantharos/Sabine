@@ -11,8 +11,8 @@ export interface SabineWindowApi {
   startDrag(): void;
   /**
    * While enabled and the window is focused, the desktop's own keyboard
-   * shortcuts reach the page instead. Rejects on macOS and on desktops that
-   * do not allow it.
+   * shortcuts reach the page instead. Rejects on desktops that do not allow
+   * it, and on macOS until the app has the Accessibility permission.
    */
   inhibitShortcuts(enabled: boolean): Promise<void>;
   /**
