@@ -22,6 +22,24 @@
 - Hidden windows stop painting unless they keep their last frame, and GPU-shared frames copy only
   the area that changed.
 - Guest previews can be captured on Windows and macOS.
+- Tray icons behave the same on every desktop: left click opens the app, right click shows the
+  menu, and menus can have submenus and checkboxes and change while the app runs. macOS menu bar
+  icons no longer show the app's name and follow the menu bar's appearance.
+- Global shortcuts accept any key, are requested together on Linux, and a shortcut another app
+  holds no longer stops the app. Pages hear about refused shortcuts with `globalShortcut.failed`.
+- Registering global shortcuts no longer hides the app's launcher entry on Linux.
+- Tray icons and global shortcuts also work for apps that run their own event loop.
+- Window regions keep working on Linux compositors without blur, and now work on macOS and Windows.
+  Windows materials cover the whole window and follow the light or dark theme as it changes.
+- Resize edges no longer take clicks in windows with system decorations.
+- App-drawn titlebars keep the macOS traffic lights, and pages can tell which corner they cover
+  with `appWindow.controlsOverlay()`.
+- Clicking the Dock icon brings back a running macOS app's window.
+- Pages can read and write any clipboard type on Windows and macOS.
+- Pages can take the system's keyboard shortcuts on macOS once the app has Accessibility
+  permission.
+- Pages and Rust can show desktop notifications.
+- Apps and pages can follow the desktop's light or dark preference and accent color.
 - Async bridge handlers no longer occupy a bridge worker while they wait, so a slow handler cannot
   stall other commands, and Tokio timers and I/O work inside them.
 - `NativeVideo.isSupported()` is false in windows that cannot show native video.
