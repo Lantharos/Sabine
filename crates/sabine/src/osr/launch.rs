@@ -315,6 +315,9 @@ pub(crate) fn cef_osr_command(
     if config.dev_mode {
         command.arg("--sabine-dev-mode");
     }
+    if config.lifecycle.retain_hidden_frame {
+        command.arg("--sabine-retain-hidden-frame");
+    }
     if let Some(root) = &config.web_root {
         let mut argument = std::ffi::OsString::from("--sabine-app-root=");
         argument.push(root);
