@@ -143,6 +143,17 @@ events.trayActivate(({ itemId, checked }) => console.log(itemId, checked));
 events.globalShortcutFailed(({ id, message }) => console.warn(id, message));
 ```
 
+## Appearance
+
+```js
+import { events, system } from "@lantharos/sabine";
+
+const { colorScheme, accentColor } = await system.appearance();
+events.appearanceChanged(({ colorScheme, accentColor }) => applyTheme(colorScheme, accentColor));
+```
+
+The accent color is also set on the page as the `--sabine-accent-color` CSS property.
+
 ## Clipboard
 
 Copy, cut, paste and `navigator.clipboard` work with the desktop clipboard as they do in a browser,

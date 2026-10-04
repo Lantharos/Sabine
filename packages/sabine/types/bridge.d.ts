@@ -1,6 +1,7 @@
 import type { SabineActivityApi } from "./activity.js";
 import type { SabineClipboardApi } from "./clipboard.js";
 import type { SabineGuestApi } from "./guest.js";
+import type { SystemAppearance } from "./system.js";
 import type { SabinePopupApi, SabineWindowApi } from "./window.js";
 
 export type JsonValue =
@@ -33,7 +34,8 @@ export interface SabineApi {
   guest: SabineGuestApi;
   activity: SabineActivityApi;
   popup: SabinePopupApi;
-  /** Present on Linux, where pages reach the desktop clipboard through Sabine. */
+  system: { appearance(): Promise<SystemAppearance> };
+  /** Present in the app's own pages. */
   clipboard?: SabineClipboardApi;
 }
 

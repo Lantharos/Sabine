@@ -107,6 +107,9 @@ pub(super) struct OsrNativeHost {
     pub(super) media: crate::media::MediaHost,
     pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
     #[cfg(target_os = "linux")]
+    pub(super) appearance: sabine_platform::AppearanceWatcher,
+    pub(super) published_appearance: Option<sabine_platform::Appearance>,
+    #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
 }
 
@@ -135,6 +138,8 @@ impl OsrNativeHost {
                 .hibernate_after
                 .map(|delay| Instant::now() + delay)
         };
+        #[cfg(target_os = "linux")]
+        let appearance_proxy = proxy.clone();
         Self {
             config,
             sender,
@@ -208,6 +213,11 @@ impl OsrNativeHost {
             surface_broker: None,
             media: Default::default(),
             clipboard: None,
+            #[cfg(target_os = "linux")]
+            appearance: sabine_platform::AppearanceWatcher::start(move || {
+                appearance_proxy.wake_up()
+            }),
+            published_appearance: None,
             #[cfg(target_os = "linux")]
             paste_gesture: None,
         }

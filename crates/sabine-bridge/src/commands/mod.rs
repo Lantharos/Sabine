@@ -12,13 +12,18 @@ pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
 /// Sent when the corner the system's window controls cover changes.
 pub const CONTROLS_OVERLAY_EVENT: &str = "window.controlsOverlay";
+pub const APPEARANCE_COMMAND: &str = "sabine.system.appearance";
+/// Sent when the desktop switches between light and dark or its accent
+/// color changes.
+pub const APPEARANCE_EVENT: &str = "system.appearance";
 
-const WINDOW_COMMANDS: [&str; 5] = [
+const WINDOW_COMMANDS: [&str; 6] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
+    APPEARANCE_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

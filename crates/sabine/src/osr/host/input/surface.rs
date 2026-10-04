@@ -56,7 +56,9 @@ impl OsrNativeHost {
         self.sync_active_frame_rate();
         let focused = focused && self.config.visible;
         self.focused = focused;
-        if !focused {
+        if focused {
+            self.refresh_appearance();
+        } else {
             self.cancel_context_menu();
         }
         self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });

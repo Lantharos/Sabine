@@ -776,6 +776,14 @@ reported as `globalShortcut.failed`; the app and its other shortcuts keep workin
 an app through the desktop entry named after its id. An installed entry is left alone; until the app
 is installed, Sabine writes a hidden stand-in entry and removes it again once a real one exists.
 
+Pages read the desktop's light or dark preference and accent color with the package's
+`system.appearance()`, hear about changes through `events.appearanceChanged`, and get the accent as
+the `--sabine-accent-color` CSS property; the app hears the same through
+`SabineWindow::on_appearance_changed`. Linux follows the XDG desktop portal's appearance settings,
+falling back to the window's theme when the desktop states no preference. Windows reads the accent
+from the DWM settings and macOS from `controlAccentColor`; neither tells windows when only the accent
+changes, so the window host reads it again when the theme changes and when the window gains focus.
+
 On macOS, clicking the Dock icon or opening the app from Finder while it runs reaches the app as a
 `singleInstance.activate` with the `focusExisting` policy, which shows and focuses its window, also
 a hidden tray app's.

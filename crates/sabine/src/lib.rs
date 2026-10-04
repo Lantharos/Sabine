@@ -41,10 +41,10 @@ pub use sabine_bridge::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
 pub use sabine_platform::{
-    AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration, NativeMessagingHost,
-    PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy, TrayActivation, TrayIcon,
-    TrayMenuItem, TrayMenuItemKind, WindowBackgroundEffect, WindowRegion, WindowRegionRect,
-    WindowRegions,
+    Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
+    NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy,
+    TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, WindowBackgroundEffect, WindowRegion,
+    WindowRegionRect, WindowRegions,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 
