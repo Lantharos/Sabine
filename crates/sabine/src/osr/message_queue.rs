@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Condvar, Mutex},
 };
 
-use super::protocol::{FrameBytes, OsrMessage, OsrPaintBatch, PaintRect};
+use super::protocol::{FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect};
 
 const MAX_QUEUED_MESSAGES: usize = 256;
 const MAX_QUEUED_BYTES: usize = 256 * 1024 * 1024;
@@ -229,8 +229,8 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
         OsrMessage::PaintBatch(batch) => batch_retained_bytes(batch),
         OsrMessage::FatalError(text)
         | OsrMessage::GuestHidden(text)
-        | OsrMessage::Cursor(text)
         | OsrMessage::TooltipChanged(text) => text.capacity(),
+        OsrMessage::Cursor(PageCursorMessage::Custom(image)) => image.rgba.capacity(),
         OsrMessage::BridgeRequest(frame) => {
             frame.line.capacity() + frame.body.as_ref().map_or(0, Vec::capacity)
         }

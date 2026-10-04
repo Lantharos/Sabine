@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use winit::{cursor::CursorIcon, event_loop::ActiveEventLoop};
+use winit::event_loop::ActiveEventLoop;
 
 use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID};
 
@@ -147,7 +147,7 @@ impl OsrNativeHost {
                     self.page_drag_exclusion_regions = exclusion;
                 }
                 OsrHostEvent::Message(_, OsrMessage::Cursor(cursor)) => {
-                    self.set_content_cursor(cursor_for_cef(&cursor));
+                    self.set_page_cursor(event_loop, cursor);
                 }
                 OsrHostEvent::Message(_, OsrMessage::CloseRequested) => {
                     if self.config.hide_on_close {
@@ -430,23 +430,4 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true),
     })
-}
-
-fn cursor_for_cef(cursor: &str) -> CursorIcon {
-    match cursor {
-        "pointer" | "hand" => CursorIcon::Pointer,
-        "text" | "vertical-text" => CursorIcon::Text,
-        "crosshair" => CursorIcon::Crosshair,
-        "move" => CursorIcon::Move,
-        "wait" => CursorIcon::Wait,
-        "help" => CursorIcon::Help,
-        "not-allowed" => CursorIcon::NotAllowed,
-        "col-resize" | "ew-resize" => CursorIcon::EwResize,
-        "row-resize" | "ns-resize" => CursorIcon::NsResize,
-        "ne-resize" => CursorIcon::NeResize,
-        "nw-resize" => CursorIcon::NwResize,
-        "se-resize" => CursorIcon::SeResize,
-        "sw-resize" => CursorIcon::SwResize,
-        _ => CursorIcon::Default,
-    }
 }

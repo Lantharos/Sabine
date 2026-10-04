@@ -80,7 +80,6 @@ uint32_t SharedBatchKind(PaintSurface surface);
 int KeyCodeForName(const std::string& key);
 std::u16string Utf8ToUtf16(const std::string& value);
 cef_mouse_button_type_t MouseButtonFromString(const std::string& value);
-std::string CursorName(cef_cursor_type_t type);
 
 }  // namespace sabine_osr
 

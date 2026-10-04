@@ -28,9 +28,19 @@ bool SabineOsrHandler::OnCursorChange(CefRefPtr<CefBrowser> browser,
                                       CefCursorHandle cursor,
                                       cef_cursor_type_t type,
                                       const CefCursorInfo& custom_cursor_info) {
-  const std::string name = CursorName(type);
-  SendMessage(kCursor, 0, 0, 0, 0, name.data(),
-              static_cast<uint32_t>(name.size()));
+  std::vector<char> payload(4);
+  PutU32(&payload, 0, static_cast<uint32_t>(type));
+  const CefSize& size = custom_cursor_info.size;
+  const bool image = type == CT_CUSTOM && custom_cursor_info.buffer &&
+                     size.width > 0 && size.height > 0;
+  if (image) {
+    const char* pixels = static_cast<const char*>(custom_cursor_info.buffer);
+    payload.insert(payload.end(), pixels,
+                   pixels + static_cast<size_t>(size.width) * size.height * 4);
+  }
+  SendMessage(kCursor, image ? size.width : 0, image ? size.height : 0,
+              custom_cursor_info.hotspot.x, custom_cursor_info.hotspot.y,
+              payload.data(), static_cast<uint32_t>(payload.size()));
   return true;
 }
 

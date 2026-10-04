@@ -505,40 +505,4 @@ uint32_t SharedBatchKind(PaintSurface surface) {
   return kMainSharedBatch;
 }
 
-std::string CursorName(cef_cursor_type_t type) {
-  switch (type) {
-    case CT_HAND:
-      return "pointer";
-    case CT_IBEAM:
-      return "text";
-    case CT_CROSS:
-      return "crosshair";
-    case CT_MOVE:
-      return "move";
-    case CT_WAIT:
-      return "wait";
-    case CT_HELP:
-      return "help";
-    case CT_NOTALLOWED:
-    case CT_NODROP:
-      return "not-allowed";
-    case CT_EASTWESTRESIZE:
-    case CT_COLUMNRESIZE:
-      return "ew-resize";
-    case CT_NORTHSOUTHRESIZE:
-    case CT_ROWRESIZE:
-      return "ns-resize";
-    case CT_NORTHEASTRESIZE:
-      return "ne-resize";
-    case CT_NORTHWESTRESIZE:
-      return "nw-resize";
-    case CT_SOUTHEASTRESIZE:
-      return "se-resize";
-    case CT_SOUTHWESTRESIZE:
-      return "sw-resize";
-    default:
-      return "default";
-  }
-}
-
 }  // namespace sabine_osr

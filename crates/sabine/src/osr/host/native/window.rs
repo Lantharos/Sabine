@@ -5,7 +5,6 @@ use winit::platform::wayland::WindowAttributesWayland;
 #[cfg(target_os = "windows")]
 use winit::platform::windows::WindowAttributesWindows;
 use winit::{
-    cursor::CursorIcon,
     dpi::LogicalSize,
     event_loop::ActiveEventLoop,
     window::{Window as WinitWindow, WindowAttributes, WindowLevel},
@@ -166,8 +165,7 @@ impl OsrNativeHost {
         self.presented = false;
         self.hovered_control = None;
         self.pressed_control = None;
-        self.cursor = CursorIcon::Default;
-        self.native_cursor_override = false;
+        self.cursor.forget_window();
         self.forward_ime(winit::event::Ime::Disabled);
     }
 
