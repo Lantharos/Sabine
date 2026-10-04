@@ -8,9 +8,10 @@ mod wayland_client;
 mod window_options;
 
 pub use desktop_integration::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation, GlobalShortcutRegistration,
-    NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers, SingleInstanceActivation,
-    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
+    AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation, GlobalShortcutFailure,
+    GlobalShortcutRegistration, NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers,
+    SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
+    TrayMenuItemKind,
 };
 pub use effect::WindowEffect;
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};

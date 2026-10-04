@@ -1,10 +1,17 @@
 use std::path::PathBuf;
 
+/// A status icon in the system tray or menu bar. `title` names the icon for
+/// assistive technology and desktops that list tray items; it is not drawn
+/// beside the icon.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrayIcon {
     pub id: String,
     pub title: String,
     pub icon_path: Option<PathBuf>,
+    /// Draw the icon as a macOS template image, which the menu bar tints to
+    /// match its appearance. Black-and-white icons are drawn as templates
+    /// automatically.
+    pub template: bool,
     pub tooltip: Option<String>,
     pub menu: Vec<TrayMenuItem>,
 }
@@ -15,9 +22,30 @@ impl TrayIcon {
             id: id.into(),
             title: title.into(),
             icon_path: None,
+            template: false,
             tooltip: None,
             menu: Vec::new(),
         }
+    }
+
+    pub fn icon(mut self, path: impl Into<PathBuf>) -> Self {
+        self.icon_path = Some(path.into());
+        self
+    }
+
+    pub fn template(mut self, template: bool) -> Self {
+        self.template = template;
+        self
+    }
+
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    pub fn menu(mut self, menu: Vec<TrayMenuItem>) -> Self {
+        self.menu = menu;
+        self
     }
 }
 
@@ -27,7 +55,62 @@ pub struct TrayMenuItem {
     pub label: String,
     pub action: Option<String>,
     pub enabled: bool,
-    pub separator: bool,
+    pub kind: TrayMenuItemKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TrayMenuItemKind {
+    Normal,
+    Separator,
+    Checkbox { checked: bool },
+    Submenu(Vec<TrayMenuItem>),
+}
+
+impl TrayMenuItem {
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            action: None,
+            enabled: true,
+            kind: TrayMenuItemKind::Normal,
+        }
+    }
+
+    pub fn separator() -> Self {
+        Self {
+            kind: TrayMenuItemKind::Separator,
+            ..Self::new("", "")
+        }
+    }
+
+    pub fn checkbox(id: impl Into<String>, label: impl Into<String>, checked: bool) -> Self {
+        Self {
+            kind: TrayMenuItemKind::Checkbox { checked },
+            ..Self::new(id, label)
+        }
+    }
+
+    pub fn submenu(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        items: Vec<TrayMenuItem>,
+    ) -> Self {
+        Self {
+            kind: TrayMenuItemKind::Submenu(items),
+            ..Self::new(id, label)
+        }
+    }
+
+    pub fn action(mut self, action: impl Into<String>) -> Self {
+        self.action = Some(action.into());
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,11 +215,14 @@ pub enum SingleInstancePolicy {
     FocusExisting,
 }
 
+/// A click on the tray icon, or on one of its menu items. `checked` carries a
+/// checkbox item's new state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrayActivation {
     pub tray_id: String,
     pub item_id: Option<String>,
     pub action: Option<String>,
+    pub checked: Option<bool>,
 }
 
 impl TrayActivation {
@@ -145,6 +231,7 @@ impl TrayActivation {
             tray_id: tray_id.into(),
             item_id: None,
             action: None,
+            checked: None,
         }
     }
 
@@ -152,11 +239,13 @@ impl TrayActivation {
         tray_id: impl Into<String>,
         item_id: impl Into<String>,
         action: Option<String>,
+        checked: Option<bool>,
     ) -> Self {
         Self {
             tray_id: tray_id.into(),
             item_id: Some(item_id.into()),
             action,
+            checked,
         }
     }
 }
@@ -181,6 +270,15 @@ impl GlobalShortcutActivation {
         self.activation_token = Some(token.into());
         self
     }
+}
+
+/// A global shortcut the desktop did not register, such as one another app
+/// already holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GlobalShortcutFailure {
+    pub id: String,
+    pub action: String,
+    pub message: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,5 +315,6 @@ pub enum PlatformEvent {
     OpenUrls(Vec<String>),
     Tray(TrayActivation),
     GlobalShortcut(GlobalShortcutActivation),
+    GlobalShortcutFailed(GlobalShortcutFailure),
     SingleInstance(SingleInstanceActivation),
 }

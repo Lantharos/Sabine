@@ -117,9 +117,9 @@ impl SabineProcess {
 
     /// Block until every OSR window has exited, then tear down the bridge.
     pub fn wait(mut self) -> std::io::Result<ExitStatus> {
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        #[cfg(target_os = "macos")]
         super::desktop_wait::wait(&mut self)?;
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        #[cfg(not(target_os = "macos"))]
         while !self.collect_exited_windows()? {
             crossbeam_channel::select! {
                 recv(self.child_exit_receiver) -> exited => {
@@ -182,6 +182,13 @@ impl SabineProcess {
                 let _ = response.send(result);
             }
         }
+    }
+
+    /// The app's tray icon, to change while it runs.
+    pub fn tray(&self) -> Option<crate::TrayHandle> {
+        self.desktop_services
+            .as_ref()
+            .and_then(DesktopServiceState::tray)
     }
 
     pub fn take_desktop_events(&self) -> Vec<PlatformEvent> {

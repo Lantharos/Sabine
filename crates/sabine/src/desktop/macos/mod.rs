@@ -1,199 +1,90 @@
-//! macOS desktop integrations: tray, global shortcuts, LaunchAgent
-//! autostart, URL-scheme deep links, native-messaging manifests, and
-//! single-instance routing via a Unix lock + socket.
+mod app_delegate;
+mod launch_agent;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    thread::{self, JoinHandle},
-};
+use std::{collections::BTreeSet, env, path::PathBuf};
 
-use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState, hotkey::HotKey};
-use sabine_platform::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation, GlobalShortcutRegistration,
-    NativeMessagingHost, PlatformEvent, SingleInstancePolicy, TrayActivation, TrayIcon,
-};
-use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent, menu::MenuEvent};
+use dispatch2::DispatchQueue;
+use objc2::runtime::AnyObject;
+use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, ns_string};
+use sabine_platform::{DeepLinkRegistration, NativeMessagingHost};
 
-pub(super) type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
-pub(super) type MenuActions = HashMap<String, (String, String, Option<String>)>;
-pub(super) type ShortcutActions = HashMap<u32, (String, String)>;
+pub(super) use super::hotkeys::GlobalShortcuts;
+pub(super) use super::unix_instance::SingleInstanceGuard;
+pub(super) use app_delegate::AppEvents;
+pub(super) use launch_agent::write_autostart_entry;
 
-mod helpers;
-mod instance;
-mod open_urls;
-use helpers::*;
-use instance::SingleInstanceGuard;
+/// AppKit's main thread. The tray icon, hotkeys and app delegate live there
+/// and start once the main thread runs its event loop.
+pub(super) struct UiThread;
 
-pub struct DesktopServiceState {
-    _event_sender: EventQueue,
-    event_receiver: crossbeam_channel::Receiver<PlatformEvent>,
-    _tray: Option<TrayRuntime>,
-    _hotkeys: Option<HotkeyRuntime>,
-    open_url_events: Option<open_urls::OpenUrlEvents>,
-    pending_tray: Option<TrayIcon>,
-    pending_shortcuts: Vec<GlobalShortcutRegistration>,
-    _single_instance: Option<SingleInstanceGuard>,
-    menu_actions: Arc<Mutex<MenuActions>>,
-    shortcut_actions: Arc<Mutex<ShortcutActions>>,
-    tray_id: Option<String>,
-}
+#[derive(Clone)]
+pub(super) struct UiQueue;
 
-impl std::fmt::Debug for DesktopServiceState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DesktopServiceState")
-            .field("queued_events", &self.event_receiver.len())
-            .finish()
+impl UiThread {
+    pub(super) fn start() -> Result<Self, String> {
+        Ok(Self)
+    }
+
+    pub(super) fn queue(&self) -> UiQueue {
+        UiQueue
     }
 }
 
-impl DesktopServiceState {
-    pub(crate) fn start_url_events(&mut self) -> Result<(), String> {
-        if self.open_url_events.is_none() {
-            self.open_url_events = Some(open_urls::OpenUrlEvents::install(
-                self._event_sender.clone(),
-            )?);
-        }
-        Ok(())
-    }
-
-    pub(crate) fn start_native_events(&mut self) -> Result<(), String> {
-        if let Some(icon) = self.pending_tray.take() {
-            let (tray, actions) = spawn_tray_icon(&icon)?;
-            *self
-                .menu_actions
-                .lock()
-                .map_err(|error| error.to_string())? = actions;
-            self._tray = Some(tray);
-        }
-        let shortcuts = std::mem::take(&mut self.pending_shortcuts);
-        if !shortcuts.is_empty() {
-            let (hotkeys, actions) = spawn_global_shortcuts(&shortcuts)?;
-            *self
-                .shortcut_actions
-                .lock()
-                .map_err(|error| error.to_string())? = actions;
-            self._hotkeys = Some(hotkeys);
-        }
-        Ok(())
-    }
-
-    pub fn take_events(&self) -> Vec<PlatformEvent> {
-        self.event_receiver.try_iter().collect()
+impl UiQueue {
+    pub(super) fn run(&self, task: impl FnOnce() + Send + 'static) {
+        DispatchQueue::main().exec_async(task);
     }
 }
 
-pub fn apply_desktop_services(
-    tray_icon: Option<&TrayIcon>,
-    autostart: &[AutostartEntry],
-    global_shortcuts: &[GlobalShortcutRegistration],
-    deep_links: &[DeepLinkRegistration],
-    native_messaging_hosts: &[NativeMessagingHost],
-    single_instance_id: Option<&str>,
-    single_instance_policy: Option<SingleInstancePolicy>,
-) -> Result<DesktopServiceState, String> {
-    let (event_sender, event_receiver) = crossbeam_channel::unbounded();
-    let mut state = DesktopServiceState {
-        _event_sender: event_sender.clone(),
-        event_receiver,
-        _tray: None,
-        _hotkeys: None,
-        open_url_events: None,
-        pending_tray: tray_icon.cloned(),
-        pending_shortcuts: global_shortcuts.to_vec(),
-        _single_instance: None,
-        menu_actions: Arc::new(Mutex::new(HashMap::new())),
-        shortcut_actions: Arc::new(Mutex::new(HashMap::new())),
-        tray_id: tray_icon.map(|icon| icon.id.clone()),
-    };
+pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> Result<(), String> {
+    super::native_messaging::write_manifests(host)
+        .map(drop)
+        .map_err(|error| error.to_string())
+}
 
-    if let Some(policy) = single_instance_policy
-        && policy != SingleInstancePolicy::AllowMultiple
+/// macOS routes URL schemes through the bundle's Info.plist, so this checks
+/// that the bundle declares every scheme instead of registering anything.
+pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> Result<(), String> {
+    registration.validate()?;
+    if registration.schemes.is_empty() {
+        return Ok(());
+    }
+    let declared = declared_url_schemes();
+    match registration
+        .schemes
+        .iter()
+        .find(|scheme| !declared.contains(&scheme.to_ascii_lowercase()))
     {
-        state._single_instance = Some(SingleInstanceGuard::acquire(
-            single_instance_id,
-            policy,
-            event_sender.clone(),
-        )?);
+        Some(scheme) => Err(format!(
+            "URL scheme {scheme} is missing from the application bundle; add x-scheme-handler/{scheme} to app.mime_types in Sabine.toml and rebuild the macOS bundle"
+        )),
+        None => Ok(()),
     }
-
-    for entry in autostart {
-        write_autostart_entry(entry)?;
-    }
-    for registration in deep_links {
-        register_deep_links(registration)?;
-    }
-    for host in native_messaging_hosts {
-        super::native_messaging::write_manifests(host).map_err(|error| error.to_string())?;
-    }
-
-    Ok(state)
 }
 
-pub fn start_desktop_event_forwarder<F>(
-    state: &DesktopServiceState,
-    stop: crossbeam_channel::Receiver<()>,
-    mut forwarder: F,
-) -> JoinHandle<()>
-where
-    F: FnMut(PlatformEvent) + Send + 'static,
-{
-    let events = state.event_receiver.clone();
-    let menu_actions = Arc::clone(&state.menu_actions);
-    let shortcut_actions = Arc::clone(&state.shortcut_actions);
-    let tray_id = state.tray_id.clone();
-    thread::spawn(move || {
-        loop {
-            crossbeam_channel::select! {
-                recv(stop) -> _ => break,
-                recv(events) -> event => match event {
-                    Ok(event) => forwarder(event),
-                    Err(_) => break,
-                },
-                recv(TrayIconEvent::receiver()) -> event => {
-                    if let Ok(TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    }) = event
-                        && let Some(tray_id) = &tray_id
-                    {
-                        forwarder(PlatformEvent::Tray(TrayActivation::new(tray_id.clone())));
-                    }
-                },
-                recv(MenuEvent::receiver()) -> event => {
-                    if let Ok(event) = event
-                        && let Ok(actions) = menu_actions.lock()
-                        && let Some((tray_id, item_id, action)) = actions.get(&event.id.0)
-                    {
-                        forwarder(PlatformEvent::Tray(TrayActivation::item(
-                            tray_id.clone(),
-                            item_id.clone(),
-                            action.clone(),
-                        )));
-                    }
-                },
-                recv(GlobalHotKeyEvent::receiver()) -> event => {
-                    if let Ok(event) = event
-                        && event.state == HotKeyState::Pressed
-                        && let Ok(actions) = shortcut_actions.lock()
-                        && let Some((id, action)) = actions.get(&event.id())
-                    {
-                        forwarder(PlatformEvent::GlobalShortcut(
-                            GlobalShortcutActivation::new(id.clone(), action.clone()),
-                        ));
-                    }
-                },
-            }
-        }
-    })
+fn declared_url_schemes() -> BTreeSet<String> {
+    let Some(types) = NSBundle::mainBundle()
+        .objectForInfoDictionaryKey(ns_string!("CFBundleURLTypes"))
+        .and_then(|types| types.downcast::<NSArray<AnyObject>>().ok())
+    else {
+        return BTreeSet::new();
+    };
+    types
+        .iter()
+        .filter_map(|entry| entry.downcast::<NSDictionary>().ok())
+        .filter_map(|entry| {
+            entry
+                .objectForKey(ns_string!("CFBundleURLSchemes"))
+                .and_then(|schemes| schemes.downcast::<NSArray<AnyObject>>().ok())
+        })
+        .flat_map(|schemes| schemes.iter().collect::<Vec<_>>())
+        .filter_map(|scheme| scheme.downcast::<NSString>().ok())
+        .map(|scheme| scheme.to_string().to_ascii_lowercase())
+        .collect()
 }
 
-pub(super) struct TrayRuntime {
-    _icon: tray_icon::TrayIcon,
-}
-
-pub(super) struct HotkeyRuntime {
-    _manager: GlobalHotKeyManager,
-    _keys: Vec<HotKey>,
+pub(super) fn home_dir() -> Result<PathBuf, String> {
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "HOME is required for macOS desktop integration".to_string())
 }

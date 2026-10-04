@@ -11,6 +11,7 @@ mod osr;
 mod render;
 mod window;
 
+pub use desktop::TrayHandle;
 pub use error::{SabineError, SabineResult};
 pub use host::{SabineProcess, SabineProcessHandle, WindowId};
 pub use window::{
@@ -41,9 +42,10 @@ pub use sabine_bridge::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
 pub use sabine_platform::{
-    AutostartEntry, GlobalShortcutRegistration, NativeMessagingHost, PlatformEvent, Shortcut,
-    ShortcutModifiers, SingleInstancePolicy, TrayIcon, TrayMenuItem, WindowBackgroundEffect,
-    WindowRegion, WindowRegionRect, WindowRegions,
+    AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration, NativeMessagingHost,
+    PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy, TrayActivation, TrayIcon,
+    TrayMenuItem, TrayMenuItemKind, WindowBackgroundEffect, WindowRegion, WindowRegionRect,
+    WindowRegions,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 

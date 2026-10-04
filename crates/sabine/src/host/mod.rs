@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "macos")]
 mod desktop_wait;
 mod process;
 mod process_tree;
