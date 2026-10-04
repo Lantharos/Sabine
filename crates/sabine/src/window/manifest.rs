@@ -148,10 +148,12 @@ fn framework_manifest_path() -> Option<PathBuf> {
         }
     }
 
-    env::current_dir()
-        .ok()
+    let cargo_package = env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from);
+    [env::current_dir().ok(), cargo_package]
+        .into_iter()
+        .flatten()
         .map(|directory| directory.join("Sabine.toml"))
-        .filter(|path| path.is_file())
+        .find(|path| path.is_file())
 }
 
 fn nonempty_env(name: &str) -> Option<String> {

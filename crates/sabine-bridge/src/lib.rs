@@ -9,32 +9,24 @@
 //! - `sabine` — drives the C++ CEF OSR host and re-exports these types.
 //! - Apps depend on `sabine` (which re-exports the bridge surface).
 
-mod activity;
 mod bridge;
-pub mod clipboard;
+mod commands;
 mod guest;
-mod guest_create;
-mod guest_download;
-mod guest_host_control;
-pub mod media;
-mod metrics;
 
-pub use activity::{
-    ActivityEventEmitter, ActivityHostUpdate, ActivityOptions, ActivityRecord, ActivityRegistry,
-    INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND, SabineActivityLease,
-    bridge_commands_with_all_internal, host_update_json,
-};
 pub use bridge::{
-    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeHandlers, BridgeRegistry,
-    BridgeResponse, BridgeResult, BridgeRuntime, ContentSecurity,
+    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeFuture, BridgeHandlers,
+    BridgeOutcome, BridgeRegistry, BridgeResponse, BridgeResult, BridgeRuntime, ContentSecurity,
+};
+pub use commands::activity::{
+    ActivityEventEmitter, ActivityHostUpdate, ActivityOptions, ActivityRecord, ActivityRegistry,
+    SabineActivityLease, host_update_json,
+};
+pub use commands::{
+    INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND, clipboard, media, page_commands,
 };
 pub use guest::{
-    GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestDownloadEvent, GuestDownloadState,
-    GuestHostControl, GuestInfo, GuestPopupPolicy,
-};
-pub use metrics::{
-    LaunchMetrics, SABINE_TRACE_ENV, SabineLaunchMetric, SabineLaunchMetricsSnapshot,
+    GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
 
 /// The `window.sabine` page API injected into every Sabine page by the native host.
-pub const INSTALL_SCRIPT: &str = include_str!("web_bridge.js");
+pub const INSTALL_SCRIPT: &str = include_str!("scripts/web_bridge.js");

@@ -165,18 +165,14 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "setZoom") {
-    const double factor = JsonDoubleValue(
-        payload, "zoomFactor", JsonDoubleValue(payload, "factor", 1.0));
+    const double factor = JsonDoubleValue(payload, "factor", 1.0);
     guest->zoom = factor;
     browser->GetHost()->SetZoomLevel(GuestZoomLevel(factor));
     *response = GuestInfoJson(*guest);
     return true;
   }
   if (operation == "executeJavaScript") {
-    std::string code = JsonStringValue(payload, "code");
-    if (code.empty()) {
-      code = JsonStringValue(payload, "script");
-    }
+    const std::string code = JsonStringValue(payload, "code");
     if (code.empty()) {
       *error = "guest.executeJavaScript requires `code`";
       return false;

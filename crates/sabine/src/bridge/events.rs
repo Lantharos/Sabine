@@ -4,8 +4,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use sabine_bridge::BridgeHandlers;
-use sabine_platform::PlatformEvent;
+use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
@@ -36,7 +35,7 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
         PlatformEvent::SingleInstance(activation) => (
             "singleInstance.activate",
             serde_json::json!({
-                "policy": format!("{:?}", activation.policy),
+                "policy": single_instance_policy_name(activation.policy),
                 "arguments": activation.arguments,
                 "workingDirectory": activation.working_directory,
                 "activationToken": activation.activation_token,
@@ -45,7 +44,15 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
     }
 }
 
-pub(crate) fn prepare_bridge_command(command: &mut Command, _bridge_handlers: &BridgeHandlers) {
+fn single_instance_policy_name(policy: SingleInstancePolicy) -> &'static str {
+    match policy {
+        SingleInstancePolicy::AllowMultiple => "allowMultiple",
+        SingleInstancePolicy::ReuseExisting => "reuseExisting",
+        SingleInstancePolicy::FocusExisting => "focusExisting",
+    }
+}
+
+pub(crate) fn prepare_bridge_command(command: &mut Command) {
     command.stdin(Stdio::piped());
     command.stdout(Stdio::piped());
 }

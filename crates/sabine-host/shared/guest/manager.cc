@@ -57,16 +57,16 @@ std::string CurrentUrl(const GuestView& guest) {
 
 GuestPopupPolicy ParseGuestPopupPolicy(const std::string& value,
                                        GuestPopupPolicy fallback) {
-  if (value == "deny" || value == "block") {
+  if (value == "deny") {
     return GuestPopupPolicy::kDeny;
   }
   if (value == "allow") {
     return GuestPopupPolicy::kAllow;
   }
-  if (value == "navigateSame" || value == "navigate_same" || value == "same") {
+  if (value == "navigateSame") {
     return GuestPopupPolicy::kNavigateSame;
   }
-  if (value == "openGuest" || value == "open_guest" || value == "guest") {
+  if (value == "openGuest") {
     return GuestPopupPolicy::kOpenGuest;
   }
   return fallback;
@@ -189,8 +189,7 @@ std::string GuestPayloadPrefix(const std::string& id) {
 }
 
 CefRect ParseGuestBounds(const std::string& payload, const CefRect& fallback) {
-  const std::string nested = JsonObjectValue(payload, "bounds");
-  const std::string& source = nested.empty() ? payload : nested;
+  const std::string source = JsonObjectValue(payload, "bounds");
   CefRect bounds;
   bounds.x = JsonIntValue(source, "x", fallback.x);
   bounds.y = JsonIntValue(source, "y", fallback.y);
@@ -221,31 +220,16 @@ bool ParseGuestCreateRequest(const std::string& payload,
   request->html = url.empty() ? html : "";
   request->bounds = ParseGuestBounds(payload, CefRect(0, 0, 1, 1));
   request->partition = JsonStringValue(payload, "partition");
-  request->allow_bridge = JsonBoolValue(
-      payload, "allowBridge", JsonBoolValue(payload, "allow_bridge", false));
-  request->allow_downloads =
-      JsonBoolValue(payload, "allowDownloads",
-                    JsonBoolValue(payload, "allow_downloads", true));
+  request->allow_bridge = JsonBoolValue(payload, "allowBridge", false);
+  request->allow_downloads = JsonBoolValue(payload, "allowDownloads", true);
   request->intercepted_shortcuts =
       JsonStringArrayValue(payload, "interceptedShortcuts");
-  if (request->intercepted_shortcuts.empty()) {
-    request->intercepted_shortcuts =
-        JsonStringArrayValue(payload, "intercepted_shortcuts");
-  }
-  request->intercept_horizontal_wheel = JsonBoolValue(
-      payload, "interceptHorizontalWheel",
-      JsonBoolValue(payload, "intercept_horizontal_wheel", false));
+  request->intercept_horizontal_wheel =
+      JsonBoolValue(payload, "interceptHorizontalWheel", false);
   request->visible = JsonBoolValue(payload, "visible", true);
-  std::string policy = JsonStringValue(payload, "popupPolicy");
-  if (policy.empty()) {
-    policy = JsonStringValue(payload, "popup_policy");
-  }
-  request->popup_policy =
-      ParseGuestPopupPolicy(policy, GuestPopupPolicy::kDeny);
+  request->popup_policy = ParseGuestPopupPolicy(
+      JsonStringValue(payload, "popupPolicy"), GuestPopupPolicy::kDeny);
   request->background_color = JsonStringValue(payload, "backgroundColor");
-  if (request->background_color.empty()) {
-    request->background_color = JsonStringValue(payload, "background_color");
-  }
   return true;
 }
 
@@ -260,10 +244,7 @@ std::string GuestInfoJson(const GuestView& guest) {
          << JsonEscape(guest.title) << "\",\"bounds\":{\"x\":" << guest.bounds.x
          << ",\"y\":" << guest.bounds.y << ",\"width\":" << guest.bounds.width
          << ",\"height\":" << guest.bounds.height
-         << "},\"x\":" << guest.bounds.x << ",\"y\":" << guest.bounds.y
-         << ",\"width\":" << guest.bounds.width
-         << ",\"height\":" << guest.bounds.height
-         << ",\"visible\":" << BoolLiteral(guest.visible)
+         << "},\"visible\":" << BoolLiteral(guest.visible)
          << ",\"loading\":" << BoolLiteral(loading)
          << ",\"canGoBack\":" << BoolLiteral(can_go_back)
          << ",\"canGoForward\":" << BoolLiteral(can_go_forward)

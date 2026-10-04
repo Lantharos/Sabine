@@ -4,13 +4,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sabine_bridge::{BridgeError, LaunchMetrics};
 use sabine_runtime::{RuntimeInfo, resolve_runtime};
 
 use super::{SabineWindow, SabineWindowConfig};
 use crate::desktop::apply_desktop_services;
 use crate::error::{SabineError, SabineResult};
 use crate::host::SabineProcess;
+use crate::launch::metrics::LaunchMetrics;
 use crate::launch::{
     allow_dev_origins, allow_url_origin, bootstrap, dev_server_candidates, local_entry,
     metrics_label,
@@ -36,7 +36,6 @@ impl SabineWindow {
     pub(crate) fn into_open_window_parts(mut self) -> SabineResult<(SabineWindowConfig, String)> {
         self.apply_launch_environment();
         self.config.validate()?;
-        self.ensure_default_bridge_handlers();
         self.allow_configured_url_origins();
         let url = self.entry_url()?;
         Ok((self.config, url))
@@ -66,7 +65,6 @@ impl SabineWindow {
             })?,
         );
         metrics.mark("desktop_services.ready");
-        self.ensure_default_bridge_handlers();
         let open_urls = self.config.open_urls.clone();
         open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),
@@ -81,14 +79,9 @@ impl SabineWindow {
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
         if self.config.dev_url.is_some() {
-            match self.wait_for_dev_server(&url) {
-                Ok(ready_url) => {
-                    url = ready_url;
-                    allow_dev_origins(&mut self.config.security, &url);
-                    metrics.mark("dev_server.ready");
-                }
-                Err(error) => return Err(error),
-            }
+            url = self.wait_for_dev_server(&url)?;
+            allow_dev_origins(&mut self.config.security, &url);
+            metrics.mark("dev_server.ready");
         }
         let mut process = osr::launch_process(
             runtime.location.path(),
@@ -107,9 +100,6 @@ impl SabineWindow {
         self.apply_dev_env_overrides();
         if self.config.dev_mode() {
             let environment = crate::AppEnvironment::Development;
-            if let Ok(id) = std::env::var("SABINE_APP_ID") {
-                self.config.app_id = Some(id);
-            }
             if let Some(id) = &mut self.config.app_id {
                 *id = environment.app_id(id);
             }
@@ -182,20 +172,6 @@ impl SabineWindow {
         Ok(local_entry(entry)?.url)
     }
 
-    fn ensure_default_bridge_handlers(&mut self) {
-        for command in self.config.bridge.commands() {
-            if self.bridge_handlers.contains(&command) {
-                continue;
-            }
-            let command_name = command.clone();
-            self.bridge_handlers.register(command, move |_| {
-                Err(BridgeError::new(format!(
-                    "Bridge command `{command_name}` has no Rust handler"
-                )))
-            });
-        }
-    }
-
     fn allow_configured_url_origins(&mut self) {
         if let Some(url) = self.config.url.clone() {
             allow_url_origin(&mut self.config.security, &url);
@@ -203,5 +179,42 @@ impl SabineWindow {
         if let Some(url) = self.config.dev_url.clone() {
             allow_dev_origins(&mut self.config.security, &url);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::window::SabineWindow;
+
+    fn allows(window: &SabineWindow, origin: &str) -> bool {
+        window
+            .config
+            .security
+            .allowed_origins
+            .iter()
+            .any(|allowed| allowed == origin)
+    }
+
+    #[test]
+    fn url_sets_production_url_and_bridge_origin() {
+        let window = SabineWindow::new().url("https://raday.lantharos.com/dashboard");
+
+        assert_eq!(
+            window.entry_url().unwrap(),
+            "https://raday.lantharos.com/dashboard"
+        );
+        assert!(window.config.security.remote_content);
+        assert!(allows(&window, "https://raday.lantharos.com"));
+    }
+
+    #[test]
+    fn dev_url_takes_precedence_over_production_url() {
+        let window = SabineWindow::new()
+            .url("https://raday.lantharos.com")
+            .dev_url("http://localhost:5173");
+
+        assert_eq!(window.entry_url().unwrap(), "http://localhost:5173");
+        assert!(allows(&window, "https://raday.lantharos.com"));
+        assert!(allows(&window, "http://localhost:5173"));
     }
 }

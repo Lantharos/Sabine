@@ -32,16 +32,15 @@ pub mod prelude {
 pub use bridge::BridgeEventEmitter;
 pub use window::SabineWindowControlRegion;
 
+pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
 pub use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
 pub use sabine_bridge::{
     BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeResponse, BridgeResult,
     ContentSecurity,
 };
 pub use sabine_bridge::{
-    GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestDownloadEvent, GuestDownloadState,
-    GuestHostControl, GuestInfo, GuestPopupPolicy,
+    GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
-pub use sabine_bridge::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
 pub use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
     PlatformEvent, Shortcut, ShortcutModifiers, SingleInstancePolicy, TrayIcon, TrayMenuItem,

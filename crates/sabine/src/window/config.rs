@@ -154,6 +154,18 @@ impl SabineWindowConfig {
     pub fn effective_remote_devtools_port(&self) -> Option<u16> {
         self.browser.effective_remote_devtools_port(self.dev_mode())
     }
+
+    /// Whether pages in this window can play video on native surfaces.
+    pub(crate) fn native_media(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            crate::media::supported(self)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            false
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,9 +200,6 @@ impl Default for SabineLifecyclePolicy {
 impl SabineLifecyclePolicy {
     pub fn browser_tab() -> Self {
         Self {
-            // Blur suspend fights Wayland interactive-move focus loss on the
-            // non-primary window and is not worth it for visible tabs.
-            suspend_on_blur: false,
             hibernate_after: Some(Duration::from_secs(300)),
             ..Self::default()
         }
@@ -252,10 +261,10 @@ pub enum SabineWindowChrome {
 }
 
 impl SabineWindowChrome {
-    pub fn parse(value: &str) -> Option<Self> {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
             "system" => Some(Self::System),
-            "sabine" | "custom" => Some(Self::Sabine),
+            "sabine" => Some(Self::Sabine),
             "frameless" => Some(Self::Frameless),
             "none" => Some(Self::None),
             _ => None,
@@ -284,7 +293,7 @@ pub enum SabineWindowControlAction {
 }
 
 impl SabineWindowControlAction {
-    pub fn parse(value: &str) -> Option<Self> {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
             "minimize" => Some(Self::Minimize),
             "maximize" => Some(Self::Maximize),
@@ -311,5 +320,20 @@ pub struct SabineWindowControlRegion {
 impl SabineWindowControlRegion {
     pub fn new(action: SabineWindowControlAction, rect: WindowRegionRect) -> Self {
         Self { action, rect }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::window::SabineWindow;
+
+    #[test]
+    fn rejects_ambiguous_content_sources() {
+        let window = SabineWindow::new()
+            .app_id("com.sabine.notes")
+            .entry("ui/index.html")
+            .url("https://example.com");
+
+        assert!(window.config.validate().is_err());
     }
 }

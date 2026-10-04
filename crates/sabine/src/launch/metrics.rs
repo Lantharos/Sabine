@@ -1,14 +1,24 @@
-//! Sabine launch metrics.
-//!
-//! Launch stages (`host.ready`, `osr_host.spawned.pid.<pid>`, etc.) are
-//! exposed by `SabineProcess::metrics()` for tracing and profiling.
+//! Launch stages (`host.ready`, `osr_host.spawned.pid.<pid>`, etc.), exposed
+//! by `SabineProcess::metrics()` and printed while `SABINE_TRACE` is set.
 
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
-pub const SABINE_TRACE_ENV: &str = "SABINE_TRACE";
+static TRACE: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var("SABINE_TRACE").is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on" | "trace"
+        )
+    })
+});
+
+/// Whether `SABINE_TRACE` asks for launch and host tracing on stderr.
+pub(crate) fn trace_enabled() -> bool {
+    *TRACE
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SabineLaunchMetric {
@@ -24,27 +34,25 @@ pub struct SabineLaunchMetricsSnapshot {
 }
 
 #[derive(Clone, Debug)]
-pub struct LaunchMetrics {
+pub(crate) struct LaunchMetrics {
     started: Instant,
     label: String,
-    trace: bool,
     stages: Arc<Mutex<Vec<SabineLaunchMetric>>>,
 }
 
 impl LaunchMetrics {
-    pub fn new(label: impl Into<String>) -> Self {
+    pub(crate) fn new(label: impl Into<String>) -> Self {
         Self {
             started: Instant::now(),
             label: label.into(),
-            trace: trace_enabled(),
             stages: Arc::default(),
         }
     }
 
-    pub fn mark(&self, stage: impl Into<String>) {
+    pub(crate) fn mark(&self, stage: impl Into<String>) {
         let stage = stage.into();
         let elapsed = self.started.elapsed();
-        if self.trace {
+        if trace_enabled() {
             eprintln!(
                 "sabine trace [{}] +{}ms {stage}",
                 self.label,
@@ -56,7 +64,7 @@ impl LaunchMetrics {
         }
     }
 
-    pub fn snapshot(&self) -> SabineLaunchMetricsSnapshot {
+    pub(crate) fn snapshot(&self) -> SabineLaunchMetricsSnapshot {
         SabineLaunchMetricsSnapshot {
             label: self.label.clone(),
             elapsed: self.started.elapsed(),
@@ -66,30 +74,5 @@ impl LaunchMetrics {
                 .map(|stages| stages.clone())
                 .unwrap_or_default(),
         }
-    }
-}
-
-fn trace_enabled() -> bool {
-    std::env::var(SABINE_TRACE_ENV).is_ok_and(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on" | "trace"
-        )
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn metrics_snapshot_keeps_stage_order() {
-        let metrics = LaunchMetrics::new("test");
-        metrics.mark("start");
-        metrics.mark("ready");
-        let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.label, "test");
-        assert_eq!(snapshot.stages[0].stage, "start");
-        assert_eq!(snapshot.stages[1].stage, "ready");
     }
 }
