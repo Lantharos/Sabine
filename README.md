@@ -2,7 +2,7 @@
 
 # Sabine
 
-Sabine is a framework for desktop apps with web UIs and native windows. Write the interface with your web stack and the native side in Rust. Apps on the same machine use a managed Chromium runtime instead of each shipping a browser. Sabine supports Linux, Windows, and Apple Silicon macOS.
+Sabine is a framework for desktop apps with web UIs and native windows. Write the interface with your web stack and the native side in Rust. Apps on the same machine use a managed Chromium runtime instead of each shipping a browser. Sabine supports Linux on Wayland, Windows, and Apple Silicon macOS.
 
 It provides windows, palettes, trays, guest views, and a typed Rust–web bridge.
 

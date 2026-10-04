@@ -79,21 +79,6 @@ impl ClipboardContent {
             .find(|(item, _)| item == wanted)
             .map(|(_, bytes)| Arc::clone(bytes))
     }
-
-    pub(crate) fn only(&self, types: Option<&[String]>) -> Self {
-        let offered = self
-            .items
-            .iter()
-            .map(|(mime, _)| mime.clone())
-            .collect::<Vec<_>>();
-        let mut content = Self::default();
-        for (source, reported) in read_plan(&offered, types) {
-            if let Some(bytes) = self.bytes_for(&source) {
-                content.push(reported, bytes);
-            }
-        }
-        content
-    }
 }
 
 /// Chooses which offered types to read and the type each is reported as:

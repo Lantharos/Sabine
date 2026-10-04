@@ -1,5 +1,8 @@
 # Unreleased
 
+- Sabine runs only on Wayland on Linux. X11 sessions are no longer supported: the X11 clipboard and
+  keyboard grab are gone, Chromium always uses its Wayland backend, and packages no longer depend
+  on `libxkbcommon-x11`.
 - Keep apps that only open from their URL schemes or documents out of launchers with
   `listed = false` under `[app]` in `Sabine.toml`. They stay installed and keep their handlers:
   Linux desktop entries are marked `NoDisplay`, Windows installs skip the Start menu shortcut, and

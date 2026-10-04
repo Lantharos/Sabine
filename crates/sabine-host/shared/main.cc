@@ -17,10 +17,6 @@
 #include "include/cef_version_info.h"
 #endif
 
-#if defined(CEF_X11)
-#include <X11/Xlib.h>
-#endif
-
 #include <cstdlib>
 #include <iostream>
 #include "sabine_host_protocol.h"
@@ -30,18 +26,6 @@
 #include "include/cef_app.h"
 #include "include/cef_command_line.h"
 #include "entry.h"
-
-#if defined(CEF_X11)
-namespace {
-int XErrorHandlerImpl(Display* display, XErrorEvent* event) {
-  return 0;
-}
-
-int XIOErrorHandlerImpl(Display* display) {
-  return 0;
-}
-}  // namespace
-#endif
 
 #if defined(OS_LINUX)
 NO_STACK_PROTECTOR
@@ -68,11 +52,6 @@ int RunSabineHost(CefMainArgs main_args,
   if (exit_code >= 0) {
     return exit_code;
   }
-
-#if defined(CEF_X11)
-  XSetErrorHandler(XErrorHandlerImpl);
-  XSetIOErrorHandler(XIOErrorHandlerImpl);
-#endif
 
   CefSettings settings;
   settings.windowless_rendering_enabled = true;

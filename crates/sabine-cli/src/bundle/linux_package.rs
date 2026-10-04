@@ -1,7 +1,7 @@
 use super::{config::BundleApp, stage::StagedBundle};
 use std::{fs, io::Read, path::Path, process::Command};
 
-const CEF_DEB_DEPENDENCIES: &str = "libgtk-3-0t64 | libgtk-3-0, libnss3, libnspr4, libasound2t64 | libasound2, libcups2t64 | libcups2, libxcomposite1, libxdamage1, libxrandr2, libgbm1, libxkbcommon0, libxkbcommon-x11-0, libudev1, libwayland-client0";
+const CEF_DEB_DEPENDENCIES: &str = "libgtk-3-0t64 | libgtk-3-0, libnss3, libnspr4, libasound2t64 | libasound2, libcups2t64 | libcups2, libxcomposite1, libxdamage1, libxrandr2, libgbm1, libxkbcommon0, libudev1, libwayland-client0";
 
 pub(super) fn architecture(binary: &Path) -> Result<(&'static str, &'static str), String> {
     let mut header = [0; 20];
@@ -93,7 +93,7 @@ Summary: {summary}
 License: {license}
 BuildArch: {architecture}
 %global source_date_epoch_from_changelog 0
-Requires: gtk3, nss, nspr, alsa-lib, cups-libs, libXcomposite, libXdamage, libXrandr, mesa-libgbm, libxkbcommon, libxkbcommon-x11, systemd-libs, wayland-libs
+Requires: gtk3, nss, nspr, alsa-lib, cups-libs, libXcomposite, libXdamage, libXrandr, mesa-libgbm, libxkbcommon, systemd-libs, wayland-libs
 
 %description
 {summary}

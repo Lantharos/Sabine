@@ -101,8 +101,6 @@ impl ApplicationHandler for OsrNativeHost {
                 self.sync_active_frame_rate();
                 let focused = focused && self.config.visible;
                 self.focused = focused;
-                #[cfg(target_os = "linux")]
-                self.sync_shortcut_inhibitor_focus();
                 self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });
                 if !focused && self.config.hide_on_blur && self.config.visible {
                     self.hide_window("blur");
