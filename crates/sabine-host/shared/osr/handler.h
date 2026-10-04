@@ -23,6 +23,7 @@
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
+#include "include/cef_keyboard_handler.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_render_handler.h"
 #include "include/cef_request_handler.h"
@@ -77,6 +78,9 @@ class SabineOsrHandler : public CefClient,
                          public CefDisplayHandler,
                          public CefDownloadHandler,
                          public CefDragHandler,
+#if defined(OS_MAC)
+                         public CefKeyboardHandler,
+#endif
                          public CefLifeSpanHandler,
                          public CefLoadHandler,
                          public CefPermissionHandler,
@@ -104,6 +108,12 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
+#if defined(OS_MAC)
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                  const CefKeyEvent& event,
+                  CefEventHandle os_event) override;
+#endif
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {

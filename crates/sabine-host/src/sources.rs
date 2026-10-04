@@ -89,6 +89,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ),
     ("osr/input/ime.h", include_str!("../shared/osr/input/ime.h")),
     (
+        "osr/input/edit_commands_mac.cc",
+        include_str!("../shared/osr/input/edit_commands_mac.cc"),
+    ),
+    (
         "osr/input/input.cc",
         include_str!("../shared/osr/input/input.cc"),
     ),

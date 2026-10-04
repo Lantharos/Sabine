@@ -91,6 +91,7 @@ if(OS_MAC)
     osr/accelerated/macos/iosurface_copy.mm
     osr/accelerated/macos/surface_broker.cc
     osr/accelerated/macos/surface_broker.h
+    osr/input/edit_commands_mac.cc
   )
 endif()
 
