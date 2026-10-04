@@ -59,7 +59,7 @@ binaries into a versioned directory. The active pointer changes atomically and t
 is retained as the rollback installation until the next successful upgrade. The old binary supervises a single-daemon
 handoff; failed startup restores the previous pointer and daemon, records the failed release, and
 applies an exponential retry delay. A damaged active installation is silently replaced from signed
-release metadata. The host is compiled against CEF Stable API 15401 and needs CEF 154 or newer, so the runtime
+release metadata. The host is compiled against CEF Stable API 15400 and needs CEF 154 or newer, so the runtime
 service can independently install newer compatible CEF builds. Apps negotiate Sabine behavior and capabilities
 and never request a Chromium version.
 
