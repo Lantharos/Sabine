@@ -17,8 +17,6 @@ use std::{ops::Range, sync::Arc};
 #[cfg(unix)]
 use self::wire::PaintLease;
 
-pub(crate) const MAIN_TEXTURE_ID: &str = "__sabine_main";
-pub(crate) const POPUP_TEXTURE_ID: &str = "__sabine_popup";
 pub(crate) const POPUP_OVERLAY_ID: &str = "__sabine_popup";
 
 #[derive(Clone, Debug)]
@@ -79,6 +77,12 @@ pub(crate) enum OsrMessage {
     },
     /// The drop the page under the pointer would accept.
     DragOperation(u32),
+    ContextMenu {
+        x: i32,
+        y: i32,
+        items: Vec<ContextMenuItem>,
+    },
+    ContextMenuDismissed,
     MainLoadStarted,
     MainLoadReady,
     FatalError(String),
@@ -114,6 +118,16 @@ pub(crate) struct CursorImage {
     pub height: u16,
     pub hotspot_x: u16,
     pub hotspot_y: u16,
+}
+
+/// One entry of a page's context menu, as Chromium offers it.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct ContextMenuItem {
+    pub id: i32,
+    pub label: String,
+    pub enabled: bool,
+    pub separator: bool,
 }
 
 /// Content dragged out of a page or dropped into one.

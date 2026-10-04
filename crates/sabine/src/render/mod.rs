@@ -11,7 +11,8 @@ pub(crate) use bgra::{BgraImage, BgraRect};
 #[cfg(windows)]
 pub(crate) use composition::Composition;
 pub use display_list::{
-    DisplayCommand, DisplayList, ImageCommand, RectCommand, RoundedRectCommand, TextCommand,
+    DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand, TextAlign,
+    TextCommand,
 };
 #[cfg(any(windows, target_os = "macos"))]
 pub(crate) use gpu::ExternalSlot;

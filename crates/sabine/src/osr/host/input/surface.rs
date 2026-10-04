@@ -35,6 +35,7 @@ impl OsrNativeHost {
     }
 
     fn apply_surface_geometry(&mut self, size: PhysicalSize<u32>, scale: f64) {
+        self.cancel_context_menu();
         self.surface_size = size;
         self.scale_factor = scale;
         self.effect_regions_dirty = true;
@@ -55,6 +56,9 @@ impl OsrNativeHost {
         self.sync_active_frame_rate();
         let focused = focused && self.config.visible;
         self.focused = focused;
+        if !focused {
+            self.cancel_context_menu();
+        }
         self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });
         if !focused && self.config.hide_on_blur && self.config.visible {
             self.hide_window("blur");

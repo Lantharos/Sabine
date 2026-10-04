@@ -5,10 +5,10 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::render::rect_pipeline::{
-    CUTOUT_BLENDING, Globals, RectVertex, create_image_pipeline, create_rounded_rect_pipeline,
-    push_rect_command, push_rounded_rect_command, to_wgpu_color,
+    CUTOUT_BLENDING, Globals, ImageVertex, RectVertex, create_image_pipeline,
+    create_rounded_rect_pipeline, push_rect_command, push_rounded_rect_command, to_wgpu_color,
 };
-use crate::render::{DisplayCommand, DisplayList};
+use crate::render::{DisplayCommand, DisplayList, ImageId};
 
 #[cfg(any(windows, target_os = "macos"))]
 mod external;
@@ -65,12 +65,13 @@ pub struct GpuRenderer {
     globals_bind_group: wgpu::BindGroup,
     rect_vertex_buffer: DynamicVertexBuffer,
     image_vertex_buffer: DynamicVertexBuffer,
+    frame: FrameGeometry,
     text: Option<TextRendererState>,
-    texture_cache: HashMap<String, CachedTexture>,
+    texture_cache: HashMap<ImageId, CachedTexture>,
     #[cfg(any(windows, target_os = "macos"))]
-    external_texture_releases: HashMap<String, Box<dyn FnOnce() + Send + 'static>>,
+    external_texture_releases: HashMap<ImageId, Box<dyn FnOnce() + Send + 'static>>,
     #[cfg(any(windows, target_os = "macos"))]
-    external_imports: HashMap<String, Vec<external::ImportedTexture>>,
+    external_imports: HashMap<ImageId, Vec<external::ImportedTexture>>,
     #[cfg(any(windows, target_os = "macos"))]
     submission_poller: retirement::SubmissionPoller,
     #[cfg(windows)]
@@ -247,6 +248,7 @@ impl GpuRenderer {
             globals_bind_group,
             rect_vertex_buffer: DynamicVertexBuffer::default(),
             image_vertex_buffer: DynamicVertexBuffer::default(),
+            frame: FrameGeometry::default(),
             text: None,
             texture_cache: HashMap::new(),
             #[cfg(any(windows, target_os = "macos"))]
@@ -279,6 +281,15 @@ impl GpuRenderer {
         self.health.failure()
     }
 
+    /// The width `text` takes on one line at `size` logical pixels.
+    pub(crate) fn measure_text(&mut self, text: &str, size: f32) -> f32 {
+        self.text
+            .get_or_insert_with(|| {
+                TextRendererState::new(&self.device, &self.queue, self.surface_config.format)
+            })
+            .measure(text, size)
+    }
+
     fn check_device(&self) -> Result<(), RendererError> {
         self.device_loss()
             .map_or(Ok(()), |message| Err(RendererError::DeviceLost(message)))
@@ -297,8 +308,20 @@ impl GpuRenderer {
                 _padding: [0.0, 0.0],
             }]),
         );
-        let (rect_vertices, rect_batches) = self.rect_vertices(display_list);
-        if rect_batches.iter().any(|batch| batch.cutout) && self.cutout_pipeline.is_none() {
+        let mut frame = std::mem::take(&mut self.frame);
+        let result = self.render_frame(display_list, &mut frame);
+        self.frame = frame;
+        result
+    }
+
+    fn render_frame(
+        &mut self,
+        display_list: &DisplayList,
+        geometry: &mut FrameGeometry,
+    ) -> Result<(), RendererError> {
+        self.collect_rects(display_list, geometry);
+        if geometry.rect_batches.iter().any(|batch| batch.cutout) && self.cutout_pipeline.is_none()
+        {
             self.cutout_pipeline = Some(create_rounded_rect_pipeline(
                 &self.device,
                 self.surface_config.format,
@@ -306,7 +329,7 @@ impl GpuRenderer {
                 CUTOUT_BLENDING,
             ));
         }
-        let (image_draws, image_vertices) = self.image_draws(display_list);
+        self.collect_images(display_list, geometry);
         let has_text = display_list
             .commands
             .iter()
@@ -341,13 +364,13 @@ impl GpuRenderer {
             &self.device,
             &self.queue,
             "sabine rounded rect vertices",
-            &rect_vertices,
+            &geometry.rect_vertices,
         );
         let image_vertex_buffer = self.image_vertex_buffer.upload(
             &self.device,
             &self.queue,
             "sabine image vertices",
-            &image_vertices,
+            &geometry.image_vertices,
         );
 
         {
@@ -371,16 +394,16 @@ impl GpuRenderer {
             if let Some(vertex_buffer) = &rect_vertex_buffer {
                 pass.set_bind_group(0, &self.globals_bind_group, &[]);
                 pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                for batch in rect_batches {
+                for batch in &geometry.rect_batches {
                     pass.set_pipeline(match &self.cutout_pipeline {
                         Some(cutout) if batch.cutout => cutout,
                         _ => &self.pipeline,
                     });
-                    pass.draw(batch.vertices, 0..1);
+                    pass.draw(batch.vertices.clone(), 0..1);
                 }
             }
 
-            for draw in &image_draws {
+            for draw in &geometry.image_draws {
                 pass.set_pipeline(&self.image_pipeline);
                 pass.set_bind_group(0, &self.globals_bind_group, &[]);
                 pass.set_bind_group(1, &draw.bind_group, &[]);
@@ -405,22 +428,24 @@ impl GpuRenderer {
         Ok(())
     }
 
-    fn rect_vertices(&self, display_list: &DisplayList) -> (Vec<RectVertex>, Vec<RectBatch>) {
-        let mut vertices = Vec::new();
-        let mut batches: Vec<RectBatch> = Vec::new();
+    fn collect_rects(&self, display_list: &DisplayList, frame: &mut FrameGeometry) {
+        let vertices = &mut frame.rect_vertices;
+        let batches = &mut frame.rect_batches;
+        vertices.clear();
+        batches.clear();
         for command in &display_list.commands {
             let start = vertices.len() as u32;
             let cutout = match command {
                 DisplayCommand::Rect(command) => {
-                    push_rect_command(&mut vertices, command, self.scale_factor);
+                    push_rect_command(vertices, command, self.scale_factor);
                     false
                 }
                 DisplayCommand::RoundedRect(command) => {
-                    push_rounded_rect_command(&mut vertices, command, self.scale_factor);
+                    push_rounded_rect_command(vertices, command, self.scale_factor);
                     false
                 }
                 DisplayCommand::Cutout(command) => {
-                    push_rounded_rect_command(&mut vertices, command, self.scale_factor);
+                    push_rounded_rect_command(vertices, command, self.scale_factor);
                     true
                 }
                 DisplayCommand::Text(_) | DisplayCommand::Image(_) => continue,
@@ -434,8 +459,17 @@ impl GpuRenderer {
                 }),
             }
         }
-        (vertices, batches)
     }
+}
+
+/// Geometry gathered for each frame, kept between frames so drawing does not
+/// allocate.
+#[derive(Default)]
+struct FrameGeometry {
+    rect_vertices: Vec<RectVertex>,
+    rect_batches: Vec<RectBatch>,
+    image_vertices: Vec<ImageVertex>,
+    image_draws: Vec<images::ImageDraw>,
 }
 
 struct RectBatch {

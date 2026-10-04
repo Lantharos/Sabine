@@ -1,11 +1,15 @@
 use sabine_platform::request_window_effect;
 
-use crate::osr::protocol::{MAIN_TEXTURE_ID, POPUP_OVERLAY_ID};
-use crate::render::{DisplayCommand, DisplayList, ImageCommand, RectCommand, RoundedRectCommand};
+use std::sync::Arc;
+
+use crate::osr::protocol::POPUP_OVERLAY_ID;
+use crate::render::{
+    DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand,
+};
 use crate::window::style::Color;
 
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::types::{SurfaceGeometry, overlay_texture_id, uses_sabine_chrome};
+use crate::osr::host::types::{SurfaceGeometry, uses_sabine_chrome};
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn present_rendered_surface(&mut self, trace: &str) {
@@ -34,15 +38,21 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn render(&mut self) -> bool {
         let scale = self.scale() as f32;
-        let list = self.display_list(
+        let mut list = std::mem::take(&mut self.display_list);
+        self.fill_display_list(
+            &mut list,
             self.logical_width().max(1.0),
             self.logical_height().max(1.0),
         );
-        let Some(renderer) = self.renderer.as_mut() else {
+        let rendered = self.renderer.as_mut().map(|renderer| {
+            renderer.resize(self.surface_size.width, self.surface_size.height, scale);
+            renderer.render(&list)
+        });
+        self.display_list = list;
+        let Some(rendered) = rendered else {
             return false;
         };
-        renderer.resize(self.surface_size.width, self.surface_size.height, scale);
-        if let Err(error) = renderer.render(&list) {
+        if let Err(error) = rendered {
             eprintln!("Sabine OSR render failed: {error}");
             return false;
         }
@@ -57,7 +67,7 @@ impl OsrNativeHost {
         true
     }
 
-    fn display_list(&self, width: f32, height: f32) -> DisplayList {
+    fn fill_display_list(&self, list: &mut DisplayList, width: f32, height: f32) {
         let opaque_swapchain = self
             .renderer
             .as_ref()
@@ -67,7 +77,7 @@ impl OsrNativeHost {
         } else {
             self.config.background_color
         };
-        let mut list = DisplayList::new(background);
+        list.reset(background);
         if !self.config.transparent || uses_sabine_chrome(self.config.chrome) {
             let radius = if self.config.chrome.uses_native_decorations() {
                 0.0
@@ -113,41 +123,35 @@ impl OsrNativeHost {
                 color: Color::rgba(0.0, 0.0, 0.0, 1.0),
             }));
         }
-        self.draw_titlebar(&mut list, width);
+        self.draw_titlebar(list, width);
         if self.loading.is_some_and(|loading| loading.revealed()) {
-            self.draw_loading(&mut list, width, height);
-            return list;
+            self.draw_loading(list, width, height);
+            return;
         }
         if !self.main_surface_ready() {
-            return list;
+            return;
         }
         let top = self.titlebar_height();
         if let Some(surface) = self.main_surface {
-            list.push(surface_image(MAIN_TEXTURE_ID.to_string(), surface, top));
+            list.push(surface_image(ImageId::Main, surface, top));
         }
-        let popup = self.overlays.get(POPUP_OVERLAY_ID);
+        let popup = self.overlays.get_key_value(POPUP_OVERLAY_ID);
         for (overlay_id, overlay) in &self.overlays {
-            if overlay_id.as_str() != POPUP_OVERLAY_ID {
-                list.push(surface_image(
-                    overlay_texture_id(overlay_id),
-                    overlay.geometry,
-                    top,
-                ));
+            if &**overlay_id != POPUP_OVERLAY_ID {
+                let image = ImageId::Overlay(Arc::clone(overlay_id));
+                list.push(surface_image(image, overlay.geometry, top));
             }
         }
-        if let Some(popup) = popup {
-            list.push(surface_image(
-                overlay_texture_id(POPUP_OVERLAY_ID),
-                popup.geometry,
-                top,
-            ));
+        if let Some((popup_id, popup)) = popup {
+            let image = ImageId::Overlay(Arc::clone(popup_id));
+            list.push(surface_image(image, popup.geometry, top));
         }
-        self.draw_tooltip(&mut list, width, height);
-        list
+        self.draw_tooltip(list, width, height);
+        self.draw_context_menu(list);
     }
 }
 
-fn surface_image(id: String, surface: SurfaceGeometry, top: f32) -> ImageCommand {
+fn surface_image(id: ImageId, surface: SurfaceGeometry, top: f32) -> ImageCommand {
     ImageCommand {
         id,
         x: surface.x as f32,

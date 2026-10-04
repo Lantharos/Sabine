@@ -1,8 +1,7 @@
-use crate::osr::protocol::{MAIN_TEXTURE_ID, OsrAccelFrame, OsrSurface};
-use crate::render::ExternalSlot;
+use crate::osr::protocol::{OsrAccelFrame, OsrSurface};
+use crate::render::{ExternalSlot, ImageId};
 
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::types::{OverlayLayer, overlay_texture_id};
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn update_accel_frame(&mut self, frame: OsrAccelFrame) -> bool {
@@ -27,20 +26,17 @@ impl OsrNativeHost {
             self.retry_resize_paint();
             return false;
         }
+        let image = self.image_id(&frame.surface);
         let Some(renderer) = self.renderer.as_mut() else {
             release_slot();
             return false;
         };
-        let texture_id = frame
-            .surface
-            .overlay_id()
-            .map_or_else(|| MAIN_TEXTURE_ID.to_string(), overlay_texture_id);
         let slot = ExternalSlot {
             index: frame.resource_slot,
             resource_id: frame.resource_id,
         };
         let installed = renderer.set_external_bgra_texture(
-            &texture_id,
+            &image,
             slot,
             |device| crate::osr::accel::import_texture(device, frame),
             (frame.visible_x, frame.visible_y),
@@ -48,27 +44,25 @@ impl OsrNativeHost {
             release_slot,
         );
         if let Err(error) = &installed {
-            eprintln!("Sabine OSR: accelerated texture import failed: {error}");
+            sabine_runtime::report_error(
+                "render",
+                format!("could not show a browser frame: {error}"),
+            );
         }
         installed.is_ok()
     }
 
     fn note_accel_surface(&mut self, frame: &OsrAccelFrame) {
         let geometry = self.accel_geometry(frame);
-        match frame.surface.overlay_id() {
-            None => {
-                self.main_surface = Some(geometry);
-                if self.main_load_ready {
-                    self.loading = None;
-                }
-                self.clear_pending_resize_paint();
+        let image = self.image_id(&frame.surface);
+        if image == ImageId::Main {
+            self.main_surface = Some(geometry);
+            if self.main_load_ready {
+                self.loading = None;
             }
-            Some(overlay_id) => {
-                self.overlays
-                    .entry(overlay_id.to_string())
-                    .or_insert_with(|| OverlayLayer::new(geometry))
-                    .geometry = geometry;
-            }
+            self.clear_pending_resize_paint();
+        } else {
+            self.place_overlay(&image, geometry);
         }
     }
 

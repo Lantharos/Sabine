@@ -23,6 +23,7 @@ impl OsrNativeHost {
     }
 
     pub(super) fn hide_window(&mut self, reason: &str) {
+        self.cancel_context_menu();
         self.config.visible = false;
         self.focused = false;
         self.overlays.clear();

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextCommand};
+use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
 use crate::window::style::Color;
 
 use super::loading_messages::loading_message;
@@ -34,7 +34,7 @@ impl OsrNativeHost {
                 (loading.started.elapsed().as_millis() / LOADING_MESSAGE_INTERVAL.as_millis())
                     as u64,
             )
-            .to_string(),
+            .into(),
             x: 24.0,
             y: center_y - 30.0,
             width: (width - 48.0).max(1.0),
@@ -42,6 +42,7 @@ impl OsrNativeHost {
             size: 14.0,
             line_height: 20.0,
             color: Color::TEXT.opacity(0.78),
+            align: TextAlign::Center,
         });
         let track_width = (width - 48.0).clamp(1.0, 112.0).min(width.max(1.0));
         let track_x = (width - track_width) * 0.5;

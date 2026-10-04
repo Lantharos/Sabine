@@ -6,7 +6,8 @@ use glyphon::{
 };
 
 use super::RendererError;
-use crate::render::TextCommand;
+use crate::render::{TextAlign, TextCommand};
+use glyphon::cosmic_text::Align;
 
 pub(super) struct TextRendererState {
     font_system: FontSystem,
@@ -54,15 +55,16 @@ impl TextRendererState {
         height: u32,
     ) -> Result<(), RendererError> {
         self.viewport.update(queue, Resolution { width, height });
-        let commands = display_list.commands.iter().filter_map(|command| {
-            let DisplayCommand::Text(command) = command else {
-                return None;
-            };
-            Some(command.clone())
-        });
+        let commands = display_list
+            .commands
+            .iter()
+            .filter_map(|command| match command {
+                DisplayCommand::Text(command) => Some(command),
+                _ => None,
+            });
         for (index, command) in commands.enumerate() {
             let unchanged = self.buffers.get(index).is_some_and(|entry| {
-                entry.command == command && (entry.scale - scale).abs() < f32::EPSILON
+                entry.command == *command && (entry.scale - scale).abs() < f32::EPSILON
             });
             if unchanged {
                 continue;
@@ -77,12 +79,16 @@ impl TextRendererState {
                 &command.text,
                 &Attrs::new().family(Family::SansSerif),
                 Shaping::Advanced,
-                Some(glyphon::cosmic_text::Align::Center),
+                Some(match command.align {
+                    TextAlign::Left => Align::Left,
+                    TextAlign::Center => Align::Center,
+                    TextAlign::Right => Align::Right,
+                }),
             );
             buffer.shape_until_scroll(&mut self.font_system, false);
             let entry = TextBufferEntry {
                 buffer,
-                command,
+                command: command.clone(),
                 scale,
             };
             if index < self.buffers.len() {
@@ -119,29 +125,43 @@ impl TextRendererState {
             .map_err(|error| RendererError::Text(error.to_string()))
     }
 
+    /// The width `text` takes on one line at `size` logical pixels.
+    pub(super) fn measure(&mut self, text: &str, size: f32) -> f32 {
+        let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size, size));
+        buffer.set_size(None, None);
+        buffer.set_text(
+            text,
+            &Attrs::new().family(Family::SansSerif),
+            Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        buffer
+            .layout_runs()
+            .map(|run| run.line_w)
+            .fold(0.0, f32::max)
+    }
+
     pub(super) fn trim(&mut self) {
         self.atlas.trim();
     }
 }
 
-fn text_areas(text_buffers: &[TextBufferEntry], scale: f32) -> Vec<TextArea<'_>> {
-    text_buffers
-        .iter()
-        .map(|entry| TextArea {
-            buffer: &entry.buffer,
-            left: entry.command.x * scale,
-            top: entry.command.y * scale,
-            scale: 1.0,
-            bounds: TextBounds {
-                left: (entry.command.x * scale) as i32,
-                top: (entry.command.y * scale) as i32,
-                right: ((entry.command.x + entry.command.width) * scale) as i32,
-                bottom: ((entry.command.y + entry.command.height) * scale) as i32,
-            },
-            default_color: to_glyphon_color(entry.command.color),
-            custom_glyphs: &[],
-        })
-        .collect()
+fn text_areas(text_buffers: &[TextBufferEntry], scale: f32) -> impl Iterator<Item = TextArea<'_>> {
+    text_buffers.iter().map(move |entry| TextArea {
+        buffer: &entry.buffer,
+        left: entry.command.x * scale,
+        top: entry.command.y * scale,
+        scale: 1.0,
+        bounds: TextBounds {
+            left: (entry.command.x * scale) as i32,
+            top: (entry.command.y * scale) as i32,
+            right: ((entry.command.x + entry.command.width) * scale) as i32,
+            bottom: ((entry.command.y + entry.command.height) * scale) as i32,
+        },
+        default_color: to_glyphon_color(entry.command.color),
+        custom_glyphs: &[],
+    })
 }
 
 fn to_glyphon_color(color: Color) -> glyphon::Color {

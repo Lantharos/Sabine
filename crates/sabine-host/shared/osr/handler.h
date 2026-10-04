@@ -68,6 +68,8 @@ constexpr uint32_t kRestoreRequested = 36;
 constexpr uint32_t kFatalError = 37;
 constexpr uint32_t kHostHello = 38;
 constexpr uint32_t kDragOperation = 40;
+constexpr uint32_t kContextMenu = 41;
+constexpr uint32_t kContextMenuDismissed = 42;
 constexpr char kClipboardCommandPrefix[] = "sabine.clipboard.";
 
 constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
@@ -141,11 +143,18 @@ class SabineOsrHandler : public CefClient,
                            CefRefPtr<CefFrame> frame,
                            CefRefPtr<CefContextMenuParams> params,
                            CefRefPtr<CefMenuModel> model) override;
+  bool RunContextMenu(CefRefPtr<CefBrowser> browser,
+                      CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefContextMenuParams> params,
+                      CefRefPtr<CefMenuModel> model,
+                      CefRefPtr<CefRunContextMenuCallback> callback) override;
   bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             CefRefPtr<CefContextMenuParams> params,
                             int command_id,
                             EventFlags event_flags) override;
+  void OnContextMenuDismissed(CefRefPtr<CefBrowser> browser,
+                              CefRefPtr<CefFrame> frame) override;
   bool OnCursorChange(CefRefPtr<CefBrowser> browser,
                       CefCursorHandle cursor,
                       cef_cursor_type_t type,
@@ -299,6 +308,7 @@ class SabineOsrHandler : public CefClient,
 #endif
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
+  void ChooseContextMenuCommand(int command_id);
   void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
   bool ConnectSocket();
   bool QueueControl(std::string line, std::optional<std::string> body);
@@ -468,6 +478,7 @@ class SabineOsrHandler : public CefClient,
   int background_frame_rate_ = 5;
   bool closing_ = false;
   bool close_requested_ = false;
+  CefRefPtr<CefRunContextMenuCallback> context_menu_callback_;
   CefRefPtr<CefBrowser> drag_source_browser_;
   CefRefPtr<CefDragData> drag_source_data_;
   cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;

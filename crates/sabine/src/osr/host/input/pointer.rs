@@ -17,6 +17,9 @@ impl OsrNativeHost {
         primary: bool,
     ) {
         let (x, y) = self.logical_point(position);
+        if self.menu_pointer_moved(x, y) {
+            return;
+        }
         match source {
             PointerSource::Touch { finger_id, force } => {
                 self.touch_moved(finger_id, force, x, y);
@@ -62,6 +65,13 @@ impl OsrNativeHost {
     ) {
         let (x, y) = self.logical_point(position);
         let pressed = state == ElementState::Pressed;
+        if pressed && self.menu_pointer_pressed(x, y) {
+            return;
+        }
+        if !pressed && self.menu_pointer_released(x, y) && !matches!(button, ButtonSource::Mouse(_))
+        {
+            return;
+        }
         match button {
             ButtonSource::Touch { finger_id, force } => {
                 self.touch_button(finger_id, force, pressed, x, y);

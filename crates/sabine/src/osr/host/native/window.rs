@@ -28,7 +28,7 @@ impl OsrNativeHost {
         let activating = self.pending_activation_token.is_some();
         let defer_visibility = self.config.visible && !activating;
         let mut attributes = WindowAttributes::default()
-            .with_title(self.config.title.clone())
+            .with_title(&*self.config.title)
             .with_surface_size(LogicalSize::new(
                 f64::from(self.config.width),
                 f64::from(self.config.height),

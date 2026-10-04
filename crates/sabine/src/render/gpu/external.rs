@@ -5,6 +5,7 @@
 // adding a half-texel inset here resamples the whole page into a blurry mess.
 
 use super::{CachedTexture, GpuRenderer, RendererError};
+use crate::render::ImageId;
 
 /// The producer slot an external frame was copied into, and the texture that
 /// slot currently holds.
@@ -27,7 +28,7 @@ impl GpuRenderer {
     /// imported once and reused until the producer replaces it.
     pub(crate) fn set_external_bgra_texture(
         &mut self,
-        id: &str,
+        id: &ImageId,
         slot: ExternalSlot,
         import: impl FnOnce(&wgpu::Device) -> Result<wgpu::Texture, String>,
         source_origin: (u32, u32),
@@ -64,7 +65,7 @@ impl GpuRenderer {
         }
         self.retire_external_texture(id);
         self.texture_cache.insert(
-            id.to_string(),
+            id.clone(),
             CachedTexture {
                 texture: imported.texture,
                 bind_group: imported.bind_group,
@@ -83,13 +84,13 @@ impl GpuRenderer {
             },
         );
         self.external_texture_releases
-            .insert(id.to_string(), Box::new(completed));
+            .insert(id.clone(), Box::new(completed));
         Ok(())
     }
 
     fn imported_texture(
         &mut self,
-        id: &str,
+        id: &ImageId,
         slot: ExternalSlot,
         import: impl FnOnce(&wgpu::Device) -> Result<wgpu::Texture, String>,
     ) -> Result<ImportedTexture, RendererError> {
@@ -106,16 +107,16 @@ impl GpuRenderer {
         let imported = ImportedTexture {
             slot: slot.index,
             resource_id: slot.resource_id,
-            bind_group: self.image_bind_group(id, &texture),
+            bind_group: self.image_bind_group(&texture),
             texture,
         };
-        let imports = self.external_imports.entry(id.to_string()).or_default();
+        let imports = self.external_imports.entry(id.clone()).or_default();
         imports.retain(|existing| existing.slot != slot.index);
         imports.push(imported.clone());
         Ok(imported)
     }
 
-    pub(super) fn retire_external_texture(&mut self, id: &str) {
+    pub(super) fn retire_external_texture(&mut self, id: &ImageId) {
         if let Some(completed) = self.external_texture_releases.remove(id) {
             self.queue.on_submitted_work_done(completed);
             self.submission_poller.notify();

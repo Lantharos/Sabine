@@ -79,8 +79,13 @@ impl ApplicationHandler for OsrNativeHost {
             } => {
                 #[cfg(target_os = "linux")]
                 self.note_paste_key(&event);
+                let pressed = event.state.is_pressed();
                 let escape = event.logical_key == Key::Named(NamedKey::Escape);
-                if !(escape && event.state.is_pressed() && self.cancel_page_drag()) {
+                if self.context_menu.is_some() {
+                    if pressed {
+                        self.menu_key_pressed(&event.logical_key);
+                    }
+                } else if !(escape && pressed && self.cancel_page_drag()) {
                     self.send_key_event(&event);
                 }
             }
@@ -111,6 +116,7 @@ impl ApplicationHandler for OsrNativeHost {
                 primary,
                 ..
             } => self.pointer_button(event_loop, state, position, button, primary),
+            WindowEvent::MouseWheel { .. } if self.context_menu.is_some() => {}
             WindowEvent::MouseWheel { delta, .. } => self.forward_mouse_wheel(delta),
             WindowEvent::PinchGesture { delta, .. } => self.forward_pinch(delta),
             WindowEvent::DragEntered { id, position } if !self.clipboard_owns_drops() => {

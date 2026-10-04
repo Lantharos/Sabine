@@ -21,7 +21,7 @@ use crate::osr::control::{ControlRelay, ControlWriter};
 
 use crate::SabineWindowChrome;
 use crate::osr::transport::IpcStream;
-use crate::render::{BgraImage, GpuRenderer};
+use crate::render::{BgraImage, DisplayList, GpuRenderer, ImageId};
 use sabine_platform::WindowEffect;
 
 use super::config::OsrHostConfig;
@@ -56,8 +56,9 @@ pub(super) struct OsrNativeHost {
     pub(super) scale_factor: f64,
     pub(super) main_surface: Option<SurfaceGeometry>,
     pub(super) main_load_ready: bool,
-    pub(super) retained_frames: HashMap<String, BgraImage>,
-    pub(super) overlays: BTreeMap<String, OverlayLayer>,
+    pub(super) retained_frames: HashMap<ImageId, BgraImage>,
+    pub(super) overlays: BTreeMap<Arc<str>, OverlayLayer>,
+    pub(super) display_list: DisplayList,
     pub(super) page_drag_regions: Vec<WindowRegionRect>,
     pub(super) page_drag_exclusion_regions: Vec<WindowRegionRect>,
     pub(super) hovered_control: Option<TitlebarControl>,
@@ -91,6 +92,7 @@ pub(super) struct OsrNativeHost {
     pub(super) main_frame_presented: bool,
     pub(super) loading: Option<super::types::NativeLoading>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
+    pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
     pub(super) pending_activation_token: Option<ActivationToken>,
     pub(super) drag: super::input::DragState,
     #[cfg(not(target_os = "macos"))]
@@ -161,6 +163,7 @@ impl OsrNativeHost {
             main_load_ready: false,
             retained_frames: HashMap::new(),
             overlays: BTreeMap::new(),
+            display_list: DisplayList::default(),
             page_drag_regions: Vec::new(),
             page_drag_exclusion_regions: Vec::new(),
             hovered_control: None,
@@ -195,6 +198,7 @@ impl OsrNativeHost {
             loading: visible
                 .then(|| super::types::NativeLoading::new(super::types::LoadingKind::Opening)),
             tooltip: None,
+            context_menu: None,
             pending_activation_token: None,
             drag: Default::default(),
             #[cfg(not(target_os = "macos"))]
@@ -213,7 +217,7 @@ impl OsrNativeHost {
 
     pub(super) fn window_options(&self) -> WindowOptions {
         WindowOptions {
-            title: self.config.title.clone(),
+            title: self.config.title.to_string(),
             width: self.config.width,
             height: self.config.height,
             min_width: self.config.min_width,

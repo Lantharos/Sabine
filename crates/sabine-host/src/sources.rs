@@ -56,6 +56,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/browser/callbacks.cc"),
     ),
     (
+        "osr/browser/context_menu.cc",
+        include_str!("../shared/osr/browser/context_menu.cc"),
+    ),
+    (
         "osr/browser/clipboard.cc",
         include_str!("../shared/osr/browser/clipboard.cc"),
     ),

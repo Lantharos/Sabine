@@ -57,6 +57,7 @@ set(SABINE_HOST_SOURCES
   osr/handler.h
   osr/bridge.cc
   osr/browser/callbacks.cc
+  osr/browser/context_menu.cc
   osr/browser/clipboard.cc
   osr/browser/recovery.cc
   osr/browser/downloads.cc
