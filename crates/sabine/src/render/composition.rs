@@ -94,7 +94,10 @@ impl Composition {
 
     pub(crate) fn commit(&self) {
         if let Err(error) = unsafe { self.device.Commit() } {
-            eprintln!("Sabine: could not update the window's composition: {error}");
+            sabine_runtime::report_error(
+                "render",
+                format!("could not update the window's composition: {error}"),
+            );
         }
     }
 }
