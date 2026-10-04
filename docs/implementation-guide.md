@@ -233,8 +233,8 @@ to benchmark the GPU in the background.
   back to a synchronous CPU readback.
   Slots are isolated by browser and released when that browser closes. The compositor evicts
   retired guest and popup textures and clears page textures during hibernation.
-- **Linux** uses CEF software `OnPaint` on Wayland and X11, with GPU composition in the native host.
-  Launch selects the available display connection without rewriting the session type. The window
+- **Linux** uses CEF software `OnPaint` on Wayland, with GPU composition in the native host. Sabine
+  runs only on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window
   presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
   On Wayland each frame requests a compositor frame callback and further redraws wait for it; with
   FIFO presentation some drivers hold the buffer carrying that callback, which stopped the window
@@ -290,8 +290,7 @@ and `restore()` leaves fullscreen, maximization, and minimization.
 `inhibitShortcuts(true)` hands the desktop's own keyboard shortcuts to the page while the window is
 focused, and the native window host answers it without involving the app. Wayland uses a
 `zwp_keyboard_shortcuts_inhibitor_v1` on the window surface, so the compositor decides when it
-applies and may ask the user first. X11 holds an active keyboard grab only while the window is
-focused. Windows installs a low-level keyboard hook that takes Ctrl, Alt and the Windows keys from
+applies and may ask the user first. Windows installs a low-level keyboard hook that takes Ctrl, Alt and the Windows keys from
 the OS while the window is in the foreground, forwards them to the page itself and writes their
 state into the thread's keyboard state, so every other key still arrives with the right modifiers
 and text. macOS rejects the request. The inhibitor is released when disabled or when the native
@@ -561,8 +560,8 @@ during interactive move does not blank the surface. When the desktop reports a s
 of sight, Chromium stops rendering it with `WasHidden`, which also throttles the page's timers, and
 the window ignores paints until it is seen again, then keeps showing its last frame while Chromium
 repaints. Wayland compositors report this with the xdg-shell `suspended` state, which Mutter-based
-compositors such as Kestrel set on minimized and fully covered windows; X11 reports a fully obscured
-window. Winit turns both into occlusion events. Hibernation hides the view too, and tears down its
+compositors such as Kestrel set on minimized and fully covered windows, and winit turns it into an
+occlusion event. Hibernation hides the view too, and tears down its
 browser. The shared CEF process stays alive when it still owns other windows. Waking creates a fresh
 browser through the same profile-singleton handoff path, and connection generations prevent a late
 disconnect from the old browser from clearing the new one.
@@ -717,8 +716,7 @@ compositor's clipboard or primary selection. The window host owns them instead. 
 primary selection device on the window's connection. Compositors without data control, such as
 GNOME's, deliver selections and drops only to a client's newest data device, so on those Sabine's
 device also receives the files dropped on the window and the window toolkit's drop handling is
-ignored. On X11 the host owns selections on an invisible window of its own connection, following the
-incremental protocol when reading large data.
+ignored.
 
 The browser host evaluates a small script in every frame. It routes trusted `paste` events,
 middle-click pastes and `navigator.clipboard` through the window host, and exports copies, cuts and

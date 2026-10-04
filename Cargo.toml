@@ -89,10 +89,8 @@ wayland-backend = { version = "0.3.17", features = ["client_system"] }
 wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
 wgpu = "30.0.1"
-winit = { git = "https://github.com/Lantharos/winit", rev = "207dc9e55467f9af10868d7d0d241c1145af2906" }
+winit = { git = "https://github.com/Lantharos/winit", rev = "207dc9e55467f9af10868d7d0d241c1145af2906", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
 windows = "0.62.2"
-x11-dl = "2.21.0"
-x11rb = "0.14.0"
 
 [patch.crates-io]
 dpi = { git = "https://github.com/Lantharos/winit", rev = "207dc9e55467f9af10868d7d0d241c1145af2906" }

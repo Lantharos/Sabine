@@ -59,7 +59,7 @@ impl OsrNativeHost {
             return Ok(());
         };
         #[cfg(target_os = "linux")]
-        let inhibitor = ShortcutInhibitor::new(window.as_ref(), self.focused);
+        let inhibitor = ShortcutInhibitor::new(window.as_ref());
         #[cfg(windows)]
         let inhibitor = {
             let system_keys = Rc::clone(&self.shortcuts.system_keys);
@@ -84,13 +84,6 @@ impl OsrNativeHost {
     #[cfg(not(target_os = "macos"))]
     pub(in crate::osr::host) fn release_shortcut_inhibitor(&mut self) {
         self.shortcuts.inhibitor = None;
-    }
-
-    #[cfg(target_os = "linux")]
-    pub(in crate::osr::host) fn sync_shortcut_inhibitor_focus(&mut self) {
-        if let Some(inhibitor) = &mut self.shortcuts.inhibitor {
-            inhibitor.set_focused(self.focused);
-        }
     }
 
     #[cfg(windows)]

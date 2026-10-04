@@ -83,9 +83,9 @@ await appWindow.inhibitShortcuts(true);
 await appWindow.inhibitShortcuts(false);
 ```
 
-This works on Wayland compositors that support keyboard shortcut inhibiting, on X11, and on
-Windows, where Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS.
-Some compositors ask the user before they allow it.
+This works on Wayland compositors that support keyboard shortcut inhibiting and on Windows, where
+Alt+Tab, Alt+Esc, Ctrl+Esc and the Windows key reach the page. It rejects on macOS. Some
+compositors ask the user before they allow it.
 
 Pages can pause work while nobody can see them. `appWindow.visible` is false while the window is
 hidden or the desktop reports it out of sight, for example when it is minimized or fully covered,

@@ -68,7 +68,7 @@ pub(crate) fn apply_browser_launch_args(
         {
             let mut features = vec!["UseOzonePlatform"];
             command
-                .arg(format!("--ozone-platform={}", linux_ozone_platform()))
+                .arg("--ozone-platform=wayland")
                 .arg(LINUX_GTK_VERSION);
             if options.vaapi_hardware_decode {
                 features.push("VaapiVideoDecoder");
@@ -108,17 +108,5 @@ pub(crate) fn apply_browser_launch_args(
     command.arg("--use-mock-keychain");
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
         command.arg(format!("--remote-debugging-port={port}"));
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn linux_ozone_platform() -> &'static str {
-    if ["WAYLAND_DISPLAY", "WAYLAND_SOCKET"]
-        .iter()
-        .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
-    {
-        "wayland"
-    } else {
-        "x11"
     }
 }

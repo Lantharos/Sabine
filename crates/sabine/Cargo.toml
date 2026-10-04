@@ -42,7 +42,7 @@ wgpu.workspace = true
 winit.workspace = true
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
-softbuffer = "0.4.8"
+softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd.workspace = true
@@ -53,7 +53,6 @@ libloading.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
-x11rb.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey = "0.8.0"
