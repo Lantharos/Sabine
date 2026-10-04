@@ -299,10 +299,12 @@ window commands wake it without polling. Use `SabineWindow::main` or call `wait(
 thread when managing the process yourself. Update confirmation runs in a separate native prompt
 process so it cannot consume the application's event loop before launch.
 
-Transport is platform-specific without changing the protocol. On Unix, sockets live under
-`$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`) with socket mode `0600`, and each window
-authenticates with a first-line token read from a one-use `0600` token file. The native host
-accepts the connection as soon as Chromium dials in; it does not poll the listener.
+Every desktop connects a window to its browser over a Unix domain socket. On Linux and macOS,
+sockets live under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`) with socket mode `0600`, and
+the native host rejects peers running as another user. On Windows they live in the user's own
+temporary directory, whose access control already keeps other accounts out. Each window
+authenticates with a first-line token read from a one-use token file beside its socket. The native
+host accepts the connection as soon as Chromium dials in; it does not poll the listener.
 
 Paint messages use the versioned `SAB1` wire signature. Surface dimensions, inline payloads, and
 shared mappings are bounded before allocation or mapping. The native host's paint queue limits
@@ -318,7 +320,7 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 | --- | --- | --- |
 | Linux | Unix domain socket | dirty-rect BGRA `OnPaint` → sparse wgpu uploads |
 | macOS | Unix domain socket + mach | CEF IOSurface → acknowledged IOSurface slots → wgpu Metal |
-| Windows | localhost TCP | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
+| Windows | Unix domain socket | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
 
 Palette and tray windows use the same native host as other desktop windows, with frameless chrome,
 always-on-top placement, and hide-on-blur behavior when configured.
