@@ -22,7 +22,8 @@ pub use commands::activity::{
     SabineActivityLease, host_update_json,
 };
 pub use commands::{
-    INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND, clipboard, media, page_commands,
+    CONTROLS_OVERLAY_COMMAND, CONTROLS_OVERLAY_EVENT, INHIBIT_SHORTCUTS_COMMAND,
+    SET_REGIONS_COMMAND, clipboard, media, page_commands,
 };
 pub use guest::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,

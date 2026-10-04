@@ -35,6 +35,9 @@ pub(crate) struct SabineWindowConfig {
     pub transparent: bool,
     pub background_color: Color,
     pub chrome: SabineWindowChrome,
+    /// The page extends under a transparent macOS titlebar that keeps the
+    /// system's traffic lights.
+    pub titlebar_overlay: bool,
     pub background_effect: WindowBackgroundEffect,
     pub regions: WindowRegions,
     pub drag_regions: Vec<WindowRegionRect>,
@@ -75,6 +78,7 @@ impl Default for SabineWindowConfig {
             transparent: false,
             background_color: Color::WINDOW,
             chrome: SabineWindowChrome::System,
+            titlebar_overlay: false,
             background_effect: WindowBackgroundEffect::None,
             regions: WindowRegions::default(),
             drag_regions: Vec::new(),

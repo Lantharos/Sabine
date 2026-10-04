@@ -70,6 +70,9 @@
     async setRegions(regions) {
       await window.sabine.bridge.invoke("sabine.window.setRegions", regions);
     },
+    controlsOverlay() {
+      return window.sabine.bridge.invoke("sabine.window.controlsOverlay");
+    },
   });
   Object.defineProperties(window.sabine.window, {
     visible: { get: () => windowState.visible, configurable: true },
@@ -133,6 +136,17 @@
       });
     },
   };
+
+  const showControlsOverlay = (overlay) => {
+    const style = document.documentElement.style;
+    for (const side of ["left", "right", "height"]) {
+      style.setProperty("--sabine-controls-" + side, overlay[side] + "px");
+    }
+  };
+  if (window === window.top && commands.has("sabine.window.controlsOverlay")) {
+    window.sabine.bridge.listen("window.controlsOverlay", showControlsOverlay);
+    window.sabine.window.controlsOverlay().then(showControlsOverlay, () => {});
+  }
 
   window.addEventListener("pagehide", () => {
     for (const entry of pending.values()) {

@@ -149,6 +149,7 @@ pub(crate) fn spawn_osr_host_child(
         "background_color": config.background_color.to_rgba8(),
         "background_effect": config.background_effect.as_str(),
         "chrome": config.chrome.as_str(),
+        "titlebar_overlay": config.titlebar_overlay,
         "bridge_policy": {
             "enabled": true,
             "documentPrefix": if url.starts_with(crate::launch::APP_URL_PREFIX) { crate::launch::APP_URL_PREFIX } else { "" },

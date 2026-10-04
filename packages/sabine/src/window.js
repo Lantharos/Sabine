@@ -38,6 +38,9 @@ export const appWindow = {
   setRegions(regions) {
     return requireApi().window.setRegions(regions);
   },
+  controlsOverlay() {
+    return requireApi().window.controlsOverlay();
+  },
   get visible() {
     return requireApi().window.visible;
   },

@@ -34,6 +34,8 @@ pub(crate) struct OsrHostConfig {
     pub background_color: Color,
     pub background_effect: WindowBackgroundEffect,
     pub chrome: SabineWindowChrome,
+    #[cfg(target_os = "macos")]
+    pub titlebar_overlay: bool,
     pub bridge_policy: serde_json::Value,
     pub regions: WindowRegions,
     pub drag_regions: Vec<WindowRegionRect>,
@@ -146,6 +148,11 @@ impl OsrHostConfig {
                 .and_then(serde_json::Value::as_str)
                 .and_then(SabineWindowChrome::parse)
                 .unwrap_or(SabineWindowChrome::System),
+            #[cfg(target_os = "macos")]
+            titlebar_overlay: value
+                .get("titlebar_overlay")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             bridge_policy: value
                 .get("bridge_policy")
                 .cloned()
