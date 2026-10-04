@@ -166,23 +166,6 @@ void SabineOsrHandler::HandleControlLine(
     const bool up = std::atoi(parts[5].c_str()) != 0;
     const int click_count = std::max(1, std::atoi(parts[6].c_str()));
     host->SendMouseClickEvent(event, button, up, click_count);
-    if (up && parts[3] == "right") {
-      const std::string script =
-          std::string("(function(){const target=document.elementFromPoint(") +
-          std::to_string(event.x) + "," + std::to_string(event.y) +
-          ")||document.body||window;const "
-          "init={bubbles:true,cancelable:true,button:2,buttons:0,clientX:" +
-          std::to_string(event.x) + ",clientY:" + std::to_string(event.y) +
-          ",screenX:" + std::to_string(event.x) +
-          ",screenY:" + std::to_string(event.y) +
-          ",ctrlKey:" + ((event.modifiers & (1 << 2)) ? "true" : "false") +
-          ",shiftKey:" + ((event.modifiers & (1 << 1)) ? "true" : "false") +
-          ",altKey:" + ((event.modifiers & (1 << 3)) ? "true" : "false") +
-          ",metaKey:" + ((event.modifiers & (1 << 7)) ? "true" : "false") +
-          "};target.dispatchEvent(new MouseEvent('contextmenu',init));})();";
-      target_browser->GetMainFrame()->ExecuteJavaScript(
-          script, target_browser->GetMainFrame()->GetURL(), 0);
-    }
   } else if (parts[0] == "file_drag" && parts.size() >= 2) {
     EmitPrimaryEvent("window.fileDrag", parts[1]);
   } else if (parts[0] == "mouse_navigation" && parts.size() >= 5) {
