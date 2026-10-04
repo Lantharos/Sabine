@@ -31,11 +31,11 @@ use sabine::prelude::*;
 fn main() {
     SabineWindow::main(|window| {
         Ok(window
+            .app()
             .size(900, 640)
             .frameless()
             .glass()
-            .app_chrome(AppChrome::new(38, 260))
-            .lifecycle_policy(SabineLifecyclePolicy::browser_tab())
+            .app_chrome(AppChrome::default())
             .bridge_handler("notes.create", |command| {
                 Ok(BridgeResponse::json(serde_json::json!({
                     "ok": true,
