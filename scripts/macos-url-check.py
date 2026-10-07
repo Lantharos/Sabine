@@ -40,8 +40,21 @@ with tempfile.TemporaryDirectory(prefix="sabine-url-check-") as temporary:
 use std::{io::Write, sync::{Arc, atomic::{AtomicBool, Ordering}}, time::Duration};
 use winit::{application::ApplicationHandler, event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, run_on_demand::EventLoopExtRunOnDemand}, window::WindowId};
-type EventQueue = crossbeam_channel::Sender<sabine_platform::PlatformEvent>;
-#[path = "@MODULE@"] mod open_urls;
+mod desktop {
+    pub type EventQueue = crossbeam_channel::Sender<sabine_platform::PlatformEvent>;
+    pub mod macos {
+        pub struct UiQueue;
+        impl UiQueue {
+            pub fn run(&self, task: impl FnOnce() + Send + 'static) {
+                dispatch2::DispatchQueue::main().exec_async(task);
+            }
+        }
+        #[path = "@MODULE@"] pub mod app_delegate;
+    }
+    pub fn install(events: EventQueue) -> impl Drop {
+        macos::app_delegate::AppEvents::install(events)
+    }
+}
 struct App { done: Arc<AtomicBool> }
 impl ApplicationHandler for App {
     fn can_create_surfaces(&mut self, events: &dyn ActiveEventLoop) { events.set_control_flow(ControlFlow::Wait); }
@@ -54,7 +67,7 @@ fn main() {
     std::fs::write("@PID@", std::process::id().to_string()).unwrap();
     let mut event_loop = EventLoop::new().unwrap();
     let (sender, receiver) = crossbeam_channel::unbounded();
-    let _events = open_urls::OpenUrlEvents::install(sender).unwrap();
+    let _events = desktop::install(sender);
     let done = Arc::new(AtomicBool::new(false));
     let completed = done.clone();
     let proxy = event_loop.create_proxy();
@@ -77,11 +90,11 @@ fn main() {
     event_loop.run_app_on_demand(&mut App { done }).unwrap();
     assert!(worker.join().unwrap(), "LaunchServices did not deliver both URL events");
 }
-'''.replace("@MODULE@", str(repository / "crates/sabine/src/desktop/macos/open_urls.rs"))
+'''.replace("@MODULE@", str(repository / "crates/sabine/src/desktop/macos/app_delegate.rs"))
         .replace("@PID@", str(pidfile)).replace("@OUTPUT@", str(received)))
     command = ["rustc", "--edition=2024", str(source), "-o", str(macos / "url-check"),
                "-L", f"dependency={repository}/target/debug/deps"]
-    for dependency in ["winit", "objc2", "objc2_app_kit", "objc2_foundation",
+    for dependency in ["winit", "objc2", "objc2_app_kit", "objc2_foundation", "dispatch2",
                        "crossbeam_channel", "sabine_platform", "serde_json"]:
         command.extend(["--extern", f"{dependency}={artifacts[dependency]}"])
     subprocess.run(command, check=True)

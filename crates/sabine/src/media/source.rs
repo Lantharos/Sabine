@@ -14,7 +14,7 @@ pub(super) fn resolve(source: &str, policy: &SourcePolicy) -> Result<String, Str
     let path = match (url.scheme(), url.host_str()) {
         ("http" | "https", _) => return Ok(url.into()),
         ("sabine", Some("app")) => app_file(&url, policy.web_root)?,
-        ("sabine", Some("file")) if policy.local_files => decoded_path(&url)?,
+        ("sabine", Some("file")) if policy.local_files => local_file(&url)?,
         ("file", _) if policy.local_files => url
             .to_file_path()
             .map_err(|_| format!("{source} is not a local file"))?,
@@ -41,6 +41,16 @@ fn app_file(url: &Url, web_root: Option<&Path>) -> Result<PathBuf, String> {
     path.starts_with(&root)
         .then_some(path)
         .ok_or_else(|| format!("{url} is outside the app"))
+}
+
+fn local_file(url: &Url) -> Result<PathBuf, String> {
+    let path = decoded_path(url)?;
+    #[cfg(windows)]
+    let path = path
+        .strip_prefix("/")
+        .map(Path::to_path_buf)
+        .unwrap_or(path);
+    Ok(path)
 }
 
 fn decoded_path(url: &Url) -> Result<PathBuf, String> {
@@ -73,7 +83,13 @@ mod tests {
     #[test]
     fn opens_local_files_only_when_allowed() {
         let file = std::env::current_exe().unwrap();
-        let source = format!("sabine://file{}", file.display()).replace(' ', "%20");
+        let forward = file.to_string_lossy().replace('\\', "/");
+        let absolute = if forward.starts_with('/') {
+            forward
+        } else {
+            format!("/{forward}")
+        };
+        let source = format!("sabine://file{}", absolute.replace(' ', "%20"));
         let denied = SourcePolicy {
             web_root: None,
             local_files: false,

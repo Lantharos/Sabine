@@ -48,6 +48,13 @@ requestAnimationFrame(frame);
 </html>
 """
 
+APP_MAIN = """use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| Ok(window.size(900, 640).system_chrome().opaque()));
+}
+"""
+
 WINDOWS_PROCESSES = (
     "Get-CimInstance Win32_Process | ForEach-Object { "
     "\"$($_.ProcessId)`t$($_.ParentProcessId)`t"
@@ -77,9 +84,13 @@ def powershell(script, **environment):
     ).stdout
 
 
-def prepare_host():
+def prepare_host(root):
     run("cargo", "build", "-p", "sabine-cli")
-    run("cargo", "build", "--release", "-p", "sabine-notes", "-p", "sabine-service")
+    run("cargo", "build", "--release", "-p", "sabine-service")
+    run(
+        "cargo", "build", "--release", "--manifest-path", root / "Cargo.toml",
+        env=dict(os.environ, CARGO_TARGET_DIR=str(repository / "target")),
+    )
     prepared = run(
         repository / f"target/debug/sabine{executable_suffix}", "runtime", "prepare",
         capture_output=True, text=True,
@@ -93,6 +104,14 @@ def prepare_host():
 
 def write_app(root):
     (root / "ui").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "src/main.rs").write_text(APP_MAIN)
+    (root / "Cargo.toml").write_text(
+        '[package]\nname = "sabine-paint-check"\nversion = "0.1.0"\nedition = "2024"\n'
+        'publish = false\n\n[workspace]\n\n[dependencies]\n'
+        f'sabine = {{ path = "{(repository / "crates/sabine").as_posix()}" }}\n'
+    )
+    shutil.copyfile(repository / "Cargo.lock", root / "Cargo.lock")
     (root / "ui/index.html").write_text(PAGE)
     (root / "Sabine.toml").write_text(
         '[app]\nid = "dev.sabine.paint-check"\nname = "Sabine Paint Check"\n'
@@ -206,7 +225,7 @@ def launch(root, host, log):
         if WINDOWS else {"start_new_session": True}
     )
     return subprocess.Popen(
-        [repository / f"target/release/sabine-notes{executable_suffix}", "--system"],
+        [repository / f"target/release/sabine-paint-check{executable_suffix}"],
         cwd=root, env=environment, stdout=log, stderr=subprocess.STDOUT, **options,
     )
 
@@ -247,9 +266,9 @@ def main():
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
-    host = prepare_host()
     root = output / "app"
     write_app(root)
+    host = prepare_host(root)
     log_path = output / "app.log"
     started = time.strftime("%Y-%m-%d %H:%M:%S")
     with log_path.open("w") as log:
