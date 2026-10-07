@@ -340,11 +340,12 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 | Windows | Unix domain socket | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
 
 Palette and tray windows use the same native host as other desktop windows, with frameless chrome
-and hide-on-blur behavior when configured. Wayland has no protocol for leaving a window out of the
-taskbar or keeping it above others, so on Linux `skip_taskbar` and `always_on_top` do nothing and a
-shown palette is listed in the taskbar or dock like any window; a `tray_app` window is only listed
-while it is shown. Windows and macOS honor both: `skip_taskbar` keeps a window off the Windows
-taskbar and gives a macOS app no Dock icon.
+and hide-on-blur behavior when configured. `skip_taskbar` keeps a window off the Windows taskbar and
+gives a macOS app no Dock icon, and `always_on_top` raises the window level on both. Wayland has no
+standard protocol for either, so on Linux Sabine asks the compositor through `kestrel_window_v1`,
+which Kestrel provides: the window leaves the taskbar and window switcher, and stays above other
+windows. On compositors without it, the window is placed like any other and Sabine records why in
+its window log.
 
 Windows without system decorations can be resized from a 7-pixel band along their edges on Linux and
 Windows, where Sabine starts the system's interactive resize. macOS resizes borderless windows from
