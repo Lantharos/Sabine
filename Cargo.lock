@@ -2638,6 +2638,7 @@ dependencies = [
  "bytemuck",
  "crossbeam-channel",
  "dispatch2",
+ "dunce",
  "futures-util",
  "getrandom 0.4.3",
  "global-hotkey",
