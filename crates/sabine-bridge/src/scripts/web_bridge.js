@@ -202,6 +202,14 @@
         this.dispatchEvent(event);
       }
     }
+    const queryPermission = navigator.permissions.query.bind(navigator.permissions);
+    navigator.permissions.query = async (descriptor) => {
+      const status = await queryPermission(descriptor);
+      if (descriptor?.name === "notifications") {
+        Object.defineProperty(status, "state", { value: "granted" });
+      }
+      return status;
+    };
     // Chromium installs its own `Notification` once this script has run.
     setTimeout(() => {
       Object.defineProperty(window, "Notification", { value: SabineNotification, configurable: true, writable: true });
