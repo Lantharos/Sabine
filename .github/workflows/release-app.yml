@@ -120,7 +120,7 @@ jobs:
             update_target: linux-aarch64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Validate app release tag
         shell: pwsh
         run: |
@@ -224,7 +224,7 @@ jobs:
           }
       - name: Check out Windows validation tools
         if: matrix.update_target == 'windows-x86_64-msi'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: Lantharos/Sabine
           ref: 58b3100dfea00d7e8dff68258dd19de3ff99f4b3
@@ -354,7 +354,7 @@ jobs:
     env:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install "${{ inputs.rust_toolchain }}" --profile minimal
       - run: rustup override set "${{ inputs.rust_toolchain }}"
       - name: Install CLI build dependencies

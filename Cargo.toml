@@ -64,7 +64,7 @@ libloading = "0.9.0"
 resvg = "0.48.1"
 pollster = "1.0.1"
 clap = { version = "4.6.7", features = ["derive"] }
-objc2 = "0.6.4"
+objc2 = "0.6.5"
 block2 = "0.6.2"
 dispatch2 = { version = "0.3.1", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSGraphics", "NSResponder", "NSView", "NSVisualEffectView"] }
@@ -91,7 +91,7 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.53.2", features = ["rt", "sync", "time", "macros"] }
 toml = "1.1.6"
-tray-icon = { version = "0.26.0", default-features = false }
+tray-icon = { version = "0.26.1", default-features = false }
 toml_edit = "0.25.15"
 ureq = "3.4.2"
 base64 = "0.23.1"
