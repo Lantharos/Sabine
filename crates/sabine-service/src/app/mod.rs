@@ -1,3 +1,4 @@
+pub(crate) mod cleanup;
 pub(crate) mod data;
 pub(crate) mod desktop;
 pub(crate) mod environment;

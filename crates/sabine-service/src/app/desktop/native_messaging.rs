@@ -229,10 +229,11 @@ fn launches_from(manifest: &Path, install: &Path) -> bool {
 
 #[cfg(unix)]
 fn inside(program: &Path, install: &Path) -> bool {
-    let (Ok(program), Ok(install)) = (program.canonicalize(), install.canonicalize()) else {
-        return false;
-    };
     program.starts_with(install)
+        || matches!(
+            (program.canonicalize(), install.canonicalize()),
+            (Ok(program), Ok(install)) if program.starts_with(&install)
+        )
 }
 
 #[cfg(windows)]
