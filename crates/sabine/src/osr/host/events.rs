@@ -188,6 +188,9 @@ impl OsrNativeHost {
                     self.show_file_dialog(request);
                 }
                 OsrHostEvent::FileDialogClosed(_, id, paths) => self.finish_file_dialog(id, paths),
+                OsrHostEvent::Message(_, OsrMessage::MediaPlaying(playing)) => {
+                    self.set_page_media_playing(playing);
+                }
                 OsrHostEvent::Message(_, OsrMessage::ContextMenuDismissed) => {
                     self.dismiss_context_menu();
                 }
@@ -197,9 +200,6 @@ impl OsrNativeHost {
                 OsrHostEvent::Message(_, OsrMessage::MinimizeRequested) => {
                     if self.config.lifecycle.suspend_on_minimize {
                         self.suspend("minimize");
-                        if self.config.lifecycle.hibernate_after.is_some() {
-                            self.begin_hibernate("minimize");
-                        }
                     }
                     if let Some(window) = &self.window {
                         window.set_minimized(true);
@@ -255,9 +255,7 @@ impl OsrNativeHost {
                     self.main_load_ready = false;
                     self.main_frame_presented = false;
                     if self.config.visible && self.loading.is_none() {
-                        self.loading = Some(super::types::NativeLoading::new(
-                            super::types::LoadingKind::Opening,
-                        ));
+                        self.loading = Some(super::types::NativeLoading::new());
                     }
                 }
                 OsrHostEvent::Message(_, OsrMessage::FatalError(message)) => {
@@ -338,19 +336,12 @@ impl OsrNativeHost {
                     return;
                 }
                 OsrHostEvent::Disconnected(_) => {
+                    self.page_media_playing = false;
                     self.clear_media();
                     self.drop_connection();
                     self.awaiting_connection = false;
                     self.connection_deadline = None;
                     if self.closing_deadline.is_some() {
-                        continue;
-                    }
-                    if matches!(
-                        self.lifecycle_state,
-                        super::types::LifecycleState::Hibernating
-                            | super::types::LifecycleState::Hibernated
-                    ) {
-                        self.lifecycle_state = super::types::LifecycleState::Hibernated;
                         continue;
                     }
                     self.begin_recovery();
@@ -454,8 +445,8 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
     let value = serde_json::from_str::<serde_json::Value>(value).ok()?;
     Some(HostActivity {
         id: value.get("id")?.as_str()?.to_string(),
-        prevents_hibernation: value
-            .get("preventsHibernation")
+        keeps_running: value
+            .get("keepRunning")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true),
     })

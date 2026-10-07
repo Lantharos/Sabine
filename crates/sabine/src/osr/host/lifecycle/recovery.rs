@@ -4,7 +4,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
 use crate::osr::host::{
     native::OsrNativeHost,
-    types::{LifecycleState, LoadingKind, NativeLoading},
+    types::{LifecycleState, NativeLoading},
 };
 
 impl OsrNativeHost {
@@ -24,15 +24,8 @@ impl OsrNativeHost {
         {
             return;
         }
-        if self.lifecycle_state != LifecycleState::Active {
-            self.lifecycle_state = LifecycleState::Hibernated;
-            self.main_surface = None;
-            self.overlays.clear();
-            self.retained_frames.clear();
-            if let Some(renderer) = &mut self.renderer {
-                renderer.clear_images();
-            }
-            return;
+        if self.lifecycle_state == LifecycleState::Frozen {
+            self.lifecycle_state = LifecycleState::Suspended;
         }
         let now = Instant::now();
         while self
@@ -50,7 +43,7 @@ impl OsrNativeHost {
         let delay = Duration::from_millis(250 * 4u64.pow(self.recoveries.len() as u32 - 1));
         self.recovery_deadline = Some(now + delay);
         if self.config.visible {
-            self.loading = Some(NativeLoading::new(LoadingKind::Resuming));
+            self.loading = Some(NativeLoading::new());
         }
         self.proxy.wake_up();
     }

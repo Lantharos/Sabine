@@ -1,5 +1,18 @@
 # Unreleased
 
+- Windows no longer tear down their page after being out of sight for a while and show a resuming
+  screen when they come back. Sabine now freezes the page instead: no JavaScript runs and its
+  caches, decoded images and GPU memory are released, while everything it holds stays in place, so
+  it continues instantly with its scroll position, input and state. Pages playing audio or video,
+  in a call, or running an activity that keeps them running are never frozen, and the document
+  receives the standard `freeze` and `resume` events. `.app()` windows freeze after five minutes
+  out of sight, palettes and tray windows after a minute.
+- `hibernate_after`, `disable_hibernation` and `memory_saver` are replaced by `freeze_after` and
+  `disable_freezing`, and `SabineLifecyclePolicy::memory_saver_hidden_window` is gone. Activities
+  take `keepRunning` instead of `preventsHibernation`, and `activity.list()` reports
+  `keepingRunning` instead of `hibernationBlockers`.
+- Chromium no longer keeps a spare renderer process warm, which saved nothing for apps that rarely
+  open new sites and cost a whole renderer's memory each.
 - Sabine runs only on Wayland on Linux. X11 sessions are no longer supported: the X11 clipboard and
   keyboard grab are gone, Chromium always uses its Wayland backend, and packages no longer depend
   on `libxkbcommon-x11`.

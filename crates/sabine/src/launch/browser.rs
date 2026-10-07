@@ -8,7 +8,8 @@ const DISABLED_CEF_FEATURES: &str = concat!(
     "AutofillServerCommunication,",
     "MediaRouter,",
     "Translate,",
-    "InterestFeedContentSuggestions"
+    "InterestFeedContentSuggestions,",
+    "SpareRendererForSitePerProcess"
 );
 
 const ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS: u8 = 8;
@@ -26,7 +27,6 @@ const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
 pub(crate) struct BrowserOptions {
     pub remote_devtools_port: Option<u16>,
     pub remote_devtools_disabled: bool,
-    pub memory_saver: bool,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
 }
@@ -72,13 +72,8 @@ pub(crate) fn apply_browser_launch_args(
     if !enabled_features.is_empty() {
         command.arg(format!("--enable-features={}", enabled_features.join(",")));
     }
-    let disabled_features = if options.memory_saver {
-        format!("{DISABLED_CEF_FEATURES},SpareRendererForSitePerProcess")
-    } else {
-        DISABLED_CEF_FEATURES.to_string()
-    };
     command
-        .arg(format!("--disable-features={disabled_features}"))
+        .arg(format!("--disable-features={DISABLED_CEF_FEATURES}"))
         .arg(format!(
             "--optimization-guide-performance-class={ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS}"
         ))

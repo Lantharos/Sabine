@@ -4,6 +4,7 @@
 mod backend;
 mod command;
 mod geometry;
+mod playing;
 mod request;
 mod source;
 mod tracks;
@@ -20,6 +21,7 @@ pub(crate) use source::SourcePolicy;
 use backend::{Backend, Native, Player};
 use command::PlayerOptions;
 use geometry::{Layout, PageRect};
+use playing::PlayingSessions;
 use request::Request;
 
 /// Whether a window with this configuration can show media surfaces: they
@@ -37,6 +39,7 @@ pub(crate) struct MediaHost {
     sessions: BTreeMap<u64, Session>,
     next_id: u64,
     changed: bool,
+    playing: PlayingSessions,
 }
 
 struct Session {
@@ -73,6 +76,7 @@ impl MediaHost {
                     .remove(&id)
                     .ok_or_else(|| format!("media {id} does not exist"))?;
                 self.backend.stop(session.player);
+                self.playing.set(id, false);
                 self.changed = true;
                 self.backend.flush();
                 return Ok(Value::Null);
@@ -96,7 +100,9 @@ impl MediaHost {
     ) -> Result<u64, String> {
         self.next_id += 1;
         let id = self.next_id;
-        let mut player = self.backend.spawn(options, events(id))?;
+        let mut player = self
+            .backend
+            .spawn(options, self.playing.track(id, events(id)))?;
         if self.attached
             && let Err(error) = self.backend.mount(&mut player)
         {
@@ -155,6 +161,7 @@ impl MediaHost {
             for session in std::mem::take(&mut self.sessions).into_values() {
                 self.backend.stop(session.player);
             }
+            self.playing.clear();
             self.changed = true;
             self.backend.flush();
         }
@@ -186,6 +193,10 @@ impl MediaHost {
         self.sessions
             .values()
             .filter_map(|session| session.layout.map(|layout| layout.hole))
+    }
+
+    pub(crate) fn is_playing(&self) -> bool {
+        self.playing.any()
     }
 
     /// Whether the holes changed since the last call.

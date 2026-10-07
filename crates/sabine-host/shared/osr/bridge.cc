@@ -50,6 +50,10 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       ForwardClipboardRequest(browser, frame, arguments->GetString(0));
     return true;
   }
+  if (message->GetName() == "sabine.media_state") {
+    UpdateFrameMediaState(browser, frame, arguments->GetString(0) == "1");
+    return true;
+  }
   if (message->GetName() == "sabine.ime_state") {
     const int browser_id = browser->GetIdentifier();
     ime_surrounding_state_[browser_id] = arguments->GetString(0);

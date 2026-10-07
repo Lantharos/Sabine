@@ -3,6 +3,7 @@
 #include "app/bridge.h"
 #include "app/clipboard.h"
 #include "app/scheme.h"
+#include "sabine_media_state_js.h"
 #include "common/bridge_policy.h"
 #include "common/json.h"
 
@@ -210,6 +211,9 @@ void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
   sabine_bridge::InstallTransport(frame, context, "__sabineImeState",
                                   "sabine.ime_state");
   frame->ExecuteJavaScript(kImeStateScript, frame->GetURL(), 0);
+  sabine_bridge::InstallTransport(frame, context, "__sabineMediaState",
+                                  "sabine.media_state");
+  frame->ExecuteJavaScript(SABINE_MEDIA_STATE_JS_RAW, frame->GetURL(), 0);
   const auto policy = BridgePolicyFor(browser);
   const std::string url = frame->GetURL();
   const std::string security_origin = sabine_bridge::RememberContext(context);

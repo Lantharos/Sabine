@@ -29,7 +29,6 @@ impl OsrNativeHost {
         let center_y = content_y + content_height * 0.5;
         list.push(TextCommand {
             text: loading_message(
-                loading.kind,
                 loading.message_seed,
                 (loading.started.elapsed().as_millis() / LOADING_MESSAGE_INTERVAL.as_millis())
                     as u64,

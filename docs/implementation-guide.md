@@ -182,8 +182,8 @@ recognize separately from authenticated CEF connections. Child OSR/CEF processes
 Closing a window stops browser recovery immediately. Transport disconnect forces closure of
 that window's browser, while other windows sharing the CEF process remain alive. A browser
 that cannot connect to its native window closes instead of remaining invisible.
-Each native connection owns its socket reader and bounded paint queue. Closing or hibernating
-a window cancels blocked reads and queue writes, then removes its endpoint. Native timers
+Each native connection owns its socket reader and bounded paint queue. Closing a window cancels
+blocked reads and queue writes, then removes its endpoint. Native timers
 return to an idle wait after firing; hidden windows remain suspended across focus changes.
 A failed browser connection gets at most three recovery attempts in 60 seconds, with increasing
 delays. Initial connection is limited to 30 seconds; profile handoff remains limited to 15 seconds.
@@ -198,9 +198,8 @@ that job so the shared browser process remains available to sibling windows.
 ## Paint and composition
 
 Sabine uses one paint policy per platform. Apps cannot select a renderer or opt into experimental
-transport branches. The GPU instance is shared within each process across window recreation.
-Hibernation still releases per-window devices, surfaces, and textures; resuming reuses the
-backend connection instead of repeatedly initializing graphics drivers. Linux uses Vulkan and only
+transport branches. The GPU instance is shared within each process across window recreation, so a recreated window
+reuses the backend connection instead of initializing graphics drivers again. Linux uses Vulkan and only
 initializes OpenGL when no Vulkan adapter can present to the window.
 
 On Linux and macOS, Chromium is launched before the native window and graphics device are created,
@@ -233,7 +232,7 @@ to benchmark the GPU in the background.
   surface replaces the queued one and its slot is released at once. The window presents through
   DirectComposition in mailbox mode, so presenting never waits for the display.
   Slots are isolated by browser and released when that browser closes. The compositor evicts
-  retired guest and popup textures and clears page textures during hibernation.
+  retired guest and popup textures.
 - **Linux** uses CEF software `OnPaint` on Wayland, with GPU composition in the native host. Sabine
   runs only on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window
   presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
@@ -548,14 +547,15 @@ Bridge commands are registered on the builder:
   `BridgeCommandDescriptor`, which can limit a command to targets (`desktop`, `linux`, `windows`,
   `macos`) and allow extra origins to call that command only.
 
-Each window also accepts lifecycle settings (`lifecycle_policy`, frame rates, suspend, hibernation
-and memory saver), `on_visibility_changed` for the window's visibility and suspension, desktop
+Each window also accepts lifecycle settings (`lifecycle_policy`, frame rates, suspend and
+`freeze_after`), `on_visibility_changed` for the window's visibility and suspension, desktop
 services (`tray_icon`, `autostart`, `global_shortcut`, `native_messaging_host`,
 `single_instance`), content (`entry`, `url`, `dev_url`, `allowed_origin`, `local_files`) and
 `runtime(RuntimeConfig)`.
 
 The launched `SabineProcess` opens and closes further windows with `open_window` and
-`close_window`, starts activities that keep windows from hibernating with `begin_activity` or
+`close_window`, starts activities that keep pages running while their window is out of sight with
+`begin_activity` or
 `begin_activity_with`, drives guests from Rust with `guest_control`, and reports launch stages
 through `metrics`. Its `BridgeEventEmitter` sends events to every window with `emit` and
 `emit_bytes`, or to one with `emit_to` and `emit_bytes_to`, and changes regions with `set_regions`
@@ -721,8 +721,7 @@ window.sabine.clipboard   (Linux)
 
 ## Lifecycle and performance
 
-Sabine distinguishes active, background, suspended, hibernating, and hibernated states. Activity
-leases allow durable Rust work or page work to block hibernation while it is genuinely active. Blur
+Sabine distinguishes active, suspended and frozen pages. Blur
 suspend only lowers the windowless frame rate; it does not call CEF `WasHidden`, so brief focus loss
 during interactive move does not blank the surface. When the desktop reports a shown window as out
 of sight, Chromium stops rendering it with `WasHidden`, which also throttles the page's timers, and
@@ -731,10 +730,19 @@ repaints. Wayland compositors report this with the xdg-shell `suspended` state, 
 compositors such as Kestrel set on minimized and fully covered windows, and winit turns it into an
 occlusion event. Windows reports neither, so a minimized window there counts as out of sight until
 it is restored. A window hidden to the tray stops painting the same way unless it keeps its frame
-for a quick return. Hibernation hides the view too, and tears down its
-browser. The shared CEF process stays alive when it still owns other windows. Waking creates a fresh
-browser through the same profile-singleton handoff path, and connection generations prevent a late
-disconnect from the old browser from clearing the new one.
+for a quick return.
+
+A page whose window stays out of sight for `freeze_after` (five minutes with `.app()`, a minute for
+palettes and tray windows) is frozen: the browser host moves it to Chromium's frozen lifecycle state
+through the DevTools protocol, so no JavaScript or timers run, and sends a critical memory pressure
+signal, which releases caches, decoded images and GPU resources. Everything the page holds stays in
+place, and it thaws in milliseconds when the window is shown or uncovered, without reloading.
+Pages hear the standard `freeze` and `resume` document events. A page is never frozen while any of
+its frames plays audio or video, runs an `AudioContext`, or holds a camera or microphone, while
+native video plays, or while an activity started with `keepRunning` (the default) runs; it thaws
+as soon as one of these starts. A script evaluated in every frame, including cross-origin frames,
+reports media playback to the browser host, which combines it with Chromium's camera and
+microphone state and tells the native window when anything is playing.
 
 Pages read the window's state from `window.sabine.window.visible` and `.suspended`, and hear about
 changes through the `window.visibility` bridge event. `visible` is false while the window is hidden
@@ -749,19 +757,17 @@ GPU compositor, window chrome, and app background configured with
 `.background_color(SabineColor::rgb8(r, g, b))`. The default is `#111113`. The same color seeds CEF
 before the document paints, avoiding a surface-color jump when the native loader disappears. Its
 loading copy rotates every 3.2 seconds from a 70% practical, 20% whimsical, and 10% strange pool
-without repeating consecutively. Live transport loss uses the wake path so a window recovers
-instead of remaining frozen.
+without repeating consecutively. When the browser exits unexpectedly, the window shows the same
+loading surface while Sabine starts a new one.
 
-Memory saver is explicit. `SabineLifecyclePolicy::memory_saver_hidden_window()` or
-`.memory_saver(true)` enables the aggressive hidden-window policy and prevents Chromium from
-keeping a spare renderer warm. Normal browser-tab and hidden-window policies retain Chromium's
-spare renderer so future navigations do not pay an avoidable process-start penalty.
+Chromium does not keep a spare renderer process warm: Sabine apps rarely open new sites, and the
+spare would cost a whole renderer's memory for every app.
 
 Rules for renderer changes:
 
 - never replace damage tracking with unconditional full-frame uploads
 - retain the last frame only when the selected lifecycle policy asks for it
-- keep hidden palette windows warm unless memory-saver policy opts into hibernation
+- never tear down a hidden window's browser; freeze its page instead
 - do not poll when a native event or deadline can wake the event loop
 - keep bridge and paint traffic off the UI thread except for final state application
 

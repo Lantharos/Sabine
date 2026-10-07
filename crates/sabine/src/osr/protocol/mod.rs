@@ -85,6 +85,8 @@ pub(crate) enum OsrMessage {
     },
     ContextMenuDismissed,
     FileDialog(FileDialogRequest),
+    /// Whether any frame plays audio or video, or holds a call's camera or microphone.
+    MediaPlaying(bool),
     MainLoadStarted,
     MainLoadReady,
     FatalError(String),

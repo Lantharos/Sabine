@@ -366,13 +366,16 @@ impl SabineWindow {
         self
     }
 
-    pub fn hibernate_after(mut self, duration: Duration) -> Self {
-        self.config.lifecycle.hibernate_after = Some(duration);
+    /// Freezes the page and trims its memory once the window has been out of
+    /// sight this long. Playing media, calls and activities that keep the page
+    /// running hold it off.
+    pub fn freeze_after(mut self, duration: Duration) -> Self {
+        self.config.lifecycle.freeze_after = Some(duration);
         self
     }
 
-    pub fn disable_hibernation(mut self) -> Self {
-        self.config.lifecycle.hibernate_after = None;
+    pub fn disable_freezing(mut self) -> Self {
+        self.config.lifecycle.freeze_after = None;
         self
     }
 
@@ -381,20 +384,10 @@ impl SabineWindow {
         self
     }
 
-    pub fn memory_saver(mut self, enabled: bool) -> Self {
-        self.config.lifecycle.memory_saver = enabled;
-        self
-    }
-
     fn apply_hidden_lifecycle_defaults(&mut self) {
         self.config.lifecycle.suspend_on_blur = true;
         self.config.lifecycle.background_frame_rate = 1;
         self.config.lifecycle.retain_hidden_frame = true;
-        self.config.lifecycle.hibernate_grace = self
-            .config
-            .lifecycle
-            .hibernate_grace
-            .min(Duration::from_millis(150));
     }
 
     pub fn runtime(mut self, runtime: RuntimeConfig) -> Self {

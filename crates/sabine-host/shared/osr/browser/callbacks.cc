@@ -116,6 +116,7 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   }
   StartCommandReader();
   SendFocusedImeState();
+  ReportMediaPlaying();
   host->WasResized();
   host->Invalidate(PET_VIEW);
 }
@@ -134,6 +135,7 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
 #endif
   renderer_crashes_.erase(browser->GetIdentifier());
   ime_frames_.erase(browser->GetIdentifier());
+  ForgetMediaState(browser);
   for (auto it = clipboard_requests_.begin();
        it != clipboard_requests_.end();) {
     if (it->second.browser->IsSame(browser))

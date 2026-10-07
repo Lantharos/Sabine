@@ -99,10 +99,8 @@ pub(crate) fn lifecycle_to_json(lifecycle: &SabineLifecyclePolicy) -> Value {
         "suspend_on_minimize": lifecycle.suspend_on_minimize,
         "suspend_on_occluded": lifecycle.suspend_on_occluded,
         "suspend_on_blur": lifecycle.suspend_on_blur,
-        "hibernate_after_ms": lifecycle.hibernate_after.map(duration_millis),
-        "hibernate_grace_ms": duration_millis(lifecycle.hibernate_grace),
+        "freeze_after_ms": lifecycle.freeze_after.map(duration_millis),
         "retain_hidden_frame": lifecycle.retain_hidden_frame,
-        "memory_saver": lifecycle.memory_saver,
     })
 }
 
@@ -133,25 +131,15 @@ pub(crate) fn lifecycle_from_json(value: Option<&Value>) -> SabineLifecyclePolic
         .get("suspend_on_blur")
         .and_then(Value::as_bool)
         .unwrap_or(lifecycle.suspend_on_blur);
-    lifecycle.hibernate_after = value
-        .get("hibernate_after_ms")
+    lifecycle.freeze_after = value
+        .get("freeze_after_ms")
         .and_then(Value::as_u64)
         .filter(|value| *value > 0)
         .map(Duration::from_millis);
-    lifecycle.hibernate_grace = value
-        .get("hibernate_grace_ms")
-        .and_then(Value::as_u64)
-        .filter(|value| *value > 0)
-        .map(Duration::from_millis)
-        .unwrap_or(lifecycle.hibernate_grace);
     lifecycle.retain_hidden_frame = value
         .get("retain_hidden_frame")
         .and_then(Value::as_bool)
         .unwrap_or(lifecycle.retain_hidden_frame);
-    lifecycle.memory_saver = value
-        .get("memory_saver")
-        .and_then(Value::as_bool)
-        .unwrap_or(lifecycle.memory_saver);
     lifecycle
 }
 
@@ -302,8 +290,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lifecycle_round_trip_preserves_memory_saver() {
-        let expected = SabineLifecyclePolicy::memory_saver_hidden_window();
+    fn lifecycle_survives_the_trip_to_the_window_host() {
+        let expected = SabineLifecyclePolicy::hidden_window();
         let actual = lifecycle_from_json(Some(&lifecycle_to_json(&expected)));
         assert_eq!(actual, expected);
     }

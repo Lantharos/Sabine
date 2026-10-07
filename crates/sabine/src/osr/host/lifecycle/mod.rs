@@ -12,7 +12,6 @@ use crate::osr::protocol::encode_component;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     FALLBACK_ACTIVE_FRAME_RATE, HostActivity, LIFECYCLE_SUSPEND_DEBOUNCE, LifecycleState,
-    LoadingKind, NativeLoading,
 };
 
 impl OsrNativeHost {
@@ -23,10 +22,9 @@ impl OsrNativeHost {
                 "suspended",
                 self.config.lifecycle.background_frame_rate.max(1),
             ),
-            LifecycleState::Hibernating | LifecycleState::Hibernated => (
-                "hibernate",
-                self.config.lifecycle.background_frame_rate.max(1),
-            ),
+            LifecycleState::Frozen => {
+                ("frozen", self.config.lifecycle.background_frame_rate.max(1))
+            }
         };
         self.last_frame_rate.set(Some(frame_rate));
         self.send_control(format!(
@@ -109,121 +107,76 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn suspend(&mut self, reason: &str) {
         self.pending_suspend_at = None;
-        if matches!(
-            self.lifecycle_state,
-            LifecycleState::Suspended | LifecycleState::Hibernating | LifecycleState::Hibernated
-        ) {
-            return;
+        if self.lifecycle_state == LifecycleState::Active {
+            self.lifecycle_state = LifecycleState::Suspended;
+            self.send_lifecycle(LifecycleState::Suspended, reason);
         }
-        self.lifecycle_state = LifecycleState::Suspended;
-        self.hibernate_commit_deadline = None;
-        self.schedule_hibernate_deadline();
-        self.send_lifecycle(LifecycleState::Suspended, reason);
+        self.refresh_freeze();
     }
 
     pub(in crate::osr::host) fn resume(&mut self, reason: &str) {
         self.pending_suspend_at = None;
+        self.freeze_deadline = None;
         if self.lifecycle_state == LifecycleState::Active {
             return;
         }
         self.lifecycle_state = LifecycleState::Active;
-        self.hibernate_deadline = None;
-        self.hibernate_commit_deadline = None;
-        if self.socket.is_none() {
-            if self.config.visible && self.main_surface.is_none() {
-                self.loading = Some(NativeLoading::new(LoadingKind::Resuming));
-            }
-            self.launch_child();
-        }
         self.send_lifecycle(LifecycleState::Active, reason);
-        // Wayland marks a moved surface outdated; a bare redraw flashes the glass.
-        if self.config.visible
-            && self.main_surface.is_none()
-            && let Some(window) = &self.window
-        {
-            window.request_redraw();
-        }
-    }
-
-    pub(in crate::osr::host) fn begin_hibernate(&mut self, reason: &str) {
-        if self.lifecycle_state != LifecycleState::Suspended
-            || self.socket.is_none()
-            || self.has_hibernation_blockers()
-        {
-            return;
-        }
-        self.lifecycle_state = LifecycleState::Hibernating;
-        self.hibernate_deadline = None;
-        self.hibernate_commit_deadline =
-            Some(Instant::now() + self.config.lifecycle.hibernate_grace);
-        self.send_lifecycle(LifecycleState::Hibernating, reason);
-    }
-
-    pub(in crate::osr::host) fn commit_hibernate(&mut self) {
-        if !matches!(self.lifecycle_state, LifecycleState::Hibernating) {
-            return;
-        }
-        self.send_control("close\n");
-        self.drop_connection();
-        self.awaiting_connection = false;
-        self.connection_deadline = None;
-        self.recovery_deadline = None;
-        self.main_surface = None;
-        self.overlays.clear();
-        self.retained_frames.clear();
-        if let Some(renderer) = &mut self.renderer {
-            renderer.clear_images();
-        }
-        self.hibernate_commit_deadline = None;
-        self.lifecycle_state = LifecycleState::Hibernated;
-        self.loading = None;
-        self.presented = false;
     }
 
     pub(in crate::osr::host) fn send_current_lifecycle(&self) {
-        match self.lifecycle_state {
-            LifecycleState::Active => self.send_lifecycle(LifecycleState::Active, "connect"),
-            LifecycleState::Suspended => self.send_lifecycle(LifecycleState::Suspended, "connect"),
-            LifecycleState::Hibernating | LifecycleState::Hibernated => {}
-        }
+        self.send_lifecycle(self.lifecycle_state, "connect");
     }
 
     pub(in crate::osr::host) fn begin_activity(&mut self, activity: HostActivity) {
-        if !activity.prevents_hibernation {
-            return;
-        }
-        self.activity_hibernation_blockers.insert(activity.id);
-        self.hibernate_deadline = None;
-        if self.lifecycle_state == LifecycleState::Hibernating {
-            self.lifecycle_state = LifecycleState::Suspended;
-            self.hibernate_commit_deadline = None;
-            self.send_lifecycle(LifecycleState::Suspended, "activity");
+        if activity.keeps_running {
+            self.running_activities.insert(activity.id);
+            self.refresh_freeze();
         }
     }
 
     pub(in crate::osr::host) fn end_activity(&mut self, activity: HostActivity) {
-        if !activity.prevents_hibernation {
-            return;
+        if activity.keeps_running {
+            self.running_activities.remove(&activity.id);
+            self.refresh_freeze();
         }
-        self.activity_hibernation_blockers.remove(&activity.id);
+    }
+
+    pub(in crate::osr::host) fn set_page_media_playing(&mut self, playing: bool) {
+        self.page_media_playing = playing;
+        self.refresh_freeze();
+    }
+
+    /// Starts the countdown to freezing a page nobody can see, and thaws a
+    /// frozen page as soon as something needs it running.
+    pub(in crate::osr::host) fn refresh_freeze(&mut self) {
+        let keep_running = !self.running_activities.is_empty()
+            || self.page_media_playing
+            || self.media.is_playing();
+        if keep_running && self.lifecycle_state == LifecycleState::Frozen {
+            self.lifecycle_state = LifecycleState::Suspended;
+            self.send_lifecycle(LifecycleState::Suspended, "playing");
+        }
+        let out_of_sight = !self.config.visible || self.occluded;
+        let freezable = self.lifecycle_state == LifecycleState::Suspended
+            && out_of_sight
+            && !keep_running
+            && self.socket.is_some();
+        match (freezable, self.config.lifecycle.freeze_after) {
+            (true, Some(delay)) => {
+                self.freeze_deadline
+                    .get_or_insert_with(|| Instant::now() + delay);
+            }
+            _ => self.freeze_deadline = None,
+        }
+    }
+
+    pub(in crate::osr::host) fn freeze(&mut self) {
+        self.freeze_deadline = None;
         if self.lifecycle_state == LifecycleState::Suspended {
-            self.schedule_hibernate_deadline();
+            self.lifecycle_state = LifecycleState::Frozen;
+            self.send_lifecycle(LifecycleState::Frozen, "idle");
         }
-    }
-
-    pub(in crate::osr::host) fn has_hibernation_blockers(&self) -> bool {
-        !self.activity_hibernation_blockers.is_empty()
-    }
-
-    pub(in crate::osr::host) fn schedule_hibernate_deadline(&mut self) {
-        self.hibernate_deadline = if self.has_hibernation_blockers() {
-            None
-        } else {
-            self.config
-                .lifecycle
-                .hibernate_after
-                .map(|delay| Instant::now() + delay)
-        };
     }
 }
 

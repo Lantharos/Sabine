@@ -26,17 +26,6 @@ impl GpuRenderer {
         self.texture_cache.remove(id);
     }
 
-    pub(crate) fn clear_images(&mut self) {
-        #[cfg(any(windows, target_os = "macos"))]
-        for (_, completed) in self.external_texture_releases.drain() {
-            self.queue.on_submitted_work_done(completed);
-            self.submission_poller.notify();
-        }
-        #[cfg(any(windows, target_os = "macos"))]
-        self.external_imports.clear();
-        self.texture_cache.clear();
-    }
-
     /// Writes `rects` into the `size` image `id`, replacing the image with a
     /// cleared one first when its size changed.
     pub(crate) fn write_bgra_rects(

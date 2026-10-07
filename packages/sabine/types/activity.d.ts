@@ -1,14 +1,17 @@
 export interface ActivityOptions {
   /** Shown in diagnostics; up to 128 characters. Defaults to `activity`. */
   name?: string;
-  /** Keeps the window from hibernating while the activity runs. Defaults to `true`. */
-  preventsHibernation?: boolean;
+  /**
+   * Keeps the page running while its window is out of sight, instead of letting Sabine freeze it.
+   * Defaults to `true`.
+   */
+  keepRunning?: boolean;
 }
 
 export interface ActivityRecord {
   id: string;
   name: string;
-  preventsHibernation: boolean;
+  keepRunning: boolean;
 }
 
 export interface ActivityEnd {
@@ -23,8 +26,8 @@ export interface ActivityHandle extends ActivityRecord {
 
 export interface ActivityList {
   activities: ActivityRecord[];
-  /** How many running activities keep the window from hibernating. */
-  hibernationBlockers: number;
+  /** How many running activities keep the page running while its window is out of sight. */
+  keepingRunning: number;
 }
 
 export interface SabineActivityApi {

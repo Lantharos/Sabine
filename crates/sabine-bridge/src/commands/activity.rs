@@ -16,19 +16,21 @@ pub(super) const COMMANDS: [&str; 3] = [BEGIN_COMMAND, END_COMMAND, LIST_COMMAND
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityOptions {
     pub name: String,
-    pub prevents_hibernation: bool,
+    pub keep_running: bool,
 }
 
 impl ActivityOptions {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            prevents_hibernation: true,
+            keep_running: true,
         }
     }
 
-    pub fn prevents_hibernation(mut self, prevents_hibernation: bool) -> Self {
-        self.prevents_hibernation = prevents_hibernation;
+    /// Whether the page keeps running while its window is out of sight
+    /// instead of being frozen. On by default.
+    pub fn keep_running(mut self, keep_running: bool) -> Self {
+        self.keep_running = keep_running;
         self
     }
 }
@@ -37,7 +39,7 @@ impl ActivityOptions {
 pub struct ActivityRecord {
     pub id: String,
     pub name: String,
-    pub prevents_hibernation: bool,
+    pub keep_running: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -70,7 +72,7 @@ impl ActivityRegistry {
         let record = ActivityRecord {
             id: format!("activity-{}", state.next_id),
             name: normalize_name(&options.name),
-            prevents_hibernation: options.prevents_hibernation,
+            keep_running: options.keep_running,
         };
         state.records.insert(record.id.clone(), record.clone());
         record
@@ -133,9 +135,9 @@ impl ActivityRegistry {
                 .and_then(Value::as_str)
                 .map(normalize_name)
                 .unwrap_or_else(|| "activity".to_string()),
-            prevents_hibernation: command
+            keep_running: command
                 .params
-                .get("preventsHibernation")
+                .get("keepRunning")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
         };
@@ -172,9 +174,9 @@ impl ActivityRegistry {
         let activities = self.list();
         json!({
             "activities": activities.iter().map(record_json).collect::<Vec<_>>(),
-            "hibernationBlockers": activities
+            "keepingRunning": activities
                 .iter()
-                .filter(|activity| activity.prevents_hibernation)
+                .filter(|activity| activity.keep_running)
                 .count(),
         })
     }
@@ -239,7 +241,7 @@ fn record_json(record: &ActivityRecord) -> Value {
     json!({
         "id": record.id,
         "name": record.name,
-        "preventsHibernation": record.prevents_hibernation,
+        "keepRunning": record.keep_running,
     })
 }
 
@@ -268,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn begin_defaults_to_hibernation_blocker() {
+    fn activities_keep_the_page_running_by_default() {
         let registry = ActivityRegistry::default();
         let (response, update) = registry
             .dispatch_bridge_command(&command(BEGIN_COMMAND, json!({ "name": "backup" })))
@@ -276,7 +278,7 @@ mod tests {
 
         let response = response.expect("activity response").result;
         assert_eq!(response["name"], "backup");
-        assert_eq!(response["preventsHibernation"], true);
+        assert_eq!(response["keepRunning"], true);
         assert!(matches!(update, Some(ActivityHostUpdate::Begin(_))));
         assert_eq!(registry.list().len(), 1);
     }
