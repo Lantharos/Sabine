@@ -3,7 +3,12 @@ use crate::{
 };
 use sabine_runtime::sabine_data_dir;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, io::Write, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use super::complete_managed_system_at;
 
@@ -34,13 +39,20 @@ pub(super) fn versions_dir() -> PathBuf {
     sabine_data_dir().join("bin/versions")
 }
 
+const INSTALLATION_STATE: &str = "bin/current.json";
+
 fn installation_state_path() -> PathBuf {
-    sabine_data_dir().join("bin/current.json")
+    sabine_data_dir().join(INSTALLATION_STATE)
 }
 
 pub(super) fn read_installation_state() -> Option<SystemInstallationState> {
+    read_installation_state_in(&sabine_data_dir())
+}
+
+/// The installation recorded under a Sabine data folder.
+pub(super) fn read_installation_state_in(root: &Path) -> Option<SystemInstallationState> {
     let state = serde_json::from_slice::<SystemInstallationState>(
-        &fs::read(installation_state_path()).ok()?,
+        &fs::read(root.join(INSTALLATION_STATE)).ok()?,
     )
     .ok()?;
     (state.schema == 1).then_some(state)

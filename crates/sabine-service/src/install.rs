@@ -22,8 +22,8 @@ use artifacts::{
 use state::{
     SystemInstallationState, clear_system_failure, compatibility_for_version, current_installation,
     lock_system_installation, normalized_state_compatibility, prune_system_versions,
-    read_installation_state, record_system_failure, system_update_is_backed_off, versions_dir,
-    write_installation_state,
+    read_installation_state, read_installation_state_in, record_system_failure,
+    system_update_is_backed_off, versions_dir, write_installation_state,
 };
 
 const SERVICE_REPO: &str = "Lantharos/Sabine";
@@ -405,7 +405,12 @@ pub(crate) fn mark_system_update_healthy(version: &str) {
 }
 
 pub fn installed_system_compatibility() -> SystemCompatibility {
-    read_installation_state()
+    system_compatibility_in(&sabine_runtime::sabine_data_dir())
+}
+
+/// What the Sabine installed under `root` accepts.
+pub(crate) fn system_compatibility_in(root: &Path) -> SystemCompatibility {
+    read_installation_state_in(root)
         .map(|state| normalized_state_compatibility(&state))
         .unwrap_or_else(SystemCompatibility::current)
 }

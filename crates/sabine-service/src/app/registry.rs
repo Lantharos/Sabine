@@ -49,9 +49,10 @@ impl SabineService {
         manifest.validate()?;
         let _lock = RegistryLock::acquire(&self.root)?;
         let mut registry = self.load_registry()?;
-        if let Some(message) =
-            incompatibility_message(&manifest, crate::install::installed_system_compatibility())
-        {
+        if let Some(message) = incompatibility_message(
+            &manifest,
+            crate::install::system_compatibility_in(&self.root),
+        ) {
             return Err(ServiceError::IncompatibleApp {
                 app_id: manifest.id,
                 message,
@@ -105,7 +106,7 @@ impl SabineService {
     }
 
     pub(crate) fn incompatible_apps(&self) -> ServiceResult<Vec<String>> {
-        let compatibility = crate::install::installed_system_compatibility();
+        let compatibility = crate::install::system_compatibility_in(&self.root);
         Ok(self
             .apps()?
             .into_iter()
