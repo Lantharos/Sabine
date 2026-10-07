@@ -1,5 +1,3 @@
-use crate::osr::host::types::LoadingKind;
-
 const PLAUSIBLE: &[&str] = &[
     "Getting situated…",
     "Sorting things out…",
@@ -59,13 +57,9 @@ const UNHINGED: &[&str] = &[
     "Inventing the relevant department…",
 ];
 
-pub(crate) fn loading_message(kind: LoadingKind, seed: u64, rotation: u64) -> &'static str {
-    let kind_salt = match kind {
-        LoadingKind::Opening => 0xA076_1D64_78BD_642F,
-        LoadingKind::Resuming => 0xE703_7ED1_A0B4_28DB,
-    };
+pub(crate) fn loading_message(seed: u64, rotation: u64) -> &'static str {
     let count = PLAUSIBLE.len() + WHIMSICAL.len() + UNHINGED.len();
-    let index = (mix(seed ^ kind_salt) as usize + rotation as usize * 17) % count;
+    let index = (mix(seed) as usize + rotation as usize * 17) % count;
     if index < PLAUSIBLE.len() {
         PLAUSIBLE[index]
     } else if index < PLAUSIBLE.len() + WHIMSICAL.len() {
@@ -89,14 +83,12 @@ mod tests {
 
     #[test]
     fn loading_messages_do_not_repeat_consecutively() {
-        for kind in [LoadingKind::Opening, LoadingKind::Resuming] {
-            for seed in 0..50 {
-                for rotation in 1..20 {
-                    assert_ne!(
-                        loading_message(kind, seed, rotation - 1),
-                        loading_message(kind, seed, rotation)
-                    );
-                }
+        for seed in 0..50 {
+            for rotation in 1..20 {
+                assert_ne!(
+                    loading_message(seed, rotation - 1),
+                    loading_message(seed, rotation)
+                );
             }
         }
     }

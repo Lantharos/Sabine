@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use crate::media::{Events, Rect, SourcePolicy, Viewport};
 use crate::osr::control::ControlWriter;
+use winit::event_loop::EventLoopProxy;
 
 use super::BridgeRequest;
 use crate::osr::host::native::OsrNativeHost;
@@ -16,8 +17,9 @@ impl OsrNativeHost {
             local_files: self.config.local_files,
         };
         let writer = self.control_writer.clone();
+        let proxy = self.proxy.clone();
         let result = self.media.handle(request.command, params, &policy, |id| {
-            media_events(writer, id)
+            media_events(writer, proxy, id)
         });
         self.send_bridge_response(request.browser_id, request.request_id, result);
         self.sync_media();
@@ -62,8 +64,11 @@ impl OsrNativeHost {
     }
 }
 
-fn media_events(writer: Option<Arc<ControlWriter>>, id: u64) -> Events {
+fn media_events(writer: Option<Arc<ControlWriter>>, proxy: EventLoopProxy, id: u64) -> Events {
     Arc::new(move |mut payload: Value| {
+        if payload["type"] == "state" {
+            proxy.wake_up();
+        }
         payload["id"] = id.into();
         if let Some(writer) = &writer {
             let _ = writer.send(format!(

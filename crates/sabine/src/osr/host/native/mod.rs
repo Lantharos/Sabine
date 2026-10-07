@@ -81,13 +81,13 @@ pub(super) struct OsrNativeHost {
     pub(super) published_window_state: Option<super::types::WindowState>,
     pub(super) lifecycle_state: LifecycleState,
     pub(super) last_frame_rate: Cell<Option<u32>>,
-    pub(super) hibernate_deadline: Option<Instant>,
-    pub(super) hibernate_commit_deadline: Option<Instant>,
+    pub(super) freeze_deadline: Option<Instant>,
     pub(super) closing_deadline: Option<Instant>,
     pub(super) pending_resize_paint: Option<PendingResizePaint>,
     pub(super) pending_suspend_at: Option<Instant>,
     pub(super) effect_regions_dirty: bool,
-    pub(super) activity_hibernation_blockers: BTreeSet<String>,
+    pub(super) running_activities: BTreeSet<String>,
+    pub(super) page_media_playing: bool,
     pub(super) presented: bool,
     pub(super) main_frame_presented: bool,
     pub(super) loading: Option<super::types::NativeLoading>,
@@ -131,14 +131,6 @@ impl OsrNativeHost {
             LifecycleState::Active
         } else {
             LifecycleState::Suspended
-        };
-        let hibernate_deadline = if visible {
-            None
-        } else {
-            config
-                .lifecycle
-                .hibernate_after
-                .map(|delay| Instant::now() + delay)
         };
         #[cfg(target_os = "linux")]
         let appearance_proxy = proxy.clone();
@@ -192,17 +184,16 @@ impl OsrNativeHost {
             published_window_state: None,
             lifecycle_state,
             last_frame_rate: Cell::new(None),
-            hibernate_deadline,
-            hibernate_commit_deadline: None,
+            freeze_deadline: None,
             closing_deadline: None,
             pending_resize_paint: None,
             pending_suspend_at: None,
             effect_regions_dirty: false,
-            activity_hibernation_blockers: BTreeSet::new(),
+            running_activities: BTreeSet::new(),
+            page_media_playing: false,
             presented: false,
             main_frame_presented: false,
-            loading: visible
-                .then(|| super::types::NativeLoading::new(super::types::LoadingKind::Opening)),
+            loading: visible.then(super::types::NativeLoading::new),
             tooltip: None,
             context_menu: None,
             pending_activation_token: None,

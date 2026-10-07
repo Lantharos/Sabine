@@ -104,15 +104,8 @@ impl OsrHostEvent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::osr) enum LoadingKind {
-    Opening,
-    Resuming,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub(in crate::osr) struct NativeLoading {
-    pub(in crate::osr) kind: LoadingKind,
     pub(in crate::osr) started: Instant,
     pub(in crate::osr) reveal_at: Instant,
     pub(in crate::osr) next_frame: Instant,
@@ -155,11 +148,10 @@ impl NativeTooltip {
 }
 
 impl NativeLoading {
-    pub(in crate::osr) fn new(kind: LoadingKind) -> Self {
+    pub(in crate::osr) fn new() -> Self {
         let started = Instant::now();
         let reveal_at = started + LOADING_REVEAL_DELAY;
         Self {
-            kind,
             started,
             reveal_at,
             next_frame: reveal_at,
@@ -191,8 +183,7 @@ pub(super) enum TitlebarControl {
 pub(super) enum LifecycleState {
     Active,
     Suspended,
-    Hibernating,
-    Hibernated,
+    Frozen,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -211,7 +202,7 @@ pub(super) enum HostControl {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct HostActivity {
     pub(super) id: String,
-    pub(super) prevents_hibernation: bool,
+    pub(super) keeps_running: bool,
 }
 
 #[derive(Clone, Copy, Debug)]

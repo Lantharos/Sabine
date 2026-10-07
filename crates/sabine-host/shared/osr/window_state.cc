@@ -14,10 +14,10 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
     return;
   }
   CefRefPtr<CefBrowserHost> host = browser_->GetHost();
+  SetPagesFrozen(state == "frozen");
   if (state == "active") {
     const bool needs_paint = resume_needs_paint_;
     suspended_ = false;
-    hibernating_ = false;
     resume_needs_paint_ = false;
     host->SetWindowlessFrameRate(std::max(1, frame_rate));
     if (!UpdateViewHidden() && needs_paint) {
@@ -27,15 +27,8 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
     return;
   }
   suspended_ = true;
-  if (state == "hibernate") {
-    hibernating_ = true;
-    resume_needs_paint_ = false;
-    host->SetWindowlessFrameRate(std::max(1, background_frame_rate_));
-    UpdateViewHidden();
-  } else {
-    resume_needs_paint_ = resume_needs_paint_ || reason == "hidden";
-    host->SetWindowlessFrameRate(std::max(1, frame_rate));
-  }
+  resume_needs_paint_ = resume_needs_paint_ || reason == "hidden";
+  host->SetWindowlessFrameRate(std::max(1, frame_rate));
   ApplyGuestLifecycle();
 }
 
@@ -54,8 +47,8 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
 }
 
 bool SabineOsrHandler::UpdateViewHidden() {
-  const bool hidden = hibernating_ || window_occluded_ ||
-                      (!window_shown_ && !retain_hidden_frame_);
+  const bool hidden =
+      window_occluded_ || (!window_shown_ && !retain_hidden_frame_);
   if (!browser_ || hidden == view_hidden_) {
     return false;
   }

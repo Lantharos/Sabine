@@ -12,6 +12,7 @@
 #include <set>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "guest/manager.h"
@@ -140,6 +141,9 @@ class SabineOsrHandler : public CefClient,
                       cef_cursor_type_t type,
                       const CefCursorInfo& custom_cursor_info) override;
   bool OnTooltip(CefRefPtr<CefBrowser> browser, CefString& text) override;
+  void OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
+                           bool has_video_access,
+                           bool has_audio_access) override;
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
   void OnAddressChange(CefRefPtr<CefBrowser> browser,
@@ -340,6 +344,12 @@ class SabineOsrHandler : public CefClient,
                       int frame_rate,
                       const std::string& reason);
   void ApplyWindowState(bool shown, bool occluded, bool suspended);
+  void SetPagesFrozen(bool frozen);
+  void UpdateFrameMediaState(CefRefPtr<CefBrowser> browser,
+                             CefRefPtr<CefFrame> frame,
+                             bool playing);
+  void ForgetMediaState(CefRefPtr<CefBrowser> browser);
+  void ReportMediaPlaying();
   bool UpdateViewHidden();
   void DispatchWindowState();
   void StartCommandReader();
@@ -444,7 +454,10 @@ class SabineOsrHandler : public CefClient,
   bool transparent_background_ = false;
   bool retain_hidden_frame_ = false;
   bool suspended_ = false;
-  bool hibernating_ = false;
+  bool frozen_ = false;
+  std::set<std::pair<int, std::string>> playing_frames_;
+  std::set<int> capturing_browsers_;
+  bool media_playing_reported_ = false;
   bool window_shown_ = true;
   bool window_visible_ = true;
   bool window_occluded_ = false;

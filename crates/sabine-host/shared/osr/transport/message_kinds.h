@@ -41,5 +41,6 @@ constexpr uint32_t kDragOperation = 40;
 constexpr uint32_t kContextMenu = 41;
 constexpr uint32_t kContextMenuDismissed = 42;
 constexpr uint32_t kFileDialog = 43;
+constexpr uint32_t kMediaPlaying = 44;
 
 #endif

@@ -107,6 +107,12 @@ const stop = appWindow.onVisibilityChanged(({ visible, suspended }) => {
 While a shown window is out of sight, Chromium also stops rendering it and treats the document as
 hidden. Rust code can follow the same changes with `SabineWindow::on_visibility_changed`.
 
+Once a window has been out of sight for a while (five minutes for `.app()` windows), Sabine freezes
+its page: no JavaScript runs and the page's caches are released, while everything it holds stays in
+memory, so it continues instantly when the window comes back. The document receives the standard
+`freeze` and `resume` events. Pages playing audio or video, in a call, or running an activity that
+keeps them running are never frozen.
+
 Glass windows can change which parts are blurred, opaque or clickable while they run, for example
 to drop a sidebar's blur while it is hidden:
 
@@ -229,9 +235,10 @@ await popup.open({ x: 40, y: 80, width: 280, height: 160, html: "<p>Menu</p>" })
 await popup.close();
 ```
 
-An activity keeps the window from hibernating while it runs, unless it is started with
-`preventsHibernation: false`. `activity.list()` returns the running activities and how many of them
-block hibernation. Rust code starts the same activities with `begin_activity`.
+An activity keeps the page running while its window is out of sight, instead of letting Sabine
+freeze it, unless it is started with `keepRunning: false`. `activity.list()` returns the running
+activities and how many of them keep the page running. Rust code starts the same activities with
+`begin_activity`.
 
 ## Opening URLs and documents
 

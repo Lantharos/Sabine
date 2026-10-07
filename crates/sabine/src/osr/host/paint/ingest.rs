@@ -8,8 +8,7 @@ use crate::render::{GpuRenderer, ImageId, RendererError};
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
-    LifecycleState, OverlayLayer, PendingResizePaint, RESIZE_REPAINT_GRACE, RESIZE_REPAINT_RETRY,
-    SurfaceGeometry,
+    OverlayLayer, PendingResizePaint, RESIZE_REPAINT_GRACE, RESIZE_REPAINT_RETRY, SurfaceGeometry,
 };
 
 impl OsrNativeHost {
@@ -69,12 +68,7 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn accepts_paint(&self) -> bool {
-        (self.config.visible || self.config.lifecycle.retain_hidden_frame)
-            && !self.occluded
-            && !matches!(
-                self.lifecycle_state,
-                LifecycleState::Hibernating | LifecycleState::Hibernated
-            )
+        (self.config.visible || self.config.lifecycle.retain_hidden_frame) && !self.occluded
     }
 
     pub(in crate::osr::host) fn surface_geometry(

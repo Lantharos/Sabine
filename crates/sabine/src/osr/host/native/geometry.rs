@@ -41,7 +41,7 @@ impl OsrNativeHost {
         let scale = self.scale();
         if !self.config.visible
             && self.window.is_none()
-            && self.config.lifecycle.hibernate_after.is_some()
+            && !self.config.lifecycle.retain_hidden_frame
         {
             return (1, 1, scale);
         }

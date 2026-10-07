@@ -3,6 +3,10 @@
 //! Pages play media Chromium cannot decode through a native surface placed
 //! beneath the page. The window host answers `sabine.media.*` commands itself.
 
+/// Evaluated in every frame by the browser host. Reports whether the frame plays
+/// audio or video, so the window never freezes a page with media playing.
+pub const STATE_SCRIPT: &str = include_str!("../scripts/media_state.js");
+
 pub const COMMAND_PREFIX: &str = "sabine.media.";
 
 pub const CREATE_COMMAND: &str = "sabine.media.create";

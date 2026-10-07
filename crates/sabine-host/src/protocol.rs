@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-pub const HOST_PROTOCOL_VERSION: &str = "4";
+pub const HOST_PROTOCOL_VERSION: &str = "5";
 const HOST_PROTOCOL_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub fn validate_host_protocol(host: &Path, runtime_dir: &Path) -> Result<(), String> {

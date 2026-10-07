@@ -185,10 +185,11 @@ pub struct SabineLifecyclePolicy {
     pub suspend_on_minimize: bool,
     pub suspend_on_occluded: bool,
     pub suspend_on_blur: bool,
-    pub hibernate_after: Option<Duration>,
-    pub hibernate_grace: Duration,
+    /// How long a window stays out of sight before its page is frozen and its
+    /// memory trimmed. Pages playing audio or video, in a call, or running an
+    /// activity that keeps them running are never frozen.
+    pub freeze_after: Option<Duration>,
     pub retain_hidden_frame: bool,
-    pub memory_saver: bool,
 }
 
 impl Default for SabineLifecyclePolicy {
@@ -199,10 +200,8 @@ impl Default for SabineLifecyclePolicy {
             suspend_on_minimize: true,
             suspend_on_occluded: true,
             suspend_on_blur: false,
-            hibernate_after: None,
-            hibernate_grace: Duration::from_millis(750),
+            freeze_after: None,
             retain_hidden_frame: false,
-            memory_saver: false,
         }
     }
 }
@@ -210,7 +209,7 @@ impl Default for SabineLifecyclePolicy {
 impl SabineLifecyclePolicy {
     pub fn browser_tab() -> Self {
         Self {
-            hibernate_after: Some(Duration::from_secs(300)),
+            freeze_after: Some(Duration::from_secs(300)),
             ..Self::default()
         }
     }
@@ -219,33 +218,19 @@ impl SabineLifecyclePolicy {
         Self {
             background_frame_rate: 1,
             suspend_on_blur: true,
-            hibernate_grace: Duration::from_millis(150),
+            freeze_after: Some(Duration::from_secs(60)),
             retain_hidden_frame: true,
             ..Self::default()
         }
     }
 
-    pub fn memory_saver_hidden_window() -> Self {
-        Self {
-            hibernate_after: Some(Duration::from_secs(5)),
-            retain_hidden_frame: false,
-            memory_saver: true,
-            ..Self::hidden_window()
-        }
-    }
-
-    pub fn with_memory_saver(mut self, enabled: bool) -> Self {
-        self.memory_saver = enabled;
+    pub fn with_freeze_after(mut self, duration: Duration) -> Self {
+        self.freeze_after = Some(duration);
         self
     }
 
-    pub fn with_hibernate_after(mut self, duration: Duration) -> Self {
-        self.hibernate_after = Some(duration);
-        self
-    }
-
-    pub fn without_hibernation(mut self) -> Self {
-        self.hibernate_after = None;
+    pub fn without_freezing(mut self) -> Self {
+        self.freeze_after = None;
         self
     }
 }
