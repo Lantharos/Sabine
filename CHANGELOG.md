@@ -1,4 +1,4 @@
-# Sabine 0.34
+# Unreleased
 
 - Sabine cleans up apps that are gone for good. An app whose program has been missing for a week,
   and a development build from `sabine dev` not launched for 30 days, are removed along with
