@@ -99,9 +99,13 @@ class RuntimeProbe : public CefClient,
       return;
     }
     auto* source = static_cast<IOSurfaceRef>(info.shared_texture_io_surface);
+    const sabine_osr::AcceleratedSurfaceKey surface{browser->GetIdentifier()};
+    const auto whole = sabine_osr::PixelRegion::Whole(
+        static_cast<int>(IOSurfaceGetWidth(source)),
+        static_cast<int>(IOSurfaceGetHeight(source)));
     sabine_osr::AccelIOSurfaceCopiedFrame copied{};
     if (!sabine_osr::CopyAcceleratedIOSurfaceFrame(
-            "probe", info.shared_texture_io_surface, &copied)) {
+            surface, info.shared_texture_io_surface, whole, &copied)) {
       std::cerr << "Chromium's shared paint surface could not be copied"
                 << std::endl;
       closing_ = true;
