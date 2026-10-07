@@ -139,6 +139,9 @@ pub struct RegisteredApp {
     pub manifest: AppManifest,
     pub registered_at: u64,
     pub updated_at: u64,
+    /// When Sabine first found the app's executable gone, cleared once it is back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing_since: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

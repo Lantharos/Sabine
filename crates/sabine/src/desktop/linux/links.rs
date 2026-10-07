@@ -1,13 +1,10 @@
 use std::{collections::BTreeSet, fs, io, path::PathBuf};
 
 use sabine_platform::{AutostartEntry, DeepLinkRegistration};
+use sabine_service::SHORTCUT_HOST_KEY;
 
 use super::util::*;
 use crate::desktop::sanitize_id;
-
-/// Marks the hidden entry Sabine writes so the GlobalShortcuts portal can
-/// name an app that has no installed entry yet.
-const SHORTCUT_HOST_KEY: &str = "X-Sabine-Shortcut-Host=true";
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> io::Result<()> {
     let path = sabine_service::app_autostart_path(&entry.id)?;

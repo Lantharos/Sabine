@@ -10,6 +10,7 @@ mod updates;
 #[cfg(windows)]
 pub mod windows_registry;
 
+pub use app::cleanup::AppCleanup;
 pub use app::data::browser_profile_path;
 #[cfg(windows)]
 pub use app::desktop::autostart::APP_AUTOSTART_KEY;
@@ -17,6 +18,8 @@ pub use app::desktop::autostart::APP_AUTOSTART_KEY;
 pub use app::desktop::autostart::app_autostart_label;
 #[cfg(unix)]
 pub use app::desktop::autostart::app_autostart_path;
+#[cfg(target_os = "linux")]
+pub use app::desktop::entries::{SHORTCUT_HOST_KEY, forget_desktop_entries};
 #[cfg(windows)]
 pub use app::desktop::native_messaging::native_messaging_registry_keys;
 pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messaging_manifest_dirs};

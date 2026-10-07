@@ -73,6 +73,7 @@ impl SabineService {
             manifest,
             registered_at,
             updated_at: now,
+            missing_since: None,
         };
         registry.apps.insert(app.manifest.id.clone(), app.clone());
         self.save_registry(&registry)?;

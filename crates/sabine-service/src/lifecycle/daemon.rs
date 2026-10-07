@@ -143,6 +143,20 @@ pub fn run_daemon() -> ServiceResult<()> {
             }
             Err(error) => sabine_runtime::report_error("maintenance", error),
         }
+        match service.clean_up_apps() {
+            Ok(cleanup) => {
+                for id in &cleanup.removed {
+                    let _ = sabine_runtime::record_diagnostic(
+                        "maintenance",
+                        &format!("removed {id}, which is no longer installed"),
+                    );
+                }
+                for failure in &cleanup.failures {
+                    sabine_runtime::report_error("maintenance", failure);
+                }
+            }
+            Err(error) => sabine_runtime::report_error("maintenance", error),
+        }
         std::thread::sleep(crate::default_maintenance_interval());
     }
 }

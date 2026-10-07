@@ -483,6 +483,14 @@ file paths use SHA-256, so every Sabine build and the daemon agree on them.
 The user systemd unit follows `XDG_CONFIG_HOME` and preserves custom data, config, and cache paths.
 Executable paths containing spaces or systemd specifier characters are quoted.
 
+Each maintenance pass also removes apps that are gone for good. An app whose program has been
+missing for a week, which leaves room for an app on a drive that is not mounted, and a development
+registration from `sabine dev` that has not been launched for 30 days lose their registration and
+everything Sabine keeps for them: login item, browser extension hosts, staged updates and
+downloads, Sabine's folder for the app, the desktop entries and URL handler Sabine wrote on Linux,
+and the app's browser profile. Installed apps whose program is still there are never removed for
+being unused, and an app that comes back simply registers again.
+
 The maintenance daemon holds an operating-system file lock for its lifetime. Its PID and version
 files are diagnostic metadata; simultaneous launches cannot become competing owners, and a killed
 daemon releases the lock automatically so the next launch can replace stale metadata.

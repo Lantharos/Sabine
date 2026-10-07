@@ -43,7 +43,7 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     }
     let name = registered.map_or_else(|_| id.clone(), |app| app.manifest.name);
     let install = directory.join("install");
-    remove_desktop(&id, &install)?;
+    remove_desktop(&id, &directory)?;
     service
         .forget_app(&id, &install)
         .map_err(|error| error.to_string())?;
@@ -86,10 +86,12 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     Ok(ExitCode::SUCCESS)
 }
 
-fn remove_desktop(id: &str, install: &Path) -> Result<(), String> {
+fn remove_desktop(id: &str, directory: &Path) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", windows))]
+    let install = directory.join("install");
     #[cfg(target_os = "linux")]
     {
-        super::handlers::linux::remove(id, install)?;
+        sabine_service::forget_desktop_entries(id, directory).map_err(|error| error.to_string())?;
         let data = super::source::data_home()?;
         let applications = data.join("applications");
         remove_path(&applications.join(format!("{id}.desktop")))?;
@@ -114,13 +116,13 @@ fn remove_desktop(id: &str, install: &Path) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
-        super::handlers::macos::remove(id, install);
+        super::handlers::macos::remove(id, &install);
         let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
         remove_path(&home.join("Applications").join(format!("{id}.app")))?;
     }
     #[cfg(windows)]
     {
-        super::handlers::windows::remove(install)?;
+        super::handlers::windows::remove(&install)?;
         let roaming = PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?);
         remove_path(
             &roaming

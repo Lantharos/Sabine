@@ -1,5 +1,10 @@
 # Unreleased
 
+- Sabine cleans up apps that are gone for good. An app whose program has been missing for a week,
+  and a development build from `sabine dev` not launched for 30 days, are removed along with
+  everything Sabine kept for them, including their login item, browser extension hosts, staged
+  updates, Linux URL handlers and browser profile. Installed apps are never removed for being
+  unused.
 - Windows no longer tear down their page after being out of sight for a while and show a resuming
   screen when they come back. Sabine now freezes the page instead: no JavaScript runs and its
   caches, decoded images and GPU memory are released, while everything it holds stays in place, so

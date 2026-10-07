@@ -367,16 +367,6 @@ pub(crate) fn data_home() -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn config_home() -> Result<PathBuf, String> {
-    if let Some(path) = env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(path));
-    }
-    home_dir()
-        .map(|home| home.join(".config"))
-        .ok_or_else(|| "HOME is not set".to_string())
-}
-
-#[cfg(target_os = "linux")]
 fn home_dir() -> Option<PathBuf> {
     env::var_os("HOME").map(PathBuf::from)
 }
