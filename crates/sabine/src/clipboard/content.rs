@@ -143,6 +143,7 @@ mod tests {
         assert_eq!(plan, [("text/plain;charset=utf-8".into(), TEXT.into())]);
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn text_is_served_under_every_name() {
         let mut content = ClipboardContent::default();
