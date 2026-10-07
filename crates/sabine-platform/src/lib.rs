@@ -9,6 +9,8 @@ mod shortcut_inhibit;
 #[cfg(target_os = "linux")]
 mod wayland_client;
 mod window_options;
+#[cfg(target_os = "linux")]
+mod window_placement;
 
 pub use appearance::Appearance;
 #[cfg(target_os = "linux")]
@@ -32,3 +34,5 @@ pub use shortcut_inhibit::SystemKey;
 pub use window_options::{
     PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
 };
+#[cfg(target_os = "linux")]
+pub use window_placement::WindowPlacement;

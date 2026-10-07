@@ -105,7 +105,10 @@ impl OsrNativeHost {
             sabine_runtime::report_error("media", error);
         }
         #[cfg(target_os = "linux")]
-        self.attach_clipboard(window.as_ref());
+        {
+            self.attach_clipboard(window.as_ref());
+            self.place_window(window.as_ref());
+        }
         self.restore_ime_state();
         if let Err(error) = self.restore_shortcut_inhibitor() {
             sabine_runtime::report_error(
@@ -130,6 +133,21 @@ impl OsrNativeHost {
             && let Some(window) = &self.window
         {
             window.request_redraw();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn place_window(&mut self, window: &dyn WinitWindow) {
+        if !self.config.skip_taskbar && !self.config.always_on_top {
+            return;
+        }
+        match sabine_platform::WindowPlacement::new(
+            window,
+            self.config.skip_taskbar,
+            self.config.always_on_top,
+        ) {
+            Ok(placement) => self.placement = Some(placement),
+            Err(error) => sabine_runtime::report_error("window", error),
         }
     }
 
@@ -198,6 +216,10 @@ impl OsrNativeHost {
                 .max(f64::from(self.config.min_height)) as u32;
         }
         self.media.detach();
+        #[cfg(target_os = "linux")]
+        {
+            self.placement = None;
+        }
         self.release_shortcut_inhibitor();
         self.retain_frames();
         self.window = None;

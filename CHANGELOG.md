@@ -40,6 +40,8 @@
   permission.
 - Pages and Rust can show desktop notifications.
 - Apps and pages can follow the desktop's light or dark preference and accent color.
+- `skip_taskbar` and `always_on_top` work on Linux under Kestrel, so palettes and tray windows stay
+  out of the taskbar and window switcher and above other windows there too.
 - Async bridge handlers no longer occupy a bridge worker while they wait, so a slow handler cannot
   stall other commands, and Tokio timers and I/O work inside them.
 - `NativeVideo.isSupported()` is false in windows that cannot show native video.
