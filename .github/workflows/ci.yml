@@ -14,7 +14,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev
       - run: rustup toolchain install 1.90 --profile minimal --component clippy,rustfmt
       - run: rustup override set 1.90
@@ -31,7 +31,7 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install 1.90 --profile minimal --component clippy
       - run: rustup override set 1.90
       - uses: Swatinem/rust-cache@v2
