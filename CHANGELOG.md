@@ -40,6 +40,8 @@
   permission.
 - Pages and Rust can show desktop notifications.
 - Apps and pages can follow the desktop's light or dark preference and accent color.
+- Fix pages losing their stored data when the cache folder is reached through a symbolic link:
+  Chromium rejected the profile path and kept everything in memory.
 - `skip_taskbar` and `always_on_top` work on Linux under Kestrel, so palettes and tray windows stay
   out of the taskbar and window switcher and above other windows there too.
 - Async bridge handlers no longer occupy a bridge worker while they wait, so a slow handler cannot

@@ -274,12 +274,14 @@ pub(crate) fn cef_osr_command(
     let binary_dir = sabine_host::runtime_binary_directory(runtime_dir);
     let profile_key = browser_profile_key(config);
     let cache_dir = browser_profile_dir(&profile_key);
-    std::fs::create_dir_all(&cache_dir).map_err(|error| {
-        format!(
-            "could not create Sabine browser profile {}: {error}",
-            cache_dir.display()
-        )
-    })?;
+    let cache_dir = std::fs::create_dir_all(&cache_dir)
+        .and_then(|()| dunce::canonicalize(&cache_dir))
+        .map_err(|error| {
+            format!(
+                "could not create Sabine browser profile {}: {error}",
+                cache_dir.display()
+            )
+        })?;
     let token_file = crate::osr::transport::write_token_file(endpoint, authentication_token)
         .map_err(|error| format!("could not write Sabine OSR token file: {error}"))?;
     let mut command = Command::new(&host_binary);
