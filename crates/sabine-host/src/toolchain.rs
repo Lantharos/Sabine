@@ -2,10 +2,31 @@ use std::{path::PathBuf, process::Command};
 
 use crate::sources::command_available;
 
+/// CEF's own detection mistakes an `aarch64` Linux machine for x86-64.
+#[cfg(target_arch = "aarch64")]
+const CEF_PROJECT_ARCH: &str = "arm64";
+#[cfg(target_arch = "x86_64")]
+const CEF_PROJECT_ARCH: &str = "x86_64";
+
+#[cfg(target_arch = "aarch64")]
+const VISUAL_STUDIO_PLATFORM: &str = "ARM64";
+#[cfg(target_arch = "x86_64")]
+const VISUAL_STUDIO_PLATFORM: &str = "x64";
+
+#[cfg(target_arch = "aarch64")]
+const VISUAL_STUDIO_TOOLS: &str = "Microsoft.VisualStudio.Component.VC.Tools.ARM64";
+#[cfg(target_arch = "x86_64")]
+const VISUAL_STUDIO_TOOLS: &str = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
+
 pub(crate) fn apply_cmake_generator(configure: &mut Command) -> Result<(), String> {
+    configure.arg(format!("-DPROJECT_ARCH={CEF_PROJECT_ARCH}"));
     if cfg!(target_os = "windows") {
         let generator = windows_msvc_generator()?;
-        configure.arg("-G").arg(generator).arg("-A").arg("x64");
+        configure
+            .arg("-G")
+            .arg(generator)
+            .arg("-A")
+            .arg(VISUAL_STUDIO_PLATFORM);
         return Ok(());
     }
     if command_available("ninja") {
@@ -58,7 +79,7 @@ fn vswhere_installation_version() -> Option<String> {
             "-products",
             "*",
             "-requires",
-            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            VISUAL_STUDIO_TOOLS,
             "-property",
             "installationVersion",
         ])
@@ -75,7 +96,7 @@ fn cmake_generator_available(generator: &str) -> bool {
     let mut command = Command::new("cmake");
     crate::configure_background_command(&mut command);
     command
-        .args(["-G", generator, "-A", "x64", "--help"])
+        .args(["-G", generator, "-A", VISUAL_STUDIO_PLATFORM, "--help"])
         .output()
         .ok()
         .is_some_and(|output| {
