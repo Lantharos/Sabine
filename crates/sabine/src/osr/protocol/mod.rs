@@ -267,16 +267,15 @@ mod tests {
 
     #[test]
     fn uri_lists_carry_files_and_the_first_link() {
+        let note = std::env::temp_dir().join("Notes draft.txt");
+        let uri = url::Url::from_file_path(&note).unwrap();
         let mut content = DragContent::default();
         content.add_uris([
-            "file:///home/ana/Notes%20draft.txt",
+            uri.as_str(),
             "https://example.com/first",
             "https://example.com/second",
         ]);
-        assert_eq!(
-            content.files,
-            [std::path::PathBuf::from("/home/ana/Notes draft.txt")]
-        );
+        assert_eq!(content.files, [note]);
         assert_eq!(content.url, "https://example.com/first");
     }
 }
