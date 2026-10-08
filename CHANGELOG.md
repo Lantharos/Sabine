@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.36
 
 - The app's own pages get the paths of dropped files: each dropped `File` has a `path`, and the
   drop's `text/uri-list` lists the files as `file://` URIs. Other origins and guests get neither.
