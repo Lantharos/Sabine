@@ -22,6 +22,11 @@ pub struct Notification {
     pub title: String,
     pub body: String,
     pub silent: bool,
+    pub urgency: Urgency,
+    /// The kind of event, such as `email.arrived` or `im.received`, from the
+    /// freedesktop notification categories. Only Linux notification servers
+    /// read it.
+    pub category: Option<String>,
 }
 
 impl Notification {
@@ -31,6 +36,8 @@ impl Notification {
             title: title.into(),
             body: String::new(),
             silent: false,
+            urgency: Urgency::Normal,
+            category: None,
         }
     }
 
@@ -43,14 +50,62 @@ impl Notification {
         self.silent = silent;
         self
     }
+
+    pub fn urgency(mut self, urgency: Urgency) -> Self {
+        self.urgency = urgency;
+        self
+    }
+
+    pub fn category(mut self, category: impl Into<String>) -> Self {
+        self.category = Some(category.into());
+        self
+    }
 }
 
-/// What happened to a shown notification.
+/// How much a notification interrupts. Low ones go straight to the
+/// notification list without a banner, and critical ones stay until they are
+/// dismissed, as far as the desktop allows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Urgency {
+    Low,
+    #[default]
+    Normal,
+    Critical,
+}
+
+impl Urgency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Normal => "normal",
+            Self::Critical => "critical",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "low" => Some(Self::Low),
+            "normal" => Some(Self::Normal),
+            "critical" => Some(Self::Critical),
+            _ => None,
+        }
+    }
+}
+
+/// What happened to a shown notification. A click carries the activation
+/// token the desktop handed over with it, which lets the window come forward
+/// on Wayland.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NotificationEvent {
-    Clicked(String),
+    Clicked {
+        id: String,
+        activation_token: Option<String>,
+    },
     Closed(String),
-    Failed { id: String, message: String },
+    Failed {
+        id: String,
+        message: String,
+    },
 }
 
 pub type NotificationEvents = Arc<dyn Fn(NotificationEvent) + Send + Sync>;

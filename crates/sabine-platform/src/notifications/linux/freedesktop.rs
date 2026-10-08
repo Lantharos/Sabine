@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Mutex};
 
-use ashpd::zbus::{Connection, Proxy, zvariant::Value};
-use futures_util::{StreamExt, future, stream};
+use ashpd::zbus::{Connection, Proxy, message::Message, zvariant::Value};
+use futures_util::StreamExt;
 
-use crate::notifications::{Notification, NotificationEvent, NotificationEvents};
+use crate::notifications::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 pub(super) const SERVICE: &str = "org.freedesktop.Notifications";
 const PATH: &str = "/org/freedesktop/Notifications";
@@ -16,9 +16,34 @@ pub(super) struct Freedesktop {
     shown: Mutex<HashMap<u32, String>>,
 }
 
+/// The server's signals, in the order it sends them: a click sends the
+/// notification's activation token just before the action.
 enum Signal {
+    ActivationToken(u32, String),
     Action(u32),
     Closed(u32),
+}
+
+impl Signal {
+    fn read(message: &Message) -> Option<Self> {
+        let body = message.body();
+        match message.header().member()?.as_str() {
+            "ActivationToken" => body
+                .deserialize::<(u32, String)>()
+                .ok()
+                .map(|(number, token)| Self::ActivationToken(number, token)),
+            "ActionInvoked" => body
+                .deserialize::<(u32, String)>()
+                .ok()
+                .filter(|(_, action)| action == DEFAULT_ACTION)
+                .map(|(number, _)| Self::Action(number)),
+            "NotificationClosed" => body
+                .deserialize::<(u32, u32)>()
+                .ok()
+                .map(|(number, _)| Self::Closed(number)),
+            _ => None,
+        }
+    }
 }
 
 impl Freedesktop {
@@ -36,10 +61,14 @@ impl Freedesktop {
         notification: Notification,
     ) -> Result<(), String> {
         let replaces = self.number_of(&notification.id).unwrap_or(0);
-        let hints = HashMap::from([
+        let mut hints = HashMap::from([
             ("desktop-entry", Value::from(app_id)),
             ("suppress-sound", Value::from(notification.silent)),
+            ("urgency", Value::from(urgency_level(notification.urgency))),
         ]);
+        if let Some(category) = &notification.category {
+            hints.insert("category", Value::from(category.as_str()));
+        }
         let number: u32 = self
             .proxy
             .call(
@@ -71,44 +100,31 @@ impl Freedesktop {
     }
 
     pub(super) async fn listen(&self, events: &NotificationEvents) {
-        let Ok(actions) = self.proxy.receive_signal("ActionInvoked").await else {
+        let Ok(mut signals) = self.proxy.receive_all_signals().await else {
             return;
         };
-        let Ok(closes) = self.proxy.receive_signal("NotificationClosed").await else {
-            return;
-        };
-        let actions = actions.filter_map(|message| {
-            future::ready(
-                message
-                    .body()
-                    .deserialize::<(u32, String)>()
-                    .ok()
-                    .filter(|(_, action)| action == DEFAULT_ACTION)
-                    .map(|(number, _)| Signal::Action(number)),
-            )
-        });
-        let closes = closes.filter_map(|message| {
-            future::ready(
-                message
-                    .body()
-                    .deserialize::<(u32, u32)>()
-                    .ok()
-                    .map(|(number, _)| Signal::Closed(number)),
-            )
-        });
-        let mut signals = stream::select(actions.boxed(), closes.boxed());
-        while let Some(signal) = signals.next().await {
-            match signal {
-                Signal::Action(number) => {
+        let mut tokens = HashMap::new();
+        while let Some(message) = signals.next().await {
+            match Signal::read(&message) {
+                Some(Signal::ActivationToken(number, token)) => {
+                    tokens.insert(number, token);
+                }
+                Some(Signal::Action(number)) => {
+                    let activation_token = tokens.remove(&number);
                     if let Some(id) = self.shown().get(&number).cloned() {
-                        events(NotificationEvent::Clicked(id));
+                        events(NotificationEvent::Clicked {
+                            id,
+                            activation_token,
+                        });
                     }
                 }
-                Signal::Closed(number) => {
+                Some(Signal::Closed(number)) => {
+                    tokens.remove(&number);
                     if let Some(id) = self.shown().remove(&number) {
                         events(NotificationEvent::Closed(id));
                     }
                 }
+                None => {}
             }
         }
     }
@@ -121,5 +137,13 @@ impl Freedesktop {
         self.shown()
             .iter()
             .find_map(|(number, shown)| (shown == id).then_some(*number))
+    }
+}
+
+fn urgency_level(urgency: Urgency) -> u8 {
+    match urgency {
+        Urgency::Low => 0,
+        Urgency::Normal => 1,
+        Urgency::Critical => 2,
     }
 }

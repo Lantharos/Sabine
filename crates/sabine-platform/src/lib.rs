@@ -26,7 +26,7 @@ pub use desktop_integration::{
     TrayMenuItemKind,
 };
 pub use effect::WindowEffect;
-pub use notifications::{Notification, NotificationEvent, NotificationEvents, Notifier};
+pub use notifications::{Notification, NotificationEvent, NotificationEvents, Notifier, Urgency};
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
 pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]

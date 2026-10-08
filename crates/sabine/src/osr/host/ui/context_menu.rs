@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use winit::{
-    keyboard::{Key, NamedKey},
-    window::Theme,
-};
+use winit::keyboard::{Key, NamedKey};
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::protocol::ContextMenuItem;
@@ -267,8 +264,7 @@ impl OsrNativeHost {
         let Some(menu) = &self.context_menu else {
             return;
         };
-        let palette =
-            MenuPalette::for_theme(self.window.as_ref().and_then(|window| window.theme()));
+        let palette = MenuPalette::new(self.appearance().is_none_or(|appearance| appearance.dark));
         list.push(RoundedRectCommand {
             x: menu.x - 1.0,
             y: menu.y - 1.0,
@@ -359,24 +355,25 @@ struct MenuPalette {
 }
 
 impl MenuPalette {
-    fn for_theme(theme: Option<Theme>) -> Self {
-        match theme {
-            Some(Theme::Light) => Self {
-                background: Color::rgb8(250, 250, 251),
-                border: Color::rgba8(0, 0, 0, 38),
-                separator: Color::rgba8(0, 0, 0, 26),
-                highlight: Color::rgba8(0, 0, 0, 18),
-                text: Color::rgb8(24, 24, 27),
-                disabled: Color::rgba8(24, 24, 27, 110),
-            },
-            _ => Self {
+    fn new(dark: bool) -> Self {
+        if dark {
+            Self {
                 background: Color::rgb8(37, 37, 41),
                 border: Color::rgba8(255, 255, 255, 30),
                 separator: Color::rgba8(255, 255, 255, 24),
                 highlight: Color::rgba8(255, 255, 255, 22),
                 text: Color::rgb8(240, 240, 242),
                 disabled: Color::rgba8(240, 240, 242, 105),
-            },
+            }
+        } else {
+            Self {
+                background: Color::rgb8(250, 250, 251),
+                border: Color::rgba8(0, 0, 0, 38),
+                separator: Color::rgba8(0, 0, 0, 26),
+                highlight: Color::rgba8(0, 0, 0, 18),
+                text: Color::rgb8(24, 24, 27),
+                disabled: Color::rgba8(24, 24, 27, 110),
+            }
         }
     }
 }

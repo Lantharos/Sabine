@@ -5,11 +5,12 @@ use objc2::{
 use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification,
-    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
-    UNNotificationSound, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    UNNotificationInterruptionLevel, UNNotificationPresentationOptions, UNNotificationRequest,
+    UNNotificationResponse, UNNotificationSound, UNUserNotificationCenter,
+    UNUserNotificationCenterDelegate,
 };
 
-use super::{Notification, NotificationEvent, NotificationEvents};
+use super::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 define_class!(
     #[unsafe(super(NSObject))]
@@ -41,7 +42,10 @@ define_class!(
             completion: &DynBlock<dyn Fn()>,
         ) {
             let id = response.notification().request().identifier().to_string();
-            (self.ivars())(NotificationEvent::Clicked(id));
+            (self.ivars())(NotificationEvent::Clicked {
+                id,
+                activation_token: None,
+            });
             completion.call(());
         }
     }
@@ -91,6 +95,11 @@ impl Backend {
         if !notification.silent {
             content.setSound(Some(&UNNotificationSound::defaultSound()));
         }
+        content.setInterruptionLevel(match notification.urgency {
+            Urgency::Low => UNNotificationInterruptionLevel::Passive,
+            Urgency::Normal => UNNotificationInterruptionLevel::Active,
+            Urgency::Critical => UNNotificationInterruptionLevel::TimeSensitive,
+        });
         let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
             &NSString::from_str(&notification.id),
             &content,

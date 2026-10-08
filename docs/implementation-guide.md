@@ -612,7 +612,12 @@ id as its AppUserModelID, registering the app's name for it per user. macOS uses
 notification center, which only serves bundled apps, asks for permission the first time, and
 reports no notifications the person dismisses. Rust shows the same notifications with
 `SabineProcess::notify` or `BridgeEventEmitter::notify`; clicks reach that window's pages as
-`notification.click` events with the notification's id. Service worker notifications are not
+`notification.click` events with the notification's id. Clicking a notification brings its window
+forward. On Wayland the window uses the activation token the notification server or portal sends
+with the click, as compositors only let a window take focus with one. A notification's urgency
+decides how much it interrupts: low ones skip the banner, and critical ones stay until dismissed on
+Linux, take high priority on Windows, and are time sensitive on macOS. Its category, such as
+`email.arrived`, reaches Linux notification servers. Service worker notifications are not
 supported.
 
 Bridge commands must be registered before launch. The host rejects commands that were not
@@ -702,8 +707,17 @@ so HTML drag events, draggable lists, and dragging text into inputs work as usua
 leaves the window, the drag continues as a desktop drag carrying the dragged files, links, text,
 and HTML, and the page learns how it ended. Files, links, text, and HTML dragged in from other
 applications arrive as ordinary drops, with the files in `dataTransfer.files`; while they pass over
-the window, the desktop shows whether the element under the pointer accepts them. On Wayland, drags
-from other applications are accepted when they carry files.
+the window, the desktop shows whether the element under the pointer accepts them, and pages hear
+`dragover` every 350 ms while the pointer rests, as in browsers. On Wayland, a drag leaves the
+window through the seat whose pointer started it, whether or not that seat has a keyboard.
+
+Browsers keep the paths of dropped files from pages, but the app's own pages get them: each dropped
+`File` has a `path`, and `getData("text/uri-list")` returns the files' `file://` URIs, which the drag
+lists in `types` from `dragenter` on. In the other direction, Chromium hides the file URIs a page
+puts in its own drags from other apps. The app's own pages can still drag files out: the `file://`
+URIs a page sets as `text/uri-list` in its `dragstart` handler leave the window as files, which
+other apps, and other windows of the same app, receive as they would from a file manager. Other
+origins and guests get neither.
 
 File inputs open the desktop's own file dialog, attached to the window that asked: the XDG desktop
 portal on Linux, the common item dialog on Windows, and a sheet on macOS. The input's accepted types

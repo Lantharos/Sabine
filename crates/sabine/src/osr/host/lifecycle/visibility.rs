@@ -52,14 +52,35 @@ impl OsrNativeHost {
         event_loop: &dyn ActiveEventLoop,
         token: Option<String>,
     ) {
+        #[cfg(target_os = "linux")]
         if let Some(token) = activation_token_value(token) {
-            self.pending_activation_token = Some(winit::window::ActivationToken::from_raw(token));
-            if self.window.is_some() {
-                self.drop_presented_window();
-            }
+            self.activate_with_token(winit::window::ActivationToken::from_raw(token));
         }
+        #[cfg(not(target_os = "linux"))]
+        let _ = token;
         self.ensure_window(event_loop);
         self.focus_window("focus");
+    }
+
+    /// Wayland only lets a window come forward with a token from the app or
+    /// service the person just used. A window still waiting for its first
+    /// frame is opened again with the token instead.
+    #[cfg(target_os = "linux")]
+    fn activate_with_token(&mut self, token: winit::window::ActivationToken) {
+        use winit::platform::wayland::WindowExtWayland;
+        match &self.window {
+            Some(window) if self.presented => {
+                if let Err(error) = window.activate(token) {
+                    sabine_runtime::report_error("window", format!("could not activate: {error}"));
+                }
+            }
+            _ => {
+                self.pending_activation_token = Some(token);
+                if self.window.is_some() {
+                    self.drop_presented_window();
+                }
+            }
+        }
     }
 }
 

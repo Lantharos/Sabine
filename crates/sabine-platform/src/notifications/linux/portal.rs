@@ -1,7 +1,12 @@
-use ashpd::desktop::notification::{Notification as PortalNotification, NotificationProxy};
+use std::collections::HashMap;
+
+use ashpd::desktop::notification::{
+    Action, Notification as PortalNotification, NotificationProxy, Priority,
+};
+use ashpd::zbus::zvariant::OwnedValue;
 use futures_util::StreamExt;
 
-use crate::notifications::{Notification, NotificationEvent, NotificationEvents};
+use crate::notifications::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 const DEFAULT_ACTION: &str = "app.sabine-notification";
 
@@ -25,7 +30,12 @@ impl Portal {
     pub(super) async fn show(&self, notification: Notification) -> Result<(), String> {
         let shown = PortalNotification::new(&notification.title)
             .body(Some(notification.body.as_str()).filter(|body| !body.is_empty()))
-            .default_action(DEFAULT_ACTION);
+            .default_action(DEFAULT_ACTION)
+            .priority(match notification.urgency {
+                Urgency::Low => Priority::Low,
+                Urgency::Normal => Priority::Normal,
+                Urgency::Critical => Priority::Urgent,
+            });
         self.proxy
             .add_notification(&notification.id, shown)
             .await
@@ -46,8 +56,20 @@ impl Portal {
         };
         while let Some(action) = actions.next().await {
             if action.name() == DEFAULT_ACTION {
-                events(NotificationEvent::Clicked(action.id().to_string()));
+                events(NotificationEvent::Clicked {
+                    id: action.id().to_string(),
+                    activation_token: activation_token(&action),
+                });
             }
         }
     }
+}
+
+/// The activation token in the platform data the portal passes with an
+/// action, its last parameter.
+fn activation_token(action: &Action) -> Option<String> {
+    let platform_data =
+        HashMap::<String, OwnedValue>::try_from(action.parameter().last()?.try_clone().ok()?)
+            .ok()?;
+    String::try_from(platform_data.get("activation-token")?.try_clone().ok()?).ok()
 }

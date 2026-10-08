@@ -173,6 +173,28 @@ pub(crate) struct DragContent {
     pub files: Vec<std::path::PathBuf>,
 }
 
+impl DragContent {
+    /// Takes a `text/uri-list`: file URIs become files and the first other
+    /// URI the link.
+    pub fn add_uris<'a>(&mut self, uris: impl IntoIterator<Item = &'a str>) {
+        for uri in uris {
+            match url::Url::parse(uri)
+                .ok()
+                .and_then(|url| url.to_file_path().ok())
+            {
+                Some(path) => self.files.push(path),
+                None if self.url.is_empty() => self.url = uri.to_string(),
+                None => {}
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty() && self.html.is_empty() && self.url.is_empty() && self.files.is_empty()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct OsrPaintBatch {
     pub surface: OsrSurface,
@@ -236,5 +258,25 @@ impl OsrSurface {
             Self::Popup => Some(POPUP_OVERLAY_ID),
             Self::Guest(id) => Some(id.as_str()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uri_lists_carry_files_and_the_first_link() {
+        let mut content = DragContent::default();
+        content.add_uris([
+            "file:///home/ana/Notes%20draft.txt",
+            "https://example.com/first",
+            "https://example.com/second",
+        ]);
+        assert_eq!(
+            content.files,
+            [std::path::PathBuf::from("/home/ana/Notes draft.txt")]
+        );
+        assert_eq!(content.url, "https://example.com/first");
     }
 }

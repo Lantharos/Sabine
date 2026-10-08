@@ -7,7 +7,6 @@ use std::{
     ffi::c_void,
     io::{self, Read, Write},
     os::{fd::AsRawFd, unix::net::UnixStream},
-    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -20,6 +19,7 @@ use wayland_backend::client::{Backend, ObjectId, WaylandError};
 use wayland_client::{Connection, EventQueue, Proxy, protocol::wl_surface::WlSurface};
 
 use super::{ClipboardContent, DropEvent, Reply, Selection, Waker};
+use crate::osr::protocol::DragContent;
 use state::{Channels, State};
 
 pub(super) enum Command {
@@ -35,7 +35,7 @@ pub(super) enum Command {
     Surface(Option<ObjectId>),
     DragData {
         drag: u64,
-        paths: Vec<PathBuf>,
+        content: DragContent,
     },
 }
 

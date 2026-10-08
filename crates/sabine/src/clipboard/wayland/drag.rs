@@ -1,4 +1,4 @@
-use std::{io::Write, path::PathBuf, sync::atomic::Ordering, thread};
+use std::{io::Write, sync::atomic::Ordering, thread};
 
 use wayland_client::{
     Proxy,
@@ -12,20 +12,23 @@ use winit::event_loop::DndAction;
 use super::Command;
 use super::objects::{Offer, OfferTypes};
 use super::state::{State, receive};
-use crate::clipboard::DropEvent;
+use crate::clipboard::content::{TEXT, read_plan};
+use crate::clipboard::{ClipboardContent, DropEvent};
+use crate::osr::protocol::DragContent;
 
 const URI_LIST: &str = "text/uri-list";
+const HTML: &str = "text/html";
 
-/// A drag over the window. Only drags carrying files are accepted, and their
-/// paths are read as soon as they enter.
+/// A drag over the window. Drags carrying files, text or HTML are accepted,
+/// and their content is read as soon as they enter.
 pub(super) struct Drag {
     id: u64,
     offer: WlDataOffer,
-    files: bool,
+    accepted: bool,
     x: f64,
     y: f64,
     action: Option<DndAction>,
-    paths: Option<Vec<PathBuf>>,
+    content: Option<DragContent>,
     dropped: bool,
 }
 
@@ -45,36 +48,36 @@ impl State {
             .data::<OfferTypes>()
             .map(OfferTypes::get)
             .unwrap_or_default();
-        let files = self.surface.as_ref() == Some(&surface.id())
-            && types.iter().any(|mime| mime == URI_LIST);
-        offer.accept(serial, files.then(|| URI_LIST.to_string()));
+        let plan = if self.surface.as_ref() == Some(&surface.id()) {
+            read_plan(&types, Some(&[URI_LIST, TEXT, HTML].map(String::from)))
+        } else {
+            Vec::new()
+        };
+        let accepted = !plan.is_empty();
+        offer.accept(serial, plan.first().map(|(mime, _)| mime.clone()));
         if offer.version() >= 3 {
-            let (actions, preferred) =
-                match (files, self.channels.outgoing_drag.load(Ordering::Relaxed)) {
-                    (false, _) => (WlDndAction::empty(), WlDndAction::empty()),
-                    (true, true) => (WlDndAction::Copy | WlDndAction::Move, WlDndAction::Move),
-                    (true, false) => (WlDndAction::Copy, WlDndAction::Copy),
-                };
+            let (actions, preferred) = match (
+                accepted,
+                self.channels.outgoing_drag.load(Ordering::Relaxed),
+            ) {
+                (false, _) => (WlDndAction::empty(), WlDndAction::empty()),
+                (true, true) => (WlDndAction::Copy | WlDndAction::Move, WlDndAction::Move),
+                (true, false) => (WlDndAction::Copy, WlDndAction::Copy),
+            };
             offer.set_actions(actions, preferred);
         }
         self.next_drag += 1;
         let id = self.next_drag;
-        if files {
+        if accepted {
             let connection = self.connection.clone();
             let source = Offer::Data(offer.clone());
             let commands = self.channels.commands.clone();
             let mut wake = self.channels.wake.try_clone().ok();
             thread::spawn(move || {
-                let plan = vec![(URI_LIST.to_string(), URI_LIST.to_string())];
-                let paths = receive(&connection, &source, plan)
-                    .map(|content| {
-                        content
-                            .items()
-                            .flat_map(|(_, bytes)| file_paths(bytes))
-                            .collect()
-                    })
+                let content = receive(&connection, &source, plan)
+                    .map(|content| drag_content(&content))
                     .unwrap_or_default();
-                let _ = commands.send(Command::DragData { drag: id, paths });
+                let _ = commands.send(Command::DragData { drag: id, content });
                 if let Some(wake) = &mut wake {
                     let _ = wake.write(&[1]);
                 }
@@ -83,22 +86,22 @@ impl State {
         self.drag = Some(Drag {
             id,
             offer,
-            files,
+            accepted,
             x,
             y,
             action: None,
-            paths: None,
+            content: None,
             dropped: false,
         });
     }
 
     pub(super) fn drag_motion(&mut self, x: f64, y: f64) {
-        let Some(drag) = self.drag.as_mut().filter(|drag| drag.files) else {
+        let Some(drag) = self.drag.as_mut().filter(|drag| drag.accepted) else {
             return;
         };
         drag.x = x;
         drag.y = y;
-        if drag.paths.is_some() {
+        if drag.content.is_some() {
             self.emit(DropEvent::Motion { x, y });
         }
     }
@@ -119,12 +122,12 @@ impl State {
         let Some(drag) = self.drag.as_mut() else {
             return;
         };
-        if !drag.files {
+        if !drag.accepted {
             self.drag.take().expect("checked above").offer.destroy();
             return;
         }
         drag.dropped = true;
-        if drag.paths.is_some() {
+        if drag.content.is_some() {
             self.finish_drop();
         }
     }
@@ -137,17 +140,17 @@ impl State {
             return;
         };
         drag.offer.destroy();
-        if drag.paths.is_some() {
+        if drag.content.is_some() {
             self.emit(DropEvent::Leave);
         }
     }
 
-    pub(super) fn receive_drag_data(&mut self, id: u64, paths: Vec<PathBuf>) {
+    pub(super) fn receive_drag_data(&mut self, id: u64, content: DragContent) {
         let Some(drag) = self.drag.as_mut().filter(|drag| drag.id == id) else {
             return;
         };
-        if paths.is_empty() {
-            drag.files = false;
+        if content.is_empty() {
+            drag.accepted = false;
             if drag.offer.version() >= 3 {
                 drag.offer
                     .set_actions(WlDndAction::empty(), WlDndAction::empty());
@@ -158,11 +161,11 @@ impl State {
             return;
         }
         let event = DropEvent::Enter {
-            paths: paths.clone(),
+            content: content.clone(),
             x: drag.x,
             y: drag.y,
         };
-        drag.paths = Some(paths);
+        drag.content = Some(content);
         let dropped = drag.dropped;
         self.emit(event);
         if dropped {
@@ -188,11 +191,20 @@ impl State {
     }
 }
 
-fn file_paths(uri_list: &[u8]) -> Vec<PathBuf> {
-    String::from_utf8_lossy(uri_list)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter_map(|line| url::Url::parse(line).ok()?.to_file_path().ok())
-        .collect()
+fn drag_content(content: &ClipboardContent) -> DragContent {
+    let mut drag = DragContent::default();
+    for (mime, bytes) in content.items() {
+        let text = String::from_utf8_lossy(bytes);
+        match mime {
+            URI_LIST => drag.add_uris(
+                text.lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with('#')),
+            ),
+            TEXT => drag.text = text.into_owned(),
+            HTML => drag.html = text.into_owned(),
+            _ => {}
+        }
+    }
+    drag
 }

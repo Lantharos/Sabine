@@ -291,6 +291,12 @@ class SabineOsrHandler : public CefClient,
 #endif
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
+  void RunDragControl(const std::vector<std::string>& parts);
+  void KeepDraggingOver(const CefMouseEvent& event);
+  void StopDraggingOver();
+  void RepeatDragOver(uint64_t serial);
+  bool SendDroppedPaths(const std::string& content);
+  void DroppedPathsDelivered(const std::string& serial);
   void ChooseContextMenuCommand(int command_id);
   void FinishFileDialog(const std::vector<std::string>& parts);
   void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
@@ -478,6 +484,12 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefDragData> drag_source_data_;
   cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;
   cef_drag_operations_mask_t drag_operation_ = DRAG_OPERATION_NONE;
+  cef_drag_operations_mask_t drag_target_operations_ = DRAG_OPERATION_NONE;
+  CefMouseEvent drag_target_event_;
+  uint64_t drag_over_serial_ = 0;
+  uint64_t dropped_paths_serial_ = 0;
+  bool awaiting_dropped_paths_ = false;
+  std::vector<std::vector<std::string>> held_drag_controls_;
   bool dev_mode_ = false;
 
   IMPLEMENT_REFCOUNTING(SabineOsrHandler);
