@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use sabine_bridge::{NOTIFICATION_CLOSE_COMMAND, NOTIFICATION_SHOW_COMMAND};
-use sabine_platform::{Notification, NotificationEvent, Notifier};
+use sabine_platform::{Notification, NotificationEvent, Notifier, Urgency};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::BridgeRequest;
 use crate::bridge::frame::Frame;
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::{HostControl, OsrHostEvent};
 
 #[derive(Deserialize)]
 struct Show {
@@ -17,6 +18,10 @@ struct Show {
     body: String,
     #[serde(default)]
     silent: bool,
+    #[serde(default)]
+    urgency: Option<String>,
+    #[serde(default)]
+    category: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +39,12 @@ impl OsrNativeHost {
                         title: show.title,
                         body: show.body,
                         silent: show.silent,
+                        urgency: show
+                            .urgency
+                            .as_deref()
+                            .and_then(Urgency::parse)
+                            .unwrap_or_default(),
+                        category: show.category.filter(|category| !category.is_empty()),
                     })
                 })
             }
@@ -62,16 +73,31 @@ impl OsrNativeHost {
     }
 
     /// Connects to the desktop's notification service the first time the
-    /// window shows a notification.
+    /// window shows a notification. Clicking one brings the window forward.
     fn notifier(&mut self) -> &Notifier {
         let relay = self.relay.clone();
+        let sender = self.sender.clone();
+        let proxy = self.proxy.clone();
         let app_id = self.config.app_id.clone().unwrap_or_default();
         let app_name = self.config.title.clone();
         self.notifier.get_or_insert_with(|| {
             Notifier::new(
                 &app_id,
                 &app_name,
-                Arc::new(move |event| relay.forward(Frame::encode(&event_line(event), None))),
+                Arc::new(move |event| {
+                    if let NotificationEvent::Clicked {
+                        activation_token, ..
+                    } = &event
+                        && sender
+                            .send(OsrHostEvent::HostControl(HostControl::Focus(
+                                activation_token.clone(),
+                            )))
+                            .is_ok()
+                    {
+                        proxy.wake_up();
+                    }
+                    relay.forward(Frame::encode(&event_line(event), None));
+                }),
             )
         })
     }
@@ -79,7 +105,7 @@ impl OsrNativeHost {
 
 fn event_line(event: NotificationEvent) -> String {
     let (name, payload) = match event {
-        NotificationEvent::Clicked(id) => ("notification.click", json!({ "id": id })),
+        NotificationEvent::Clicked { id, .. } => ("notification.click", json!({ "id": id })),
         NotificationEvent::Closed(id) => ("notification.close", json!({ "id": id })),
         NotificationEvent::Failed { id, message } => (
             "notification.error",

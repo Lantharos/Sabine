@@ -141,7 +141,7 @@ impl State {
             } => self.read(selection, types, reply),
             Command::Write { selection, content } => self.write(selection, content),
             Command::Surface(surface) => self.surface = surface,
-            Command::DragData { drag, paths } => self.receive_drag_data(drag, paths),
+            Command::DragData { drag, content } => self.receive_drag_data(drag, content),
         }
     }
 

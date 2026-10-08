@@ -1,3 +1,30 @@
+# Unreleased
+
+- The app's own pages get the paths of dropped files: each dropped `File` has a `path`, and the
+  drop's `text/uri-list` lists the files as `file://` URIs. Other origins and guests get neither.
+- Pages can drag files to other apps, and to other windows of the same app: the `file://` URIs a
+  page sets as `text/uri-list` in its `dragstart` handler leave the window as files, which
+  Chromium would otherwise hide from other apps.
+- Fix drops from other apps listing text, HTML and link types with nothing in them.
+- Pages hear `dragover` every 350 ms while the pointer rests during a drag, as in browsers,
+  so a drop on the element the pointer only just reached lands there instead of opening the
+  dropped file in the window.
+- Text and HTML dragged in from other apps reach pages on Wayland compositors without data
+  control, such as GNOME's, which only accepted files before.
+- Fix drags out of the window failing to start on Wayland when the seat had no keyboard: the drag
+  now uses the seat whose pointer started it.
+- Fix the edit menu and tooltips being drawn under the page wherever the page is opaque, which
+  left the menu without a background outside a glass window's see-through areas. The window now
+  draws everything in order.
+- The edit menu follows the desktop's light or dark preference instead of the window's theme, which
+  could be missing or stale.
+- Clicking a notification brings its window forward. On Wayland it uses the activation token the
+  notification server or portal sends with the click, and a window already on screen comes
+  forward with a token, such as one passed to `appWindow.focus`, without being opened again.
+- Notifications take an urgency and a freedesktop category, from Rust with
+  `Notification::urgency` and `Notification::category` and from pages with the `urgency` and
+  `category` options.
+
 # Sabine 0.35
 
 - Sabine cleans up apps that are gone for good. An app whose program has been missing for a week,

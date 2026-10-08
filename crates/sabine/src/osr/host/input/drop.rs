@@ -69,18 +69,13 @@ impl OsrNativeHost {
             return;
         };
         match value.type_().hint() {
-            Some(TypeHint::UriList) => {
-                for uri in value.try_as_uris().unwrap_or_default() {
-                    match url::Url::parse(&uri)
-                        .ok()
-                        .and_then(|url| url.to_file_path().ok())
-                    {
-                        Some(path) => drag.content.files.push(path),
-                        None if drag.content.url.is_empty() => drag.content.url = uri,
-                        None => {}
-                    }
-                }
-            }
+            Some(TypeHint::UriList) => drag.content.add_uris(
+                value
+                    .try_as_uris()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(String::as_str),
+            ),
             Some(TypeHint::Plaintext) => {
                 drag.content.text = value.try_as_string().unwrap_or_default()
             }
@@ -146,14 +141,14 @@ impl OsrNativeHost {
         let events = clipboard.drop_events().collect::<Vec<_>>();
         for event in events {
             match event {
-                DropEvent::Enter { paths, x, y } => {
+                DropEvent::Enter { content, x, y } => {
                     let (x, y) = (x as f32, y as f32);
                     let mut drag = IncomingDrag::entered(None, x, y);
                     if self.drag.outgoing().is_some() {
                         self.drag.incoming = Some(drag);
                         self.send_drag_position("drag_enter_source", x, y, None);
                     } else {
-                        drag.content.files = paths;
+                        drag.content = content;
                         self.drag.incoming = Some(drag);
                         self.enter_incoming_drag();
                     }

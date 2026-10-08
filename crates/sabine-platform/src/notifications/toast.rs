@@ -13,12 +13,14 @@ use std::{
 
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::Foundation::TypedEventHandler;
-use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastNotifier};
+use windows::UI::Notifications::{
+    ToastNotification, ToastNotificationManager, ToastNotificationPriority, ToastNotifier,
+};
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
 use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use windows::core::HSTRING;
 
-use super::{Notification, NotificationEvent, NotificationEvents};
+use super::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 pub(super) struct Backend {
     notifier: Result<ToastNotifier, String>,
@@ -60,7 +62,10 @@ impl Backend {
         let clicked = (Arc::clone(&self.events), id.clone());
         toast
             .Activated(&TypedEventHandler::new(move |_, _| {
-                (clicked.0)(NotificationEvent::Clicked(clicked.1.clone()));
+                (clicked.0)(NotificationEvent::Clicked {
+                    id: clicked.1.clone(),
+                    activation_token: None,
+                });
                 Ok(())
             }))
             .map_err(|error| error.to_string())?;
@@ -125,7 +130,13 @@ fn toast(notification: &Notification) -> windows::core::Result<ToastNotification
         xml_text(&notification.title),
         xml_text(&notification.body)
     )))?;
-    ToastNotification::CreateToastNotification(&document)
+    let toast = ToastNotification::CreateToastNotification(&document)?;
+    match notification.urgency {
+        Urgency::Low => toast.SetSuppressPopup(true)?,
+        Urgency::Normal => {}
+        Urgency::Critical => toast.SetPriority(ToastNotificationPriority::High)?,
+    }
+    Ok(toast)
 }
 
 fn xml_text(value: &str) -> String {

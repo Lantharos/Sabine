@@ -54,7 +54,7 @@ request and ignores later responses. This does not interrupt a Rust handler that
 handlers remain responsible for bounding their own work. A page can retain at most 128 requests.
 
 `events` has typed listeners for everything Sabine sends: tray, global shortcut and second-launch
-activations, renderer crashes, file drags, and guest lifecycle, navigation, download, shortcut,
+activations, renderer crashes, and guest lifecycle, navigation, download, shortcut,
 wheel and favicon events.
 
 Bytes travel as they are, without JSON or base64. Send them with a call, and receive them from a
@@ -154,7 +154,26 @@ events.globalShortcutFailed(({ id, message }) => console.warn(id, message));
 ## Notifications
 
 `new Notification(title, { body, tag, silent })` shows a desktop notification from the app's own
-pages, without asking for permission. Clicks fire its `click` event.
+pages, without asking for permission. Clicking it brings the window forward and fires its `click`
+event. Sabine also reads `urgency` (`"low"`, `"normal"` or `"critical"`) and a freedesktop
+`category` such as `"email.arrived"` from the options.
+
+## Drag and drop
+
+Dropped files carry their paths, and file URIs a page drags out reach other apps as files:
+
+```js
+zone.addEventListener("drop", (event) => {
+  const paths = [...event.dataTransfer.files].map((file) => file.path);
+});
+
+item.addEventListener("dragstart", (event) => {
+  event.dataTransfer.setData("text/uri-list", "file:///home/ana/Notes.txt");
+});
+```
+
+A drop's `text/uri-list` lists the dropped files as `file://` URIs too. Only the app's own pages get
+paths.
 
 ## Appearance
 

@@ -13,7 +13,7 @@ use std::{
 use sabine_platform::{WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect};
 use winit::{
     event_loop::{ActiveEventLoop, EventLoopProxy},
-    window::{ActivationToken, Window as WinitWindow},
+    window::Window as WinitWindow,
 };
 
 use crate::bridge::frame::Frame;
@@ -93,7 +93,8 @@ pub(super) struct OsrNativeHost {
     pub(super) loading: Option<super::types::NativeLoading>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
     pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
-    pub(super) pending_activation_token: Option<ActivationToken>,
+    #[cfg(target_os = "linux")]
+    pub(super) pending_activation_token: Option<winit::window::ActivationToken>,
     pub(super) drag: super::input::DragState,
     pub(super) shortcuts: super::input::ShortcutInhibition,
     /// CEF exited with process-singleton handoff (code 24). The existing
@@ -196,6 +197,7 @@ impl OsrNativeHost {
             loading: visible.then(super::types::NativeLoading::new),
             tooltip: None,
             context_menu: None,
+            #[cfg(target_os = "linux")]
             pending_activation_token: None,
             drag: Default::default(),
             shortcuts: Default::default(),

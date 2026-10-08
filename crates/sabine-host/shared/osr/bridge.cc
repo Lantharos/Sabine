@@ -50,6 +50,11 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       ForwardClipboardRequest(browser, frame, arguments->GetString(0));
     return true;
   }
+  if (message->GetName() == "sabine.drop.ready") {
+    if (browser_ && browser_->IsSame(browser))
+      DroppedPathsDelivered(arguments->GetString(0));
+    return true;
+  }
   if (message->GetName() == "sabine.media_state") {
     UpdateFrameMediaState(browser, frame, arguments->GetString(0) == "1");
     return true;

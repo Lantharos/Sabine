@@ -5,7 +5,8 @@ mod notifications;
 mod paste_gesture;
 
 use sabine_bridge::{
-    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, INHIBIT_SHORTCUTS_COMMAND, SET_REGIONS_COMMAND,
+    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND, INHIBIT_SHORTCUTS_COMMAND,
+    SET_REGIONS_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -52,6 +53,25 @@ impl OsrNativeHost {
         self.send_bridge_response(request.browser_id, request.request_id, result);
     }
 
+    fn answer_drag_files(&mut self, request: &BridgeRequest) {
+        #[derive(serde::Deserialize)]
+        struct DragFiles {
+            files: Vec<String>,
+        }
+        let result = serde_json::from_str::<DragFiles>(request.payload)
+            .map(|drag| {
+                self.set_page_drag_files(
+                    drag.files
+                        .iter()
+                        .filter_map(|uri| url::Url::parse(uri).ok()?.to_file_path().ok())
+                        .collect(),
+                )
+            })
+            .map(|()| serde_json::Value::Null)
+            .map_err(|error| error.to_string());
+        self.send_bridge_response(request.browser_id, request.request_id, result);
+    }
+
     /// Answers the bridge commands that act on this window. Returns false for
     /// every other command so it reaches the app.
     pub(super) fn answer_window_bridge_request(&mut self, line: &str) -> bool {
@@ -61,6 +81,7 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            DRAG_FILES_COMMAND => self.answer_drag_files(&request),
             APPEARANCE_COMMAND => self.send_bridge_response(
                 request.browser_id,
                 request.request_id,

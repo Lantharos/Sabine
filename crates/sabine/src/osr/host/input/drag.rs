@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use winit::{
     data_transfer::{DataTransferId, DataTransferSendBuilder, SendData, TypeHint},
     event_loop::{ActiveEventLoop, DndAction},
@@ -17,6 +19,7 @@ pub(super) const DRAG_OPERATIONS_ANY: u32 =
 #[derive(Default)]
 pub(in crate::osr::host) struct DragState {
     page: Option<PageDrag>,
+    page_files: Vec<PathBuf>,
     pub(super) incoming: Option<super::drop::IncomingDrag>,
 }
 
@@ -45,13 +48,33 @@ impl DragState {
 }
 
 impl OsrNativeHost {
-    pub(in crate::osr::host) fn begin_page_drag(&mut self, content: DragContent, operations: u32) {
+    pub(in crate::osr::host) fn begin_page_drag(
+        &mut self,
+        mut content: DragContent,
+        operations: u32,
+    ) {
+        content.files.append(&mut self.drag.page_files);
         self.drag.page = Some(PageDrag {
             content,
             operations,
             outgoing: None,
         });
         self.send_drag_position("drag_enter_source", self.cursor_x, self.cursor_y, None);
+    }
+
+    /// The files the page's next drag, or its drag still inside the window,
+    /// carries to other apps. The page names them while the browser starts
+    /// the drag, so they can arrive just before or just after it.
+    pub(in crate::osr::host) fn set_page_drag_files(&mut self, files: Vec<PathBuf>) {
+        match self
+            .drag
+            .page
+            .as_mut()
+            .filter(|drag| drag.outgoing.is_none())
+        {
+            Some(drag) => drag.content.files = files,
+            None => self.drag.page_files = files,
+        }
     }
 
     /// Moves a page drag that is still inside the window. Returns false when

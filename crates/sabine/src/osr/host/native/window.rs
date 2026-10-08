@@ -28,7 +28,10 @@ impl OsrNativeHost {
         if self.window.is_some() {
             return;
         }
+        #[cfg(target_os = "linux")]
         let activating = self.pending_activation_token.is_some();
+        #[cfg(not(target_os = "linux"))]
+        let activating = false;
         let defer_visibility = self.config.visible && !activating;
         let mut attributes = WindowAttributes::default()
             .with_title(&*self.config.title)
@@ -284,9 +287,13 @@ impl OsrNativeHost {
         let _ = output.flush();
     }
 
-    pub(in crate::osr::host) fn appearance_json(&self) -> serde_json::Value {
+    pub(in crate::osr::host) fn appearance(&self) -> Option<sabine_platform::Appearance> {
         self.published_appearance
             .or_else(|| self.current_appearance())
+    }
+
+    pub(in crate::osr::host) fn appearance_json(&self) -> serde_json::Value {
+        self.appearance()
             .map_or(serde_json::Value::Null, |appearance| {
                 appearance_json(&appearance)
             })

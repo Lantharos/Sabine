@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use crossbeam_channel::Receiver;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
@@ -6,14 +6,22 @@ use winit::window::Window;
 
 use super::wayland::WaylandClipboard;
 use super::{ClipboardContent, Reply, Selection};
+use crate::osr::protocol::DragContent;
 
 pub(crate) type Waker = Arc<dyn Fn() + Send + Sync>;
 
-/// Files dragged over the window, on displays where the clipboard also
-/// receives the window's drops.
+/// Drags over the window, on displays where the clipboard also receives the
+/// window's drops.
 pub(crate) enum DropEvent {
-    Enter { paths: Vec<PathBuf>, x: f64, y: f64 },
-    Motion { x: f64, y: f64 },
+    Enter {
+        content: DragContent,
+        x: f64,
+        y: f64,
+    },
+    Motion {
+        x: f64,
+        y: f64,
+    },
     Drop,
     Leave,
 }

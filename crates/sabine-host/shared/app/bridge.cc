@@ -211,6 +211,27 @@ void ReceiveBytes(CefRefPtr<CefBrowser> browser,
                      CefV8Value::CreateBool(true), ArrayBuffer(bytes)};
            });
 }
+void ReceiveDroppedPaths(CefRefPtr<CefFrame> frame,
+                         CefRefPtr<CefListValue> values,
+                         CefRefPtr<CefDictionaryValue> policy) {
+  CefRefPtr<CefV8Context> context;
+  if (values->GetSize() > 1 &&
+      AuthorizedEventContext(frame, policy, &context)) {
+    CallPage(
+        context, "__sabineDropPaths",
+        [&](CefRefPtr<CefV8Value>) -> CefV8ValueList {
+          auto paths =
+              CefV8Value::CreateArray(static_cast<int>(values->GetSize() - 1));
+          for (size_t index = 1; index < values->GetSize(); ++index)
+            paths->SetValue(static_cast<int>(index - 1),
+                            CefV8Value::CreateString(values->GetString(index)));
+          return {paths};
+        });
+  }
+  auto ready = CefProcessMessage::Create("sabine.drop.ready");
+  ready->GetArgumentList()->SetString(0, values->GetString(0));
+  frame->SendProcessMessage(PID_BROWSER, ready);
+}
 }  // namespace
 
 void InstallTransport(CefRefPtr<CefFrame> frame,
@@ -271,6 +292,10 @@ bool Receive(CefRefPtr<CefBrowser> browser,
     return true;
   }
   auto values = message->GetArgumentList();
+  if (name == "sabine.drop.paths") {
+    ReceiveDroppedPaths(frame, values, policy);
+    return true;
+  }
   if (name == "sabine.response") {
     if (values->GetSize() != 3)
       return true;

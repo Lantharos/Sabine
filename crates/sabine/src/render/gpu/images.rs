@@ -6,10 +6,10 @@
 
 use std::ops::Range;
 
-use crate::render::rect_pipeline::push_image_quad;
-use crate::render::{BgraRect, DisplayCommand, DisplayList, ImageId};
+use crate::render::rect_pipeline::{ImageVertex, push_image_quad};
+use crate::render::{BgraRect, ImageCommand, ImageId};
 
-use super::{CachedTexture, FrameGeometry, GpuRenderer, RendererError};
+use super::{CachedTexture, GpuRenderer, RendererError};
 
 pub(super) struct ImageDraw {
     pub(super) bind_group: wgpu::BindGroup,
@@ -83,31 +83,26 @@ impl GpuRenderer {
         Ok(())
     }
 
-    pub(super) fn collect_images(&self, display_list: &DisplayList, frame: &mut FrameGeometry) {
-        let draws = &mut frame.image_draws;
-        let vertices = &mut frame.image_vertices;
-        draws.clear();
-        vertices.clear();
-        for command in &display_list.commands {
-            let DisplayCommand::Image(image) = command else {
-                continue;
-            };
-            let Some(entry) = self.texture_cache.get(&image.id) else {
-                continue;
-            };
-            let vertex_start = vertices.len() as u32;
-            push_image_quad(
-                vertices,
-                [image.x, image.y, image.width, image.height],
-                self.scale_factor,
-                entry.uv_origin,
-                entry.uv_size,
-            );
-            draws.push(ImageDraw {
-                bind_group: entry.bind_group.clone(),
-                vertices: vertex_start..vertices.len() as u32,
-            });
-        }
+    /// The draw for `image`, adding its quad to `vertices`, or none while its
+    /// texture is not there yet.
+    pub(super) fn image_draw(
+        &self,
+        image: &ImageCommand,
+        vertices: &mut Vec<ImageVertex>,
+    ) -> Option<ImageDraw> {
+        let entry = self.texture_cache.get(&image.id)?;
+        let vertex_start = vertices.len() as u32;
+        push_image_quad(
+            vertices,
+            [image.x, image.y, image.width, image.height],
+            self.scale_factor,
+            entry.uv_origin,
+            entry.uv_size,
+        );
+        Some(ImageDraw {
+            bind_group: entry.bind_group.clone(),
+            vertices: vertex_start..vertices.len() as u32,
+        })
     }
 
     pub(super) fn create_dynamic_bgra_image(&mut self, id: ImageId, width: u32, height: u32) {
