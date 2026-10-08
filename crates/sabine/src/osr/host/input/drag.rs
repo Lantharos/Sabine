@@ -210,12 +210,14 @@ impl OsrNativeHost {
 
 fn desktop_transfer(content: &DragContent) -> Box<dyn winit::data_transfer::DataTransferSend> {
     let mut transfer = DataTransferSendBuilder::new(content.clone());
-    let uris = content
+    let mut uris = content
         .files
         .iter()
         .filter_map(|path| url::Url::from_file_path(path).ok().map(String::from))
-        .chain((!content.url.is_empty()).then(|| content.url.clone()))
         .collect::<Vec<_>>();
+    if !content.url.is_empty() && !uris.contains(&content.url) {
+        uris.push(content.url.clone());
+    }
     if !uris.is_empty() {
         transfer.add_type(TypeHint::UriList, move |_, _| {
             Some(SendData::Uris(uris.clone()))
