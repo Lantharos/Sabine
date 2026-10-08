@@ -1,3 +1,8 @@
+# Unreleased
+
+- Fix a file a page drags out being listed twice when the page had been handed that file before,
+  such as by a drop, as Chromium then keeps its link next to the file.
+
 # Sabine 0.36
 
 - The app's own pages get the paths of dropped files: each dropped `File` has a `path`, and the
