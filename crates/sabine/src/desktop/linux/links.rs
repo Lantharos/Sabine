@@ -56,46 +56,111 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> io::Re
     if registration.schemes.is_empty() {
         return Ok(());
     }
-    let desktop_id = format!("{}.sabine-url.desktop", registration.id);
+    let schemes = registration
+        .schemes
+        .iter()
+        .map(|scheme| scheme.to_ascii_lowercase())
+        .collect::<BTreeSet<_>>();
+    let installed_id = format!("{}.desktop", registration.id);
+    let stand_in_id = format!("{}.sabine-url.desktop", registration.id);
+    let stand_in = data_home()?.join("applications").join(&stand_in_id);
+    let handler = if handles_schemes(&installed_id, &schemes)? {
+        if let Err(error) = fs::remove_file(&stand_in)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            return Err(error);
+        }
+        installed_id.clone()
+    } else {
+        write_stand_in(&stand_in, registration, &schemes)?;
+        stand_in_id.clone()
+    };
     let config = config_home()?;
     let _lock = sabine_runtime::FileLock::acquire(
         &config.join("sabine/mimeapps.lock"),
         std::time::Duration::from_secs(5),
         |_| {},
     )?;
-    let executable = crate::launch::executable::launch_executable()?;
-    let executable = executable
-        .to_str()
-        .ok_or_else(|| io::Error::other("URL handler executable must have a UTF-8 path"))?;
-    let schemes = registration
-        .schemes
-        .iter()
-        .map(|scheme| scheme.to_ascii_lowercase())
-        .collect::<BTreeSet<_>>();
-    let mime_types = schemes
-        .iter()
-        .map(|scheme| format!("x-scheme-handler/{scheme};"))
-        .collect::<String>();
-    let desktop = format!(
-        "[Desktop Entry]\nType=Application\nName={}\nTryExec={}\nExec={} %U\nTerminal=false\nNoDisplay=true\nMimeType={mime_types}\n",
-        registration.id,
-        desktop_value(executable),
-        desktop_exec(executable)
-    );
-    let desktop_path = data_home()?.join("applications").join(&desktop_id);
-    write_file(desktop_path.with_extension("desktop.tmp"), &desktop)?;
-    fs::rename(desktop_path.with_extension("desktop.tmp"), &desktop_path)?;
     let path = config.join("mimeapps.list");
     let mut content = match fs::read_to_string(&path) {
         Ok(content) => content,
         Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(error),
     };
+    let own = [installed_id.as_str(), stand_in_id.as_str()];
     for scheme in schemes {
-        content = set_mime_default(&content, &scheme, &desktop_id);
+        let replaceable = match mime_default(&content, &scheme) {
+            Some(chosen) => own.contains(&chosen) || find_entry(chosen)?.is_none(),
+            None => true,
+        };
+        if replaceable {
+            content = set_mime_default(&content, &scheme, &handler);
+        }
     }
     write_file(path.with_extension("list.sabine-tmp"), &content)?;
     fs::rename(path.with_extension("list.sabine-tmp"), path)
+}
+
+fn write_stand_in(
+    path: &std::path::Path,
+    registration: &DeepLinkRegistration,
+    schemes: &BTreeSet<String>,
+) -> io::Result<()> {
+    let executable = crate::launch::executable::launch_executable()?;
+    let executable = executable
+        .to_str()
+        .ok_or_else(|| io::Error::other("URL handler executable must have a UTF-8 path"))?;
+    let mime_types = schemes
+        .iter()
+        .map(|scheme| format!("x-scheme-handler/{scheme};"))
+        .collect::<String>();
+    let desktop = format!(
+        "[Desktop Entry]\nType=Application\nName={}\nIcon={}\nTryExec={}\nExec={} %U\nTerminal=false\nNoDisplay=true\nMimeType={mime_types}\n",
+        registration.id,
+        registration.id,
+        desktop_value(executable),
+        desktop_exec(executable)
+    );
+    write_file(path.with_extension("desktop.tmp"), &desktop)?;
+    fs::rename(path.with_extension("desktop.tmp"), path)
+}
+
+fn find_entry(desktop_id: &str) -> io::Result<Option<PathBuf>> {
+    Ok(application_dirs()?
+        .into_iter()
+        .map(|dir| dir.join(desktop_id))
+        .find(|path| path.is_file()))
+}
+
+fn handles_schemes(desktop_id: &str, schemes: &BTreeSet<String>) -> io::Result<bool> {
+    let Some(path) = find_entry(desktop_id)? else {
+        return Ok(false);
+    };
+    let entry = fs::read_to_string(path)?;
+    let declared = entry
+        .lines()
+        .find_map(|line| line.strip_prefix("MimeType="))
+        .unwrap_or_default()
+        .split(';')
+        .collect::<BTreeSet<_>>();
+    Ok(schemes
+        .iter()
+        .all(|scheme| declared.contains(format!("x-scheme-handler/{scheme}").as_str())))
+}
+
+fn mime_default<'a>(content: &'a str, scheme: &str) -> Option<&'a str> {
+    let key = format!("x-scheme-handler/{scheme}");
+    content
+        .lines()
+        .skip_while(|line| line.trim() != "[Default Applications]")
+        .skip(1)
+        .take_while(|line| !line.trim().starts_with('['))
+        .find_map(|line| {
+            line.split_once('=')
+                .filter(|(line_key, _)| *line_key == key)
+        })
+        .and_then(|(_, value)| value.split(';').next())
+        .filter(|value| !value.is_empty())
 }
 
 fn desktop_exec(value: &str) -> String {
