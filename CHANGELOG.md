@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.37
 
 - Fix a file a page drags out being listed twice when the page had been handed that file before,
   such as by a drop, as Chromium then keeps its link next to the file.
