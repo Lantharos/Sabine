@@ -64,6 +64,11 @@ impl OsrNativeHost {
         self.handoff_deadline = None;
 
         let (width, height, scale) = self.content_size_for_cef();
+        let accelerated_paint = self.accelerated_paint();
+        #[cfg(target_os = "linux")]
+        {
+            self.accelerated_launch = accelerated_paint;
+        }
         let mut command = match osr::cef_osr_command(
             &self.config.runtime_dir,
             &self.config.host_binary,
@@ -82,8 +87,7 @@ impl OsrNativeHost {
                         _ => None,
                     }
                 }),
-                accelerated_paint: cfg!(target_os = "macos")
-                    || (cfg!(windows) && self.renderer.is_some()),
+                accelerated_paint,
             },
         ) {
             Ok(command) => command,

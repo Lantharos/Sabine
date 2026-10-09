@@ -114,6 +114,10 @@ pub(super) struct OsrNativeHost {
     pub(super) notifier: Option<sabine_platform::Notifier>,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
+    #[cfg(target_os = "linux")]
+    pub(super) software_paint: bool,
+    #[cfg(target_os = "linux")]
+    pub(super) accelerated_launch: bool,
 }
 
 impl OsrNativeHost {
@@ -127,6 +131,11 @@ impl OsrNativeHost {
         start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
         let visible = config.visible;
+        #[cfg(target_os = "linux")]
+        let software_paint = !sabine_runtime::runtime_version_at_least(
+            &config.runtime_dir,
+            &sabine_runtime::MIN_LINUX_SHARED_TEXTURE_CEF,
+        );
         let focused = visible && config.active;
         let lifecycle_state = if visible {
             LifecycleState::Active
@@ -217,6 +226,10 @@ impl OsrNativeHost {
             notifier: None,
             #[cfg(target_os = "linux")]
             paste_gesture: None,
+            #[cfg(target_os = "linux")]
+            software_paint,
+            #[cfg(target_os = "linux")]
+            accelerated_launch: false,
         }
     }
 

@@ -6,8 +6,12 @@ use std::io;
 pub(super) const KIND_MAIN_ACCEL: u32 = 24;
 pub(super) const KIND_POPUP_ACCEL: u32 = 25;
 pub(super) const KIND_GUEST_ACCEL: u32 = 26;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(super) const KIND_ACCEL_RETIRE: u32 = 39;
+#[cfg(target_os = "linux")]
+pub(super) const KIND_ACCEL_DMABUF: u32 = 45;
+#[cfg(target_os = "linux")]
+pub(super) const KIND_ACCEL_UNAVAILABLE: u32 = 46;
 
 const META_LEN: usize = 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
 
@@ -83,7 +87,7 @@ pub(super) fn parse_accel_frame(
     Ok((frame, shared_handle))
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(super) fn parse_retired_resources(payload: &[u8]) -> io::Result<Vec<u64>> {
     let (resources, []) = payload.as_chunks::<8>() else {
         return Err(io::Error::new(
@@ -92,4 +96,33 @@ pub(super) fn parse_retired_resources(payload: &[u8]) -> io::Result<Vec<u64>> {
         ));
     };
     Ok(resources.iter().copied().map(u64::from_le_bytes).collect())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn parse_dmabuf_announcement(
+    width: u32,
+    height: u32,
+    payload: &[u8],
+    fd: Option<i32>,
+) -> io::Result<(u64, crate::osr::accel::Dmabuf)> {
+    use std::os::fd::{FromRawFd, OwnedFd};
+
+    let fd = fd.map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
+    let (Some(fd), 24) = (fd, payload.len()) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid dma-buf announcement",
+        ));
+    };
+    Ok((
+        read_u64(&payload[0..8]),
+        crate::osr::accel::Dmabuf {
+            fd,
+            width,
+            height,
+            modifier: read_u64(&payload[8..16]),
+            stride: read_u32(&payload[16..20]),
+            offset: read_u32(&payload[20..24]),
+        },
+    ))
 }

@@ -9,20 +9,17 @@ use crate::render::rect_pipeline::{
 };
 use crate::render::{DisplayCommand, DisplayList, ImageId};
 
-#[cfg(any(windows, target_os = "macos"))]
 mod external;
 mod geometry;
 mod health;
 mod images;
 mod instance;
 mod readback;
-#[cfg(any(windows, target_os = "macos"))]
 mod retirement;
 mod surface;
 mod text;
 mod vertex_buffer;
 
-#[cfg(any(windows, target_os = "macos"))]
 pub(crate) use external::ExternalSlot;
 
 use geometry::{Draw, FrameGeometry};
@@ -69,11 +66,8 @@ pub struct GpuRenderer {
     frame: FrameGeometry,
     text: Option<TextRendererState>,
     texture_cache: HashMap<ImageId, CachedTexture>,
-    #[cfg(any(windows, target_os = "macos"))]
     external_texture_releases: HashMap<ImageId, Box<dyn FnOnce() + Send + 'static>>,
-    #[cfg(any(windows, target_os = "macos"))]
     external_imports: HashMap<ImageId, Vec<external::ImportedTexture>>,
-    #[cfg(any(windows, target_os = "macos"))]
     submission_poller: retirement::SubmissionPoller,
     #[cfg(windows)]
     software_adapter: bool,
@@ -108,9 +102,14 @@ impl GpuRenderer {
             surface,
             adapter,
         } = instance::connect(&source).await?;
+        #[cfg(target_os = "linux")]
+        let required_features = adapter.features() & wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+        #[cfg(not(target_os = "linux"))]
+        let required_features = wgpu::Features::empty();
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("sabine-gpu"),
+                required_features,
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 ..Default::default()
             })
@@ -118,7 +117,6 @@ impl GpuRenderer {
             .map_err(|error| RendererError::Device(error.to_string()))?;
 
         let health = health::DeviceHealth::watch(&device, wake);
-        #[cfg(any(windows, target_os = "macos"))]
         let submission_poller = retirement::SubmissionPoller::new(&device, &queue, health.clone())?;
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
@@ -252,11 +250,8 @@ impl GpuRenderer {
             frame: FrameGeometry::default(),
             text: None,
             texture_cache: HashMap::new(),
-            #[cfg(any(windows, target_os = "macos"))]
             external_texture_releases: HashMap::new(),
-            #[cfg(any(windows, target_os = "macos"))]
             external_imports: HashMap::new(),
-            #[cfg(any(windows, target_os = "macos"))]
             submission_poller,
             #[cfg(windows)]
             software_adapter: adapter.get_info().device_type == wgpu::DeviceType::Cpu,
@@ -271,6 +266,13 @@ impl GpuRenderer {
 
     pub(crate) fn surface_alpha_is_opaque(&self) -> bool {
         self.surface_alpha_is_opaque
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn imports_dmabuf(&self) -> bool {
+        self.device
+            .features()
+            .contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF)
     }
 
     #[cfg(windows)]
@@ -431,7 +433,6 @@ impl GpuRenderer {
     }
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 impl Drop for GpuRenderer {
     fn drop(&mut self) {
         if self.external_texture_releases.is_empty() {

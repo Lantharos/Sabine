@@ -205,6 +205,30 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/accelerated/windows/d3d11_copy.h"),
     ),
     (
+        "osr/accelerated/linux/dmabuf_copy.cc",
+        include_str!("../shared/osr/accelerated/linux/dmabuf_copy.cc"),
+    ),
+    (
+        "osr/accelerated/linux/dmabuf_copy.h",
+        include_str!("../shared/osr/accelerated/linux/dmabuf_copy.h"),
+    ),
+    (
+        "osr/accelerated/linux/dmabuf_image.cc",
+        include_str!("../shared/osr/accelerated/linux/dmabuf_image.cc"),
+    ),
+    (
+        "osr/accelerated/linux/dmabuf_image.h",
+        include_str!("../shared/osr/accelerated/linux/dmabuf_image.h"),
+    ),
+    (
+        "osr/accelerated/linux/vulkan_context.cc",
+        include_str!("../shared/osr/accelerated/linux/vulkan_context.cc"),
+    ),
+    (
+        "osr/accelerated/linux/vulkan_context.h",
+        include_str!("../shared/osr/accelerated/linux/vulkan_context.h"),
+    ),
+    (
         "osr/accelerated/macos/iosurface_copy.h",
         include_str!("../shared/osr/accelerated/macos/iosurface_copy.h"),
     ),

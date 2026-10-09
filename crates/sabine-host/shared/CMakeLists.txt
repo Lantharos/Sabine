@@ -94,6 +94,12 @@ set(SABINE_HOST_SOURCES
   osr/accelerated/protocol.h
   osr/accelerated/windows/d3d11_copy.cc
   osr/accelerated/windows/d3d11_copy.h
+  osr/accelerated/linux/dmabuf_copy.cc
+  osr/accelerated/linux/dmabuf_copy.h
+  osr/accelerated/linux/dmabuf_image.cc
+  osr/accelerated/linux/dmabuf_image.h
+  osr/accelerated/linux/vulkan_context.cc
+  osr/accelerated/linux/vulkan_context.h
   osr/paint/shared_pool.cc
   osr/paint/shared_pool.h
 )
@@ -110,6 +116,17 @@ endif()
 
 if(OS_MAC)
   list(APPEND SABINE_HOST_SOURCES main_mac.mm)
+endif()
+
+if(NOT OS_LINUX)
+  list(REMOVE_ITEM SABINE_HOST_SOURCES
+    osr/accelerated/linux/dmabuf_copy.cc
+    osr/accelerated/linux/dmabuf_copy.h
+    osr/accelerated/linux/dmabuf_image.cc
+    osr/accelerated/linux/dmabuf_image.h
+    osr/accelerated/linux/vulkan_context.cc
+    osr/accelerated/linux/vulkan_context.h
+  )
 endif()
 
 if(NOT OS_WINDOWS)
@@ -153,6 +170,9 @@ if(OS_WINDOWS)
   target_link_libraries(sabine-host ws2_32 d3d11 d3d12 dxgi shell32)
 endif()
 if(OS_LINUX)
+  find_path(SABINE_VULKAN_INCLUDE_DIR vulkan/vulkan.h REQUIRED)
+  target_include_directories(sabine-host PRIVATE "${SABINE_VULKAN_INCLUDE_DIR}")
+  target_link_libraries(sabine-host ${CMAKE_DL_LIBS})
   set_target_properties(sabine-host PROPERTIES INSTALL_RPATH "$ORIGIN")
   set_target_properties(sabine-host PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE)
 endif()

@@ -48,7 +48,13 @@ impl OsrNativeHost {
             self.fail("The active graphics adapter is no longer available. Restart the application to connect Chromium to the replacement adapter.".to_string());
             return;
         }
+        #[cfg(target_os = "linux")]
+        let imports_dmabuf = renderer.imports_dmabuf();
         self.renderer = Some(renderer);
+        #[cfg(target_os = "linux")]
+        if !imports_dmabuf {
+            self.paint_in_software("the graphics device cannot import dma-bufs");
+        }
         self.send_control("repaint\n");
     }
 }

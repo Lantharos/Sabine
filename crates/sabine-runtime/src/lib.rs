@@ -16,6 +16,11 @@ pub use install::sandbox_windows::prepare_sandbox_access;
 
 pub const MIN_CEF_MAJOR: u32 = 154;
 
+/// Older runtimes hand Linux windows empty shared textures on NVIDIA
+/// (chromiumembedded/cef#4237), so they paint in software instead.
+#[cfg(target_os = "linux")]
+pub const MIN_LINUX_SHARED_TEXTURE_CEF: [u32; 3] = [156, 0, 3];
+
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use discovery::paths::runtime_execution_path;
 pub use discovery::paths::{sabine_data_dir, user_runtime_path};
@@ -38,6 +43,12 @@ pub use types::{RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocat
 
 pub use diagnostics::{capture_diagnostics, diagnostic_path, record_diagnostic, report_error};
 pub use discovery::detect::detect_runtime;
+
+pub fn runtime_version_at_least(runtime_dir: &std::path::Path, minimum: &[u32]) -> bool {
+    discovery::version::version_sort_key(&discovery::version::detect_version(runtime_dir))
+        .as_slice()
+        >= minimum
+}
 
 #[cfg(test)]
 mod tests {

@@ -48,6 +48,10 @@ impl OsrNativeHost {
                 "render",
                 format!("could not show a browser frame: {error}"),
             );
+            #[cfg(target_os = "linux")]
+            if matches!(error, crate::render::RendererError::Texture(_)) {
+                self.paint_in_software("the window could not import the browser's frames");
+            }
         }
         installed.is_ok()
     }

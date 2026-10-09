@@ -1,4 +1,3 @@
-#[cfg(any(windows, target_os = "macos"))]
 pub(crate) mod accel;
 pub(crate) mod control;
 pub(crate) mod host;
