@@ -32,9 +32,7 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
-#if defined(OS_WIN) || defined(OS_MAC)
 #include "osr/accelerated/damage.h"
-#endif
 #if defined(OS_MAC)
 #include <memory>
 
@@ -251,12 +249,14 @@ class SabineOsrHandler : public CefClient,
 #ifndef _WIN32
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
 #endif
-#if defined(OS_WIN) || defined(OS_MAC)
   void ReleaseAcceleratedFrame(uint64_t slot_token);
   void RetireAcceleratedBrowser(int browser_id);
-#endif
 #if defined(OS_MAC)
   void UseSurfaceService(const std::string& service_name);
+#endif
+#if defined(OS_LINUX)
+  void UseAcceleratedPaint(bool enabled);
+  void WatchAcceleratedPaint();
 #endif
 
  private:
@@ -271,7 +271,6 @@ class SabineOsrHandler : public CefClient,
 
   friend class SabineGuestRequestContextHandler;
 
-#if defined(OS_WIN) || defined(OS_MAC)
   struct CopiedAccelFrame {
     uint32_t width = 0;
     uint32_t height = 0;
@@ -288,6 +287,8 @@ class SabineOsrHandler : public CefClient,
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);
   void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
+#if defined(OS_LINUX)
+  void ReportAcceleratedPaintUnavailable();
 #endif
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
@@ -419,14 +420,18 @@ class SabineOsrHandler : public CefClient,
 #ifndef _WIN32
   sabine_osr::SharedPaintPool shared_paint_;
 #endif
-#if defined(OS_WIN) || defined(OS_MAC)
   std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
       dropped_accelerated_paints_;
-#endif
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
   std::set<uint64_t> announced_accelerated_resources_;
-#elif defined(OS_MAC)
+#endif
+#if defined(OS_MAC)
   std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
+#endif
+#if defined(OS_LINUX)
+  bool accelerated_paint_ = false;
+  bool accelerated_paint_seen_ = false;
+  bool accelerated_paint_failed_ = false;
 #endif
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;

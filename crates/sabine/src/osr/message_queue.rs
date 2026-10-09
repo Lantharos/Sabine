@@ -84,7 +84,6 @@ impl MessageQueue {
                     OsrMessage::PaintBatch(incoming)
                 }
             }
-            #[cfg(any(windows, target_os = "macos"))]
             OsrMessage::AccelFrame(incoming) => {
                 let queued = state
                     .messages
@@ -154,7 +153,6 @@ impl MessageQueue {
 fn is_frame(message: &OsrMessage) -> bool {
     match message {
         OsrMessage::PaintBatch(_) => true,
-        #[cfg(any(windows, target_os = "macos"))]
         OsrMessage::AccelFrame(_) => true,
         _ => false,
     }
@@ -227,6 +225,9 @@ fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
 fn message_retained_bytes(message: &OsrMessage) -> usize {
     match message {
         OsrMessage::PaintBatch(batch) => batch_retained_bytes(batch),
+        OsrMessage::AccelFrame(frame) => {
+            frame.coded_width as usize * frame.coded_height as usize * 4
+        }
         OsrMessage::FatalError(text)
         | OsrMessage::GuestHidden(text)
         | OsrMessage::TooltipChanged(text) => text.capacity(),

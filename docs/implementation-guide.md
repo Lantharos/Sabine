@@ -233,8 +233,18 @@ to benchmark the GPU in the background.
   DirectComposition in mailbox mode, so presenting never waits for the display.
   Slots are isolated by browser and released when that browser closes. The compositor evicts
   retired guest and popup textures.
-- **Linux** uses CEF software `OnPaint` on Wayland, with GPU composition in the native host. Sabine
-  runs only on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window
+- **Linux** uses accelerated `OnAcceleratedPaint` on CEF 156.0.3 and newer. CEF returns its dma-bufs
+  to Chromium's pool when the callback returns, so the host imports each one into Vulkan with its
+  DRM format modifier and copies it on the GPU into one of four Sabine-owned dma-bufs per surface,
+  copying only the area that changed since that slot last received a frame, and waits for the copy
+  before publishing it. Chromium's pooled buffers are imported once and reused. Each owned dma-buf
+  is passed to the native window once over the socket with its modifier, stride and offset, and the
+  window samples it through wgpu's Vulkan device without copying. Slots are acknowledged, retired
+  and re-requested as on Windows. A window whose device cannot import dma-bufs, or whose browser
+  sends no accelerated frame within two seconds of loading, reopens the page with software
+  `OnPaint`. Older runtimes paint in software from the start, because they hand NVIDIA drivers
+  empty shared textures. Sabine runs only on Wayland sessions; Chromium is started with the
+  Wayland Ozone platform. The window
   presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
   On Wayland each frame requests a compositor frame callback and further redraws wait for it; with
   FIFO presentation some drivers hold the buffer carrying that callback, which stopped the window

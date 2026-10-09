@@ -112,7 +112,6 @@ impl OsrNativeHost {
                         needs_initial_present |= paint.initial_present;
                     }
                 }
-                #[cfg(any(windows, target_os = "macos"))]
                 OsrHostEvent::Message(_, OsrMessage::AccelFrame(frame)) => {
                     if self.accepts_paint() {
                         let paint = self.apply_paint(|host| host.update_accel_frame(frame));
@@ -122,6 +121,10 @@ impl OsrNativeHost {
                     } else {
                         self.send_control(format!("accel_release\t{}\n", frame.slot_token));
                     }
+                }
+                #[cfg(target_os = "linux")]
+                OsrHostEvent::Message(_, OsrMessage::AccelUnavailable) => {
+                    self.paint_in_software("the browser could not share its frames");
                 }
                 OsrHostEvent::Message(_, OsrMessage::PopupHidden) => {
                     self.clear_overlay(POPUP_OVERLAY_ID);

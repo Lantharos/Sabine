@@ -14,7 +14,6 @@ pub use display_list::{
     DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand, TextAlign,
     TextCommand,
 };
-#[cfg(any(windows, target_os = "macos"))]
 pub(crate) use gpu::ExternalSlot;
 pub use gpu::{GpuRenderer, RendererError};
 pub(crate) use pixel_rect::PixelRect;
