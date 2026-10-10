@@ -20,8 +20,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - run: rustup toolchain install 1.90 --profile minimal
-      - run: rustup override set 1.90
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup override set stable
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: paint-${{ matrix.os }}
