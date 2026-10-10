@@ -16,7 +16,7 @@ The shared service registers installed apps and manages runtime and app updates.
 
 ## Get started
 
-Building an app requires Rust 1.90 or newer and Bun. The installed app does not need either tool.
+Building an app requires Rust 1.98 or newer and Bun. The installed app does not need either tool.
 
 ```sh
 cargo install --git https://github.com/Lantharos/Sabine --tag v0.37 sabine-cli
