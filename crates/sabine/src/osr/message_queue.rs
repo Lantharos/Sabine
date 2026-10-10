@@ -151,11 +151,10 @@ impl MessageQueue {
 }
 
 fn is_frame(message: &OsrMessage) -> bool {
-    match message {
-        OsrMessage::PaintBatch(_) => true,
-        OsrMessage::AccelFrame(_) => true,
-        _ => false,
-    }
+    matches!(
+        message,
+        OsrMessage::PaintBatch(_) | OsrMessage::AccelFrame(_)
+    )
 }
 
 fn queue_wake(state: &mut MessageQueueState) -> bool {
