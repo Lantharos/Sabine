@@ -176,7 +176,13 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     if desktop {
-        source_desktop::install_windows_shortcut(app, &wrapper, desktop_icon.as_deref())?;
+        source_desktop::install_windows_shortcut(
+            &app.id,
+            app.listing.generic_name.as_deref(),
+            &wrapper,
+            desktop_icon.as_deref(),
+            false,
+        )?;
     }
     #[cfg(target_os = "macos")]
     if desktop {

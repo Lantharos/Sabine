@@ -65,6 +65,8 @@ bun add github:Lantharos/Sabine#v0.37
 ```sh
 sabine install .                  # development launcher for this checkout
 sabine install --bundle .         # production app independent of the checkout
+sabine runtime install --system-wide            # Sabine and CEF for every user
+sabine install --bundle --system-wide .         # this app for every user
 sabine bundle . --target portable --release
 sabine update                     # CLI, shared components, and CEF
 sabine update --force             # skip the release soak, keep integrity checks

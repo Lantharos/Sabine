@@ -23,7 +23,9 @@ pub const MIN_LINUX_SHARED_TEXTURE_CEF: [u32; 3] = [156, 0, 3];
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use discovery::paths::runtime_execution_path;
-pub use discovery::paths::{sabine_data_dir, user_runtime_path};
+pub use discovery::paths::{
+    path_in_root, sabine_data_dir, system_dir, system_runtime_path, user_runtime_path,
+};
 pub use discovery::resolve::{ensure_runtime, resolve_runtime};
 pub use download::latest_install_plan;
 pub use download::transfer::download_file as download_file_with_progress;
@@ -33,6 +35,8 @@ pub use fingerprint::Fingerprint;
 pub use install::archive::extract_tar_archive;
 pub use install::assets::prepare_runtime_assets;
 pub use install::directory::{install_directory, recover_directory_installs};
+pub use install::payload::copy_runtime_payload;
+pub use install::system::install_system_runtime;
 pub use install::{
     install_user_runtime_with_progress, prune_user_runtimes, quarantine_user_runtime,
     remove_user_runtime_version, update_user_runtime_with_progress,

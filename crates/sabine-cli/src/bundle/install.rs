@@ -33,6 +33,7 @@ pub fn install_bundle(
         version: None,
         json: false,
         offline: false,
+        system_wide: false,
         env_files: env_files.clone(),
     })?;
     let service = sabine_service::SabineService::default();

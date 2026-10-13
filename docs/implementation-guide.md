@@ -1197,6 +1197,34 @@ verifies the signed system manifest, applies the soak policy, updates the CLI an
 and validates the newest compatible CEF runtime. `--force` skips the soak policy only. Failed-release
 backoff, signatures, checksums and version ordering remain enforced.
 
+## System-wide installation
+
+An operating system image or an administrator can install Sabine and its apps once for every user,
+so no app ever prepares a runtime on first launch:
+
+```sh
+sabine runtime install --system-wide --root /image   # service, daemon, host and CEF runtime
+sabine install --bundle --system-wide --root /image . # this app
+```
+
+Without `--root` both write to the running system and need administrator rights. The system Sabine
+folder is `/usr/lib/sabine` on Linux, `/Library/Application Support/Sabine` on macOS and
+`%ProgramFiles%\Sabine` on Windows. It mirrors the per-user layout, read-only: `bin/current.json`
+names the active version under `bin/versions/<version>` with the service, daemon and host, and
+`runtimes/cef` holds one runtime with its resource links already in place. The runtime install takes
+its pieces from the installing machine's Sabine: a service next to the CLI or already installed,
+the host built for the runtime, and the newest runtime, downloaded when none is present.
+
+A system-wide app goes where native packages put it: `/usr/lib/sabine/<app-id>` with a launcher in
+`/usr/bin` and its desktop entry, icons, AppStream metadata and file types under `/usr/share` on
+Linux, `/Applications` on macOS, and `%ProgramFiles%` with an all-users Start menu shortcut on
+Windows. The bundle carries no update source; whoever installed it updates it.
+
+Apps and services prefer the system installation unless it is older than an app requires or than a
+user's own installation, which a newer third-party app or `sabine update` may bring. Each user still
+registers apps, runs their own daemon and keeps logs, browser profiles and app data in their own
+folders. While the system provides a runtime, a user's daemon validates it instead of downloading
+its own.
 
 ## Development environments
 

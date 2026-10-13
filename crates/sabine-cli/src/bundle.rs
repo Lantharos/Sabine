@@ -8,6 +8,8 @@ mod metadata;
 mod package;
 mod signing;
 mod stage;
+mod system;
+pub use system::install_system_bundle;
 mod windows;
 
 use std::{
@@ -36,6 +38,8 @@ pub struct BundleOptions {
     pub version: Option<String>,
     pub json: bool,
     pub offline: bool,
+    /// The operating system owns updates, so the bundle carries no update source.
+    pub system_wide: bool,
     pub env_files: Vec<PathBuf>,
 }
 
@@ -322,7 +326,7 @@ fn prepare_bundle(
         return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
     }
     let out = absolute_path(options.out)?;
-    let app = config::resolve_app(
+    let mut app = config::resolve_app(
         &options.source,
         ConfigOverrides {
             id: options.id,
@@ -333,6 +337,9 @@ fn prepare_bundle(
             web_dist: options.web_dist,
         },
     )?;
+    if options.system_wide {
+        app.updates = None;
+    }
 
     let environment = environment::BuildEnvironment::load(
         &app.source_dir,

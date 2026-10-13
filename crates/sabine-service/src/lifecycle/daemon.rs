@@ -7,7 +7,8 @@ use std::{
 
 use crate::{
     SabineService, ServiceError, ServiceResult, ensure_service_executable,
-    install::service_path_for_version, service_daemon_path,
+    install::{daemon_paths_for_version, service_path_for_version},
+    service_daemon_path,
 };
 use sabine_runtime::{configure_background_command, process_alive, sabine_data_dir};
 
@@ -263,7 +264,7 @@ fn start_daemon_at(executable: &Path) -> ServiceResult<()> {
     })
 }
 
-fn service_version(service: &Path) -> Option<String> {
+pub(crate) fn service_version(service: &Path) -> Option<String> {
     let parent = service.parent()?;
     if parent.parent()?.file_name()?.to_str()? == "versions" {
         return parent.file_name()?.to_str().map(ToString::to_string);
@@ -275,14 +276,16 @@ fn stop_stale_daemon() -> ServiceResult<()> {
     let Some(state) = daemon_state().filter(|state| process_alive(state.pid)) else {
         return Ok(());
     };
-    let expected = service_daemon_path(&service_path_for_version(&state.version));
     let Some(actual) = process_executable(state.pid) else {
         return Err(ServiceError::Update(format!(
             "could not verify stale Sabine service {} before stopping it",
             state.pid
         )));
     };
-    if !same_executable(&actual, &expected) {
+    if !daemon_paths_for_version(&state.version)
+        .iter()
+        .any(|expected| same_executable(&actual, expected))
+    {
         let _ = fs::remove_file(sabine_data_dir().join(PID_FILE));
         let _ = fs::remove_file(sabine_data_dir().join(DAEMON_STATE_FILE));
         return Ok(());
