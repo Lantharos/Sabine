@@ -32,7 +32,13 @@ pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
         let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
         super::handlers::windows::register(app, executable)?;
         if app.listing.listed {
-            install_windows_shortcut(app, executable, icon.as_deref())?;
+            install_windows_shortcut(
+                &app.id,
+                app.listing.generic_name.as_deref(),
+                executable,
+                icon.as_deref(),
+                false,
+            )?;
         } else {
             remove_windows_shortcut(&app.id)?;
         }
@@ -112,6 +118,11 @@ pub fn refresh_mime_database(mime_dir: &Path) {
 }
 
 #[cfg(target_os = "linux")]
+pub fn refresh_icon_cache(theme_dir: &Path) {
+    refresh("gtk-update-icon-cache", theme_dir);
+}
+
+#[cfg(target_os = "linux")]
 fn refresh(tool: &str, directory: &Path) {
     if sabine_runtime::find_program(tool).is_none() {
         return;
@@ -166,23 +177,27 @@ pub fn install_autostart(
 
 #[cfg(target_os = "windows")]
 pub fn install_windows_shortcut(
-    app: &SourceApp,
+    id: &str,
+    description: Option<&str>,
     wrapper: &Path,
     icon: Option<&str>,
+    all_users: bool,
 ) -> Result<(), String> {
-    let name = powershell_string(&app.id);
+    let name = powershell_string(id);
     let target = powershell_string(&wrapper.display().to_string());
     let icon = icon
         .map(|icon| format!("$shortcut.IconLocation='{}';", powershell_string(icon)))
         .unwrap_or_default();
-    let description = app
-        .listing
-        .generic_name
-        .as_deref()
+    let description = description
         .map(|name| format!("$shortcut.Description='{}';", powershell_string(name)))
         .unwrap_or_default();
+    let folder = if all_users {
+        "CommonPrograms"
+    } else {
+        "Programs"
+    };
     let script = format!(
-        "$dir=[Environment]::GetFolderPath('Programs'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}{description}$shortcut.Save()"
+        "$dir=[Environment]::GetFolderPath('{folder}'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{name}.lnk')); $shortcut.TargetPath='{target}'; {icon}{description}$shortcut.Save()"
     );
     let status = std::process::Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])

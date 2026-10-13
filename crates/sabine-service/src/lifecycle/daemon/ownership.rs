@@ -47,13 +47,13 @@ pub(super) fn claim_daemon_pid() -> ServiceResult<Option<DaemonPid>> {
         let current = std::env::current_exe()?;
         let registered = daemon_state()
             .filter(|state| state.pid == pid)
-            .map(|state| {
-                crate::service_daemon_path(&crate::install::service_path_for_version(
-                    &state.version,
-                ))
-            });
+            .map(|state| crate::install::daemon_paths_for_version(&state.version));
         if same_executable(&actual, &current)
-            || registered.is_some_and(|expected| same_executable(&actual, &expected))
+            || registered.is_some_and(|paths| {
+                paths
+                    .iter()
+                    .any(|expected| same_executable(&actual, expected))
+            })
         {
             return Ok(None);
         }

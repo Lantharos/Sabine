@@ -67,7 +67,13 @@ fn main() -> ExitCode {
             RuntimeSubcommand::Prepare => RuntimeCommand::Prepare,
             RuntimeSubcommand::SandboxProfile => RuntimeCommand::SandboxProfile,
             RuntimeSubcommand::List { json } => RuntimeCommand::List { json },
-            RuntimeSubcommand::Install => RuntimeCommand::Install,
+            RuntimeSubcommand::Install {
+                system_wide: false, ..
+            } => RuntimeCommand::Install,
+            RuntimeSubcommand::Install {
+                system_wide: true,
+                root,
+            } => RuntimeCommand::InstallSystemWide { root },
             RuntimeSubcommand::Remove { version } => RuntimeCommand::Remove { version },
             RuntimeSubcommand::Prune { keep } => RuntimeCommand::Prune { keep },
             RuntimeSubcommand::Doctor { json } => RuntimeCommand::Doctor { json },
@@ -81,6 +87,8 @@ fn main() -> ExitCode {
             command,
             autostart,
             no_desktop,
+            system_wide,
+            root,
         } => match install::run(
             InstallOptions {
                 source,
@@ -90,7 +98,11 @@ fn main() -> ExitCode {
                 autostart,
                 desktop: !no_desktop,
             },
-            bundle,
+            match (bundle, system_wide) {
+                (_, true) => install::InstallKind::SystemBundle { root },
+                (true, false) => install::InstallKind::Bundle,
+                (false, false) => install::InstallKind::Source,
+            },
             env_file,
         ) {
             Ok(code) => code,
@@ -150,6 +162,7 @@ fn main() -> ExitCode {
             version,
             json,
             offline,
+            system_wide: false,
             env_files: env_file,
         }) {
             Ok(code) => code,

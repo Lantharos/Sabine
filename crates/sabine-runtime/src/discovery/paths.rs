@@ -1,21 +1,41 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
-pub fn system_runtime_path() -> PathBuf {
+/// The machine-wide Sabine directory. An administrator or OS image fills it
+/// with `sabine runtime install --system-wide`; every user reads it and
+/// nothing writes to it while apps run.
+pub fn system_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("ProgramFiles")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
-            .join("Sabine/Runtime/cef")
+            .join("Sabine")
     }
     #[cfg(target_os = "macos")]
     {
-        PathBuf::from("/Library/Application Support/Sabine/runtimes/cef")
+        PathBuf::from("/Library/Application Support/Sabine")
     }
     #[cfg(target_os = "linux")]
     {
-        PathBuf::from("/usr/lib/sabine/cef")
+        PathBuf::from("/usr/lib/sabine")
     }
+}
+
+pub fn system_runtime_path() -> PathBuf {
+    system_dir().join("runtimes").join("cef")
+}
+
+/// Where `path` lands when a system-wide installation is staged into `root`,
+/// such as an OS image or a package build directory.
+pub fn path_in_root(root: Option<&Path>, path: &Path) -> PathBuf {
+    let Some(root) = root else {
+        return path.to_path_buf();
+    };
+    root.join(
+        path.components()
+            .filter(|component| matches!(component, Component::Normal(_)))
+            .collect::<PathBuf>(),
+    )
 }
 
 /// The per-user directory that holds every piece of shared Sabine state:

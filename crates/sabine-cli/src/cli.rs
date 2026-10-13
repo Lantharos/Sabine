@@ -54,6 +54,12 @@ pub(crate) enum Command {
         autostart: bool,
         #[arg(long)]
         no_desktop: bool,
+        /// Install the bundle for every user of the machine.
+        #[arg(long, requires = "bundle", conflicts_with_all = ["autostart", "no_desktop"])]
+        system_wide: bool,
+        /// Stage a system-wide install under this directory, such as an OS image.
+        #[arg(long, requires = "system_wide")]
+        root: Option<PathBuf>,
     },
     /// Remove an installed app, or Sabine itself with --system.
     Uninstall {
@@ -147,7 +153,14 @@ pub(crate) enum RuntimeSubcommand {
         #[arg(long)]
         json: bool,
     },
-    Install,
+    Install {
+        /// Install the Sabine service, host and CEF runtime for every user of the machine.
+        #[arg(long)]
+        system_wide: bool,
+        /// Stage a system-wide install under this directory, such as an OS image.
+        #[arg(long, requires = "system_wide")]
+        root: Option<PathBuf>,
+    },
     Remove {
         version: Option<String>,
     },

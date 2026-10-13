@@ -18,46 +18,11 @@ pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
         || !sabine_host::host_is_complete(&destination.join(sabine_host_relative_path()))
     {
         let staging = versions_dir().join(format!("{version}.installing"));
-        if staging.exists() {
-            fs::remove_dir_all(&staging)?;
-        }
-        fs::create_dir_all(&staging)?;
-        for name in [service_binary_name(), service_daemon_binary_name()] {
-            let source = source_dir.join(name);
-            if !source.is_file() {
-                return Err(ServiceError::Update(format!(
-                    "offline Sabine system bundle is missing {name}"
-                )));
-            }
-            let target = staging.join(name);
-            fs::copy(source, &target)?;
-            make_executable(&target)?;
-        }
-        if cfg!(target_os = "macos") {
-            copy_directory(
-                &source_dir.join("sabine-host.app"),
-                &staging.join("sabine-host.app"),
-            )?;
-        } else {
-            let name = sabine_host_relative_path();
-            let source = source_dir.join(&name);
-            if !source.is_file() {
-                return Err(ServiceError::Update(format!(
-                    "offline Sabine system bundle is missing {}",
-                    name.display()
-                )));
-            }
-            let target = staging.join(name);
-            fs::copy(&source, &target)?;
-            make_executable(&target)?;
-            if cfg!(windows) {
-                fs::copy(source.with_extension("dll"), target.with_extension("dll"))?;
-                fs::copy(
-                    source.with_file_name("chrome_elf.dll"),
-                    target.with_file_name("chrome_elf.dll"),
-                )?;
-            }
-        }
+        stage_system_files(
+            &staging,
+            service,
+            &source_dir.join(sabine_host_relative_path()),
+        )?;
         sabine_runtime::install_directory(&staging, &destination)?;
     }
     let previous_state = read_installation_state();

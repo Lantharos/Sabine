@@ -9,11 +9,11 @@ mod autostart;
 mod daemon;
 
 use autostart::{install_login_autostart, uninstall_login_autostart};
-pub(crate) use daemon::stop_daemon;
 pub use daemon::{
     complete_system_update, ensure_daemon_running, resolve_service_executable, run_daemon,
     running_daemon_version,
 };
+pub(crate) use daemon::{service_version, stop_daemon};
 
 const POLICY_FILE: &str = "service-policy.json";
 pub(super) const PID_FILE: &str = "service.pid";

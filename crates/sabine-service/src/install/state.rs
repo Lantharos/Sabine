@@ -36,14 +36,14 @@ struct SystemUpdateFailure {
 }
 
 pub(super) fn versions_dir() -> PathBuf {
-    sabine_data_dir().join("bin/versions")
+    versions_dir_in(&sabine_data_dir())
+}
+
+pub(super) fn versions_dir_in(root: &Path) -> PathBuf {
+    root.join("bin/versions")
 }
 
 const INSTALLATION_STATE: &str = "bin/current.json";
-
-fn installation_state_path() -> PathBuf {
-    sabine_data_dir().join(INSTALLATION_STATE)
-}
 
 pub(super) fn read_installation_state() -> Option<SystemInstallationState> {
     read_installation_state_in(&sabine_data_dir())
@@ -59,14 +59,30 @@ pub(super) fn read_installation_state_in(root: &Path) -> Option<SystemInstallati
 }
 
 pub(super) fn current_installation() -> Option<(String, PathBuf)> {
-    let state = read_installation_state()?;
-    let path = versions_dir().join(&state.active);
+    installation_in(&sabine_data_dir())
+}
+
+/// The installation every user shares, placed by `sabine runtime install --system-wide`.
+pub(super) fn system_installation() -> Option<(String, PathBuf)> {
+    installation_in(&sabine_runtime::system_dir())
+}
+
+fn installation_in(root: &Path) -> Option<(String, PathBuf)> {
+    let state = read_installation_state_in(root)?;
+    let path = versions_dir_in(root).join(&state.active);
     complete_managed_system_at(&path)?;
     Some((state.active, path))
 }
 
 pub(super) fn write_installation_state(state: &SystemInstallationState) -> ServiceResult<()> {
-    let path = installation_state_path();
+    write_installation_state_in(&sabine_data_dir(), state)
+}
+
+pub(super) fn write_installation_state_in(
+    root: &Path,
+    state: &SystemInstallationState,
+) -> ServiceResult<()> {
+    let path = root.join(INSTALLATION_STATE);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -79,7 +95,14 @@ pub(super) fn write_installation_state(state: &SystemInstallationState) -> Servi
 }
 
 pub(super) fn prune_system_versions(active: &str, previous: Option<&str>) -> ServiceResult<()> {
-    let base = versions_dir();
+    prune_system_versions_in(&versions_dir(), active, previous)
+}
+
+pub(super) fn prune_system_versions_in(
+    base: &Path,
+    active: &str,
+    previous: Option<&str>,
+) -> ServiceResult<()> {
     if !base.is_dir() {
         return Ok(());
     }

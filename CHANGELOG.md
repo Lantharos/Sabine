@@ -4,6 +4,12 @@
   frames reach the window as dma-bufs without passing through the CPU, and only the area that
   changed is copied. Older runtimes, and graphics devices that cannot share frames, keep painting
   in software.
+- Apps can be installed for every user of a machine, such as in an operating system image.
+  `sabine runtime install --system-wide` puts the Sabine service, host and CEF runtime in the
+  system's Sabine folder, and `sabine install --bundle --system-wide` installs an app with its
+  desktop entry and icons in the system's folders. `--root` stages either into an image or package
+  tree. Apps then start for every user without preparing anything, and users' Sabine services no
+  longer download a runtime of their own while the machine provides one.
 
 # Sabine 0.37
 

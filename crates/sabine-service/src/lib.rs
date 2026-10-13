@@ -29,11 +29,12 @@ pub use uninstall::uninstall_system;
 
 pub use app::registry::SabineService;
 pub(crate) use install::{
-    StagedSystemUpdate, cached_service_path, find_service_executable, repair_system_installation,
-    rollback_system_update, stage_system_update,
+    StagedSystemUpdate, cached_service_path, repair_system_installation, rollback_system_update,
+    stage_system_update,
 };
 pub use install::{
-    ensure_service_executable, installed_service_version, service_daemon_path, update_components,
+    ensure_service_executable, find_service_executable, install_system_service,
+    installed_service_version, service_daemon_path, update_components,
 };
 pub(crate) use lifecycle::{PrepareProgress, PrepareStage};
 pub use lifecycle::{

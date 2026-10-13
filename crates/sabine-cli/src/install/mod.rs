@@ -44,15 +44,23 @@ pub(crate) fn rebuild_bundle(id: &str, install: BundleInstall) -> Result<(), Str
     Ok(())
 }
 
+pub enum InstallKind {
+    Source,
+    Bundle,
+    SystemBundle { root: Option<std::path::PathBuf> },
+}
+
 pub fn run(
     options: source::InstallOptions,
-    bundle: bool,
+    kind: InstallKind,
     env_files: Vec<std::path::PathBuf>,
 ) -> Result<std::process::ExitCode, String> {
-    if bundle {
-        crate::bundle::install_bundle(options, env_files)
-    } else {
-        source::install(options)
+    match kind {
+        InstallKind::Source => source::install(options),
+        InstallKind::Bundle => crate::bundle::install_bundle(options, env_files),
+        InstallKind::SystemBundle { root } => {
+            crate::bundle::install_system_bundle(options, env_files, root.as_deref())
+        }
     }
 }
 

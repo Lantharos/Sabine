@@ -6,12 +6,14 @@ use sabine_runtime::{
 };
 
 mod sandbox;
+mod system;
 
 pub enum RuntimeCommand {
     Prepare,
     SandboxProfile,
     List { json: bool },
     Install,
+    InstallSystemWide { root: Option<std::path::PathBuf> },
     Remove { version: Option<String> },
     Prune { keep: usize },
     Doctor { json: bool },
@@ -41,6 +43,13 @@ pub fn run_runtime(command: RuntimeCommand) -> ExitCode {
         },
         RuntimeCommand::List { json } => list_runtimes(json),
         RuntimeCommand::Install => install_runtime(),
+        RuntimeCommand::InstallSystemWide { root } => match system::install(root.as_deref()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
         RuntimeCommand::Remove { version } => remove_runtime(version.as_deref()),
         RuntimeCommand::Prune { keep } => prune_runtime(keep),
         RuntimeCommand::Doctor { json } => doctor_runtime(json),

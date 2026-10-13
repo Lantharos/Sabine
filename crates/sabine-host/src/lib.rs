@@ -333,17 +333,32 @@ fn prebuilt_host_path() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         return None;
     }
+    let user = installed_system_host(&sabine_runtime::sabine_data_dir());
+    let machine = installed_system_host(&sabine_runtime::system_dir());
+    match (user, machine) {
+        (Some(user), Some(machine)) if machine.0 >= user.0 => Some(machine.1),
+        (user, machine) => user.or(machine).map(|(_, path)| path),
+    }
+}
+
+/// The host of the Sabine installation under a data directory, with its
+/// version for choosing between the user's and the machine's.
+fn installed_system_host(root: &Path) -> Option<(Vec<u64>, PathBuf)> {
     #[derive(Deserialize)]
     struct CurrentSystem {
         active: String,
     }
-    let bin = sabine_runtime::sabine_data_dir().join("bin");
+    let bin = root.join("bin");
     let current =
         serde_json::from_slice::<CurrentSystem>(&std::fs::read(bin.join("current.json")).ok()?)
             .ok()?;
-    let directory = bin.join("versions").join(current.active);
-    let path = installed_host_path(&directory);
-    host_is_complete(&path).then_some(path)
+    let path = installed_host_path(&bin.join("versions").join(&current.active));
+    let version = current
+        .active
+        .split('.')
+        .map(|part| part.parse().unwrap_or(0))
+        .collect();
+    host_is_complete(&path).then_some((version, path))
 }
 
 fn installed_host_path(directory: &Path) -> PathBuf {

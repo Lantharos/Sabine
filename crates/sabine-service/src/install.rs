@@ -12,7 +12,10 @@ mod manual;
 mod payload;
 use payload::{install_system_archive, seed_managed_install};
 mod state;
+mod system;
 pub use manual::update_components;
+pub use system::install_system_service;
+use system::stage_system_files;
 
 use artifacts::{
     copy_directory, download_file, extract_system_archive, fetch_system_manifest,
@@ -23,7 +26,7 @@ use state::{
     SystemInstallationState, clear_system_failure, compatibility_for_version, current_installation,
     lock_system_installation, normalized_state_compatibility, prune_system_versions,
     read_installation_state, read_installation_state_in, record_system_failure,
-    system_update_is_backed_off, versions_dir, write_installation_state,
+    system_installation, system_update_is_backed_off, versions_dir, write_installation_state,
 };
 
 const SERVICE_REPO: &str = "Lantharos/Sabine";
@@ -48,7 +51,9 @@ pub struct StagedSystemUpdate {
 }
 
 pub fn installed_service_version() -> Option<String> {
-    current_installation().map(|(version, _)| version)
+    current_installation()
+        .or_else(system_installation)
+        .map(|(version, _)| version)
 }
 
 pub fn cached_service_path() -> PathBuf {
@@ -59,6 +64,17 @@ pub fn cached_service_path() -> PathBuf {
 
 pub(crate) fn service_path_for_version(version: &str) -> PathBuf {
     versions_dir().join(version).join(service_binary_name())
+}
+
+/// Where a daemon of `version` runs from: the user's installation or the machine's.
+pub(crate) fn daemon_paths_for_version(version: &str) -> [PathBuf; 2] {
+    [
+        service_path_for_version(version),
+        state::versions_dir_in(&sabine_runtime::system_dir())
+            .join(version)
+            .join(service_binary_name()),
+    ]
+    .map(|service| service_daemon_path(&service))
 }
 
 pub fn service_daemon_path(service: &Path) -> PathBuf {
@@ -75,7 +91,7 @@ fn complete_managed_system_at(directory: &Path) -> Option<PathBuf> {
 }
 
 pub fn find_service_executable() -> Option<PathBuf> {
-    if let Some(path) = configured_service() {
+    if let Some(path) = configured_service().or_else(system_service) {
         return Some(path);
     }
 
@@ -99,7 +115,7 @@ pub fn find_service_executable() -> Option<PathBuf> {
 pub fn ensure_service_executable(
     mut on_progress: impl FnMut(PrepareProgress),
 ) -> ServiceResult<PathBuf> {
-    if let Some(path) = configured_service() {
+    if let Some(path) = configured_service().or_else(system_service) {
         return Ok(path);
     }
     let mut current = current_installation();
@@ -206,6 +222,16 @@ fn configured_service() -> Option<PathBuf> {
     std::env::var_os("SABINE_SERVICE_PATH")
         .map(PathBuf::from)
         .and_then(complete_service_at)
+}
+
+/// The machine's shared service, unless it is older than this app needs or
+/// than the user's own installation.
+fn system_service() -> Option<PathBuf> {
+    let (version, directory) = system_installation()?;
+    let superseded = current_installation()
+        .is_some_and(|(user, _)| crate::types::version_is_newer(&user, &version));
+    (!managed_system_is_older(&version) && !superseded)
+        .then(|| directory.join(service_binary_name()))
 }
 
 fn adjacent_service() -> Option<PathBuf> {
@@ -411,6 +437,7 @@ pub fn installed_system_compatibility() -> SystemCompatibility {
 /// What the Sabine installed under `root` accepts.
 pub(crate) fn system_compatibility_in(root: &Path) -> SystemCompatibility {
     read_installation_state_in(root)
+        .or_else(|| read_installation_state_in(&sabine_runtime::system_dir()))
         .map(|state| normalized_state_compatibility(&state))
         .unwrap_or_else(SystemCompatibility::current)
 }

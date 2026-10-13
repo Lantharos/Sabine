@@ -106,12 +106,14 @@ impl SabineService {
         progress: impl FnMut(sabine_runtime::RuntimeInstallProgress),
     ) -> ServiceResult<sabine_runtime::RuntimeInfo> {
         retry_quarantined_runtimes()?;
-        let runtime = if self.runtime.allow_user_install
-            && matches!(
-                self.runtime.mode,
-                sabine_runtime::RuntimeMode::SharedPreferred
-                    | sabine_runtime::RuntimeMode::SystemPreferred
-            ) {
+        let shared = matches!(
+            self.runtime.mode,
+            sabine_runtime::RuntimeMode::SharedPreferred
+                | sabine_runtime::RuntimeMode::SystemPreferred
+        );
+        let runtime = if shared && let Some(runtime) = self.system_runtime() {
+            runtime
+        } else if shared && self.runtime.allow_user_install {
             update_user_runtime_with_progress(&self.runtime, progress)?
         } else {
             resolve_runtime(&self.runtime)?
@@ -132,6 +134,16 @@ impl SabineService {
             return Err(ServiceError::Update(error));
         }
         Ok(runtime)
+    }
+
+    /// The runtime the machine provides for every user, which its
+    /// administrator keeps up to date in place of per-user downloads.
+    fn system_runtime(&self) -> Option<sabine_runtime::RuntimeInfo> {
+        resolve_runtime(&sabine_runtime::RuntimeConfig {
+            mode: sabine_runtime::RuntimeMode::SystemRequired,
+            ..self.runtime.clone()
+        })
+        .ok()
     }
 
     pub fn update_app(&self, id: &str) -> ServiceResult<AppUpdateStatus> {
