@@ -42,6 +42,9 @@ impl Backend {
             material_shown: true,
             shape: None,
         };
+        if !options.chrome.uses_native_decorations() {
+            shape::round_corners(backend.hwnd);
+        }
         backend.show_material(window.theme().unwrap_or(Theme::Light));
         Some(backend)
     }

@@ -1,3 +1,10 @@
+# Sabine 0.39
+
+- Frameless windows get Windows 11's rounded corners. Windows 10 keeps them square.
+- Windows bundles write the app's icon into its executable, and windows show it in their title bar,
+  the taskbar and Alt+Tab. The setup program and its uninstaller use the icon too, instead of the
+  installer's default one.
+
 # Sabine 0.38
 
 - Linux windows paint with the GPU on CEF 156.0.3 and newer, including on NVIDIA. Chromium's

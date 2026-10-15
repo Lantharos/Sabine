@@ -3,13 +3,33 @@
 // A window region clips everything DWM composes for the window, including
 // its DirectComposition content and backdrop, and the window stops receiving
 // input outside it. The system owns a region once SetWindowRgn accepts it.
+// Windows 11 rounds a window's corners itself unless a region is set;
+// Windows 10 ignores the corner preference and keeps square corners.
 
 use windows::Win32::{
     Foundation::{HWND, RECT},
-    Graphics::Gdi::{ExtCreateRegion, RDH_RECTANGLES, RGNDATA, RGNDATAHEADER, SetWindowRgn},
+    Graphics::{
+        Dwm::{
+            DWM_WINDOW_CORNER_PREFERENCE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+            DwmSetWindowAttribute,
+        },
+        Gdi::{ExtCreateRegion, RDH_RECTANGLES, RGNDATA, RGNDATAHEADER, SetWindowRgn},
+    },
 };
 
 use crate::WindowRegionRect;
+
+/// Asks for the system's rounded corners on a window without a system frame.
+pub(super) fn round_corners(hwnd: HWND) {
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&DWMWCP_ROUND as *const DWM_WINDOW_CORNER_PREFERENCE).cast(),
+            size_of_val(&DWMWCP_ROUND) as u32,
+        );
+    }
+}
 
 /// Limits the window to `rects`, in physical pixels, or lifts the limit.
 pub(super) fn set_window_shape(hwnd: HWND, rects: Option<&[RECT]>) {

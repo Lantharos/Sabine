@@ -98,6 +98,11 @@ impl ApplicationHandler for Dialog {
                 560.0,
                 if self.notice { 360.0 } else { 300.0 },
             ));
+        #[cfg(target_os = "windows")]
+        let attributes = crate::desktop::with_app_icon(
+            attributes,
+            winit::platform::windows::WindowAttributesWindows::default(),
+        );
         let result = (|| {
             let window: Arc<dyn Window> = Arc::from(
                 event_loop

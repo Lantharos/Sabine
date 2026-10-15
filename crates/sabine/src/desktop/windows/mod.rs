@@ -1,8 +1,10 @@
+mod app_icon;
 mod instance;
 mod registry;
 mod ui_thread;
 
 pub(super) use super::hotkeys::GlobalShortcuts;
+pub(crate) use app_icon::with_app_icon;
 pub(super) use instance::SingleInstanceGuard;
 pub(super) use registry::{
     register_deep_links, register_native_messaging_host, write_autostart_entry,

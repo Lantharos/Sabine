@@ -37,7 +37,7 @@ pub(super) fn nsis_script(
     let icon = icon
         .map(|path| {
             format!(
-                "Icon \"{}\"\nUninstallIcon \"{}\"",
+                "!define MUI_ICON \"{}\"\n!define MUI_UNICON \"{}\"",
                 escape(&dunce::simplified(Path::new(path)).to_string_lossy()),
                 escape(&dunce::simplified(Path::new(path)).to_string_lossy())
             )
