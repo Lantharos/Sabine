@@ -12,6 +12,7 @@ pub(in crate::bundle) fn wix_source(
     staged_app_dir: &str,
     executable: &str,
     icon: Option<&str>,
+    dialog_bitmap: Option<&str>,
     actions_binary: &str,
 ) -> Result<String, String> {
     let version = semver::Version::parse(&app.version).map_err(|error| error.to_string())?;
@@ -25,6 +26,14 @@ pub(in crate::bundle) fn wix_source(
             format!(
                 "    <Icon Id=\"AppIcon.ico\" SourceFile=\"{}\"/>\n",
                 xml(icon)
+            )
+        })
+        .unwrap_or_default();
+    let dialog_bitmap = dialog_bitmap
+        .map(|path| {
+            format!(
+                "    <WixVariable Id=\"WixUIDialogBmp\" Value=\"{}\"/>\n",
+                xml(path)
             )
         })
         .unwrap_or_default();
@@ -53,7 +62,7 @@ pub(in crate::bundle) fn wix_source(
         </Directory>
       </Directory>
     </StandardDirectory>
-{}{}
+{}{}{}
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER"/>
     <UI>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" Condition="NOT Installed"/>
@@ -81,6 +90,7 @@ pub(in crate::bundle) fn wix_source(
         inventory,
         program_menu,
         icon_element,
+        dialog_bitmap,
         xml(actions_binary),
         actions(),
     ))

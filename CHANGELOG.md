@@ -4,6 +4,8 @@
 - Windows bundles write the app's icon into its executable, and windows show it in their title bar,
   the taskbar and Alt+Tab. The setup program and its uninstaller use the icon too, instead of the
   installer's default one.
+- Setup programs can show the app's own artwork on their welcome and finish pages, from
+  `installer_image` in `Sabine.toml`.
 
 # Sabine 0.38
 

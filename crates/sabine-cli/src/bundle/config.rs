@@ -18,6 +18,7 @@ pub(super) struct BundleApp {
     pub license: Option<String>,
     pub homepage: Option<String>,
     pub icon: Option<PathBuf>,
+    pub installer_image: Option<PathBuf>,
     pub associations: Associations,
     pub listing: Listing,
     pub cargo_manifest: PathBuf,
@@ -92,6 +93,7 @@ struct AppSection {
     license: Option<String>,
     homepage: Option<String>,
     icon: Option<String>,
+    installer_image: Option<String>,
     #[serde(flatten)]
     associations: Associations,
     #[serde(flatten)]
@@ -185,6 +187,18 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
     {
         return Err(format!("app icon was not found: {}", icon.display()));
     }
+    let installer_image = sabine
+        .app
+        .installer_image
+        .map(|image| source_dir.join(image));
+    if let Some(image) = &installer_image
+        && !image.is_file()
+    {
+        return Err(format!(
+            "installer image was not found: {}",
+            image.display()
+        ));
+    }
     if !sabine_service::valid_app_id(&id) {
         return Err("app id must contain lowercase letters, digits, dots or hyphens and must not be a relative path".to_string());
     }
@@ -207,6 +221,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         license,
         homepage,
         icon,
+        installer_image,
         associations: sabine.app.associations,
         listing: sabine.app.listing,
         cargo_manifest,

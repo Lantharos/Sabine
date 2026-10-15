@@ -10,7 +10,7 @@ use super::{
     linux::package::{deb_control, deb_dependencies, rpm_spec},
     metadata::shell_script,
     stage::StagedBundle,
-    windows::nsis_script,
+    windows::{artwork, nsis_script},
 };
 
 fn command_exists(name: &str) -> bool {
@@ -293,6 +293,12 @@ fn package_msi(
     let source_dir = dunce::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
     let icon = source_dir.join("resources").join("windows-app.ico");
     let icon = icon.is_file().then(|| icon.display().to_string());
+    let dialog_bitmap = app
+        .installer_image
+        .as_deref()
+        .map(|image| artwork::wix_dialog(image, &staged.root))
+        .transpose()?
+        .map(|bitmap| dunce::simplified(&bitmap).display().to_string());
     fs::write(
         &wxs,
         super::windows::msi::wix_source(
@@ -300,6 +306,7 @@ fn package_msi(
             &source_dir.display().to_string(),
             &staged.executable,
             icon.as_deref(),
+            dialog_bitmap.as_deref(),
             &dunce::simplified(&actions).display().to_string(),
         )?,
     )
@@ -361,6 +368,11 @@ fn package_exe(
     let artifact = artifact_path(app, staged, BundleFormat::Exe, "exe");
     let icon = staged.app_dir.join("resources/windows-app.ico");
     let icon = icon.is_file().then(|| icon.display().to_string());
+    let welcome_bitmap = app
+        .installer_image
+        .as_deref()
+        .map(|image| artwork::nsis_welcome(image, &staged.root))
+        .transpose()?;
     fs::write(
         &script,
         nsis_script(
@@ -369,6 +381,7 @@ fn package_exe(
             &staged.executable,
             &artifact.display().to_string(),
             icon.as_deref(),
+            welcome_bitmap.as_deref(),
         )?,
     )
     .map_err(|error| error.to_string())?;
