@@ -1161,6 +1161,19 @@ and failures go to the installer details pane; failure returns a nonzero exit co
 `--sabine-uninstall` removes the registration before the uninstaller deletes packaged files.
 These modes are handled by `SabineWindow::main` and its process variants.
 
+Setup programs show the app's own artwork on their welcome and finish pages when the manifest names
+a PNG, JPEG or WebP image:
+
+```toml
+[app]
+installer_image = "installer.png"
+```
+
+The image is scaled to cover the space and cropped from its center: 164×314 down the side of the
+NSIS pages, and the left 164 pixels of the MSI dialogs, which keep their white text area. A portrait
+image of about that shape, at twice the size, crops least. Without it the installers keep their
+default artwork.
+
 The default destination is `%LOCALAPPDATA%\Programs\<app-id>`. Installation and shortcuts belong
 to the current user. The uninstaller deletes the files included by the package and leaves other
 files in place. Shared runtimes and the service remain available to other Sabine apps.

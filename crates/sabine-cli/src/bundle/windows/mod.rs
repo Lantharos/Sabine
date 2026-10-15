@@ -1,3 +1,4 @@
+pub(super) mod artwork;
 pub(super) mod msi;
 pub(super) mod msi_actions;
 
@@ -20,6 +21,7 @@ pub(super) fn nsis_script(
     executable: &str,
     output: &str,
     icon: Option<&str>,
+    welcome_bitmap: Option<&Path>,
 ) -> Result<String, String> {
     let source = dunce::canonicalize(source).map_err(|error| error.to_string())?;
     let name = escape(&app.name);
@@ -40,6 +42,14 @@ pub(super) fn nsis_script(
                 "!define MUI_ICON \"{}\"\n!define MUI_UNICON \"{}\"",
                 escape(&dunce::simplified(Path::new(path)).to_string_lossy()),
                 escape(&dunce::simplified(Path::new(path)).to_string_lossy())
+            )
+        })
+        .unwrap_or_default();
+    let welcome_bitmap = welcome_bitmap
+        .map(|path| {
+            format!(
+                "!define MUI_WELCOMEFINISHPAGE_BITMAP \"{}\"\n",
+                escape(&dunce::simplified(path).to_string_lossy())
             )
         })
         .unwrap_or_default();
@@ -83,7 +93,7 @@ Var SetupCancelled
 Var CancelHandle
 Var CancelButton
 {icon}
-!define MUI_CUSTOMFUNCTION_ABORT CancelSetup
+{welcome_bitmap}!define MUI_CUSTOMFUNCTION_ABORT CancelSetup
 !define MUI_WELCOMEPAGE_TEXT "Setup installs {name} and prepares its shared Sabine runtime.$\r$\n$\r$\nIf the runtime is not already available, setup downloads it before finishing. You can rerun this installer to repair the installation."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY

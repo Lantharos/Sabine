@@ -201,13 +201,13 @@ fn svg_font_family(config: &fontconfig::Fontconfig, family: &std::ffi::CStr) -> 
         .map(str::to_owned)
 }
 
-fn load_raster(path: &Path) -> Result<DynamicImage, String> {
+pub fn load_raster(path: &Path) -> Result<DynamicImage, String> {
     ImageReader::open(path)
-        .map_err(|error| format!("failed to open icon {}: {error}", path.display()))?
+        .map_err(|error| format!("failed to open image {}: {error}", path.display()))?
         .with_guessed_format()
-        .map_err(|error| format!("failed to identify icon {}: {error}", path.display()))?
+        .map_err(|error| format!("failed to identify image {}: {error}", path.display()))?
         .decode()
-        .map_err(|error| format!("failed to decode icon {}: {error}", path.display()))
+        .map_err(|error| format!("failed to decode image {}: {error}", path.display()))
 }
 
 fn square_icon(image: &DynamicImage, size: u32) -> DynamicImage {
