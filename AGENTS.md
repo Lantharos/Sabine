@@ -15,3 +15,4 @@
 - Keep the README focused on getting started. Architecture and platform details belong in `docs/implementation-guide.md`; release procedures belong in `docs/publishing.md`.
 - Preserve the warning banners around Windows-specific Chromium, GPU, and process behavior when editing those files.
 - When publishing, use `scripts/publish.sh`. Crate metadata lives in each crate's `Cargo.toml`; the workspace owns version, license, repository, homepage, authors, keywords, categories.
+- Never add Co-Authored-By, "Generated with", or any other AI or tool attribution lines to commit messages or pull request descriptions.
