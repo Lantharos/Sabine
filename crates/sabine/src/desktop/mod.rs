@@ -23,6 +23,8 @@ use sabine_platform::{
     NativeMessagingHost, PlatformEvent, SingleInstancePolicy, TrayIcon,
 };
 
+#[cfg(target_os = "windows")]
+pub(crate) use platform::with_app_icon;
 use platform::{
     GlobalShortcuts, SingleInstanceGuard, UiThread, register_deep_links,
     register_native_messaging_host, write_autostart_entry,

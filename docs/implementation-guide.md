@@ -544,7 +544,8 @@ Recipes set a window up for its role, and later builder calls refine them:
 - `.tray_app()`: starts hidden, out of the taskbar, hidden-window lifecycle; pair it with
   `.tray_icon(...)` and `.single_instance_id(...)`
 
-`AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
+Frameless windows get the system's rounded corners on Windows 11, as on Linux and macOS; Windows 10
+keeps them square. `AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
 and close hit targets at the right end, and with a sidebar the blur, opaque and input regions of a
 glass sidebar layout. On macOS the window keeps its own traffic lights instead: its titlebar turns
 transparent and the page extends under it, so the page draws no controls of its own and leaves the
@@ -1051,7 +1052,8 @@ removes the app registration and preserves the shared Sabine system. MSI builds 
 the UI and Util extensions. Local build machines accept the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/)
 with `wix eula accept wix7`; reusable workflow callers set `accept_wix_eula: true` after reviewing
 the terms. Apps build with the latest stable Rust; set `rust_toolchain` to pin another toolchain.
-The configured icon appears in the Start menu shortcut, and the release
+The configured icon is written into the executable, so Explorer, the Start menu shortcut, the
+setup program and the app's windows and taskbar button show it, and the release
 workflow installs and launches the package before publication. Raster and SVG icons are decoded, rendered, and resized in process without external
 image tools. The SVG is rendered once, then reused for all native icon sizes. Font discovery
 runs only when needed; Linux uses Fontconfig for the configured generic font families.

@@ -145,6 +145,11 @@ impl ApplicationHandler for ProgressApp {
             .with_surface_size(LogicalSize::new(f64::from(WIDTH), f64::from(HEIGHT)))
             .with_resizable(false)
             .with_decorations(true);
+        #[cfg(target_os = "windows")]
+        let attributes = crate::desktop::with_app_icon(
+            attributes,
+            winit::platform::windows::WindowAttributesWindows::default(),
+        );
         let window: Arc<dyn Window> = match event_loop.create_window(attributes) {
             Ok(window) => Arc::from(window),
             Err(error) => {

@@ -66,6 +66,22 @@ pub fn stage_windows_icon(
     copy_bytes(&ico, destination)
 }
 
+/// Writes the icon into a Windows executable as its main icon, which Explorer,
+/// shortcuts and the app's own windows show.
+pub fn embed_windows_icon(executable: &Path, ico: &Path) -> Result<(), String> {
+    let mut image = editpe::Image::parse_file(executable).map_err(|error| error.to_string())?;
+    let mut resources = image.resource_directory().cloned().unwrap_or_default();
+    resources
+        .set_main_icon(fs::read(ico).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    image
+        .set_resource_directory(resources)
+        .map_err(|error| error.to_string())?;
+    image
+        .write_file(executable)
+        .map_err(|error| error.to_string())
+}
+
 pub fn stage_macos_icon(app_id: &str, icon_set: &Path, destination: &Path) -> Result<(), String> {
     use icns::{IconFamily, IconType, PixelFormat};
     let mut family = IconFamily::new();

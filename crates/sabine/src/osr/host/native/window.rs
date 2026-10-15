@@ -67,11 +67,13 @@ impl OsrNativeHost {
             ));
         }
         #[cfg(target_os = "windows")]
-        if self.config.transparent || self.config.skip_taskbar {
-            let windows_attributes = WindowAttributesWindows::default()
-                .with_no_redirection_bitmap(self.config.transparent)
-                .with_skip_taskbar(self.config.skip_taskbar);
-            attributes = attributes.with_platform_attributes(Box::new(windows_attributes));
+        {
+            attributes = crate::desktop::with_app_icon(
+                attributes,
+                WindowAttributesWindows::default()
+                    .with_no_redirection_bitmap(self.config.transparent)
+                    .with_skip_taskbar(self.config.skip_taskbar),
+            );
         }
         if let Some(position) =
             crate::centered_window_position(event_loop, self.config.width, self.config.height)

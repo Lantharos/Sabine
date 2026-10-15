@@ -220,6 +220,10 @@ fn stage_windows(
             &resources.join("icons"),
             &resources.join("windows-app.ico"),
         )?;
+        icons::embed_windows_icon(
+            &app_dir.join(executable),
+            &resources.join("windows-app.ico"),
+        )?;
     }
     Ok(app_dir)
 }
