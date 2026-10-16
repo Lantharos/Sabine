@@ -264,11 +264,23 @@ void SabineOsrHandler::WatchAcceleratedPaint() {
                          [](CefRefPtr<SabineOsrHandler> handler) {
                            if (!handler->accelerated_paint_seen_ &&
                                !handler->view_hidden_ && handler->browser_) {
-                             handler->ReportAcceleratedPaintUnavailable();
+                             handler->ReportMissingAcceleratedPaint();
                            }
                          },
                          self)),
                      kAcceleratedPaintGraceMs);
+}
+
+void SabineOsrHandler::ReportMissingAcceleratedPaint() {
+  std::fprintf(
+      stderr,
+      "Sabine CEF: no accelerated frame reached the window %lld ms "
+      "after loading: %s; the window needs a %dx%d page at scale %.2f\n",
+      static_cast<long long>(kAcceleratedPaintGraceMs),
+      accelerated_drop_reason_.empty() ? "Chromium painted nothing"
+                                       : accelerated_drop_reason_.c_str(),
+      width_, height_, scale_);
+  std::fflush(stderr);
 }
 
 void SabineOsrHandler::ReportAcceleratedPaintUnavailable() {

@@ -8,6 +8,9 @@
 - Fix Linux windows on NVIDIA crashing while they recreate their graphics device after it was lost.
 - A page that loaded but shows no frame within 10 seconds is now only logged, with what the window
   received and what it expected. The window no longer switches to software painting or closes.
+- On Linux, a browser whose GPU frames have not reached the window 2 seconds after loading now
+  logs why they were dropped and what the window needs, and keeps painting on the GPU instead of
+  reopening the page with software painting.
 
 # Sabine 0.42
 

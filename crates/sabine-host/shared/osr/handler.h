@@ -297,6 +297,7 @@ class SabineOsrHandler : public CefClient,
   void ForgetAcceleratedCaptures(int browser_id);
 #if defined(OS_LINUX)
   void ReportAcceleratedPaintUnavailable();
+  void ReportMissingAcceleratedPaint();
   void RepaintAllSoon();
   bool TakeSettledResizeFrame(CefRefPtr<CefBrowser> browser,
                               PaintElementType type);

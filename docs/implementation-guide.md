@@ -252,9 +252,10 @@ to benchmark the GPU in the background.
   before publishing it. Chromium's pooled buffers are imported once and reused. Each owned dma-buf
   is passed to the native window once over the socket with its modifier, stride and offset, and the
   window samples it through wgpu's Vulkan device without copying. Slots are acknowledged, retired
-  and re-requested as on Windows. A window whose device cannot import dma-bufs, or whose browser
-  sends no accelerated frame the window can use within two seconds of loading, reopens the page
-  with software `OnPaint`, and the browser logs why its frames were dropped. Chromium's Wayland
+  and re-requested as on Windows. A window whose device cannot import dma-bufs reopens the page with
+  software `OnPaint`. A browser that sends no accelerated frame the window can use within two
+  seconds of loading logs why its frames were dropped against the size and scale the window needs,
+  and stays on the GPU. Chromium's Wayland
   fractional-scale support is turned off: it takes each page's scale from a native window, which
   off-screen pages lack, so pages would always paint at 100% and never match a scaled window.
   Without it Chromium uses the scale the window reports. Chromium reports each frame's damage against the capture before it, so a frame that
