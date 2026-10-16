@@ -244,15 +244,14 @@ to benchmark the GPU in the background.
   sends no accelerated frame within two seconds of loading, reopens the page with software
   `OnPaint`. Chromium reports each frame's damage against the capture before it, so a frame that
   follows one the host never copied is copied whole. CEF hands over no fence with a frame, so the
-  host waits for Chromium's drawing through the fences on the dma-buf itself. NVIDIA's driver puts
-  none there and its frames can arrive half drawn, so windows whose primary GPU runs it paint in
-  software from the start, as do older runtimes, which hand NVIDIA drivers empty shared textures.
-  Sabine runs only on Wayland sessions; Chromium is started with the Wayland Ozone platform. The
-  window
-  presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
-  On Wayland each frame requests a compositor frame callback and further redraws wait for it; with
-  FIFO presentation some drivers hold the buffer carrying that callback, which stopped the window
-  from presenting until input arrived.
+  host waits for Chromium's drawing through the fences on the dma-buf itself; NVIDIA's driver puts
+  none there, so its frames can still be in flight when they are copied. Older runtimes paint in
+  software from the start, because they hand NVIDIA drivers empty shared textures. Sabine runs only
+  on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window presents in
+  mailbox mode where the driver offers it, so presenting never blocks the window thread. On Wayland
+  each frame requests a compositor frame callback and further redraws wait for it; with FIFO
+  presentation some drivers hold the buffer carrying that callback, which stopped the window from
+  presenting until input arrived.
 - **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
   returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
   surface, copying only the area that changed since that slot last received a frame, and waits for

@@ -1,9 +1,5 @@
 # Sabine 0.40
 
-- Fix Linux windows on NVIDIA showing a blank or partly drawn page, often after a resize, with
-  only the parts that changed later filled in. Chromium can hand over a frame before the GPU has
-  finished drawing it, and NVIDIA's driver gives no way to wait for that, so windows on NVIDIA
-  paint in software again.
 - A frame that follows one Sabine skipped is now copied whole, since the area Chromium reports as
   changed is relative to the frame before it.
 

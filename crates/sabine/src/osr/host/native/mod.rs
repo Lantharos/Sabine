@@ -135,7 +135,7 @@ impl OsrNativeHost {
         let software_paint = !sabine_runtime::runtime_version_at_least(
             &config.runtime_dir,
             &sabine_runtime::MIN_LINUX_SHARED_TEXTURE_CEF,
-        ) || !crate::osr::accel::primary_gpu_fences_dmabufs();
+        );
         let focused = visible && config.active;
         let lifecycle_state = if visible {
             LifecycleState::Active

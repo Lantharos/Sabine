@@ -1,8 +1,6 @@
 mod import;
-mod primary_gpu;
 
 pub(super) use import::import_dmabuf;
-pub(crate) use primary_gpu::primary_gpu_fences_dmabufs;
 
 use std::{collections::HashMap, os::fd::OwnedFd, sync::Arc};
 
