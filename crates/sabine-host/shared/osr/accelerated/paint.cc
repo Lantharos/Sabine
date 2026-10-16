@@ -385,8 +385,12 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   }
   const AcceleratedSurfaceKey surface{browser->GetIdentifier(),
                                       type == PET_POPUP};
+  bool copy_whole = !FollowsCopiedCapture(surface, info.extra);
+#if defined(OS_LINUX)
+  copy_whole |= TakeSettledResizeFrame(browser, type);
+#endif
   PixelRegion damage;
-  if (FollowsCopiedCapture(surface, info.extra)) {
+  if (!copy_whole) {
     for (const CefRect& rect : dirtyRects) {
       damage.Unite(PixelRegion{rect.x, rect.y, rect.width, rect.height});
     }

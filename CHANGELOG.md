@@ -1,5 +1,8 @@
 # Sabine 0.40
 
+- Fix Linux windows, mostly on NVIDIA, keeping blank or partly drawn areas after a resize or
+  maximize until those areas changed again. Once a resize settles, Sabine repaints the whole window
+  once.
 - A frame that follows one Sabine skipped is now copied whole, since the area Chromium reports as
   changed is relative to the frame before it.
 

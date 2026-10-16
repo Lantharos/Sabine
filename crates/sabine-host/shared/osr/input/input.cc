@@ -158,6 +158,9 @@ void SabineOsrHandler::HandleControlLine(
     host->WasResized();
     host->Invalidate(PET_VIEW);
     NotifyGuestScreenInfo();
+#if defined(OS_LINUX)
+    RepaintWholeOnceResizeSettles();
+#endif
   } else if (parts[0] == "mouse_move" && parts.size() >= 5) {
     CefMouseEvent event;
     event.x = pointer_x;

@@ -245,7 +245,10 @@ to benchmark the GPU in the background.
   `OnPaint`. Chromium reports each frame's damage against the capture before it, so a frame that
   follows one the host never copied is copied whole. CEF hands over no fence with a frame, so the
   host waits for Chromium's drawing through the fences on the dma-buf itself; NVIDIA's driver puts
-  none there, so its frames can still be in flight when they are copied. Older runtimes paint in
+  none there, so its frames can still be in flight when they are copied. This mostly hits frames
+  drawn right after a resize, so until CEF passes the fence along (chromiumembedded/cef#4313), the
+  host asks for one more frame once the size has stayed the same for 100 ms and copies it whole,
+  replacing anything that was copied half drawn. Older runtimes paint in
   software from the start, because they hand NVIDIA drivers empty shared textures. Sabine runs only
   on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window presents in
   mailbox mode where the driver offers it, so presenting never blocks the window thread. On Wayland

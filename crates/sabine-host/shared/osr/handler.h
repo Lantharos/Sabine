@@ -257,6 +257,7 @@ class SabineOsrHandler : public CefClient,
 #if defined(OS_LINUX)
   void UseAcceleratedPaint(bool enabled);
   void WatchAcceleratedPaint();
+  void RepaintWholeOnceResizeSettles();
 #endif
 
  private:
@@ -295,6 +296,8 @@ class SabineOsrHandler : public CefClient,
   void ForgetAcceleratedCaptures(int browser_id);
 #if defined(OS_LINUX)
   void ReportAcceleratedPaintUnavailable();
+  bool TakeSettledResizeFrame(CefRefPtr<CefBrowser> browser,
+                              PaintElementType type);
 #endif
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
@@ -439,6 +442,8 @@ class SabineOsrHandler : public CefClient,
   bool accelerated_paint_ = false;
   bool accelerated_paint_seen_ = false;
   bool accelerated_paint_failed_ = false;
+  uint64_t resize_generation_ = 0;
+  bool settled_resize_frame_pending_ = false;
 #endif
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
