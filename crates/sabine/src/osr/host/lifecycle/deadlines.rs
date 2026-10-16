@@ -83,6 +83,7 @@ impl OsrNativeHost {
             .into_iter()
             .chain(tooltip_deadline)
             .chain(freeze_deadline)
+            .chain(self.gpu_reconnect_deadline())
             .min()
         {
             event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));

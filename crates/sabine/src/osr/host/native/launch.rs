@@ -104,18 +104,21 @@ impl OsrNativeHost {
             surface_broker.service_name()
         ));
         #[cfg(windows)]
-        if let Some(renderer) = &self.renderer {
-            let luid = crate::osr::accel::adapter_luid(renderer);
-            let angle = if renderer.uses_software_adapter() {
-                "d3d11-warp"
-            } else {
-                "d3d11"
-            };
-            command.arg(format!("--use-angle={angle}"));
-            command.arg(format!("--use-adapter-luid={luid}"));
-            if crate::launch::metrics::trace_enabled() {
-                eprintln!("Sabine GPU: Chromium adapter LUID={luid} ANGLE={angle}");
-            }
+        {
+            self.browser_adapter = self.renderer.as_ref().map(|renderer| {
+                let luid = crate::osr::accel::adapter_luid(renderer);
+                let angle = if renderer.uses_software_adapter() {
+                    "d3d11-warp"
+                } else {
+                    "d3d11"
+                };
+                command.arg(format!("--use-angle={angle}"));
+                command.arg(format!("--use-adapter-luid={luid}"));
+                if crate::launch::metrics::trace_enabled() {
+                    eprintln!("Sabine GPU: Chromium adapter LUID={luid} ANGLE={angle}");
+                }
+                luid
+            });
         }
         let child = match command.spawn() {
             Ok(child) => child,
@@ -141,6 +144,28 @@ impl OsrNativeHost {
             self.surface_broker = Some(surface_broker);
         }
         self.children.push((generation, child));
+    }
+
+    /// Closes the browser and starts it again, so it picks up how the window
+    /// paints now.
+    #[cfg(any(windows, target_os = "linux"))]
+    pub(in crate::osr::host) fn relaunch_browser(&mut self) {
+        if self.socket.is_none() && !self.awaiting_connection {
+            return;
+        }
+        self.send_control("close\n");
+        self.drop_connection();
+        self.awaiting_connection = false;
+        self.connection_deadline = None;
+        self.main_surface = None;
+        self.overlays.clear();
+        if let Some(renderer) = &mut self.renderer {
+            renderer.clear_images();
+        }
+        if self.config.visible {
+            self.loading = Some(crate::osr::host::types::NativeLoading::new());
+        }
+        self.launch_child();
     }
 
     #[cfg(not(windows))]

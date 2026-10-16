@@ -11,11 +11,15 @@ projects do not depend on a checkout on the machine that built the CLI.
 
 ## Graphics device recovery
 
-A lost graphics device wakes the window event loop and recreates its renderer. Sabine restores
-cached software pixels without cloning the CPU buffers and asks Chromium to repaint its main page,
-popups and guests. Page state and bridge connections remain active. Recovery is limited to three
-attempts per minute; persistent failure closes the app with a diagnostic. If Windows loses the
-selected physical adapter, restart the app to attach both Chromium and the compositor to its replacement.
+A lost graphics device, such as after the driver reset or restarted, wakes the window event loop
+and recreates its renderer through a new graphics instance, since the old one keeps listing the
+adapters from before the reset. While the driver is still restarting and no adapter is available,
+the window keeps looking for one for up to 20 seconds. Sabine then asks Chromium to repaint its main
+page, popups and guests; page state and bridge connections remain active. On Windows, the browser's
+copy device follows the same reset: when it finds its device removed, or Chromium's frames on another
+adapter, it opens a new one and replaces every shared texture. If the window comes back on a
+different adapter, Sabine restarts the browser on that adapter, which reloads the page. Recovery is
+limited to three losses per minute; persistent failure closes the app with a diagnostic.
 
 ## Browser sandbox
 
@@ -199,7 +203,8 @@ that job so the shared browser process remains available to sibling windows.
 
 Sabine uses one paint policy per platform. Apps cannot select a renderer or opt into experimental
 transport branches. The GPU instance is shared within each process across window recreation, so a recreated window
-reuses the backend connection instead of initializing graphics drivers again. Linux uses Vulkan and only
+reuses the backend connection instead of initializing graphics drivers again. A new instance
+replaces it after a device loss, or when it no longer finds an adapter. Linux uses Vulkan and only
 initializes OpenGL when no Vulkan adapter can present to the window.
 
 On Linux and macOS, Chromium is launched before the native window and graphics device are created,

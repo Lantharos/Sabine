@@ -6,7 +6,7 @@
 // presentation mode can break the browser surface even when ordinary wgpu
 // drawing still works.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use winit::window::Window;
 
@@ -62,18 +62,31 @@ impl SurfaceSource {
     }
 }
 
-static INSTANCE: OnceLock<wgpu::Instance> = OnceLock::new();
+static INSTANCE: Mutex<Option<wgpu::Instance>> = Mutex::new(None);
 
+/// Connects through the instance earlier windows of this process used, so
+/// graphics drivers start only once.
 pub(super) async fn connect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
-    if let Some(instance) = INSTANCE.get() {
-        return request_adapter(instance.clone(), source).await;
+    let shared = INSTANCE.lock().unwrap().clone();
+    if let Some(instance) = shared
+        && let Ok(connection) = request_adapter(instance, source).await
+    {
+        return Ok(connection);
     }
+    reconnect(source).await
+}
+
+/// Connects through a new instance, which replaces the shared one. An
+/// instance's adapters stay those of the driver it started with, so after a
+/// device was lost, such as when the driver restarted or the adapter was
+/// removed, only a new instance finds the adapters that work now.
+pub(super) async fn reconnect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
     let mut failure = None;
     for backends in backend_preference() {
         let instance = create_instance(*backends);
         match request_adapter(instance.clone(), source).await {
             Ok(connection) => {
-                let _ = INSTANCE.set(instance);
+                *INSTANCE.lock().unwrap() = Some(instance);
                 return Ok(connection);
             }
             Err(error) => failure = Some(error),

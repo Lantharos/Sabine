@@ -149,6 +149,7 @@ impl ApplicationHandler for OsrNativeHost {
     }
 
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        self.recover_gpu();
         self.drive_deadlines(event_loop);
         self.sync_window_state();
     }

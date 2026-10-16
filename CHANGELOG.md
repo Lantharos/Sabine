@@ -5,6 +5,11 @@
   once.
 - A frame that follows one Sabine skipped is now copied whole, since the area Chromium reports as
   changed is relative to the frame before it.
+- Fix windows closing with "Could not restore GPU rendering" after the graphics driver reset, such
+  as when Windows recovers a stalled GPU. The window now finds the adapters the driver offers after
+  the reset, waits for one while the driver restarts, and keeps painting on the GPU. On Windows,
+  the browser's frames follow the reset too, and a window that comes back on another adapter
+  restarts the browser there instead of asking to restart the app.
 
 # Sabine 0.39
 

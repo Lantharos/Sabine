@@ -51,6 +51,10 @@ pub(super) struct OsrNativeHost {
     pub(super) recovery_deadline: Option<Instant>,
     pub(super) recoveries: VecDeque<Instant>,
     pub(super) gpu_recoveries: VecDeque<Instant>,
+    pub(super) gpu_reconnect: Option<super::paint::GpuReconnect>,
+    /// The graphics adapter Chromium was started on.
+    #[cfg(windows)]
+    pub(super) browser_adapter: Option<String>,
     pub(super) failure: Option<String>,
     pub(super) surface_size: winit::dpi::PhysicalSize<u32>,
     pub(super) scale_factor: f64,
@@ -164,6 +168,9 @@ impl OsrNativeHost {
             recovery_deadline: None,
             recoveries: VecDeque::new(),
             gpu_recoveries: VecDeque::new(),
+            gpu_reconnect: None,
+            #[cfg(windows)]
+            browser_adapter: None,
             failure: None,
             surface_size,
             scale_factor: 1.0,

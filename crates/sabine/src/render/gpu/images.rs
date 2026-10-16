@@ -23,7 +23,7 @@ impl GpuRenderer {
         self.texture_cache.remove(id);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(windows, target_os = "linux"))]
     pub(crate) fn clear_images(&mut self) {
         for (_, completed) in self.external_texture_releases.drain() {
             self.queue.on_submitted_work_done(completed);

@@ -20,8 +20,8 @@ impl SubmissionPoller {
         thread::Builder::new()
             .name("sabine-gpu-retire".into())
             .spawn(move || {
-                while receiver.recv().is_ok() {
-                    while let Err(error) = device.poll(wgpu::PollType::Wait {
+                while receiver.recv().is_ok() && health.failure().is_none() {
+                    if let Err(error) = device.poll(wgpu::PollType::Wait {
                         submission_index: None,
                         timeout: Some(Duration::from_secs(5)),
                     }) {

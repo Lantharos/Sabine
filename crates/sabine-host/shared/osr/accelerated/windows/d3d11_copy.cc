@@ -35,6 +35,13 @@ constexpr DWORD kGpuFenceTimeoutMs = 1000;
 constexpr uint32_t kSlotsPerSurface = 4;
 
 struct D3d11Context {
+  ~D3d11Context() {
+    if (fence_event) {
+      CloseHandle(fence_event);
+    }
+  }
+
+  LUID luid{};
   ComPtr<ID3D11Device1> device;
   ComPtr<ID3D11DeviceContext4> context;
   ComPtr<ID3D11Fence> fence;
@@ -92,19 +99,31 @@ void LogFailure(const char* what, HRESULT hr) {
                static_cast<unsigned long>(hr));
 }
 
-std::unique_ptr<D3d11Context> CreateContext(HANDLE shared_resource) {
-  ComPtr<IDXGIFactory4> factory;
-  HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
-  LUID luid{};
+bool SharedResourceAdapter(HANDLE shared_resource,
+                           ComPtr<IDXGIFactory4>* factory,
+                           LUID* luid) {
+  HRESULT hr =
+      CreateDXGIFactory1(IID_PPV_ARGS(factory->ReleaseAndGetAddressOf()));
   if (SUCCEEDED(hr)) {
-    hr = factory->GetSharedResourceAdapterLuid(shared_resource, &luid);
-  }
-  ComPtr<IDXGIAdapter> adapter;
-  if (SUCCEEDED(hr)) {
-    hr = factory->EnumAdapterByLuid(luid, IID_PPV_ARGS(&adapter));
+    hr = (*factory)->GetSharedResourceAdapterLuid(shared_resource, luid);
   }
   if (FAILED(hr)) {
     LogFailure("could not identify shared texture adapter", hr);
+    return false;
+  }
+  return true;
+}
+
+std::unique_ptr<D3d11Context> CreateContext(HANDLE shared_resource) {
+  ComPtr<IDXGIFactory4> factory;
+  LUID luid{};
+  if (!SharedResourceAdapter(shared_resource, &factory, &luid)) {
+    return nullptr;
+  }
+  ComPtr<IDXGIAdapter> adapter;
+  HRESULT hr = factory->EnumAdapterByLuid(luid, IID_PPV_ARGS(&adapter));
+  if (FAILED(hr)) {
+    LogFailure("could not open shared texture adapter", hr);
     return nullptr;
   }
   D3D_FEATURE_LEVEL feature_levels[] = {
@@ -131,6 +150,7 @@ std::unique_ptr<D3d11Context> CreateContext(HANDLE shared_resource) {
     return nullptr;
   }
   auto result = std::make_unique<D3d11Context>();
+  result->luid = luid;
   ComPtr<ID3D11Device5> device5;
   if (FAILED(hr = device.As(&result->device)) ||
       FAILED(hr = device.As(&device5)) ||
@@ -271,6 +291,63 @@ bool CopyIntoSlot(ID3D11Texture2D* source,
   return true;
 }
 
+// The copy device stops working when its adapter is reset or removed, and
+// Chromium moves to another adapter when the window does. Either way, every
+// slot made on the old device goes with it.
+bool ContextIsStale(HANDLE cef_shared_handle) {
+  if (FAILED(g_d3d11->device->GetDeviceRemovedReason())) {
+    return true;
+  }
+  ComPtr<IDXGIFactory4> factory;
+  LUID luid{};
+  return SharedResourceAdapter(cef_shared_handle, &factory, &luid) &&
+         (luid.LowPart != g_d3d11->luid.LowPart ||
+          luid.HighPart != g_d3d11->luid.HighPart);
+}
+
+void ResetContext(std::vector<uint64_t>* retired) {
+  for (const auto& [surface, slots] : g_surfaces) {
+    for (const OwnedSharedSlot& slot : slots.slots) {
+      if (slot.resource_id != 0) {
+        retired->push_back(slot.resource_id);
+      }
+    }
+  }
+  g_surfaces.clear();
+  g_d3d11.reset();
+}
+
+ComPtr<ID3D11Texture2D> OpenCefTexture(HANDLE cef_shared_handle,
+                                       std::vector<uint64_t>* retired) {
+  ComPtr<ID3D11Texture2D> texture;
+  if (g_d3d11) {
+    const HRESULT hr = g_d3d11->device->OpenSharedResource1(
+        cef_shared_handle, IID_PPV_ARGS(&texture));
+    if (SUCCEEDED(hr)) {
+      return texture;
+    }
+    if (!ContextIsStale(cef_shared_handle)) {
+      LogFailure("OpenSharedResource1 failed", hr);
+      return nullptr;
+    }
+    std::fprintf(stderr,
+                 "Sabine CEF: the graphics device was reset; recreating the "
+                 "copy device\n");
+    ResetContext(retired);
+  }
+  g_d3d11 = CreateContext(cef_shared_handle);
+  if (!g_d3d11) {
+    return nullptr;
+  }
+  const HRESULT hr = g_d3d11->device->OpenSharedResource1(
+      cef_shared_handle, IID_PPV_ARGS(&texture));
+  if (FAILED(hr)) {
+    LogFailure("OpenSharedResource1 failed", hr);
+    return nullptr;
+  }
+  return texture;
+}
+
 }  // namespace
 
 bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
@@ -281,19 +358,11 @@ bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
   if (!cef_shared_handle || cef_format != kCefColorTypeBgra8888) {
     return false;
   }
-  if (!g_d3d11) {
-    g_d3d11 = CreateContext(cef_shared_handle);
-    if (!g_d3d11) {
-      return false;
-    }
-  }
   // The returned COM reference must not outlive this paint callback. Sabine
   // exports its own copy instead of retaining CEF's pooled texture or handle.
-  ComPtr<ID3D11Texture2D> source;
-  const HRESULT hr = g_d3d11->device->OpenSharedResource1(
-      cef_shared_handle, IID_PPV_ARGS(&source));
-  if (FAILED(hr)) {
-    LogFailure("OpenSharedResource1 failed", hr);
+  const ComPtr<ID3D11Texture2D> source =
+      OpenCefTexture(cef_shared_handle, &out->retired_resource_ids);
+  if (!source) {
     return false;
   }
   D3D11_TEXTURE2D_DESC source_desc{};

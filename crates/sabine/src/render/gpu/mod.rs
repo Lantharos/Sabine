@@ -95,13 +95,35 @@ impl GpuRenderer {
         transparent: bool,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, RendererError> {
-        let size = window.surface_size();
         let source = instance::SurfaceSource::new(window.clone())?;
-        let instance::GpuConnection {
+        let connection = instance::connect(&source).await?;
+        Self::connected(window, source, connection, transparent, wake).await
+    }
+
+    /// Creates the renderer again after its device was lost, on the adapters
+    /// the system has now.
+    pub(crate) async fn after_device_loss(
+        window: Arc<dyn Window>,
+        transparent: bool,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self, RendererError> {
+        let source = instance::SurfaceSource::new(window.clone())?;
+        let connection = instance::reconnect(&source).await?;
+        Self::connected(window, source, connection, transparent, wake).await
+    }
+
+    async fn connected(
+        window: Arc<dyn Window>,
+        source: instance::SurfaceSource,
+        instance::GpuConnection {
             instance,
             surface,
             adapter,
-        } = instance::connect(&source).await?;
+        }: instance::GpuConnection,
+        transparent: bool,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self, RendererError> {
+        let size = window.surface_size();
         #[cfg(target_os = "linux")]
         let required_features = adapter.features() & wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
         #[cfg(not(target_os = "linux"))]

@@ -1,6 +1,4 @@
 use crate::osr::host::native::OsrNativeHost;
-#[cfg(target_os = "linux")]
-use crate::osr::host::types::NativeLoading;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn accelerated_paint(&self) -> bool {
@@ -34,21 +32,8 @@ impl OsrNativeHost {
             "gpu",
             format!("Painting without shared GPU frames: {reason}"),
         );
-        if !self.accelerated_launch || (self.socket.is_none() && !self.awaiting_connection) {
-            return;
+        if self.accelerated_launch {
+            self.relaunch_browser();
         }
-        self.send_control("close\n");
-        self.drop_connection();
-        self.awaiting_connection = false;
-        self.connection_deadline = None;
-        self.main_surface = None;
-        self.overlays.clear();
-        if let Some(renderer) = &mut self.renderer {
-            renderer.clear_images();
-        }
-        if self.config.visible {
-            self.loading = Some(NativeLoading::new());
-        }
-        self.launch_child();
     }
 }
