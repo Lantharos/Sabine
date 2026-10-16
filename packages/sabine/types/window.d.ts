@@ -43,6 +43,15 @@ export interface SabineWindowApi {
    * while it is not focused.
    */
   readonly suspended: boolean;
+  /** Whether the desktop maximized the window. */
+  readonly maximized: boolean;
+  /** Whether the window covers its whole screen. */
+  readonly fullscreen: boolean;
+  /**
+   * Whether the desktop tiled the window against a screen edge, such as
+   * snapping it to one half of the screen. Wayland only.
+   */
+  readonly tiled: boolean;
 }
 
 export interface ControlsOverlay {
@@ -56,9 +65,17 @@ export interface WindowVisibility {
   suspended: boolean;
 }
 
+export interface WindowState {
+  maximized: boolean;
+  fullscreen: boolean;
+  tiled: boolean;
+}
+
 export interface AppWindow extends SabineWindowApi {
   /** Calls `callback` whenever `visible` or `suspended` changes. */
   onVisibilityChanged(callback: (state: WindowVisibility) => void): () => void;
+  /** Calls `callback` whenever `maximized`, `fullscreen` or `tiled` changes. */
+  onStateChanged(callback: (state: WindowState) => void): () => void;
 }
 
 /** A window region built with the `region` helpers. */

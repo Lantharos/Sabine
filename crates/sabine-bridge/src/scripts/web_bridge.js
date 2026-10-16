@@ -52,6 +52,14 @@
     window.__sabineBridgeEmit("window.visibility", { visible, suspended });
   };
 
+  let toplevelState = { maximized: false, fullscreen: false, tiled: false };
+  window.__sabineToplevelSet = function (maximized, fullscreen, tiled) {
+    const state = toplevelState;
+    if (state.maximized === maximized && state.fullscreen === fullscreen && state.tiled === tiled) return;
+    toplevelState = { maximized, fullscreen, tiled };
+    window.__sabineBridgeEmit("window.state", { ...toplevelState });
+  };
+
   window.sabine = window.sabine || {};
   window.sabine.window = Object.assign(window.sabine.window || {}, {
     show() { windowCommand("show"); },
@@ -77,6 +85,9 @@
   Object.defineProperties(window.sabine.window, {
     visible: { get: () => windowState.visible, configurable: true },
     suspended: { get: () => windowState.suspended, configurable: true },
+    maximized: { get: () => toplevelState.maximized, configurable: true },
+    fullscreen: { get: () => toplevelState.fullscreen, configurable: true },
+    tiled: { get: () => toplevelState.tiled, configurable: true },
   });
 
   window.sabine.bridge = {

@@ -90,3 +90,28 @@ void SabineOsrHandler::DispatchWindowState() {
     }
   }
 }
+
+void SabineOsrHandler::ApplyToplevelState(bool maximized,
+                                          bool fullscreen,
+                                          bool tiled) {
+  CEF_REQUIRE_UI_THREAD();
+  window_maximized_ = maximized;
+  window_fullscreen_ = fullscreen;
+  window_tiled_ = tiled;
+  DispatchToplevelState();
+}
+
+void SabineOsrHandler::DispatchToplevelState() {
+  CEF_REQUIRE_UI_THREAD();
+  const auto flag = [](bool value) { return value ? "true" : "false"; };
+  const std::string script =
+      std::string("window.__sabineToplevelSet&&window.__sabineToplevelSet(") +
+      flag(window_maximized_) + "," + flag(window_fullscreen_) + "," +
+      flag(window_tiled_) + ");";
+  for (auto& browser : browsers_) {
+    if (!GuestForBrowser(browser)) {
+      browser->GetMainFrame()->ExecuteJavaScript(
+          script, browser->GetMainFrame()->GetURL(), 0);
+    }
+  }
+}

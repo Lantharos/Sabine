@@ -156,6 +156,38 @@ impl WindowRegion {
         }
     }
 
+    /// The same region with square corners, for windows against screen edges.
+    pub fn squared(&self) -> Self {
+        let adaptive = self.adaptive.clone().map(|adaptive| match adaptive {
+            WindowRegionAdaptive::RoundedRect { .. } => WindowRegionAdaptive::Full,
+            WindowRegionAdaptive::RoundedLeft { width, .. } => {
+                WindowRegionAdaptive::RoundedLeft { width, radius: 0 }
+            }
+            WindowRegionAdaptive::TitlebarAndSidebar {
+                sidebar_width,
+                titlebar_height,
+                ..
+            } => WindowRegionAdaptive::TitlebarAndSidebar {
+                sidebar_width,
+                titlebar_height,
+                radius: 0,
+            },
+            WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
+                sidebar_width,
+                titlebar_height,
+                ..
+            } => WindowRegionAdaptive::ContentAfterSidebar {
+                sidebar_width,
+                titlebar_height,
+            },
+            square => square,
+        });
+        Self {
+            rects: self.rects.clone(),
+            adaptive,
+        }
+    }
+
     pub fn add_rect(mut self, x: i32, y: i32, width: i32, height: i32) -> Self {
         let rect = WindowRegionRect::new(x, y, width, height);
         if !rect.is_empty() {
@@ -324,6 +356,15 @@ impl WindowRegions {
     pub fn input(mut self, region: WindowRegion) -> Self {
         self.input = Some(region);
         self
+    }
+
+    /// The same regions with square corners, for windows against screen edges.
+    pub fn squared(&self) -> Self {
+        Self {
+            blur: self.blur.as_ref().map(WindowRegion::squared),
+            opaque: self.opaque.as_ref().map(WindowRegion::squared),
+            input: self.input.as_ref().map(WindowRegion::squared),
+        }
     }
 
     pub fn is_empty(&self) -> bool {

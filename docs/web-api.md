@@ -101,6 +101,16 @@ const stop = appWindow.onVisibilityChanged(({ visible, suspended }) => {
 While a shown window is out of sight, Chromium also stops rendering it and treats the document as
 hidden. Rust code can follow the same changes with `SabineWindow::on_visibility_changed`.
 
+Windows the desktop maximized, made fullscreen or tiled against a screen edge meet the edges of the
+screen, so pages with rounded corners square them off while `appWindow.maximized`,
+`appWindow.fullscreen` or `appWindow.tiled` is true. Sabine squares the window's regions itself:
+
+```js
+const stop = appWindow.onStateChanged(({ maximized, fullscreen, tiled }) => {
+  document.documentElement.classList.toggle("docked", maximized || fullscreen || tiled);
+});
+```
+
 Once a window has been out of sight for a while (five minutes for `.app()` windows), Sabine freezes
 its page: no JavaScript runs and the page's caches are released, while everything it holds stays in
 memory, so it continues instantly when the window comes back. The document receives the standard

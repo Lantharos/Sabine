@@ -290,6 +290,8 @@ void SabineOsrHandler::HandleControlLine(
     ApplyLifecycle(parts[1], std::max(1, std::atoi(parts[2].c_str())), reason);
   } else if (parts[0] == "window_state" && parts.size() >= 4) {
     ApplyWindowState(parts[1] == "1", parts[2] == "1", parts[3] == "1");
+  } else if (parts[0] == "toplevel" && parts.size() >= 4) {
+    ApplyToplevelState(parts[1] == "1", parts[2] == "1", parts[3] == "1");
   } else if (parts[0] == "close") {
     if (close_requested_) {
       return;

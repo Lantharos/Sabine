@@ -50,6 +50,18 @@ export const appWindow = {
   onVisibilityChanged(callback) {
     return listen("window.visibility", callback);
   },
+  get maximized() {
+    return requireApi().window.maximized;
+  },
+  get fullscreen() {
+    return requireApi().window.fullscreen;
+  },
+  get tiled() {
+    return requireApi().window.tiled;
+  },
+  onStateChanged(callback) {
+    return listen("window.state", callback);
+  },
 };
 
 /** @type {import("../types/window.js").SabinePopupApi} */

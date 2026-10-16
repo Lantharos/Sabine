@@ -10,7 +10,9 @@ use std::{
     time::Instant,
 };
 
-use sabine_platform::{WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect};
+use sabine_platform::{
+    WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect, WindowRegions,
+};
 use winit::{
     event_loop::{ActiveEventLoop, EventLoopProxy},
     window::Window as WinitWindow,
@@ -83,6 +85,7 @@ pub(super) struct OsrNativeHost {
     pub(super) ime_preedit: Option<super::types::ImePreedit>,
     pub(super) occluded: bool,
     pub(super) published_window_state: Option<super::types::WindowState>,
+    pub(super) toplevel: super::lifecycle::toplevel::ToplevelState,
     pub(super) lifecycle_state: LifecycleState,
     pub(super) last_frame_rate: Cell<Option<u32>>,
     pub(super) freeze_deadline: Option<Instant>,
@@ -199,6 +202,7 @@ impl OsrNativeHost {
             ime_preedit: None,
             occluded: false,
             published_window_state: None,
+            toplevel: Default::default(),
             lifecycle_state,
             last_frame_rate: Cell::new(None),
             freeze_deadline: None,
@@ -254,7 +258,16 @@ impl OsrNativeHost {
             always_on_top: self.config.always_on_top,
             transparent: self.config.transparent,
             background_effect: self.config.background_effect,
-            regions: self.config.regions.clone(),
+            regions: self.regions(),
+        }
+    }
+
+    /// The app's regions, with square corners while the window is not floating.
+    pub(super) fn regions(&self) -> WindowRegions {
+        if self.toplevel.floating() {
+            self.config.regions.clone()
+        } else {
+            self.config.regions.squared()
         }
     }
 

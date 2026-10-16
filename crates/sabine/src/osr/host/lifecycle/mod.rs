@@ -1,5 +1,6 @@
 mod deadlines;
 mod recovery;
+pub(super) mod toplevel;
 pub(super) mod visibility;
 
 use std::time::Instant;

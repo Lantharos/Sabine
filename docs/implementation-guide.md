@@ -811,6 +811,14 @@ frame rate. The native window sends the page its state whenever either changes a
 finishes loading while hidden or suspended, and reports the same changes to the app's
 `on_visibility_changed` listener.
 
+The window's `maximized`, `fullscreen` and `tiled` states follow what the desktop configured it
+with: the xdg-toplevel states on Wayland, where `tiled` means any of the tiled edge states, and
+winit's maximized and fullscreen state elsewhere. Pages read them from `window.sabine.window` and
+hear about changes through the `window.state` bridge event, sent whenever one changes and again when
+a page loads while the window is not floating. While any of them is set, Sabine squares the corners
+of the window's adaptive blur, opaque and input regions and of the Sabine chrome background, since
+the window then meets the screen's edges.
+
 Visible windows remain unmapped until the first browser frame when startup or wake completes
 quickly. After 120 milliseconds, Sabine presents a neutral native loading surface using the same
 GPU compositor, window chrome, and app background configured with

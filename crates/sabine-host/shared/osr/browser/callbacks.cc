@@ -218,6 +218,9 @@ void SabineOsrHandler::OnLoadStart(CefRefPtr<CefBrowser> browser,
   if (!guest) {
     SendMessage(kMainLoadStarted, 0, 0, 0, 0, nullptr, 0);
     InstallTransparentBackground(frame);
+    if (!WindowFloating()) {
+      DispatchToplevelState();
+    }
   }
 }
 
@@ -234,6 +237,9 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
     SendMessage(kMainLoadReady, 0, 0, 0, 0, nullptr, 0);
     if (!window_visible_ || window_suspended_) {
       DispatchWindowState();
+    }
+    if (!WindowFloating()) {
+      DispatchToplevelState();
     }
 #if defined(OS_LINUX)
     WatchAcceleratedPaint();

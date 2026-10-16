@@ -79,11 +79,12 @@ impl OsrNativeHost {
         };
         list.reset(background);
         if !self.config.transparent || uses_sabine_chrome(self.config.chrome) {
-            let radius = if self.config.chrome.uses_native_decorations() {
-                0.0
-            } else {
-                12.0
-            };
+            let radius =
+                if self.config.chrome.uses_native_decorations() || !self.toplevel.floating() {
+                    0.0
+                } else {
+                    12.0
+                };
             list.push(RoundedRectCommand {
                 x: 0.0,
                 y: 0.0,
@@ -99,7 +100,7 @@ impl OsrNativeHost {
         // Solid underlay for opaque regions so glass windows only show blur
         // through the sidebar (or other non-opaque areas), not the content pane.
         if self.config.transparent
-            && let Some(opaque) = &self.config.regions.opaque
+            && let Some(opaque) = self.regions().opaque
         {
             let region_width = width.round().max(1.0) as i32;
             let region_height = height.round().max(1.0) as i32;

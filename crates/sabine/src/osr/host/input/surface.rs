@@ -11,6 +11,7 @@ impl OsrNativeHost {
         if minimized {
             return;
         }
+        self.sync_toplevel_state();
         let Some(scale) = self.window.as_ref().map(|window| window.scale_factor()) else {
             return;
         };

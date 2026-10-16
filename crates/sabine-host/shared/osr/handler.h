@@ -371,6 +371,11 @@ class SabineOsrHandler : public CefClient,
   void ReportMediaPlaying();
   bool UpdateViewHidden();
   void DispatchWindowState();
+  void ApplyToplevelState(bool maximized, bool fullscreen, bool tiled);
+  void DispatchToplevelState();
+  bool WindowFloating() const {
+    return !(window_maximized_ || window_fullscreen_ || window_tiled_);
+  }
   void StartCommandReader();
 
   GuestView* GuestForBrowser(const CefRefPtr<CefBrowser>& browser);
@@ -490,6 +495,9 @@ class SabineOsrHandler : public CefClient,
   bool window_visible_ = true;
   bool window_occluded_ = false;
   bool window_suspended_ = false;
+  bool window_maximized_ = false;
+  bool window_fullscreen_ = false;
+  bool window_tiled_ = false;
   // Blur only lowers the frame rate: WasHidden blanks the view until the next
   // paint, which flickers after an interactive move.
   bool view_hidden_ = false;
