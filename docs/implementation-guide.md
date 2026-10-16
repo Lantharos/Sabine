@@ -242,9 +242,13 @@ to benchmark the GPU in the background.
   window samples it through wgpu's Vulkan device without copying. Slots are acknowledged, retired
   and re-requested as on Windows. A window whose device cannot import dma-bufs, or whose browser
   sends no accelerated frame within two seconds of loading, reopens the page with software
-  `OnPaint`. Older runtimes paint in software from the start, because they hand NVIDIA drivers
-  empty shared textures. Sabine runs only on Wayland sessions; Chromium is started with the
-  Wayland Ozone platform. The window
+  `OnPaint`. Chromium reports each frame's damage against the capture before it, so a frame that
+  follows one the host never copied is copied whole. CEF hands over no fence with a frame, so the
+  host waits for Chromium's drawing through the fences on the dma-buf itself. NVIDIA's driver puts
+  none there and its frames can arrive half drawn, so windows whose primary GPU runs it paint in
+  software from the start, as do older runtimes, which hand NVIDIA drivers empty shared textures.
+  Sabine runs only on Wayland sessions; Chromium is started with the Wayland Ozone platform. The
+  window
   presents in mailbox mode where the driver offers it, so presenting never blocks the window thread.
   On Wayland each frame requests a compositor frame callback and further redraws wait for it; with
   FIFO presentation some drivers hold the buffer carrying that callback, which stopped the window

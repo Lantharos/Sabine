@@ -131,6 +131,7 @@ bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   RetireAcceleratedBrowser(browser->GetIdentifier());
+  ForgetAcceleratedCaptures(browser->GetIdentifier());
   renderer_crashes_.erase(browser->GetIdentifier());
   ime_frames_.erase(browser->GetIdentifier());
   ForgetMediaState(browser);

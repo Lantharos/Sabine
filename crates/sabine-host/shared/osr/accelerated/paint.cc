@@ -298,6 +298,22 @@ void SabineOsrHandler::ReleaseAcceleratedFrame(uint64_t slot_token) {
   dropped_accelerated_paints_.clear();
 }
 
+bool SabineOsrHandler::FollowsCopiedCapture(
+    const AcceleratedSurfaceKey& surface,
+    const cef_accelerated_paint_info_common_t& frame) const {
+  if (!frame.has_capture_counter) {
+    return true;
+  }
+  const auto copied = copied_captures_.find(surface);
+  return copied != copied_captures_.end() &&
+         copied->second + 1 == frame.capture_counter;
+}
+
+void SabineOsrHandler::ForgetAcceleratedCaptures(int browser_id) {
+  copied_captures_.erase({browser_id, false});
+  copied_captures_.erase({browser_id, true});
+}
+
 void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                           PaintElementType type,
                                           const RectList& dirtyRects,
@@ -367,17 +383,22 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
+  const AcceleratedSurfaceKey surface{browser->GetIdentifier(),
+                                      type == PET_POPUP};
   PixelRegion damage;
-  for (const CefRect& rect : dirtyRects) {
-    damage.Unite(PixelRegion{rect.x, rect.y, rect.width, rect.height});
+  if (FollowsCopiedCapture(surface, info.extra)) {
+    for (const CefRect& rect : dirtyRects) {
+      damage.Unite(PixelRegion{rect.x, rect.y, rect.width, rect.height});
+    }
   }
   if (damage.empty()) {
     damage = PixelRegion::Whole(frame_w, frame_h);
   }
-  const AcceleratedSurfaceKey surface{browser->GetIdentifier(),
-                                      type == PET_POPUP};
   auto send_accel = [&](uint32_t accel_kind, const std::string& guest_id,
                         int32_t x, int32_t y) -> bool {
+    if (info.extra.has_capture_counter) {
+      copied_captures_[surface] = info.extra.capture_counter;
+    }
     CopiedAccelFrame copied{};
     if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
       dropped_accelerated_paints_.emplace_back(browser, type);

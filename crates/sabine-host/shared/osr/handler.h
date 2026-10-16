@@ -287,6 +287,12 @@ class SabineOsrHandler : public CefClient,
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);
   void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
+  // Chromium reports damage against the capture before it, so a frame that
+  // follows one Sabine never copied has to be copied whole.
+  bool FollowsCopiedCapture(
+      const sabine_osr::AcceleratedSurfaceKey& surface,
+      const cef_accelerated_paint_info_common_t& frame) const;
+  void ForgetAcceleratedCaptures(int browser_id);
 #if defined(OS_LINUX)
   void ReportAcceleratedPaintUnavailable();
 #endif
@@ -422,6 +428,7 @@ class SabineOsrHandler : public CefClient,
 #endif
   std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
       dropped_accelerated_paints_;
+  std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
 #if defined(OS_WIN) || defined(OS_LINUX)
   std::set<uint64_t> announced_accelerated_resources_;
 #endif

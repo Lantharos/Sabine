@@ -8,7 +8,7 @@ mod iosurface;
 #[cfg(windows)]
 pub(crate) use d3d12::{SharedHandles, adapter_luid};
 #[cfg(target_os = "linux")]
-pub(crate) use dmabuf::{Dmabuf, Dmabufs};
+pub(crate) use dmabuf::{Dmabuf, Dmabufs, primary_gpu_fences_dmabufs};
 #[cfg(target_os = "macos")]
 pub(crate) use iosurface::{SharedSurface, SurfaceBroker, SurfaceRegistry};
 
