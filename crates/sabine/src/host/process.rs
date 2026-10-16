@@ -191,13 +191,6 @@ impl SabineProcess {
             .and_then(DesktopServiceState::tray)
     }
 
-    pub fn take_desktop_events(&self) -> Vec<PlatformEvent> {
-        self.desktop_services
-            .as_ref()
-            .map(DesktopServiceState::take_events)
-            .unwrap_or_default()
-    }
-
     pub fn emit_bridge_event(&self, name: impl Into<String>, payload: serde_json::Value) -> bool {
         self.bridge_emitter
             .as_ref()

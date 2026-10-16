@@ -55,10 +55,6 @@ impl SabineWindow {
     ///
     /// Bridge handlers, chrome, and size stay in Rust; identity and content
     /// paths can live in the manifest shared with the CLI/bundler.
-    pub fn from_manifest(path: impl AsRef<Path>) -> SabineResult<Self> {
-        Self::new().with_manifest(path)
-    }
-
     pub fn with_manifest(mut self, path: impl AsRef<Path>) -> SabineResult<Self> {
         let path = path.as_ref();
         let text = fs::read_to_string(path).map_err(|source| SabineError::ManifestRead {

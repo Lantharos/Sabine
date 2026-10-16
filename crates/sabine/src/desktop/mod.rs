@@ -59,10 +59,6 @@ impl std::fmt::Debug for DesktopServiceState {
 }
 
 impl DesktopServiceState {
-    pub fn take_events(&self) -> Vec<PlatformEvent> {
-        self.event_receiver.try_iter().collect()
-    }
-
     pub fn tray(&self) -> Option<TrayHandle> {
         self.tray.clone()
     }
