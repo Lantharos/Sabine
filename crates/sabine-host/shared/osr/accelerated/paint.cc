@@ -488,7 +488,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   const uint32_t kind = type == PET_POPUP ? kPopupAccel : kMainAccel;
   const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
   const int32_t y = type == PET_POPUP ? popup_rect_.y : 0;
-  const bool sent = send_accel(kind, std::string(), x, y);
+  [[maybe_unused]] const bool sent = send_accel(kind, std::string(), x, y);
 #if defined(OS_LINUX)
   accelerated_paint_seen_ |= sent && type == PET_VIEW;
 #endif
