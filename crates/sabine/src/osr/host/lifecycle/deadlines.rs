@@ -56,6 +56,7 @@ impl OsrNativeHost {
         }
         let loading_deadline = self.drive_loading();
         let tooltip_deadline = self.drive_tooltip();
+        let first_frame_deadline = self.watch_first_frame();
         if self.drive_resize_paint(event_loop) {
             return;
         }
@@ -82,6 +83,7 @@ impl OsrNativeHost {
         if let Some(deadline) = loading_deadline
             .into_iter()
             .chain(tooltip_deadline)
+            .chain(first_frame_deadline)
             .chain(freeze_deadline)
             .chain(self.gpu_reconnect_deadline())
             .min()

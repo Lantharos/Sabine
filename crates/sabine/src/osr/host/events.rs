@@ -269,6 +269,7 @@ impl OsrNativeHost {
                 OsrHostEvent::Message(_, OsrMessage::MainLoadReady) => {
                     super::trace_host(&self.config, "browser.load_ready");
                     self.main_load_ready = true;
+                    self.note_main_load_ready();
                     if self.main_surface.is_some() {
                         self.loading = None;
                         needs_redraw = true;

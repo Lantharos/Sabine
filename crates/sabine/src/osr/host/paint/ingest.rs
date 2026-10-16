@@ -93,6 +93,7 @@ impl OsrNativeHost {
         let pixel_size = (batch.width, batch.height);
         let geometry = self.surface_geometry(pixel_size, batch.x, batch.y);
         if batch.surface == OsrSurface::Main && geometry.size() != self.content_surface_size() {
+            self.note_rejected_main_frame(pixel_size);
             self.retry_resize_paint();
             return false;
         }

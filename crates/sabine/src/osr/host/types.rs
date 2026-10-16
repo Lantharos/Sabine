@@ -110,6 +110,9 @@ pub(in crate::osr) struct NativeLoading {
     pub(in crate::osr) reveal_at: Instant,
     pub(in crate::osr) next_frame: Instant,
     pub(in crate::osr) message_seed: u64,
+    pub(in crate::osr) ready_at: Option<Instant>,
+    pub(in crate::osr) rejected_frame: Option<(u32, u32)>,
+    pub(in crate::osr) slow_load_reported: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -156,6 +159,9 @@ impl NativeLoading {
             reveal_at,
             next_frame: reveal_at,
             message_seed: next_loading_seed(),
+            ready_at: None,
+            rejected_frame: None,
+            slow_load_reported: false,
         }
     }
 

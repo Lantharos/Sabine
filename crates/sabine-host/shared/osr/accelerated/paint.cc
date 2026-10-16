@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 
 #include "include/base/cef_callback.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -208,6 +209,7 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
       CopyAcceleratedDmabufFrame(surface, info, damage, &copied);
   RetireAcceleratedResources(copied.retired_resource_ids);
   if (result == DmabufCopy::kFailed) {
+    accelerated_drop_reason_ = "its dma-buf could not be copied on the GPU";
     ReportAcceleratedPaintUnavailable();
   }
   if (result != DmabufCopy::kCopied) {
@@ -268,6 +270,11 @@ void SabineOsrHandler::ReportAcceleratedPaintUnavailable() {
     return;
   }
   accelerated_paint_failed_ = true;
+  std::fprintf(
+      stderr, "Sabine CEF: no accelerated frame reached the window: %s\n",
+      accelerated_drop_reason_.empty() ? "Chromium painted nothing"
+                                       : accelerated_drop_reason_.c_str());
+  std::fflush(stderr);
   SendMessage(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
 }
 #endif
@@ -322,10 +329,6 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   if (!browser) {
     return;
   }
-#if defined(OS_LINUX)
-  accelerated_paint_seen_ = true;
-#endif
-
   static bool traced_first_callback = false;
   if (!traced_first_callback && TraceEnabled()) {
     traced_first_callback = true;
@@ -346,6 +349,8 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                 info.format == CEF_COLOR_TYPE_RGBA_8888;
 #endif
   if (!supported_format) {
+    accelerated_drop_reason_ = "Chromium shared frames in color format " +
+                               std::to_string(static_cast<int>(info.format));
     EmitBridgeEvent("\"osr.accel_unsupported\"", "{}");
     return;
   }
@@ -366,6 +371,11 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
       !info.extra.has_source_size || (info.extra.source_size.width == frame_w &&
                                       info.extra.source_size.height == frame_h);
   if (!full_content || !source_matches) {
+    accelerated_drop_reason_ =
+        "Chromium's frames held only part of the page (coded " +
+        std::to_string(frame_w) + "x" + std::to_string(frame_h) + ", content " +
+        std::to_string(info.extra.content_rect.width) + "x" +
+        std::to_string(info.extra.content_rect.height) + ")";
     return;
   }
   CefRect reported_visible = info.extra.visible_rect;
@@ -380,6 +390,10 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   }
   if (type == PET_VIEW &&
       !QualifyResizeFrame(reported_visible.width, reported_visible.height)) {
+    accelerated_drop_reason_ = "Chromium painted " +
+                               std::to_string(reported_visible.width) + "x" +
+                               std::to_string(reported_visible.height) +
+                               " pixels instead of the requested size";
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
@@ -405,6 +419,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     }
     CopiedAccelFrame copied{};
     if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
+      accelerated_drop_reason_ = "the frame could not be handed to the window";
       dropped_accelerated_paints_.emplace_back(browser, type);
       EmitBridgeEvent("\"osr.accel_copy_dropped\"", "{}");
       return false;
@@ -473,7 +488,10 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   const uint32_t kind = type == PET_POPUP ? kPopupAccel : kMainAccel;
   const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
   const int32_t y = type == PET_POPUP ? popup_rect_.y : 0;
-  send_accel(kind, std::string(), x, y);
+  const bool sent = send_accel(kind, std::string(), x, y);
+#if defined(OS_LINUX)
+  accelerated_paint_seen_ |= sent && type == PET_VIEW;
+#endif
   if (type == PET_VIEW) {
     CompleteResizeFrame(reported_visible.width, reported_visible.height);
   }

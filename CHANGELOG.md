@@ -1,3 +1,15 @@
+# Sabine 0.41
+
+- Fix Linux windows staying on their loading screen whenever the display is scaled, such as at
+  125% or 200% on a laptop. Chromium took the scale of off-screen pages from a native window they
+  do not have and always painted at 100%, so no frame ever matched the window. Pages now paint at
+  the window's scale, on the GPU.
+- A window whose page has loaded but shows no frame within 10 seconds no longer waits forever. It
+  logs what it received and what it expected, switches to software painting on Linux, and closes
+  with that diagnostic if the page still does not show. When the GPU path drops every frame, the
+  log now says why.
+- `SABINE_CHROMIUM_LOG` names a file for Chromium's browser log.
+
 # Sabine 0.40
 
 - Fix Linux windows, mostly on NVIDIA, keeping blank or partly drawn areas after a resize or

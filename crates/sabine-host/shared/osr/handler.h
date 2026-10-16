@@ -445,6 +445,7 @@ class SabineOsrHandler : public CefClient,
   uint64_t resize_generation_ = 0;
   bool settled_resize_frame_pending_ = false;
 #endif
+  std::string accelerated_drop_reason_;
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
   float scale_ = 1.0f;

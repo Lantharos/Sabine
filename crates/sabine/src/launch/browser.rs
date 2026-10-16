@@ -14,6 +14,12 @@ const DISABLED_CEF_FEATURES: &str = concat!(
 
 const ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS: u8 = 8;
 
+/// With Wayland's fractional-scale protocol, Chromium takes each view's scale from its native
+/// window. Off-screen views have none, so pages would always render at 1x and never match the
+/// window; without it Chromium uses the scale Sabine reports for the view.
+#[cfg(target_os = "linux")]
+const LINUX_DISABLED_CEF_FEATURES: &str = "WaylandFractionalScaleV1";
+
 /// Chromium's GTK 4 integration crashes the browser process when the desktop's settings portal
 /// is unavailable; GTK 3 reads the desktop settings itself.
 #[cfg(target_os = "linux")]
@@ -21,6 +27,9 @@ const LINUX_GTK_VERSION: &str = "--gtk-version=3";
 
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
 const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
+/// A file for the browser process's log; sandboxed Chromium processes keep logging to the window
+/// host's log.
+const CHROMIUM_LOG_ENV: &str = "SABINE_CHROMIUM_LOG";
 
 /// Browser-process launch options (devtools, hardware decode, and related flags).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -72,8 +81,13 @@ pub(crate) fn apply_browser_launch_args(
     if !enabled_features.is_empty() {
         command.arg(format!("--enable-features={}", enabled_features.join(",")));
     }
+    #[cfg(target_os = "linux")]
+    command.arg(format!(
+        "--disable-features={DISABLED_CEF_FEATURES},{LINUX_DISABLED_CEF_FEATURES}"
+    ));
+    #[cfg(not(target_os = "linux"))]
+    command.arg(format!("--disable-features={DISABLED_CEF_FEATURES}"));
     command
-        .arg(format!("--disable-features={DISABLED_CEF_FEATURES}"))
         .arg(format!(
             "--optimization-guide-performance-class={ON_DEVICE_MODEL_GPU_BLOCKED_PERFORMANCE_CLASS}"
         ))
@@ -92,5 +106,13 @@ pub(crate) fn apply_browser_launch_args(
     command.arg("--use-mock-keychain");
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
         command.arg(format!("--remote-debugging-port={port}"));
+    }
+    if let Some(path) = std::env::var_os(CHROMIUM_LOG_ENV).filter(|path| !path.is_empty()) {
+        let mut log_file = std::ffi::OsString::from("--log-file=");
+        log_file.push(path);
+        command
+            .arg("--enable-logging")
+            .arg(log_file)
+            .arg("--log-severity=info");
     }
 }

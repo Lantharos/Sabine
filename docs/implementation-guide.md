@@ -246,8 +246,11 @@ to benchmark the GPU in the background.
   is passed to the native window once over the socket with its modifier, stride and offset, and the
   window samples it through wgpu's Vulkan device without copying. Slots are acknowledged, retired
   and re-requested as on Windows. A window whose device cannot import dma-bufs, or whose browser
-  sends no accelerated frame within two seconds of loading, reopens the page with software
-  `OnPaint`. Chromium reports each frame's damage against the capture before it, so a frame that
+  sends no accelerated frame the window can use within two seconds of loading, reopens the page
+  with software `OnPaint`, and the browser logs why its frames were dropped. Chromium's Wayland
+  fractional-scale support is turned off: it takes each page's scale from a native window, which
+  off-screen pages lack, so pages would always paint at 100% and never match a scaled window.
+  Without it Chromium uses the scale the window reports. Chromium reports each frame's damage against the capture before it, so a frame that
   follows one the host never copied is copied whole. CEF hands over no fence with a frame, so the
   host waits for Chromium's drawing through the fences on the dma-buf itself; NVIDIA's driver puts
   none there, so its frames can still be in flight when they are copied. This mostly hits frames
@@ -298,6 +301,11 @@ uploads them again when it returns, so it reappears with its last frame:
 - main page
 - popup overlay
 - one texture per guest (including guest `<select>` popups)
+
+On every platform, a page that has loaded but shows no frame within 10 seconds does not leave its
+window on the loading screen. The window logs the size the browser painted, or that it painted
+nothing, against the size and scale it needs; Linux then reopens the page with software painting,
+and a page that still does not show closes the window with that diagnostic.
 
 Each redraw composites the whole window, which is a handful of textured quads; changed pixels only
 travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip, or
@@ -1145,6 +1153,10 @@ before discarding older entries. On Linux this directory follows `XDG_DATA_HOME`
 falling back to `~/.local/share/sabine/logs`. Child stderr is also forwarded to the
 launching terminal when one is attached. Diagnostic files may contain application
 URLs and paths; review their contents before sharing them.
+
+Set `SABINE_CHROMIUM_LOG` to a file path to have Chromium's browser process write its own log
+there at info level. Sandboxed Chromium processes, such as the GPU and renderer processes, cannot
+open the file and keep writing their warnings and errors to the window host's log.
 
 Failed setup keeps its progress window open, displays the error and log location,
 and closes with Enter, Escape, or the window close button. Startup failures before
