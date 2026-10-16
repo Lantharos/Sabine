@@ -94,6 +94,6 @@ fn hotkey(shortcut: &Shortcut) -> Result<HotKey, String> {
     modifiers.set(Modifiers::CONTROL, shortcut.modifiers.ctrl);
     modifiers.set(Modifiers::ALT, shortcut.modifiers.alt);
     modifiers.set(Modifiers::SHIFT, shortcut.modifiers.shift);
-    modifiers.set(Modifiers::SUPER, shortcut.modifiers.meta);
+    modifiers.set(Modifiers::META, shortcut.modifiers.meta);
     Ok(HotKey::new(Some(modifiers), code))
 }
