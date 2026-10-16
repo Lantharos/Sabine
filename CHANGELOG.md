@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.42
 
 - Fix Linux windows staying on their loading screen whenever the display is scaled, such as at
   125% or 200% on a laptop. Chromium took the scale of off-screen pages from a native window they
