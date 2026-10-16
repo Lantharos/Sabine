@@ -94,6 +94,7 @@ set(SABINE_HOST_SOURCES
   osr/accelerated/protocol.h
   osr/accelerated/windows/d3d11_copy.cc
   osr/accelerated/windows/d3d11_copy.h
+  osr/accelerated/linux/device_loss.cc
   osr/accelerated/linux/dmabuf_copy.cc
   osr/accelerated/linux/dmabuf_copy.h
   osr/accelerated/linux/dmabuf_image.cc
@@ -121,6 +122,7 @@ endif()
 
 if(NOT OS_LINUX)
   list(REMOVE_ITEM SABINE_HOST_SOURCES
+    osr/accelerated/linux/device_loss.cc
     osr/accelerated/linux/dmabuf_copy.cc
     osr/accelerated/linux/dmabuf_copy.h
     osr/accelerated/linux/dmabuf_image.cc

@@ -2,6 +2,12 @@
 
 - Fix building apps without a lockfile. Every 8.x release of the zip crate Sabine used was pulled
   from crates.io; Sabine now uses zip 9.
+- Fix Linux windows switching to software painting after the graphics driver reset. The browser's
+  copy device now reopens on the GPU, imports Chromium's frames again and repaints every page, as
+  on Windows. Software painting is left for a GPU that does not come back within 20 seconds.
+- Fix Linux windows on NVIDIA crashing while they recreate their graphics device after it was lost.
+- A page that loaded but shows no frame within 10 seconds is now only logged, with what the window
+  received and what it expected. The window no longer switches to software painting or closes.
 
 # Sabine 0.42
 

@@ -113,6 +113,7 @@ pub(in crate::osr) struct NativeLoading {
     pub(in crate::osr) ready_at: Option<Instant>,
     pub(in crate::osr) rejected_frame: Option<(u32, u32)>,
     pub(in crate::osr) slow_load_reported: bool,
+    pub(in crate::osr) stall_reported: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -162,6 +163,7 @@ impl NativeLoading {
             ready_at: None,
             rejected_frame: None,
             slow_load_reported: false,
+            stall_reported: false,
         }
     }
 

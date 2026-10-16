@@ -32,6 +32,20 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
   ApplyGuestLifecycle();
 }
 
+void SabineOsrHandler::RepaintAll() {
+  if (!browser_) {
+    return;
+  }
+  browser_->GetHost()->Invalidate(PET_VIEW);
+  browser_->GetHost()->Invalidate(PET_POPUP);
+  for (auto* guest : guests_.InZOrder()) {
+    if (guest->browser && guest->visible) {
+      guest->browser->GetHost()->Invalidate(PET_VIEW);
+      guest->browser->GetHost()->Invalidate(PET_POPUP);
+    }
+  }
+}
+
 void SabineOsrHandler::ApplyWindowState(bool shown,
                                         bool occluded,
                                         bool suspended) {

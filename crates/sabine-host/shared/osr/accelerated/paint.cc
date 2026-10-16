@@ -208,6 +208,12 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
   const DmabufCopy result =
       CopyAcceleratedDmabufFrame(surface, info, damage, &copied);
   RetireAcceleratedResources(copied.retired_resource_ids);
+  if (copied.device_reopened) {
+    RepaintAll();
+  }
+  if (result == DmabufCopy::kReopening) {
+    RepaintAllSoon();
+  }
   if (result == DmabufCopy::kFailed) {
     accelerated_drop_reason_ = "its dma-buf could not be copied on the GPU";
     ReportAcceleratedPaintUnavailable();

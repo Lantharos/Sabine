@@ -11,7 +11,10 @@ namespace sabine_osr {
 
 #define SABINE_VULKAN_DEVICE_FUNCTIONS(X) \
   X(vkGetDeviceQueue)                     \
+  X(vkDestroyDevice)                      \
+  X(vkDeviceWaitIdle)                     \
   X(vkCreateCommandPool)                  \
+  X(vkDestroyCommandPool)                 \
   X(vkAllocateCommandBuffers)             \
   X(vkResetCommandBuffer)                 \
   X(vkBeginCommandBuffer)                 \
@@ -20,9 +23,11 @@ namespace sabine_osr {
   X(vkCmdCopyImage)                       \
   X(vkQueueSubmit)                        \
   X(vkCreateFence)                        \
+  X(vkDestroyFence)                       \
   X(vkResetFences)                        \
   X(vkWaitForFences)                      \
   X(vkCreateSemaphore)                    \
+  X(vkDestroySemaphore)                   \
   X(vkCreateImage)                        \
   X(vkDestroyImage)                       \
   X(vkGetImageMemoryRequirements)         \
@@ -37,7 +42,10 @@ namespace sabine_osr {
 #define SABINE_VULKAN_OPTIONAL_DEVICE_FUNCTIONS(X) X(vkImportSemaphoreFdKHR)
 
 struct VulkanContext {
+  ~VulkanContext();
+
   VkInstance instance = VK_NULL_HANDLE;
+  PFN_vkDestroyInstance vkDestroyInstance = nullptr;
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
@@ -61,9 +69,16 @@ enum class SharedFormat { kBgra, kRgba };
 VkFormat UnormFormat(SharedFormat format);
 
 // Opens the Vulkan device used to copy Chromium's frames into Sabine-owned
-// dma-bufs, once per process. Returns null when this machine cannot share
-// dma-bufs through Vulkan.
+// dma-bufs on first use. Returns null when this machine cannot share dma-bufs
+// through Vulkan.
 VulkanContext* SharedVulkanContext();
+
+// Replaces the shared device after it was lost. The new one comes from a new
+// Vulkan instance, since the old one still lists the devices from before a
+// driver reset. Returns null while no device can share dma-bufs.
+VulkanContext* ReopenSharedVulkanContext();
+
+bool VulkanDeviceLost(VulkanContext* context);
 
 }  // namespace sabine_osr
 

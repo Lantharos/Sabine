@@ -251,6 +251,7 @@ class SabineOsrHandler : public CefClient,
 #endif
   void ReleaseAcceleratedFrame(uint64_t slot_token);
   void RetireAcceleratedBrowser(int browser_id);
+  void RepaintAll();
 #if defined(OS_MAC)
   void UseSurfaceService(const std::string& service_name);
 #endif
@@ -296,6 +297,7 @@ class SabineOsrHandler : public CefClient,
   void ForgetAcceleratedCaptures(int browser_id);
 #if defined(OS_LINUX)
   void ReportAcceleratedPaintUnavailable();
+  void RepaintAllSoon();
   bool TakeSettledResizeFrame(CefRefPtr<CefBrowser> browser,
                               PaintElementType type);
 #endif
@@ -444,6 +446,7 @@ class SabineOsrHandler : public CefClient,
   bool accelerated_paint_failed_ = false;
   uint64_t resize_generation_ = 0;
   bool settled_resize_frame_pending_ = false;
+  bool repaint_all_pending_ = false;
 #endif
   std::string accelerated_drop_reason_;
   int last_main_paint_width_ = 0;

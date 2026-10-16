@@ -7,8 +7,10 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <map>
+#include <optional>
 
 #include "osr/accelerated/linux/dmabuf_image.h"
 
@@ -18,6 +20,9 @@ namespace {
 constexpr uint32_t kSlotsPerSurface = 4;
 constexpr size_t kSourcesPerSurface = 6;
 constexpr uint64_t kCopyTimeoutNs = 1000000000;
+// While a graphics driver restarts, no device may be available for a few
+// seconds, so the copy device keeps being reopened before it gives up.
+constexpr std::chrono::seconds kReopenTimeout{20};
 
 struct OwnedSlot {
   DmabufImage image;
@@ -48,6 +53,7 @@ std::map<AcceleratedSurfaceKey, SurfaceSlots> g_surfaces;
 uint64_t g_next_token = 1;
 uint64_t g_next_resource_id = 1;
 uint64_t g_use = 0;
+std::optional<std::chrono::steady_clock::time_point> g_device_lost_at;
 
 bool Matches(const Source& source,
              const struct stat& buffer,
@@ -277,20 +283,11 @@ bool CopyIntoSlot(VulkanContext* vulkan,
   return true;
 }
 
-}  // namespace
-
-bool AcceleratedDmabufAvailable() {
-  return SharedVulkanContext() != nullptr;
-}
-
-DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
-                                      const CefAcceleratedPaintInfo& info,
-                                      const PixelRegion& damage,
-                                      AccelDmabufCopiedFrame* out) {
-  VulkanContext* vulkan = SharedVulkanContext();
-  if (!vulkan || info.plane_count < 1) {
-    return DmabufCopy::kFailed;
-  }
+DmabufCopy CopyFrame(VulkanContext* vulkan,
+                     const AcceleratedSurfaceKey& surface,
+                     const CefAcceleratedPaintInfo& info,
+                     const PixelRegion& damage,
+                     AccelDmabufCopiedFrame* out) {
   const SharedFormat format = info.format == CEF_COLOR_TYPE_BGRA_8888
                                   ? SharedFormat::kBgra
                                   : SharedFormat::kRgba;
@@ -315,6 +312,71 @@ DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
     return DmabufCopy::kCopied;
   }
   return DmabufCopy::kSlotsBusy;
+}
+
+void ForgetSurfaces(VulkanContext* vulkan, std::vector<uint64_t>* retired) {
+  for (auto& [surface, slots] : g_surfaces) {
+    for (OwnedSlot& slot : slots.slots) {
+      if (slot.resource_id != 0) {
+        retired->push_back(slot.resource_id);
+      }
+      DestroyDmabuf(vulkan, &slot.image);
+    }
+    for (Source& source : slots.sources) {
+      DestroyDmabuf(vulkan, &source.image);
+    }
+  }
+  g_surfaces.clear();
+}
+
+DmabufCopy ReopenAndCopy(const AcceleratedSurfaceKey& surface,
+                         const CefAcceleratedPaintInfo& info,
+                         const PixelRegion& damage,
+                         AccelDmabufCopiedFrame* out) {
+  VulkanContext* vulkan = ReopenSharedVulkanContext();
+  if (!vulkan) {
+    const bool waiting =
+        std::chrono::steady_clock::now() - *g_device_lost_at < kReopenTimeout;
+    return waiting ? DmabufCopy::kReopening : DmabufCopy::kFailed;
+  }
+  g_device_lost_at.reset();
+  out->device_reopened = true;
+  std::fprintf(stderr, "Sabine CEF: the copy device is back\n");
+  std::fflush(stderr);
+  return CopyFrame(vulkan, surface, info, damage, out);
+}
+
+}  // namespace
+
+bool AcceleratedDmabufAvailable() {
+  return SharedVulkanContext() != nullptr;
+}
+
+DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
+                                      const CefAcceleratedPaintInfo& info,
+                                      const PixelRegion& damage,
+                                      AccelDmabufCopiedFrame* out) {
+  if (info.plane_count < 1) {
+    return DmabufCopy::kFailed;
+  }
+  if (g_device_lost_at) {
+    return ReopenAndCopy(surface, info, damage, out);
+  }
+  VulkanContext* vulkan = SharedVulkanContext();
+  if (!vulkan) {
+    return DmabufCopy::kFailed;
+  }
+  const DmabufCopy result = CopyFrame(vulkan, surface, info, damage, out);
+  if (result != DmabufCopy::kFailed || !VulkanDeviceLost(vulkan)) {
+    return result;
+  }
+  std::fprintf(stderr,
+               "Sabine CEF: the graphics device was lost; reopening the copy "
+               "device\n");
+  std::fflush(stderr);
+  ForgetSurfaces(vulkan, &out->retired_resource_ids);
+  g_device_lost_at = std::chrono::steady_clock::now();
+  return ReopenAndCopy(surface, info, damage, out);
 }
 
 void ReleaseAcceleratedDmabufFrame(uint64_t slot_token) {

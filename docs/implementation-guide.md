@@ -13,12 +13,19 @@ projects do not depend on a checkout on the machine that built the CLI.
 
 A lost graphics device, such as after the driver reset or restarted, wakes the window event loop
 and recreates its renderer through a new graphics instance, since the old one keeps listing the
-adapters from before the reset. While the driver is still restarting and no adapter is available,
-the window keeps looking for one for up to 20 seconds. Sabine then asks Chromium to repaint its main
+adapters from before the reset. The old instance is released before the new one is created:
+NVIDIA's Vulkan driver crashes when an older instance is destroyed while a newer one has a window
+surface. While the driver is still restarting and no adapter is available, the window keeps looking
+for one for up to 20 seconds. Sabine then asks Chromium to repaint its main
 page, popups and guests; page state and bridge connections remain active. On Windows, the browser's
 copy device follows the same reset: when it finds its device removed, or Chromium's frames on another
 adapter, it opens a new one and replaces every shared texture. If the window comes back on a
-different adapter, Sabine restarts the browser on that adapter, which reloads the page. Recovery is
+different adapter, Sabine restarts the browser on that adapter, which reloads the page. On Linux,
+the browser's Vulkan copy device does the same when a copy fails on a lost device: it opens a new
+device through a new Vulkan instance, imports Chromium's dma-bufs again into new Sabine-owned slots,
+and repaints every page whole. While no device is available it retries every 250 ms for up to 20
+seconds, and only then does the page fall back to software painting. A window whose frames fail to
+import because its own device was lost waits for its renderer to come back instead. Recovery is
 limited to three losses per minute; persistent failure closes the app with a diagnostic.
 
 ## Browser sandbox
@@ -302,10 +309,10 @@ uploads them again when it returns, so it reappears with its last frame:
 - popup overlay
 - one texture per guest (including guest `<select>` popups)
 
-On every platform, a page that has loaded but shows no frame within 10 seconds does not leave its
-window on the loading screen. The window logs the size the browser painted, or that it painted
-nothing, against the size and scale it needs; Linux then reopens the page with software painting,
-and a page that still does not show closes the window with that diagnostic.
+On every platform, a page that has loaded but shows no frame within 10 seconds is reported once.
+The window logs the size the browser painted, or that it painted nothing, against the size, scale
+and painting mode it needs. It keeps its painting mode and stays open, so a frame that arrives later
+still shows.
 
 Each redraw composites the whole window, which is a handful of textured quads; changed pixels only
 travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip, or

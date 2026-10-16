@@ -205,6 +205,10 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/accelerated/windows/d3d11_copy.h"),
     ),
     (
+        "osr/accelerated/linux/device_loss.cc",
+        include_str!("../shared/osr/accelerated/linux/device_loss.cc"),
+    ),
+    (
         "osr/accelerated/linux/dmabuf_copy.cc",
         include_str!("../shared/osr/accelerated/linux/dmabuf_copy.cc"),
     ),

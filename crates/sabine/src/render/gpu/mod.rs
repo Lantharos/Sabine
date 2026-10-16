@@ -306,6 +306,14 @@ impl GpuRenderer {
         self.health.failure()
     }
 
+    /// Whether a failure came from a lost device. A loss is only reported
+    /// once wgpu next waits on the device, so this polls it first.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn lost_device(&self) -> bool {
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        self.device_loss().is_some()
+    }
+
     /// The width `text` takes on one line at `size` logical pixels.
     pub(crate) fn measure_text(&mut self, text: &str, size: f32) -> f32 {
         self.text

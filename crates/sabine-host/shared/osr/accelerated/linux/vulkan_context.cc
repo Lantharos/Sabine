@@ -21,7 +21,6 @@ constexpr VkFormatFeatureFlags kSharedFeatures =
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
 
 struct InstanceFunctions {
-  PFN_vkDestroyInstance vkDestroyInstance = nullptr;
   PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
   PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
   PFN_vkGetPhysicalDeviceQueueFamilyProperties
@@ -295,13 +294,15 @@ bool CreateDevice(const InstanceFunctions& vk,
   return true;
 }
 
-VulkanContext* CreateContext() {
+PFN_vkGetInstanceProcAddr LoadVulkan() {
   void* library = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
-  if (!library) {
-    return nullptr;
-  }
-  auto get_instance_proc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
-      dlsym(library, "vkGetInstanceProcAddr"));
+  return library ? reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+                       dlsym(library, "vkGetInstanceProcAddr"))
+                 : nullptr;
+}
+
+std::unique_ptr<VulkanContext> CreateContext() {
+  static const PFN_vkGetInstanceProcAddr get_instance_proc = LoadVulkan();
   auto create_instance =
       get_instance_proc ? reinterpret_cast<PFN_vkCreateInstance>(
                               get_instance_proc(nullptr, "vkCreateInstance"))
@@ -318,11 +319,12 @@ VulkanContext* CreateContext() {
   if (create_instance(&info, nullptr, &context->instance) != VK_SUCCESS) {
     return nullptr;
   }
+  context->vkDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(
+      get_instance_proc(context->instance, "vkDestroyInstance"));
   InstanceFunctions vk;
 #define SABINE_VULKAN_INSTANCE(name)      \
   vk.name = reinterpret_cast<PFN_##name>( \
       get_instance_proc(context->instance, #name));
-  SABINE_VULKAN_INSTANCE(vkDestroyInstance)
   SABINE_VULKAN_INSTANCE(vkEnumeratePhysicalDevices)
   SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceProperties)
   SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceQueueFamilyProperties)
@@ -335,15 +337,17 @@ VulkanContext* CreateContext() {
   SABINE_VULKAN_INSTANCE(vkGetDeviceProcAddr)
 #undef SABINE_VULKAN_INSTANCE
   auto candidate = ChooseDevice(vk, context->instance);
-  if (!candidate) {
-    vk.vkDestroyInstance(context->instance, nullptr);
-  }
   if (!candidate || !CreateDevice(vk, *candidate, context.get())) {
     std::fprintf(stderr,
                  "Sabine CEF: no Vulkan device can share frames as dma-bufs\n");
     return nullptr;
   }
-  return context.release();
+  return context;
+}
+
+std::unique_ptr<VulkanContext>& SharedContext() {
+  static std::unique_ptr<VulkanContext> context = CreateContext();
+  return context;
 }
 
 }  // namespace
@@ -353,9 +357,34 @@ VkFormat UnormFormat(SharedFormat format) {
                                        : VK_FORMAT_R8G8B8A8_UNORM;
 }
 
+VulkanContext::~VulkanContext() {
+  if (command_pool) {
+    vkDeviceWaitIdle(device);
+    vkDestroySemaphore(device, producer_done, nullptr);
+    vkDestroyFence(device, fence, nullptr);
+    vkDestroyCommandPool(device, command_pool, nullptr);
+  }
+  if (device && vkDestroyDevice) {
+    vkDestroyDevice(device, nullptr);
+  }
+  if (instance && vkDestroyInstance) {
+    vkDestroyInstance(instance, nullptr);
+  }
+}
+
 VulkanContext* SharedVulkanContext() {
-  static VulkanContext* context = CreateContext();
-  return context;
+  return SharedContext().get();
+}
+
+VulkanContext* ReopenSharedVulkanContext() {
+  std::unique_ptr<VulkanContext>& context = SharedContext();
+  context.reset();
+  context = CreateContext();
+  return context.get();
+}
+
+bool VulkanDeviceLost(VulkanContext* context) {
+  return context->vkDeviceWaitIdle(context->device) == VK_ERROR_DEVICE_LOST;
 }
 
 }  // namespace sabine_osr

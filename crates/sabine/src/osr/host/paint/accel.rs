@@ -45,12 +45,15 @@ impl OsrNativeHost {
             release_slot,
         );
         if let Err(error) = &installed {
+            #[cfg(target_os = "linux")]
+            let import_unsupported = matches!(error, crate::render::RendererError::Texture(_))
+                && !renderer.lost_device();
             sabine_runtime::report_error(
                 "render",
                 format!("could not show a browser frame: {error}"),
             );
             #[cfg(target_os = "linux")]
-            if matches!(error, crate::render::RendererError::Texture(_)) {
+            if import_unsupported {
                 self.paint_in_software("the window could not import the browser's frames");
             }
         }

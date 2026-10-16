@@ -22,9 +22,14 @@ struct AccelDmabufCopiedFrame {
   uint32_t offset = 0;
   // Resources this call replaced, whose compositor imports can be dropped.
   std::vector<uint64_t> retired_resource_ids;
+  // The copy device was lost and replaced, and with it every slot of every
+  // surface, so every surface needs a new frame.
+  bool device_reopened = false;
 };
 
-enum class DmabufCopy { kCopied, kSlotsBusy, kFailed };
+// kReopening means the copy device was lost and no new one could be opened
+// yet; the frame is dropped and should be painted again shortly.
+enum class DmabufCopy { kCopied, kSlotsBusy, kReopening, kFailed };
 
 bool AcceleratedDmabufAvailable();
 

@@ -79,8 +79,11 @@ pub(super) async fn connect(source: &SurfaceSource) -> Result<GpuConnection, Ren
 /// Connects through a new instance, which replaces the shared one. An
 /// instance's adapters stay those of the driver it started with, so after a
 /// device was lost, such as when the driver restarted or the adapter was
-/// removed, only a new instance finds the adapters that work now.
+/// removed, only a new instance finds the adapters that work now. The old
+/// instance is released first: NVIDIA's Vulkan driver crashes when an older
+/// instance is destroyed while a newer one has a window surface.
 pub(super) async fn reconnect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
+    drop(INSTANCE.lock().unwrap().take());
     let mut failure = None;
     for backends in backend_preference() {
         let instance = create_instance(*backends);
