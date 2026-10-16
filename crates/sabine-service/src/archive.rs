@@ -1,7 +1,7 @@
 use std::{
     fs::{self, File},
     io::{self, Read, Seek},
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
 };
 
 use crate::{ServiceError, ServiceResult};
@@ -45,7 +45,7 @@ fn extract_zip(input: File, destination: &Path) -> io::Result<()> {
     let mut links = Vec::new();
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index)?;
-        let path = Path::new(entry.name()).to_path_buf();
+        let path = PathBuf::from(entry.name()?.as_ref());
         if !safe_path(&path) {
             return Err(invalid("archive contains an unsafe path"));
         }

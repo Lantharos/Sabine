@@ -1,3 +1,8 @@
+# Unreleased
+
+- Fix building apps without a lockfile. Every 8.x release of the zip crate Sabine used was pulled
+  from crates.io; Sabine now uses zip 9.
+
 # Sabine 0.42
 
 - Fix Linux windows staying on their loading screen whenever the display is scaled, such as at
