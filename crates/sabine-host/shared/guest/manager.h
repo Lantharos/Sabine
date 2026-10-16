@@ -118,7 +118,6 @@ class GuestRegistry {
   GuestView* TopmostAt(int x, int y);
   std::vector<GuestView*> InZOrder();
   std::vector<const GuestView*> InZOrder() const;
-  bool Empty() const { return guests_.empty(); }
   void SetCovered(bool covered) { covered_ = covered; }
   bool Covered() const { return covered_; }
 

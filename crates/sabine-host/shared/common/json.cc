@@ -80,24 +80,6 @@ std::string JsString(const std::string& value) {
   return "\"" + JsonEscape(value) + "\"";
 }
 
-std::string JsArray(const std::set<std::string>& values) {
-  std::string output = "[";
-  bool first = true;
-  for (const auto& value : values) {
-    if (!first) {
-      output += ",";
-    }
-    output += JsString(value);
-    first = false;
-  }
-  output += "]";
-  return output;
-}
-
-bool JsonHasKey(const std::string& payload, const std::string& name) {
-  return FindValueStart(payload, name) != std::string::npos;
-}
-
 std::string JsonStringValue(const std::string& payload,
                             const std::string& name) {
   size_t cursor = FindValueStart(payload, name);
