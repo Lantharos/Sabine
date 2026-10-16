@@ -83,7 +83,7 @@ Development runs use a `.dev` app identity and development environment files, ke
 
 - [Implementation guide](docs/implementation-guide.md) — runtime, bridge, windows, packaging, and platform behavior
 - [Publishing guide](docs/publishing.md) — app releases and Sabine releases
-- [TypeScript helpers](packages/sabine) — page bridge API
+- [Web API](docs/web-api.md) — the page bridge and the `@lantharos/sabine` helpers
 
 ## License
 
