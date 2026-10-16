@@ -20,7 +20,7 @@ jobs:
       - run: rustup override set stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: pipx run clang-format==23.1.1 --dry-run --Werror $(git ls-files '*.cc' '*.h' '*.mm')
+      - run: git ls-files -z '*.cc' '*.h' '*.mm' | xargs -0 pipx run clang-format==23.1.1 --dry-run --Werror
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 

@@ -68,6 +68,7 @@ jobs:
           fi
       - name: Install MSI packaging dependencies
         if: matrix.target == 'msi'
+        shell: pwsh
         run: |
           dotnet tool install --global wix --version 7.0.0
           if ($LASTEXITCODE -ne 0) { throw "WiX installation failed" }
@@ -77,6 +78,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "WiX extension installation failed; check WiX EULA acceptance" }
       - name: Install Windows setup tools
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install nsis --yes --no-progress
           "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
