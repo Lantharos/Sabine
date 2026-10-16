@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.43
 
 - Fix building apps without a lockfile. Every 8.x release of the zip crate Sabine used was pulled
   from crates.io; Sabine now uses zip 9.
