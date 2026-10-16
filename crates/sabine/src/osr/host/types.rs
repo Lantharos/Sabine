@@ -52,6 +52,8 @@ impl WindowState {
     }
 }
 
+/// Where a browser surface sits on the page, in DIPs, and its size in the
+/// pixels Chromium painted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct SurfaceGeometry {
     pub(super) x: i32,

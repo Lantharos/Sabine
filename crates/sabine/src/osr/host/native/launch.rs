@@ -63,7 +63,7 @@ impl OsrNativeHost {
         self.cef_handed_off = false;
         self.handoff_deadline = None;
 
-        let (width, height, scale) = self.content_size_for_cef();
+        let page = self.page_viewport();
         let accelerated_paint = self.accelerated_paint();
         #[cfg(target_os = "linux")]
         {
@@ -76,9 +76,7 @@ impl OsrNativeHost {
             &authentication_token,
             &self.config,
             osr::CefViewport {
-                width,
-                height,
-                scale,
+                page,
                 frame_rate: self.active_frame_rate(),
                 parent_window: self.window.as_ref().and_then(|window| {
                     use raw_window_handle::{HasWindowHandle, RawWindowHandle};

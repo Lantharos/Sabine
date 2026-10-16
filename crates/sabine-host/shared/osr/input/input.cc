@@ -136,10 +136,8 @@ void SabineOsrHandler::HandleControlLine(
   if (parts[0] == "resize" && parts.size() >= 4) {
     const int width = std::max(1, std::atoi(parts[1].c_str()));
     const int height = std::max(1, std::atoi(parts[2].c_str()));
-    const float scale =
-        std::max(0.25f, static_cast<float>(std::atof(parts[3].c_str())));
-    if (width == width_ && height == height_ &&
-        std::fabs(scale - scale_) < 0.0001f) {
+    const float scale = std::max(0.25f, std::strtof(parts[3].c_str(), nullptr));
+    if (width == width_ && height == height_ && scale == scale_) {
       host->Invalidate(PET_VIEW);
       return;
     }

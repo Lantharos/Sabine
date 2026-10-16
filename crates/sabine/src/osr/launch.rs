@@ -247,9 +247,7 @@ pub(crate) fn attach_open_window(
 }
 
 pub(crate) struct CefViewport {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) scale: f64,
+    pub(in crate::osr) page: crate::osr::host::viewport::PageViewport,
     pub(crate) frame_rate: u32,
     pub(crate) accelerated_paint: bool,
     pub(crate) parent_window: Option<u64>,
@@ -300,9 +298,9 @@ pub(crate) fn cef_osr_command(
     }
     command.arg(format!("--sabine-osr-token-file={}", token_file.display()));
     command
-        .arg(format!("--sabine-width={}", viewport.width))
-        .arg(format!("--sabine-height={}", viewport.height))
-        .arg(format!("--sabine-scale={:.4}", viewport.scale))
+        .arg(format!("--sabine-width={}", viewport.page.width))
+        .arg(format!("--sabine-height={}", viewport.page.height))
+        .arg(format!("--sabine-scale={}", viewport.page.scale_argument()))
         .arg(format!("--sabine-bridge-policy={}", config.bridge_policy))
         .arg(format!(
             "--sabine-active-frame-rate={}",

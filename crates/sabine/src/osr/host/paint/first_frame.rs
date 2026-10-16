@@ -69,15 +69,16 @@ impl OsrNativeHost {
     }
 
     fn first_frame_stall(&self) -> String {
-        let (width, height) = self.content_surface_size();
+        let viewport = self.page_viewport();
+        let (width, height) = viewport.pixel_size();
         let painting = if self.accelerated_paint() {
             "shared GPU frames"
         } else {
             "software frames"
         };
         let expected = format!(
-            "the window needs a {width}x{height} page at scale {:.2} in {painting}",
-            self.scale()
+            "the window needs {width}x{height} pixels for a {}x{} page at scale {} in {painting}",
+            viewport.width, viewport.height, viewport.scale
         );
         match self.loading.and_then(|loading| loading.rejected_frame) {
             Some((frame_width, frame_height)) => {

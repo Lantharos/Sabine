@@ -133,31 +133,35 @@ impl OsrNativeHost {
             return;
         }
         let top = self.titlebar_height();
+        let scale = self.scale();
         if let Some(surface) = self.main_surface {
-            list.push(surface_image(ImageId::Main, surface, top));
+            list.push(surface_image(ImageId::Main, surface, top, scale));
         }
         let popup = self.overlays.get_key_value(POPUP_OVERLAY_ID);
         for (overlay_id, overlay) in &self.overlays {
             if &**overlay_id != POPUP_OVERLAY_ID {
                 let image = ImageId::Overlay(Arc::clone(overlay_id));
-                list.push(surface_image(image, overlay.geometry, top));
+                list.push(surface_image(image, overlay.geometry, top, scale));
             }
         }
         if let Some((popup_id, popup)) = popup {
             let image = ImageId::Overlay(Arc::clone(popup_id));
-            list.push(surface_image(image, popup.geometry, top));
+            list.push(surface_image(image, popup.geometry, top, scale));
         }
         self.draw_tooltip(list, width, height);
         self.draw_context_menu(list);
     }
 }
 
-fn surface_image(id: ImageId, surface: SurfaceGeometry, top: f32) -> ImageCommand {
+/// Places a surface on the device pixel grid Chromium painted it for, so its
+/// pixels map one to one onto the window's.
+fn surface_image(id: ImageId, surface: SurfaceGeometry, top: f32, scale: f64) -> ImageCommand {
+    let device = |dips: f64| (dips * scale).round() as i32;
     ImageCommand {
         id,
-        x: surface.x as f32,
-        y: top + surface.y as f32,
-        width: surface.width as f32,
-        height: surface.height as f32,
+        x: device(f64::from(surface.x)),
+        y: device(f64::from(top) + f64::from(surface.y)),
+        width: surface.width,
+        height: surface.height,
     }
 }

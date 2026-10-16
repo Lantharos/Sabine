@@ -91,13 +91,15 @@ pub enum ImageId {
     Overlay(Arc<str>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// An image drawn pixel for pixel, placed in device pixels so it stays crisp
+/// at fractional scales.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImageCommand {
     pub id: ImageId,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl From<RectCommand> for DisplayCommand {

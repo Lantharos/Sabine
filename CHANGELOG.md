@@ -11,6 +11,14 @@
 - On Linux, a browser whose GPU frames have not reached the window 2 seconds after loading now
   logs why they were dropped and what the window needs, and keeps painting on the GPU instead of
   reopening the page with software painting.
+- Fix windows at fractional display scales, such as 133% or 175%, staying on their loading screen
+  at some sizes. Chromium rounds a page's pixel size up, so a 1180-point window at 133% gets a page
+  1574 pixels wide, while Sabine expected 1573 and turned every frame down. Sabine now expects the
+  exact size Chromium paints, on every platform.
+- Fix open windows turning blurry and no longer updating after the display scale changed while
+  they ran. They now repaint at the new scale.
+- Pages are drawn pixel for pixel onto the window, so they stay sharp at fractional scales,
+  including below the titlebar of windows with Sabine's own chrome.
 
 # Sabine 0.42
 

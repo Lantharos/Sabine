@@ -256,15 +256,10 @@ pub(crate) fn create_image_pipeline(
 pub(crate) fn push_image_quad(
     vertices: &mut Vec<ImageVertex>,
     bounds: [f32; 4],
-    scale: f32,
     uv_origin: [f32; 2],
     uv_size: [f32; 2],
 ) {
     let [x, y, width, height] = bounds;
-    let x = x * scale;
-    let y = y * scale;
-    let width = width * scale;
-    let height = height * scale;
 
     let positions = [
         [x, y],

@@ -52,7 +52,7 @@ float SwitchFloat(CefRefPtr<CefCommandLine> command_line,
   if (value.empty()) {
     return fallback;
   }
-  return std::atof(value.c_str());
+  return std::strtof(value.c_str(), nullptr);
 }
 
 }  // namespace sabine_osr

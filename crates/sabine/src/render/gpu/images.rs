@@ -101,8 +101,12 @@ impl GpuRenderer {
         let vertex_start = vertices.len() as u32;
         push_image_quad(
             vertices,
-            [image.x, image.y, image.width, image.height],
-            self.scale_factor,
+            [
+                image.x as f32,
+                image.y as f32,
+                image.width as f32,
+                image.height as f32,
+            ],
             entry.uv_origin,
             entry.uv_size,
         );

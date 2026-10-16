@@ -8,6 +8,7 @@ mod paint;
 mod socket;
 pub(in crate::osr) mod types;
 mod ui;
+pub(in crate::osr) mod viewport;
 
 use std::path::PathBuf;
 use std::sync::mpsc;

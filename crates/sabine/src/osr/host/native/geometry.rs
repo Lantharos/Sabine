@@ -2,6 +2,7 @@ use winit::dpi::PhysicalPosition;
 
 use super::OsrNativeHost;
 use crate::osr::host::types::uses_sabine_chrome;
+use crate::osr::host::viewport::PageViewport;
 use crate::render::effective_scale;
 
 impl OsrNativeHost {
@@ -37,35 +38,23 @@ impl OsrNativeHost {
         }
     }
 
-    pub(in crate::osr::host) fn content_size_for_cef(&self) -> (u32, u32, f64) {
+    /// The page Chromium renders, in DIPs at the scale Chromium is given.
+    pub(in crate::osr::host) fn page_viewport(&self) -> PageViewport {
         let scale = self.scale();
         if !self.config.visible
             && self.window.is_none()
             && !self.config.lifecycle.retain_hidden_frame
         {
-            return (1, 1, scale);
+            return PageViewport::new(1, 1, scale);
         }
         let logical_width = f64::from(self.surface_size.width) / scale;
         let logical_height = (f64::from(self.surface_size.height) / scale
             - f64::from(self.titlebar_height()))
         .max(1.0);
-        (
+        PageViewport::new(
             logical_width.round().max(1.0) as u32,
             logical_height.round().max(1.0) as u32,
             scale,
-        )
-    }
-
-    pub(in crate::osr::host) fn content_surface_size(&self) -> (u32, u32) {
-        let (width, height, _) = self.content_size_for_cef();
-        (width, height)
-    }
-
-    pub(in crate::osr::host) fn frame_size_for_view(&self, size: (u32, u32)) -> (u32, u32) {
-        let scale = self.scale();
-        (
-            (f64::from(size.0) / scale).round().max(1.0) as u32,
-            (f64::from(size.1) / scale).round().max(1.0) as u32,
         )
     }
 

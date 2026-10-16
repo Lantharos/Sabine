@@ -230,6 +230,7 @@ class SabineOsrHandler : public CefClient,
                          const std::optional<std::string>& body = std::nullopt);
   void QueueResizeControlLine(std::string line);
   void HandlePendingResize();
+  bool FitsView(int pixel_width, int pixel_height) const;
   bool QualifyResizeFrame(int pixel_width, int pixel_height);
   void CompleteResizeFrame(int pixel_width, int pixel_height);
   void CloseFromNativeDisconnect();

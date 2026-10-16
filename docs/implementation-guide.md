@@ -320,10 +320,13 @@ travel as far as the page textures. The window redraws only when a paint, the ti
 a menu changes. Its display list, vertex data, and surface ids are reused between redraws, and GPU
 vertex buffers grow geometrically, so a redraw allocates nothing. Native surface resize is presented
 synchronously with the last frame at its original logical size while CEF catches up. Resize control
-messages coalesce to the newest size on CEF's UI thread. Main paints must exactly match that logical
-size, and accelerated paints with transitional coded/content/source metadata are discarded. This
+messages coalesce to the newest size on CEF's UI thread. Main paints must exactly match the pixel
+size Chromium gives that page, which it rounds up in single precision: a 1180-point page at 4/3 is
+1574 pixels wide, not 1573. A change of scale alone is a resize too, so the page repaints at the new
+scale. Accelerated paints with transitional coded/content/source metadata are discarded. This
 keeps the swapchain responsive without stretching a stale frame or presenting a partially relaid-out
-Chromium texture.
+Chromium texture. Page textures are placed on the window's pixel grid and drawn pixel for pixel, so
+pages stay sharp at fractional scales; the page's last partial pixel row or column is clipped.
 
 Automatic frame pacing follows the monitor's current display mode and updates when the window
 moves, changes scale or size, or regains focus. An explicit lifecycle frame rate overrides this

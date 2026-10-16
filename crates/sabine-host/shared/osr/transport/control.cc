@@ -20,6 +20,13 @@ using namespace sabine_osr;
 namespace {
 constexpr size_t kMaxControlBytes = 64 * 1024 * 1024;
 constexpr size_t kMaxControlCount = 256;
+
+// Chromium sizes the view's pixels with gfx::ScaleToCeiledSize, rounding up
+// in single precision.
+int ViewPixels(int dips, float scale) {
+  const float pixels = static_cast<float>(dips) * scale;
+  return static_cast<int>(std::ceil(pixels));
+}
 }  // namespace
 
 void SabineOsrHandler::StartCommandReader() {
@@ -165,28 +172,20 @@ void SabineOsrHandler::HandlePendingResize() {
   }
 }
 
+bool SabineOsrHandler::FitsView(int pixel_width, int pixel_height) const {
+  return pixel_width == ViewPixels(width_, scale_) &&
+         pixel_height == ViewPixels(height_, scale_);
+}
+
 bool SabineOsrHandler::QualifyResizeFrame(int pixel_width, int pixel_height) {
   CEF_REQUIRE_UI_THREAD();
-  const int expected_width =
-      std::max(1, static_cast<int>(std::lround(width_ * scale_)));
-  const int expected_height =
-      std::max(1, static_cast<int>(std::lround(height_ * scale_)));
   std::lock_guard<std::mutex> lock(resize_mutex_);
-  if (!resize_in_flight_) {
-    return true;
-  }
-  return std::abs(pixel_width - expected_width) <= 1 &&
-         std::abs(pixel_height - expected_height) <= 1;
+  return !resize_in_flight_ || FitsView(pixel_width, pixel_height);
 }
 
 void SabineOsrHandler::CompleteResizeFrame(int pixel_width, int pixel_height) {
   CEF_REQUIRE_UI_THREAD();
-  const int expected_width =
-      std::max(1, static_cast<int>(std::lround(width_ * scale_)));
-  const int expected_height =
-      std::max(1, static_cast<int>(std::lround(height_ * scale_)));
-  if (std::abs(pixel_width - expected_width) > 1 ||
-      std::abs(pixel_height - expected_height) > 1) {
+  if (!FitsView(pixel_width, pixel_height)) {
     return;
   }
   bool schedule = false;

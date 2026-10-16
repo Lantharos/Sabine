@@ -21,8 +21,8 @@ impl OsrNativeHost {
             }
         };
         let geometry = self.accel_geometry(frame);
-        if frame.surface == OsrSurface::Main && geometry.size() != self.content_surface_size() {
-            self.note_rejected_main_frame((frame.visible_width, frame.visible_height));
+        if frame.surface == OsrSurface::Main && !self.fits_page(geometry) {
+            self.note_rejected_main_frame(geometry.size());
             release_slot();
             self.retry_resize_paint();
             return false;
@@ -75,10 +75,11 @@ impl OsrNativeHost {
     }
 
     fn accel_geometry(&self, frame: &OsrAccelFrame) -> crate::osr::host::types::SurfaceGeometry {
-        self.surface_geometry(
-            (frame.visible_width, frame.visible_height),
-            frame.x,
-            frame.y,
-        )
+        crate::osr::host::types::SurfaceGeometry {
+            x: frame.x,
+            y: frame.y,
+            width: frame.visible_width,
+            height: frame.visible_height,
+        }
     }
 }

@@ -13,12 +13,17 @@ use crate::osr::host::types::{
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn send_resize(&self) {
-        let (width, height, scale) = self.content_size_for_cef();
-        self.send_control(format!("resize\t{width}\t{height}\t{scale:.4}\n"));
+        let viewport = self.page_viewport();
+        self.send_control(format!(
+            "resize\t{}\t{}\t{}\n",
+            viewport.width,
+            viewport.height,
+            viewport.scale_argument()
+        ));
     }
 
     pub(in crate::osr::host) fn queue_resize_paint(&mut self) {
-        let size = self.content_surface_size();
+        let size = self.page_viewport().pixel_size();
         if self.main_surface_matches(size) {
             self.pending_resize_paint = None;
             return;
@@ -58,6 +63,11 @@ impl OsrNativeHost {
         }
     }
 
+    /// Whether a main frame was painted for the page the window shows now.
+    pub(in crate::osr::host) fn fits_page(&self, geometry: SurfaceGeometry) -> bool {
+        geometry.size() == self.page_viewport().pixel_size()
+    }
+
     pub(in crate::osr::host) fn main_surface_matches(&self, size: (u32, u32)) -> bool {
         self.main_surface
             .is_some_and(|surface| surface.size() == size)
@@ -71,29 +81,18 @@ impl OsrNativeHost {
         (self.config.visible || self.config.lifecycle.retain_hidden_frame) && !self.occluded
     }
 
-    pub(in crate::osr::host) fn surface_geometry(
-        &self,
-        pixel_size: (u32, u32),
-        x: i32,
-        y: i32,
-    ) -> SurfaceGeometry {
-        let (width, height) = self.frame_size_for_view(pixel_size);
-        SurfaceGeometry {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
     pub(in crate::osr::host) fn update_paint_batch(&mut self, batch: OsrPaintBatch) -> bool {
         if batch.rects.is_empty() {
             return false;
         }
-        let pixel_size = (batch.width, batch.height);
-        let geometry = self.surface_geometry(pixel_size, batch.x, batch.y);
-        if batch.surface == OsrSurface::Main && geometry.size() != self.content_surface_size() {
-            self.note_rejected_main_frame(pixel_size);
+        let geometry = SurfaceGeometry {
+            x: batch.x,
+            y: batch.y,
+            width: batch.width,
+            height: batch.height,
+        };
+        if batch.surface == OsrSurface::Main && !self.fits_page(geometry) {
+            self.note_rejected_main_frame(geometry.size());
             self.retry_resize_paint();
             return false;
         }
