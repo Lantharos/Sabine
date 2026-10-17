@@ -20,6 +20,9 @@ pub(super) const RESIZE_EDGE: f32 = 7.0;
 pub(super) const CLOSE_GRACE: Duration = Duration::from_millis(300);
 pub(super) const RESIZE_REPAINT_RETRY: Duration = Duration::from_millis(100);
 pub(super) const RESIZE_REPAINT_GRACE: Duration = Duration::from_millis(900);
+/// The longest a resized window waits for its page before showing the new
+/// size with the last frame it has, so a busy page can't stall resizing.
+pub(super) const RESIZE_HOLD_LIMIT: Duration = Duration::from_millis(100);
 pub(super) const FALLBACK_ACTIVE_FRAME_RATE: u32 = 60;
 /// Wayland briefly drops focus/occlusion around interactive move. Suspending
 /// immediately thrashes lifecycle on the secondary (handed-off) window.
@@ -279,4 +282,7 @@ pub(super) struct PendingResizePaint {
     pub(super) size: (u32, u32),
     pub(super) retry_at: Instant,
     pub(super) deadline: Instant,
+    /// Until when the window keeps its last frame on screen instead of
+    /// showing the new size without a page painted at it.
+    pub(super) held_until: Option<Instant>,
 }

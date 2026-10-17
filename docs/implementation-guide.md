@@ -322,8 +322,14 @@ still shows.
 Each redraw composites the whole window, which is a handful of textured quads; changed pixels only
 travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip, or
 a menu changes. Its display list, vertex data, and surface ids are reused between redraws, and GPU
-vertex buffers grow geometrically, so a redraw allocates nothing. Native surface resize is presented
-synchronously with the last frame at its original logical size while CEF catches up. Resize control
+vertex buffers grow geometrically, so a redraw allocates nothing. On Wayland a window shows a new
+size from its next commit, so after the desktop configures a new size, as for maximize, snapping
+or fullscreen, the window keeps its last frame on screen and commits the new size together with
+the first page frame painted at it, or after 100 ms if the page is slower. A resize that arrives
+while the page is still catching up with the one before, as while an edge is dragged, is committed
+right away with the last frame the page painted, so the window follows the pointer at the
+desktop's pace. On other platforms the native surface resize is presented synchronously with the
+last frame at its original logical size while CEF catches up. Resize control
 messages coalesce to the newest size on CEF's UI thread. Main paints must exactly match the pixel
 size Chromium gives that page, which it rounds up in single precision: a 1180-point page at 4/3 is
 1574 pixels wide, not 1573. A change of scale alone is a resize too, so the page repaints at the new

@@ -37,6 +37,9 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn render(&mut self) -> bool {
+        if self.resize_held() {
+            return false;
+        }
         let scale = self.scale() as f32;
         let mut list = std::mem::take(&mut self.display_list);
         self.fill_display_list(

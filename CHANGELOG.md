@@ -10,6 +10,10 @@
 - `appWindow.revealWhen(ready)` keeps a window off screen until the page's first real view is in the
   document, for pages that fetch what they show after loading. The window appears with the next
   frame the page paints, or after five seconds at most.
+- On Wayland, a window that is maximized, restored, snapped or made fullscreen shows its new size
+  together with the page painted at it, instead of first showing the old picture or the bare
+  window background at the new size. The window waits up to 100 milliseconds for the page; while
+  an edge is being dragged it keeps up with the pointer as before.
 
 # Sabine 0.44
 

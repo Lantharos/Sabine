@@ -33,6 +33,7 @@ impl OsrNativeHost {
             size,
             retry_at: now + RESIZE_REPAINT_RETRY,
             deadline: now + RESIZE_REPAINT_GRACE,
+            held_until: self.resize_hold(now),
         });
         self.send_resize();
     }
