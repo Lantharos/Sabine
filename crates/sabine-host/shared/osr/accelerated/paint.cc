@@ -207,16 +207,22 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
   AccelDmabufCopiedFrame copied{};
   const DmabufCopy result =
       CopyAcceleratedDmabufFrame(surface, info, damage, &copied);
-  RetireAcceleratedResources(copied.retired_resource_ids);
-  if (copied.device_reopened) {
-    RepaintAll();
-  }
   if (result == DmabufCopy::kReopening) {
     RepaintAllSoon();
   }
   if (result == DmabufCopy::kFailed) {
     accelerated_drop_reason_ = "its dma-buf could not be copied on the GPU";
     ReportAcceleratedPaintUnavailable();
+  }
+  return ShareDmabufCopy(result, copied, out);
+}
+
+bool SabineOsrHandler::ShareDmabufCopy(DmabufCopy result,
+                                       const AccelDmabufCopiedFrame& copied,
+                                       CopiedAccelFrame* out) {
+  RetireAcceleratedResources(copied.retired_resource_ids);
+  if (copied.device_reopened) {
+    RepaintAll();
   }
   if (result != DmabufCopy::kCopied) {
     return false;
@@ -247,6 +253,7 @@ void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
 }
 
 void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
+  unsettled_frames_.erase({browser_id, false});
   RetireAcceleratedResources(RetireAcceleratedDmabufBrowser(browser_id));
 }
 
@@ -343,7 +350,6 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                           PaintElementType type,
                                           const RectList& dirtyRects,
                                           const CefAcceleratedPaintInfo& info) {
-  (void)dirtyRects;
   if (!browser) {
     return;
   }
@@ -415,14 +421,15 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
+  const std::optional<AcceleratedTarget> target =
+      AcceleratedTargetFor(browser, type);
+  if (!target) {
+    return;
+  }
   const AcceleratedSurfaceKey surface{browser->GetIdentifier(),
                                       type == PET_POPUP};
-  bool copy_whole = !FollowsCopiedCapture(surface, info.extra);
-#if defined(OS_LINUX)
-  copy_whole |= TakeSettledResizeFrame(browser, type);
-#endif
   PixelRegion damage;
-  if (!copy_whole) {
+  if (FollowsCopiedCapture(surface, info.extra)) {
     for (const CefRect& rect : dirtyRects) {
       damage.Unite(PixelRegion{rect.x, rect.y, rect.width, rect.height});
     }
@@ -430,69 +437,34 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   if (damage.empty()) {
     damage = PixelRegion::Whole(frame_w, frame_h);
   }
-  auto send_accel = [&](uint32_t accel_kind, const std::string& guest_id,
-                        int32_t x, int32_t y) -> bool {
-    if (info.extra.has_capture_counter) {
-      copied_captures_[surface] = info.extra.capture_counter;
-    }
-    CopiedAccelFrame copied{};
-    if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
-      accelerated_drop_reason_ = "the frame could not be handed to the window";
-      dropped_accelerated_paints_.emplace_back(browser, type);
-      EmitBridgeEvent("\"osr.accel_copy_dropped\"", "{}");
-      return false;
-    }
-    const int coded_width = static_cast<int>(copied.width);
-    const int coded_height = static_cast<int>(copied.height);
-    CefRect visible = info.extra.visible_rect;
-    const int64_t visible_right =
-        static_cast<int64_t>(visible.x) + visible.width;
-    const int64_t visible_bottom =
-        static_cast<int64_t>(visible.y) + visible.height;
-    if (visible.x < 0 || visible.y < 0 || visible.width <= 0 ||
-        visible.height <= 0 || visible_right > coded_width ||
-        visible_bottom > coded_height) {
-      visible = CefRect(0, 0, coded_width, coded_height);
-    }
-    if (TraceEnabled() && (frame_w != coded_width || frame_h != coded_height)) {
-      std::fprintf(stderr,
-                   "Sabine CEF: accelerated metadata mismatch reported=%dx%d "
-                   "resource=%dx%d\n",
-                   frame_w, frame_h, coded_width, coded_height);
-      std::fflush(stderr);
-    }
-
-    AccelPaintMeta meta;
-    meta.format = static_cast<uint32_t>(info.format);
-    meta.visible_x = visible.x;
-    meta.visible_y = visible.y;
-    meta.visible_width = static_cast<uint32_t>(visible.width);
-    meta.visible_height = static_cast<uint32_t>(visible.height);
-    meta.resource_id = copied.resource_id;
-    meta.resource_slot = copied.resource_slot;
-    meta.shared_handle = copied.shared_handle;
-    meta.slot_token = copied.slot_token;
-
-    const std::string payload = BuildAccelPayload(guest_id, meta);
-    const bool sent =
-        !payload.empty() &&
-        SendMessage(accel_kind, copied.width, copied.height, x, y,
-                    payload.data(), static_cast<uint32_t>(payload.size()));
-    if (!sent) {
-      DiscardAcceleratedFrame(copied);
-    }
-    return sent;
-  };
-
+  if (info.extra.has_capture_counter) {
+    copied_captures_[surface] = info.extra.capture_counter;
+  }
+  CopiedAccelFrame copied{};
+  if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
+    accelerated_drop_reason_ = "the frame could not be handed to the window";
+    dropped_accelerated_paints_.emplace_back(browser, type);
+    EmitBridgeEvent("\"osr.accel_copy_dropped\"", "{}");
+    return;
+  }
+  if (TraceEnabled() && (frame_w != static_cast<int>(copied.width) ||
+                         frame_h != static_cast<int>(copied.height))) {
+    std::fprintf(stderr,
+                 "Sabine CEF: accelerated metadata mismatch reported=%dx%d "
+                 "resource=%ux%u\n",
+                 frame_w, frame_h, copied.width, copied.height);
+    std::fflush(stderr);
+  }
+  const AcceleratedContent content{static_cast<uint32_t>(info.format),
+                                   reported_visible};
+  const bool sent = SendAcceleratedFrame(*target, copied, content);
+#if defined(OS_LINUX)
+  if (sent && type == PET_VIEW) {
+    SettleWhenPaused(surface, browser, content);
+  }
+#endif
   if (GuestView* guest = GuestForBrowser(browser)) {
-    if (type == PET_POPUP) {
-      send_accel(kGuestAccel, guest->id + "/popup",
-                 guest->bounds.x + guest_popup_rect_.x,
-                 guest->bounds.y + guest_popup_rect_.y);
-      return;
-    }
-    if (send_accel(kGuestAccel, guest->id, guest->bounds.x, guest->bounds.y) &&
-        !guest->painted) {
+    if (sent && type == PET_VIEW && !guest->painted) {
       guest->painted = true;
       if (guest->id == kSabinePopupGuestId) {
         EmitBridgeEvent("\"popup.open\"", "{}");
@@ -500,17 +472,69 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     }
     return;
   }
-  if (view_hidden_ || !browser_ || !browser_->IsSame(browser)) {
-    return;
-  }
-  const uint32_t kind = type == PET_POPUP ? kPopupAccel : kMainAccel;
-  const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
-  const int32_t y = type == PET_POPUP ? popup_rect_.y : 0;
-  [[maybe_unused]] const bool sent = send_accel(kind, std::string(), x, y);
 #if defined(OS_LINUX)
   accelerated_paint_seen_ |= sent && type == PET_VIEW;
 #endif
   if (type == PET_VIEW) {
     CompleteResizeFrame(reported_visible.width, reported_visible.height);
   }
+}
+
+std::optional<SabineOsrHandler::AcceleratedTarget>
+SabineOsrHandler::AcceleratedTargetFor(CefRefPtr<CefBrowser> browser,
+                                       PaintElementType type) {
+  if (GuestView* guest = GuestForBrowser(browser)) {
+    if (type == PET_POPUP) {
+      return AcceleratedTarget{kGuestAccel, guest->id + "/popup",
+                               guest->bounds.x + guest_popup_rect_.x,
+                               guest->bounds.y + guest_popup_rect_.y};
+    }
+    return AcceleratedTarget{kGuestAccel, guest->id, guest->bounds.x,
+                             guest->bounds.y};
+  }
+  if (view_hidden_ || !browser_ || !browser_->IsSame(browser)) {
+    return std::nullopt;
+  }
+  if (type == PET_POPUP) {
+    return AcceleratedTarget{kPopupAccel, std::string(), popup_rect_.x,
+                             popup_rect_.y};
+  }
+  return AcceleratedTarget{kMainAccel, std::string(), 0, 0};
+}
+
+bool SabineOsrHandler::SendAcceleratedFrame(const AcceleratedTarget& target,
+                                            const CopiedAccelFrame& copied,
+                                            const AcceleratedContent& content) {
+  const int coded_width = static_cast<int>(copied.width);
+  const int coded_height = static_cast<int>(copied.height);
+  CefRect visible = content.visible;
+  const int64_t visible_right = static_cast<int64_t>(visible.x) + visible.width;
+  const int64_t visible_bottom =
+      static_cast<int64_t>(visible.y) + visible.height;
+  if (visible.x < 0 || visible.y < 0 || visible.width <= 0 ||
+      visible.height <= 0 || visible_right > coded_width ||
+      visible_bottom > coded_height) {
+    visible = CefRect(0, 0, coded_width, coded_height);
+  }
+
+  AccelPaintMeta meta;
+  meta.format = content.format;
+  meta.visible_x = visible.x;
+  meta.visible_y = visible.y;
+  meta.visible_width = static_cast<uint32_t>(visible.width);
+  meta.visible_height = static_cast<uint32_t>(visible.height);
+  meta.resource_id = copied.resource_id;
+  meta.resource_slot = copied.resource_slot;
+  meta.shared_handle = copied.shared_handle;
+  meta.slot_token = copied.slot_token;
+
+  const std::string payload = BuildAccelPayload(target.guest_id, meta);
+  const bool sent =
+      !payload.empty() &&
+      SendMessage(target.kind, copied.width, copied.height, target.x, target.y,
+                  payload.data(), static_cast<uint32_t>(payload.size()));
+  if (!sent) {
+    DiscardAcceleratedFrame(copied);
+  }
+  return sent;
 }

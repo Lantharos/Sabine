@@ -32,6 +32,11 @@ struct OwnedSlot {
   bool filled = false;
   uint64_t token = 0;
   PixelRegion stale;
+  // CEF passes no fence with a frame (chromiumembedded/cef#4313), and drivers
+  // that attach none to the dma-buf, such as NVIDIA's, let a copy start
+  // before Chromium finished drawing. The pixels a copy took for new damage
+  // are copied again the next time the slot receives a frame.
+  PixelRegion unsettled;
 };
 
 struct Source {
@@ -47,6 +52,9 @@ struct SurfaceSlots {
   std::array<OwnedSlot, kSlotsPerSurface> slots;
   uint32_t next = 0;
   std::vector<Source> sources;
+  // The use stamp of the source the last frame was copied from.
+  uint64_t last_source = 0;
+  SharedFormat last_format = SharedFormat::kBgra;
 };
 
 std::map<AcceleratedSurfaceKey, SurfaceSlots> g_surfaces;
@@ -163,7 +171,7 @@ bool Copy(VulkanContext* vulkan,
           VkImage source,
           OwnedSlot* slot,
           const PixelRegion& region,
-          int fd) {
+          std::optional<int> drawing_fd) {
   DmabufImage* target = &slot->image;
   const uint32_t ours = vulkan->queue_family;
   const uint32_t external = vulkan->external_queue_family;
@@ -207,7 +215,7 @@ bool Copy(VulkanContext* vulkan,
 
   const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
   VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-  if (WaitForProducer(vulkan, fd)) {
+  if (drawing_fd && WaitForProducer(vulkan, *drawing_fd)) {
     submit.waitSemaphoreCount = 1;
     submit.pWaitSemaphores = &vulkan->producer_done;
     submit.pWaitDstStageMask = &wait_stage;
@@ -249,10 +257,12 @@ bool EnsureSlot(VulkanContext* vulkan,
   return true;
 }
 
+// A frame copied as it arrives may still be drawing, so `drawing_fd` names
+// the dma-buf whose fences the copy waits for; a finished frame has none.
 bool CopyIntoSlot(VulkanContext* vulkan,
                   const Source& source,
                   SharedFormat format,
-                  int fd,
+                  std::optional<int> drawing_fd,
                   OwnedSlot* slot,
                   AccelDmabufCopiedFrame* out) {
   const uint32_t width = source.image.width;
@@ -261,15 +271,19 @@ bool CopyIntoSlot(VulkanContext* vulkan,
                   &out->retired_resource_ids)) {
     return false;
   }
-  const PixelRegion region =
-      slot->stale.Within(static_cast<int>(width), static_cast<int>(height));
+  const int surface_width = static_cast<int>(width);
+  const int surface_height = static_cast<int>(height);
+  const PixelRegion changed = slot->stale.Within(surface_width, surface_height);
+  PixelRegion region = changed;
+  region.Unite(slot->unsettled.Within(surface_width, surface_height));
   if (!region.empty()) {
-    if (!Copy(vulkan, source.image.image, slot, region, fd)) {
+    if (!Copy(vulkan, source.image.image, slot, region, drawing_fd)) {
       return false;
     }
     slot->filled = true;
   }
   slot->stale = {};
+  slot->unsettled = drawing_fd ? changed : PixelRegion{};
   slot->in_use = true;
   slot->token = g_next_token++;
   out->fd = slot->image.fd;
@@ -281,6 +295,17 @@ bool CopyIntoSlot(VulkanContext* vulkan,
   out->stride = slot->image.stride;
   out->offset = slot->image.offset;
   return true;
+}
+
+std::optional<uint32_t> FreeSlot(SurfaceSlots& slots) {
+  const uint32_t first_slot = slots.next++ % kSlotsPerSurface;
+  for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
+    const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
+    if (!slots.slots[slot_index].in_use) {
+      return slot_index;
+    }
+  }
+  return std::nullopt;
 }
 
 DmabufCopy CopyFrame(VulkanContext* vulkan,
@@ -295,23 +320,19 @@ DmabufCopy CopyFrame(VulkanContext* vulkan,
   for (OwnedSlot& slot : slots.slots) {
     slot.stale.Unite(damage);
   }
-  const uint32_t first_slot = slots.next++ % kSlotsPerSurface;
-  for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
-    const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
-    OwnedSlot& slot = slots.slots[slot_index];
-    if (slot.in_use) {
-      continue;
-    }
-    Source* source =
-        SourceFor(vulkan, slots.sources, info, UnormFormat(format));
-    if (!source ||
-        !CopyIntoSlot(vulkan, *source, format, info.planes[0].fd, &slot, out)) {
-      return DmabufCopy::kFailed;
-    }
-    out->slot_index = slot_index;
-    return DmabufCopy::kCopied;
+  const std::optional<uint32_t> slot_index = FreeSlot(slots);
+  if (!slot_index) {
+    return DmabufCopy::kSlotsBusy;
   }
-  return DmabufCopy::kSlotsBusy;
+  Source* source = SourceFor(vulkan, slots.sources, info, UnormFormat(format));
+  if (!source || !CopyIntoSlot(vulkan, *source, format, info.planes[0].fd,
+                               &slots.slots[*slot_index], out)) {
+    return DmabufCopy::kFailed;
+  }
+  slots.last_source = source->last_use;
+  slots.last_format = format;
+  out->slot_index = *slot_index;
+  return DmabufCopy::kCopied;
 }
 
 void ForgetSurfaces(VulkanContext* vulkan, std::vector<uint64_t>* retired) {
@@ -377,6 +398,36 @@ DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
   ForgetSurfaces(vulkan, &out->retired_resource_ids);
   g_device_lost_at = std::chrono::steady_clock::now();
   return ReopenAndCopy(surface, info, damage, out);
+}
+
+DmabufCopy CopyFinishedDmabufFrame(const AcceleratedSurfaceKey& surface,
+                                   AccelDmabufCopiedFrame* out) {
+  const auto found = g_surfaces.find(surface);
+  VulkanContext* vulkan = SharedVulkanContext();
+  if (found == g_surfaces.end() || g_device_lost_at || !vulkan) {
+    return DmabufCopy::kFailed;
+  }
+  SurfaceSlots& slots = found->second;
+  const auto source = std::find_if(
+      slots.sources.begin(), slots.sources.end(), [&](const Source& candidate) {
+        return candidate.last_use == slots.last_source;
+      });
+  if (source == slots.sources.end()) {
+    return DmabufCopy::kFailed;
+  }
+  const std::optional<uint32_t> slot_index = FreeSlot(slots);
+  if (!slot_index) {
+    return DmabufCopy::kSlotsBusy;
+  }
+  OwnedSlot& slot = slots.slots[*slot_index];
+  slot.stale = PixelRegion::Whole(static_cast<int>(source->image.width),
+                                  static_cast<int>(source->image.height));
+  if (!CopyIntoSlot(vulkan, *source, slots.last_format, std::nullopt, &slot,
+                    out)) {
+    return DmabufCopy::kFailed;
+  }
+  out->slot_index = *slot_index;
+  return DmabufCopy::kCopied;
 }
 
 void ReleaseAcceleratedDmabufFrame(uint64_t slot_token) {

@@ -99,7 +99,7 @@ set(SABINE_HOST_SOURCES
   osr/accelerated/linux/dmabuf_copy.h
   osr/accelerated/linux/dmabuf_image.cc
   osr/accelerated/linux/dmabuf_image.h
-  osr/accelerated/linux/settled_resize.cc
+  osr/accelerated/linux/settle.cc
   osr/accelerated/linux/vulkan_context.cc
   osr/accelerated/linux/vulkan_context.h
   osr/paint/shared_pool.cc
@@ -127,7 +127,7 @@ if(NOT OS_LINUX)
     osr/accelerated/linux/dmabuf_copy.h
     osr/accelerated/linux/dmabuf_image.cc
     osr/accelerated/linux/dmabuf_image.h
-    osr/accelerated/linux/settled_resize.cc
+    osr/accelerated/linux/settle.cc
     osr/accelerated/linux/vulkan_context.cc
     osr/accelerated/linux/vulkan_context.h
   )

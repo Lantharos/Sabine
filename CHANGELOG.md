@@ -8,6 +8,14 @@
 - Touchpad scrolling moves pages as far as the fingers travel on scaled displays, where it used to
   scroll farther by the display scale, such as 1.5 times as far at 150%. Mouse wheels scroll as
   before.
+- Fix Linux windows on NVIDIA keeping parts of an older frame after the page changed, such as a
+  settings page showing the previous page's title until something else repainted. NVIDIA's driver
+  lets a frame be copied before Chromium has finished drawing it. A part that changed is now copied
+  again with the next frame, and once a page stops painting for 100 milliseconds, its last frame is
+  copied again whole, without asking Chromium for another one.
+- Fix icon edges and rounded corners on Linux staying as they were before an animation, since
+  Chromium changes them without reporting it. The whole copy after a page stops painting picks
+  them up.
 
 # Sabine 0.45
 

@@ -225,8 +225,8 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/accelerated/linux/dmabuf_image.h"),
     ),
     (
-        "osr/accelerated/linux/settled_resize.cc",
-        include_str!("../shared/osr/accelerated/linux/settled_resize.cc"),
+        "osr/accelerated/linux/settle.cc",
+        include_str!("../shared/osr/accelerated/linux/settle.cc"),
     ),
     (
         "osr/accelerated/linux/vulkan_context.cc",

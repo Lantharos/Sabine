@@ -36,11 +36,18 @@ bool AcceleratedDmabufAvailable();
 // CEF returns its dma-bufs to Chromium's pool when OnAcceleratedPaint returns,
 // so each frame is copied on the GPU into a Sabine-owned dma-buf that stays
 // valid until the compositor releases its slot. Only the pixels that changed
-// since the chosen slot last received a frame are copied.
+// since the chosen slot last received a frame are copied, together with the
+// pixels its previous copy took from a frame that may still have been drawing.
 DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
                                       const CefAcceleratedPaintInfo& info,
                                       const PixelRegion& damage,
                                       AccelDmabufCopiedFrame* out);
+// Copies the whole of the last frame a surface received again, from the
+// dma-buf it still holds. Once the page has stopped painting, Chromium has
+// finished drawing that frame, so the copy holds every pixel as drawn, also
+// those Chromium changed without reporting them as damage.
+DmabufCopy CopyFinishedDmabufFrame(const AcceleratedSurfaceKey& surface,
+                                   AccelDmabufCopiedFrame* out);
 void ReleaseAcceleratedDmabufFrame(uint64_t slot_token);
 std::vector<uint64_t> RetireAcceleratedDmabufBrowser(int browser_id);
 

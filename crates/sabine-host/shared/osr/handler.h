@@ -33,6 +33,9 @@
 #include "include/cef_request_context.h"
 #include "include/cef_values.h"
 #include "osr/accelerated/damage.h"
+#if defined(OS_LINUX)
+#include "osr/accelerated/linux/dmabuf_copy.h"
+#endif
 #if defined(OS_MAC)
 #include <memory>
 
@@ -259,7 +262,6 @@ class SabineOsrHandler : public CefClient,
 #if defined(OS_LINUX)
   void UseAcceleratedPaint(bool enabled);
   void WatchAcceleratedPaint();
-  void RepaintWholeOnceResizeSettles();
 #endif
 
  private:
@@ -283,6 +285,26 @@ class SabineOsrHandler : public CefClient,
     uint64_t slot_token = 0;
   };
 
+  // Where a surface's accelerated frames go in the window.
+  struct AcceleratedTarget {
+    uint32_t kind = 0;
+    std::string guest_id;
+    int32_t x = 0;
+    int32_t y = 0;
+  };
+
+  // What a copied frame holds: its color format and the part the page fills.
+  struct AcceleratedContent {
+    uint32_t format = 0;
+    CefRect visible;
+  };
+
+  std::optional<AcceleratedTarget> AcceleratedTargetFor(
+      CefRefPtr<CefBrowser> browser,
+      PaintElementType type);
+  bool SendAcceleratedFrame(const AcceleratedTarget& target,
+                            const CopiedAccelFrame& copied,
+                            const AcceleratedContent& content);
   bool CopyAcceleratedFrame(const sabine_osr::AcceleratedSurfaceKey& surface,
                             const sabine_osr::PixelRegion& damage,
                             const CefAcceleratedPaintInfo& info,
@@ -300,8 +322,25 @@ class SabineOsrHandler : public CefClient,
   void ReportAcceleratedPaintUnavailable();
   void ReportMissingAcceleratedPaint();
   void RepaintAllSoon();
-  bool TakeSettledResizeFrame(CefRefPtr<CefBrowser> browser,
-                              PaintElementType type);
+  bool ShareDmabufCopy(sabine_osr::DmabufCopy result,
+                       const sabine_osr::AccelDmabufCopiedFrame& copied,
+                       CopiedAccelFrame* out);
+
+  // A page frame shown as copied while Chromium may still have been drawing
+  // it, copied again once the page stops painting.
+  struct UnsettledFrame {
+    CefRefPtr<CefBrowser> browser;
+    AcceleratedContent content;
+    std::chrono::steady_clock::time_point painted_at;
+  };
+
+  void SettleWhenPaused(const sabine_osr::AcceleratedSurfaceKey& surface,
+                        CefRefPtr<CefBrowser> browser,
+                        const AcceleratedContent& content);
+  void ScheduleSettle(std::chrono::milliseconds delay);
+  void SettlePausedFrames();
+  void SettleFrame(const sabine_osr::AcceleratedSurfaceKey& surface,
+                   const UnsettledFrame& frame);
 #endif
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
@@ -451,8 +490,8 @@ class SabineOsrHandler : public CefClient,
   bool accelerated_paint_ = false;
   bool accelerated_paint_seen_ = false;
   bool accelerated_paint_failed_ = false;
-  uint64_t resize_generation_ = 0;
-  bool settled_resize_frame_pending_ = false;
+  std::map<sabine_osr::AcceleratedSurfaceKey, UnsettledFrame> unsettled_frames_;
+  bool settle_pending_ = false;
   bool repaint_all_pending_ = false;
 #endif
   std::string accelerated_drop_reason_;
