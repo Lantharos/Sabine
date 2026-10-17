@@ -65,8 +65,8 @@ impl OsrNativeHost {
         let image = self.image_id(&frame.surface);
         if image == ImageId::Main {
             self.main_surface = Some(geometry);
-            if self.main_load_ready {
-                self.loading = None;
+            if self.page_ready() {
+                self.finish_loading();
             }
             self.clear_pending_resize_paint();
         } else {

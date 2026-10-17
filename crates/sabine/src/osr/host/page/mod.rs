@@ -5,8 +5,8 @@ mod notifications;
 mod paste_gesture;
 
 use sabine_bridge::{
-    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND, INHIBIT_SHORTCUTS_COMMAND,
-    SET_REGIONS_COMMAND,
+    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND, HOLD_REVEAL_COMMAND,
+    INHIBIT_SHORTCUTS_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -87,6 +87,22 @@ impl OsrNativeHost {
                 request.request_id,
                 Ok(self.appearance_json()),
             ),
+            HOLD_REVEAL_COMMAND => {
+                self.hold_reveal();
+                self.send_bridge_response(
+                    request.browser_id,
+                    request.request_id,
+                    Ok(serde_json::Value::Null),
+                );
+            }
+            REVEAL_COMMAND => {
+                self.reveal_page();
+                self.send_bridge_response(
+                    request.browser_id,
+                    request.request_id,
+                    Ok(serde_json::Value::Null),
+                );
+            }
             CONTROLS_OVERLAY_COMMAND => self.send_bridge_response(
                 request.browser_id,
                 request.request_id,

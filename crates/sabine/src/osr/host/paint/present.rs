@@ -64,6 +64,7 @@ impl OsrNativeHost {
             self.effect_regions_dirty = false;
             self.update_effect_regions();
         }
+        self.drive_loading_fade();
         true
     }
 
@@ -125,8 +126,8 @@ impl OsrNativeHost {
             }));
         }
         self.draw_titlebar(list, width);
-        if self.loading.is_some_and(|loading| loading.revealed()) {
-            self.draw_loading(list, width, height);
+        if let Some(loading) = self.loading.filter(|loading| loading.revealed()) {
+            self.draw_loading(list, loading, width, height, 1.0);
             return;
         }
         if !self.main_surface_ready() {
@@ -147,6 +148,12 @@ impl OsrNativeHost {
         if let Some((popup_id, popup)) = popup {
             let image = ImageId::Overlay(Arc::clone(popup_id));
             list.push(surface_image(image, popup.geometry, top, scale));
+        }
+        if let Some((fade, opacity)) = self
+            .loading_fade
+            .and_then(|fade| Some((fade, fade.opacity()?)))
+        {
+            self.draw_loading(list, fade.loading, width, height, opacity);
         }
         self.draw_tooltip(list, width, height);
         self.draw_context_menu(list);

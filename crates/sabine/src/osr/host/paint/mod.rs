@@ -6,5 +6,6 @@ mod ingest;
 mod policy;
 mod present;
 mod resize;
+mod reveal;
 
 pub(in crate::osr::host) use gpu_recovery::GpuReconnect;

@@ -1,3 +1,13 @@
+# Unreleased
+
+- Launching windows appear with their page's first frame. Sabine no longer maps a window on its
+  loading screen after 120 milliseconds; it waits for the page and shows the loading screen only
+  when a launch takes longer than 1.5 seconds. Once the page is ready, the loading screen fades out
+  over it instead of disappearing in one frame.
+- `appWindow.revealWhen(ready)` keeps a window off screen until the page's first real view is in the
+  document, for pages that fetch what they show after loading. The window appears with the next
+  frame the page paints, or after five seconds at most.
+
 # Sabine 0.44
 
 - Sabine uses zbus 6 on Linux. Apps that talk to D-Bus themselves should move to zbus 6 as well, so

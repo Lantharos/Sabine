@@ -10,6 +10,10 @@ pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
+/// Holds back the window's first frame until the page sends
+/// [`REVEAL_COMMAND`], so the window appears with the page's first view.
+pub const HOLD_REVEAL_COMMAND: &str = "sabine.window.holdReveal";
+pub const REVEAL_COMMAND: &str = "sabine.window.reveal";
 /// Sent when the corner the system's window controls cover changes.
 pub const CONTROLS_OVERLAY_EVENT: &str = "window.controlsOverlay";
 pub const APPEARANCE_COMMAND: &str = "sabine.system.appearance";
@@ -23,12 +27,14 @@ pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
 /// in the drag's `text/uri-list`.
 pub const DRAG_FILES_COMMAND: &str = "sabine.drag.files";
 
-const WINDOW_COMMANDS: [&str; 9] = [
+const WINDOW_COMMANDS: [&str; 11] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
+    HOLD_REVEAL_COMMAND,
+    REVEAL_COMMAND,
     APPEARANCE_COMMAND,
     NOTIFICATION_SHOW_COMMAND,
     NOTIFICATION_CLOSE_COMMAND,

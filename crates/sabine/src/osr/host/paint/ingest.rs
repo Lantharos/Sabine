@@ -74,7 +74,7 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn main_surface_ready(&self) -> bool {
-        self.main_load_ready && self.main_surface.is_some()
+        self.page_ready() && self.main_surface.is_some()
     }
 
     pub(in crate::osr::host) fn accepts_paint(&self) -> bool {
@@ -106,8 +106,8 @@ impl OsrNativeHost {
         self.place_overlay(&image, geometry);
         if batch.surface == OsrSurface::Main {
             self.main_surface = Some(geometry);
-            if self.main_load_ready {
-                self.loading = None;
+            if self.page_ready() {
+                self.finish_loading();
             }
             self.clear_pending_resize_paint();
         }

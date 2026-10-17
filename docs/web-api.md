@@ -132,6 +132,19 @@ await appWindow.setRegions({
 Rust code can do the same with `set_regions` or, for one window, `set_regions_of` on the app's
 `BridgeEventEmitter`.
 
+A window appears as soon as its page has loaded and painted. A page that still fetches what its
+first view shows can keep the window off screen until that view is ready, so it never opens on an
+empty frame. Call `revealWhen` while the page starts and settle the promise once the view is in the
+document:
+
+```js
+appWindow.revealWhen(loadSettings().then(render));
+```
+
+The window then appears with the next frame the page paints. If the promise takes longer than five
+seconds, the window shows the page anyway, and a launch slower than 1.5 seconds shows Sabine's
+loading screen in the meantime, which fades into the page.
+
 ## Tray
 
 An app that configures a tray icon can change it while it runs. A left click on the icon arrives

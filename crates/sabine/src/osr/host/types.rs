@@ -24,7 +24,16 @@ pub(super) const FALLBACK_ACTIVE_FRAME_RATE: u32 = 60;
 /// Wayland briefly drops focus/occlusion around interactive move. Suspending
 /// immediately thrashes lifecycle on the secondary (handed-off) window.
 pub(super) const LIFECYCLE_SUSPEND_DEBOUNCE: Duration = Duration::from_millis(200);
+/// How long a window that is already on screen waits before it shows the
+/// loading screen, such as after a reload.
 pub(super) const LOADING_REVEAL_DELAY: Duration = Duration::from_millis(120);
+/// How long a launching window stays unmapped while its page loads. Most pages
+/// paint well within it, so the window first appears with its real content;
+/// slower ones show the loading screen, which fades into the page.
+pub(super) const LAUNCH_LOADING_REVEAL_DELAY: Duration = Duration::from_millis(1_500);
+pub(super) const LOADING_FADE: Duration = Duration::from_millis(167);
+/// The longest a page may hold back its first frame with `revealWhen`.
+pub(super) const REVEAL_HOLD_LIMIT: Duration = Duration::from_secs(5);
 pub(in crate::osr) const LOADING_ANIMATION_INTERVAL: Duration = Duration::from_millis(100);
 pub(in crate::osr) const LOADING_MESSAGE_INTERVAL: Duration = Duration::from_millis(3_200);
 pub(super) const TOOLTIP_REVEAL_DELAY: Duration = Duration::from_millis(500);
@@ -118,6 +127,21 @@ pub(in crate::osr) struct NativeLoading {
     pub(in crate::osr) stall_reported: bool,
 }
 
+/// A loading screen fading out over the page that replaced it.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LoadingFade {
+    pub(super) loading: NativeLoading,
+    pub(super) started: Instant,
+}
+
+impl LoadingFade {
+    /// The loading screen's opacity, easing out so the page shows at once.
+    pub(super) fn opacity(self) -> Option<f32> {
+        let progress = self.started.elapsed().as_secs_f32() / LOADING_FADE.as_secs_f32();
+        (progress < 1.0).then(|| (1.0 - progress).powi(3))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct NativeTooltip {
     pub(super) text: Arc<str>,
@@ -154,9 +178,9 @@ impl NativeTooltip {
 }
 
 impl NativeLoading {
-    pub(in crate::osr) fn new() -> Self {
+    pub(in crate::osr) fn new(reveal_delay: Duration) -> Self {
         let started = Instant::now();
-        let reveal_at = started + LOADING_REVEAL_DELAY;
+        let reveal_at = started + reveal_delay;
         Self {
             started,
             reveal_at,

@@ -81,6 +81,13 @@
     controlsOverlay() {
       return window.sabine.bridge.invoke("sabine.window.controlsOverlay");
     },
+    revealWhen(ready) {
+      const reveal = () => requestAnimationFrame(() => {
+        window.sabine.bridge.invoke("sabine.window.reveal").catch(() => {});
+      });
+      window.sabine.bridge.invoke("sabine.window.holdReveal").catch(() => {});
+      Promise.resolve(ready).then(reveal, reveal);
+    },
   });
   Object.defineProperties(window.sabine.window, {
     visible: { get: () => windowState.visible, configurable: true },

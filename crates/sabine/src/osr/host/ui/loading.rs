@@ -5,18 +5,19 @@ use crate::window::style::Color;
 
 use super::loading_messages::loading_message;
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::types::{LOADING_ANIMATION_INTERVAL, LOADING_MESSAGE_INTERVAL};
+use crate::osr::host::types::{
+    LOADING_ANIMATION_INTERVAL, LOADING_MESSAGE_INTERVAL, NativeLoading,
+};
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn draw_loading(
         &self,
         list: &mut DisplayList,
+        loading: NativeLoading,
         width: f32,
         height: f32,
+        opacity: f32,
     ) {
-        let Some(loading) = self.loading else {
-            return;
-        };
         let content_y = self.titlebar_height();
         let content_height = (height - content_y).max(1.0);
         list.push(RectCommand {
@@ -24,7 +25,7 @@ impl OsrNativeHost {
             y: content_y,
             width,
             height: content_height,
-            color: self.config.background_color,
+            color: self.config.background_color.opacity(opacity),
         });
         let center_y = content_y + content_height * 0.5;
         list.push(TextCommand {
@@ -40,7 +41,7 @@ impl OsrNativeHost {
             height: 24.0,
             size: 14.0,
             line_height: 20.0,
-            color: Color::TEXT.opacity(0.78),
+            color: Color::TEXT.opacity(0.78 * opacity),
             align: TextAlign::Center,
         });
         let track_width = (width - 48.0).clamp(1.0, 112.0).min(width.max(1.0));
@@ -48,14 +49,14 @@ impl OsrNativeHost {
         let phase = (loading.started.elapsed().as_millis() / 100) as usize % 9;
         for index in 0..3 {
             let distance = phase.abs_diff(index * 3).min(9 - phase.abs_diff(index * 3));
-            let opacity = if distance <= 1 { 0.82 } else { 0.20 };
+            let dot_opacity = if distance <= 1 { 0.82 } else { 0.20 };
             list.push(RoundedRectCommand {
                 x: track_x + index as f32 * (track_width + 8.0) / 3.0,
                 y: center_y + 4.0,
                 width: (track_width - 16.0) / 3.0,
                 height: 3.0,
                 radius: 2.0,
-                color: Color::TEXT.opacity(opacity),
+                color: Color::TEXT.opacity(dot_opacity * opacity),
             });
         }
     }

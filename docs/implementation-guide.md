@@ -828,14 +828,18 @@ a page loads while the window is not floating. While any of them is set, Sabine 
 of the window's adaptive blur, opaque and input regions and of the Sabine chrome background, since
 the window then meets the screen's edges.
 
-Visible windows remain unmapped until the first browser frame when startup or wake completes
-quickly. After 120 milliseconds, Sabine presents a neutral native loading surface using the same
-GPU compositor, window chrome, and app background configured with
-`.background_color(SabineColor::rgb8(r, g, b))`. The default is `#111113`. The same color seeds CEF
-before the document paints, avoiding a surface-color jump when the native loader disappears. Its
-loading copy rotates every 3.2 seconds from a 70% practical, 20% whimsical, and 10% strange pool
-without repeating consecutively. When the browser exits unexpectedly, the window shows the same
-loading surface while Sabine starts a new one.
+A launching window stays unmapped until its page has loaded and painted, so it appears with its
+first frame. Pages that fetch what their first view shows after loading can hold that frame back
+with `appWindow.revealWhen`; the window then maps with the first frame painted after the page
+reveals itself, or after five seconds at most. Only when a launch takes longer than 1.5 seconds does
+Sabine map the window early with a neutral native loading surface, and a window already on screen
+shows it after 120 milliseconds, such as while a page reloads. It uses the same GPU compositor,
+window chrome, and app background configured with `.background_color(SabineColor::rgb8(r, g, b))`.
+The default is `#111113`. The same color seeds CEF before the document paints, avoiding a
+surface-color jump, and once the page is ready the loading surface fades out over it in 167
+milliseconds. Its loading copy rotates every 3.2 seconds from a 70% practical, 20% whimsical, and
+10% strange pool without repeating consecutively. When the browser exits unexpectedly, the window
+shows the same loading surface while Sabine starts a new one.
 
 Chromium does not keep a spare renderer process warm: Sabine apps rarely open new sites, and the
 spare would cost a whole renderer's memory for every app.

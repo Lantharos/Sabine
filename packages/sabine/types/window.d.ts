@@ -32,6 +32,14 @@ export interface SabineWindowApi {
    */
   controlsOverlay(): Promise<ControlsOverlay>;
   /**
+   * Keeps the window off screen until `ready` settles, so it first appears
+   * with the page's first real view instead of an empty one. Call it while the
+   * page starts, before it finishes loading, and settle `ready` once that view
+   * is in the document. Slow pages show Sabine's loading screen in the
+   * meantime, which fades into the page.
+   */
+  revealWhen(ready: PromiseLike<unknown>): void;
+  /**
    * Whether people can see the window: it is shown and the desktop has not
    * reported it out of sight, as it does for minimized or fully covered
    * windows where it can.

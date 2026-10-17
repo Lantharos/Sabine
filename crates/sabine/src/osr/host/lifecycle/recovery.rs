@@ -2,10 +2,7 @@ use std::time::{Duration, Instant};
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
-use crate::osr::host::{
-    native::OsrNativeHost,
-    types::{LifecycleState, NativeLoading},
-};
+use crate::osr::host::{native::OsrNativeHost, types::LifecycleState};
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn fail(&mut self, message: String) {
@@ -43,7 +40,7 @@ impl OsrNativeHost {
         let delay = Duration::from_millis(250 * 4u64.pow(self.recoveries.len() as u32 - 1));
         self.recovery_deadline = Some(now + delay);
         if self.config.visible {
-            self.loading = Some(NativeLoading::new());
+            self.start_loading();
         }
         self.proxy.wake_up();
     }

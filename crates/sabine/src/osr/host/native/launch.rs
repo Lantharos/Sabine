@@ -161,7 +161,7 @@ impl OsrNativeHost {
             renderer.clear_images();
         }
         if self.config.visible {
-            self.loading = Some(crate::osr::host::types::NativeLoading::new());
+            self.start_loading();
         }
         self.launch_child();
     }

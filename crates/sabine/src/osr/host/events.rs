@@ -258,8 +258,9 @@ impl OsrNativeHost {
                     self.clear_media();
                     self.main_load_ready = false;
                     self.main_frame_presented = false;
+                    self.reveal_held_since = None;
                     if self.config.visible && self.loading.is_none() {
-                        self.loading = Some(super::types::NativeLoading::new());
+                        self.start_loading();
                     }
                 }
                 OsrHostEvent::Message(_, OsrMessage::FatalError(message)) => {
@@ -271,8 +272,8 @@ impl OsrNativeHost {
                     super::trace_host(&self.config, "browser.load_ready");
                     self.main_load_ready = true;
                     self.note_main_load_ready();
-                    if self.main_surface.is_some() {
-                        self.loading = None;
+                    if self.main_surface_ready() {
+                        self.finish_loading();
                         needs_redraw = true;
                         needs_initial_present |= !self.presented;
                     }

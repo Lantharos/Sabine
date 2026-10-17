@@ -98,6 +98,9 @@ pub(super) struct OsrNativeHost {
     pub(super) presented: bool,
     pub(super) main_frame_presented: bool,
     pub(super) loading: Option<super::types::NativeLoading>,
+    pub(super) loading_fade: Option<super::types::LoadingFade>,
+    /// When the page asked to hold back its first frame until it is ready.
+    pub(super) reveal_held_since: Option<Instant>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
     pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
     #[cfg(target_os = "linux")]
@@ -214,7 +217,11 @@ impl OsrNativeHost {
             page_media_playing: false,
             presented: false,
             main_frame_presented: false,
-            loading: visible.then(super::types::NativeLoading::new),
+            loading: visible.then(|| {
+                super::types::NativeLoading::new(super::types::LAUNCH_LOADING_REVEAL_DELAY)
+            }),
+            loading_fade: None,
+            reveal_held_since: None,
             tooltip: None,
             context_menu: None,
             #[cfg(target_os = "linux")]
