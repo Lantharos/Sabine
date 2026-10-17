@@ -4,6 +4,9 @@
   loading screen after 120 milliseconds; it waits for the page and shows the loading screen only
   when a launch takes longer than 1.5 seconds. Once the page is ready, the loading screen fades out
   over it instead of disappearing in one frame.
+- On Wayland, an app's first window passes on the activation token it was launched with. A window
+  that takes a while to appear no longer jumps in front of whatever the person switched to while it
+  started; the desktop opens it behind and shows that it wants attention instead.
 - `appWindow.revealWhen(ready)` keeps a window off screen until the page's first real view is in the
   document, for pages that fetch what they show after loading. The window appears with the next
   frame the page paints, or after five seconds at most.

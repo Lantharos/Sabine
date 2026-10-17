@@ -171,7 +171,13 @@ impl OsrNativeHost {
         if let Some(app_id) = &self.config.app_id {
             attributes = attributes.with_name(app_id, app_id);
         }
-        if let Some(token) = self.pending_activation_token.take() {
+        let token = self.pending_activation_token.take().or_else(|| {
+            self.config
+                .activation_token
+                .take()
+                .map(winit::window::ActivationToken::from_raw)
+        });
+        if let Some(token) = token {
             attributes = attributes.with_activation_token(token);
         }
         attributes

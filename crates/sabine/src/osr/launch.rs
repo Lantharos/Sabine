@@ -62,7 +62,7 @@ pub(crate) fn launch_process(
     let host_binary = crate::host::ensure_host(runtime_dir)
         .map_err(|message| SabineError::CreationFailed { message })?;
     metrics.mark("host.ready");
-    let mut child = spawn_osr_host_child(runtime_dir, &host_binary, config, url)?;
+    let mut child = spawn_osr_host_child(runtime_dir, &host_binary, config, url, true)?;
     metrics.mark(format!("osr_host.spawned.pid.{}", child.id()));
     let activity = sabine_bridge::ActivityRegistry::default();
     let bridge_dispatch = spawn_bridge_dispatch(
@@ -116,11 +116,14 @@ pub(crate) struct OpenWindowContext {
     pub(crate) bridge: sabine_bridge::BridgeRegistry,
 }
 
+/// Only the window an app opens first was asked for by whoever launched the
+/// app, so only it carries the launch's activation token.
 pub(crate) fn spawn_osr_host_child(
     runtime_dir: &Path,
     host_binary: &Path,
     config: &SabineWindowConfig,
     url: &str,
+    launched: bool,
 ) -> SabineResult<std::process::Child> {
     let _ = require_app_id(config)?;
     let host_config_path =
@@ -173,7 +176,12 @@ pub(crate) fn spawn_osr_host_child(
     #[cfg(target_os = "linux")]
     {
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
+        if launched {
+            body["activation_token"] = crate::desktop::startup_activation_token().into();
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = launched;
     std::fs::write(&host_config_path, body.to_string()).map_err(|error| {
         SabineError::CreationFailed {
             message: format!("failed to write Sabine OSR host config: {error}"),
@@ -188,6 +196,8 @@ pub(crate) fn spawn_osr_host_child(
     command
         .arg(OSR_HOST_ARG)
         .arg(&host_config_path)
+        .env_remove("XDG_ACTIVATION_TOKEN")
+        .env_remove("DESKTOP_STARTUP_ID")
         .stderr(Stdio::piped());
     prepare_bridge_command(&mut command);
     prepare_child_command(&mut command);
@@ -219,6 +229,7 @@ pub(crate) fn attach_open_window(
         &context.host_binary,
         &window_config,
         url,
+        false,
     )?;
     let window_id = child.id();
     let Some(emitter) = process.bridge_emitter.clone() else {

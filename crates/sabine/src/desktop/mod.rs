@@ -33,6 +33,8 @@ use platform::{
 };
 pub use tray::TrayHandle;
 pub(crate) use tray::UPDATE_COMMAND as TRAY_UPDATE_COMMAND;
+#[cfg(target_os = "linux")]
+pub(crate) use unix_instance::startup_activation_token;
 
 pub(crate) const INSTANCE_ALREADY_RUNNING: &str = "another instance is already running";
 

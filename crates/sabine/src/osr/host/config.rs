@@ -46,6 +46,8 @@ pub(crate) struct OsrHostConfig {
     pub remote_devtools_disabled: bool,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
+    #[cfg(target_os = "linux")]
+    pub activation_token: Option<String>,
 }
 
 impl OsrHostConfig {
@@ -176,6 +178,11 @@ impl OsrHostConfig {
                 .get("vaapi_hardware_decode")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            #[cfg(target_os = "linux")]
+            activation_token: value
+                .get("activation_token")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
         })
     }
 }

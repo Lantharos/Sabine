@@ -181,6 +181,10 @@ private IPC directory under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`, so
   `close_window(WindowId)` to tear down one surface; `wait()` returns only after every OSR window
   has exited. If the parent app process exits, its OSR children are terminated; closing a child
   window does not exit the parent.
+- **Launch focus**: on Wayland, an app's first window carries the activation token its launcher
+  handed it (`XDG_ACTIVATION_TOKEN`, or `DESKTOP_STARTUP_ID`). The compositor gives it focus only
+  if the person hasn't used another window since launching it, and otherwise opens it behind and
+  marks it as wanting attention. Windows opened later with `open_window` don't inherit the token.
 - **Second OS launch**: optional `single_instance` still focuses an existing process when enabled.
   Without it, a second launch of the same app uses CEF handoff plus a new per-window socket.
   After exit-24 handoff the secondary host waits up to 15s for the primary CEF process to connect.

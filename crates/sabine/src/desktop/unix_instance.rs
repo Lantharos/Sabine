@@ -200,13 +200,19 @@ fn notify_existing_instance(socket_path: &Path) -> io::Result<()> {
 /// instance needs to raise its window on Wayland.
 #[cfg(target_os = "linux")]
 fn with_startup_activation_token(mut activation: serde_json::Value) -> serde_json::Value {
-    activation["activationToken"] = env::var("XDG_ACTIVATION_TOKEN")
+    activation["activationToken"] = startup_activation_token().into();
+    activation
+}
+
+/// The token the launcher handed this process, which lets its first window
+/// take focus unless the person moved on to something else meanwhile.
+#[cfg(target_os = "linux")]
+pub(crate) fn startup_activation_token() -> Option<String> {
+    env::var("XDG_ACTIVATION_TOKEN")
         .or_else(|_| env::var("DESKTOP_STARTUP_ID"))
         .ok()
         .map(|token| token.trim().to_string())
         .filter(|token| !token.is_empty())
-        .into();
-    activation
 }
 
 #[cfg(target_os = "linux")]
