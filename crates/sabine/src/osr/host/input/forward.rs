@@ -113,6 +113,7 @@ impl OsrNativeHost {
                 0,
             ),
             MouseScrollDelta::PixelDelta(position) => {
+                let position = position.to_logical::<f64>(self.scale());
                 (position.x, position.y, EVENTFLAG_PRECISION_SCROLLING_DELTA)
             }
             _ => return,

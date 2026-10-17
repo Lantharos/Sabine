@@ -5,6 +5,9 @@
   or its browser restarts. Apps that want the loading screen enable it with `splash = true` under
   `[window]` in `Sabine.toml`, optionally with `splash_delay_ms`, or with `.splash(true)` and
   `.splash_after(delay)` on `SabineWindow`.
+- Touchpad scrolling moves pages as far as the fingers travel on scaled displays, where it used to
+  scroll farther by the display scale, such as 1.5 times as far at 150%. Mouse wheels scroll as
+  before.
 
 # Sabine 0.45
 
