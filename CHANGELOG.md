@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.46
 
 - Sabine's loading screen is off by default. A launching window appears with its page's first
   frame however long that takes, and a window on screen keeps its last frame while its page reloads
