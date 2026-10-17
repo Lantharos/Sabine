@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.45
 
 - Launching windows appear with their page's first frame. Sabine no longer maps a window on its
   loading screen after 120 milliseconds; it waits for the page and shows the loading screen only
