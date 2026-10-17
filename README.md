@@ -54,7 +54,14 @@ Generated projects already pin the matching Rust crate and TypeScript helper. Fo
 ```toml
 [dependencies]
 sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.43" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
 ```
+
+The release profile keeps the app binary small: generated projects use it too.
 
 ```sh
 bun add github:Lantharos/Sabine#v0.43

@@ -8,6 +8,11 @@
   requests, so apps can spawn their own async work on it instead of starting another runtime.
 - `bridge_typed_async` registers an async command with typed params and a JSON answer, as
   `bridge_typed` does for synchronous ones.
+- New projects build their release binaries with fat link-time optimization, one codegen unit and
+  stripped symbols, which roughly halves the size of an app. Add the same `[profile.release]` to
+  existing apps, as the README shows. Sabine's own binaries are built this way too.
+- Sabine uses the glow and pollster versions its graphics and file dialog dependencies use, so apps
+  no longer link two copies of each.
 
 # Sabine 0.43
 

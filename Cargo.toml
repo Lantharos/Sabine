@@ -55,14 +55,14 @@ futures-util = "0.3.34"
 getrandom = "0.4.3"
 global-hotkey = "0.9.0"
 glyphon = "0.12.0"
-glow = "0.18.0"
+glow = "0.17.0"
 icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
 khronos-egl = { version = "6.0.0", features = ["dynamic"] }
 libc = "0.2.190"
 libloading = "0.9.0"
 resvg = "0.48.1"
-pollster = "1.0.1"
+pollster = "0.4.0"
 clap = { version = "4.6.7", features = ["derive"] }
 objc2 = "0.6.5"
 block2 = "0.6.2"
@@ -111,6 +111,11 @@ zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }
 dpi = { git = "https://github.com/Lantharos/winit", rev = "d53da931269ee450ba64f90a937b4af1b7895d42" }
 winit-common = { git = "https://github.com/Lantharos/winit", rev = "d53da931269ee450ba64f90a937b4af1b7895d42" }
 winit-core = { git = "https://github.com/Lantharos/winit", rev = "d53da931269ee450ba64f90a937b4af1b7895d42" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
 
 [profile.dev.package.libbz2-rs-sys]
 opt-level = 3

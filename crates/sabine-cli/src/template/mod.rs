@@ -121,6 +121,11 @@ sabine = {sabine_dep}
 serde = {{ version = "1", features = ["derive"] }}
 serde_json = "1"
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+
 [workspace]
 "#
     )
