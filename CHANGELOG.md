@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.44
 
 - Sabine uses zbus 6 on Linux. Apps that talk to D-Bus themselves should move to zbus 6 as well, so
   they carry a single copy of it. Sabine no longer depends on ashpd or ksni: it calls the desktop
