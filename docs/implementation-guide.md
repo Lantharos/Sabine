@@ -589,9 +589,15 @@ Bridge commands are registered on the builder:
 - `bridge_typed` deserializes params into a request type and serializes the result as JSON.
 - `bridge_handler` receives the raw `BridgeCommand`, including `body` bytes and the calling
   `window`, and answers with `BridgeResponse::json` or `BridgeResponse::bytes`.
-- `bridge_handler_async` registers a handler whose future is awaited on a Tokio runtime the bridge
-  starts on first use, so a handler waiting on I/O or timers holds no thread. Synchronous handlers
-  run on four worker threads per window and should not wait on slow work.
+- `bridge_handler_async` and `bridge_typed_async` register handlers whose futures are awaited on
+  `sabine::async_runtime()`, so a handler waiting on I/O or timers holds no thread. Synchronous
+  handlers run on four worker threads per window and should not wait on slow work.
+
+`sabine::async_runtime()` is the process's Tokio runtime: two worker threads, started on first use.
+Sabine runs its own D-Bus work there (notifications, the tray icon, portal requests), and apps spawn
+their background tasks on it too, so a D-Bus connection made on it serves every window. Code that
+cannot be async, such as a synchronous handler, waits on it with `async_runtime().block_on(..)`;
+async code never does.
 - `bridge_descriptor_handler` and `bridge_descriptor_handler_async` take a
   `BridgeCommandDescriptor`, which can limit a command to targets (`desktop`, `linux`, `windows`,
   `macos`) and allow extra origins to call that command only.
@@ -854,7 +860,9 @@ platform registration belongs in `sabine-platform` or `sabine-service`; CEF code
 
 The tray icon behaves the same on every desktop: a left click activates the app (`tray.activate`
 with no `itemId`) and a right click opens its menu, which can hold separators, checkbox items and
-submenus. Linux publishes it as a StatusNotifierItem with the image itself, not an icon theme name.
+submenus. Linux publishes it as a StatusNotifierItem with a dbusmenu, carrying the image itself
+rather than an icon theme name, and registers it again whenever the desktop's
+StatusNotifierWatcher restarts.
 macOS shows only the image in the menu bar, not the title, and draws black-and-white icons, or any
 icon marked `template`, as template images that follow the menu bar's appearance. Without an image,
 or when it cannot be read, every desktop shows a plain dot. `SabineProcess::tray()` returns a

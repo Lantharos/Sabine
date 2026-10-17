@@ -1,3 +1,14 @@
+# Unreleased
+
+- Sabine uses zbus 6 on Linux. Apps that talk to D-Bus themselves should move to zbus 6 as well, so
+  they carry a single copy of it. Sabine no longer depends on ashpd or ksni: it calls the desktop
+  portals and serves its tray icon over D-Bus itself.
+- `sabine::async_runtime()` returns the Tokio runtime Sabine awaits async bridge handlers on. It now
+  has two worker threads and also runs Sabine's notifications, tray icon, appearance and portal
+  requests, so apps can spawn their own async work on it instead of starting another runtime.
+- `bridge_typed_async` registers an async command with typed params and a JSON answer, as
+  `bridge_typed` does for synchronous ones.
+
 # Sabine 0.43
 
 - Fix building apps without a lockfile. Every 8.x release of the zip crate Sabine used was pulled

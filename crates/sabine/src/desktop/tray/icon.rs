@@ -37,6 +37,7 @@ pub(super) fn load(path: Option<&Path>) -> TrayImage {
 impl TrayImage {
     /// Whether every visible pixel is black, or every one white: an icon the
     /// macOS menu bar can tint as a template.
+    #[cfg(not(target_os = "linux"))]
     pub(super) fn is_black_and_white(&self) -> bool {
         let mut visible = self
             .rgba
@@ -60,9 +61,21 @@ impl TrayImage {
         })
     }
 
+    #[cfg(not(target_os = "linux"))]
     pub(super) fn into_icon(self) -> Result<tray_icon::Icon, String> {
         tray_icon::Icon::from_rgba(self.rgba, self.width, self.height)
             .map_err(|error| error.to_string())
+    }
+
+    /// The image as a StatusNotifierItem pixmap: its size and ARGB pixels in
+    /// network byte order.
+    #[cfg(target_os = "linux")]
+    pub(super) fn into_pixmap(self) -> (i32, i32, Vec<u8>) {
+        let mut argb = self.rgba;
+        for pixel in argb.as_chunks_mut::<4>().0 {
+            pixel.rotate_right(1);
+        }
+        (self.width as i32, self.height as i32, argb)
     }
 }
 

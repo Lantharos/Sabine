@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Mutex};
 
-use ashpd::zbus::{Connection, Proxy, message::Message, zvariant::Value};
 use futures_util::StreamExt;
+use zbus::{Connection, Proxy, Variant, message::Message};
 
 use crate::notifications::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
@@ -47,7 +47,7 @@ impl Signal {
 }
 
 impl Freedesktop {
-    pub(super) async fn connect(connection: &Connection) -> ashpd::zbus::Result<Self> {
+    pub(super) async fn connect(connection: &Connection) -> zbus::Result<Self> {
         Ok(Self {
             proxy: Proxy::new(connection, SERVICE, PATH, SERVICE).await?,
             shown: Mutex::default(),
@@ -62,12 +62,15 @@ impl Freedesktop {
     ) -> Result<(), String> {
         let replaces = self.number_of(&notification.id).unwrap_or(0);
         let mut hints = HashMap::from([
-            ("desktop-entry", Value::from(app_id)),
-            ("suppress-sound", Value::from(notification.silent)),
-            ("urgency", Value::from(urgency_level(notification.urgency))),
+            ("desktop-entry", Variant::from(app_id)),
+            ("suppress-sound", Variant::from(notification.silent)),
+            (
+                "urgency",
+                Variant::from(urgency_level(notification.urgency)),
+            ),
         ]);
         if let Some(category) = &notification.category {
-            hints.insert("category", Value::from(category.as_str()));
+            hints.insert("category", Variant::from(category.as_str()));
         }
         let number: u32 = self
             .proxy

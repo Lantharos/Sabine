@@ -4,8 +4,11 @@ mod controls_overlay;
 mod desktop_integration;
 mod effect;
 mod notifications;
+#[cfg(target_os = "linux")]
+pub mod portal;
 mod regions;
 mod shortcut_inhibit;
+mod tasks;
 #[cfg(target_os = "linux")]
 mod wayland_client;
 mod window_options;
@@ -31,6 +34,7 @@ pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRe
 pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]
 pub use shortcut_inhibit::SystemKey;
+pub use tasks::async_runtime;
 pub use window_options::{
     PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
 };

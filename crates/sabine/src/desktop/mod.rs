@@ -23,11 +23,13 @@ use sabine_platform::{
     NativeMessagingHost, PlatformEvent, SingleInstancePolicy, TrayIcon,
 };
 
+#[cfg(not(target_os = "linux"))]
+use platform::UiThread;
 #[cfg(target_os = "windows")]
 pub(crate) use platform::with_app_icon;
 use platform::{
-    GlobalShortcuts, SingleInstanceGuard, UiThread, register_deep_links,
-    register_native_messaging_host, write_autostart_entry,
+    GlobalShortcuts, SingleInstanceGuard, register_deep_links, register_native_messaging_host,
+    write_autostart_entry,
 };
 pub use tray::TrayHandle;
 pub(crate) use tray::UPDATE_COMMAND as TRAY_UPDATE_COMMAND;
@@ -45,7 +47,8 @@ pub struct DesktopServiceState {
     _single_instance: Option<SingleInstanceGuard>,
     #[cfg(target_os = "macos")]
     _app_events: platform::AppEvents,
-    ui_thread: UiThread,
+    #[cfg(not(target_os = "linux"))]
+    _ui_thread: UiThread,
 }
 
 impl std::fmt::Debug for DesktopServiceState {
@@ -66,7 +69,9 @@ impl DesktopServiceState {
 
 impl Drop for DesktopServiceState {
     fn drop(&mut self) {
-        self.ui_thread.queue().run(tray::remove);
+        if let Some(tray) = &self.tray {
+            tray.remove();
+        }
     }
 }
 
@@ -97,11 +102,21 @@ pub fn apply_desktop_services(
     }
     #[cfg(target_os = "macos")]
     let app_events = platform::AppEvents::install(event_sender.clone());
+    #[cfg(target_os = "linux")]
+    let (tray, shortcuts) = (
+        tray_icon.map(|icon| TrayHandle::spawn(icon, &event_sender)),
+        (!global_shortcuts.is_empty())
+            .then(|| GlobalShortcuts::register(global_shortcuts, event_sender.clone())),
+    );
+    #[cfg(not(target_os = "linux"))]
     let ui_thread = UiThread::start()?;
-    let tray = tray_icon.map(|icon| TrayHandle::spawn(ui_thread.queue(), icon, &event_sender));
-    let shortcuts = (!global_shortcuts.is_empty()).then(|| {
-        GlobalShortcuts::register(&ui_thread.queue(), global_shortcuts, event_sender.clone())
-    });
+    #[cfg(not(target_os = "linux"))]
+    let (tray, shortcuts) = (
+        tray_icon.map(|icon| TrayHandle::spawn(ui_thread.queue(), icon, &event_sender)),
+        (!global_shortcuts.is_empty()).then(|| {
+            GlobalShortcuts::register(&ui_thread.queue(), global_shortcuts, event_sender.clone())
+        }),
+    );
     Ok(DesktopServiceState {
         event_receiver,
         tray,
@@ -109,7 +124,8 @@ pub fn apply_desktop_services(
         _single_instance: single_instance,
         #[cfg(target_os = "macos")]
         _app_events: app_events,
-        ui_thread,
+        #[cfg(not(target_os = "linux"))]
+        _ui_thread: ui_thread,
     })
 }
 

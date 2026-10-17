@@ -28,11 +28,29 @@ impl SabineWindow {
         self.bridge_handler(command_name, move |command| {
             let request = serde_json::from_value(command.params)
                 .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")))?;
-            let response = handler(request)?;
-            let value = serde_json::to_value(response).map_err(|error| {
-                BridgeError::new(format!("failed to encode bridge result: {error}"))
-            })?;
-            Ok(BridgeResponse::json(value))
+            json_response(handler(request)?)
+        })
+    }
+
+    /// Registers an async command that deserializes params into `Req` and
+    /// serializes the handler's answer as JSON. It is awaited like
+    /// [`Self::bridge_handler_async`].
+    pub fn bridge_typed_async<Req, Res, F, Fut>(
+        self,
+        command_name: impl Into<String>,
+        handler: F,
+    ) -> Self
+    where
+        Req: serde::de::DeserializeOwned,
+        Res: serde::Serialize,
+        F: Fn(Req) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Res, BridgeError>> + Send + 'static,
+    {
+        self.bridge_handler_async(command_name, move |command| {
+            let request = serde_json::from_value::<Req>(command.params)
+                .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")));
+            let answer = request.map(&handler);
+            async move { json_response(answer?.await?) }
         })
     }
 
@@ -77,4 +95,10 @@ impl SabineWindow {
         self.config.bridge.register_descriptor(descriptor);
         self
     }
+}
+
+fn json_response(answer: impl serde::Serialize) -> BridgeResult {
+    let value = serde_json::to_value(answer)
+        .map_err(|error| BridgeError::new(format!("failed to encode bridge result: {error}")))?;
+    Ok(BridgeResponse::json(value))
 }

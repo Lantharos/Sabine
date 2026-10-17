@@ -39,7 +39,6 @@ rfd.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tray-icon.workspace = true
 url.workspace = true
 wgpu.workspace = true
 winit.workspace = true
@@ -48,17 +47,17 @@ toml = { workspace = true, features = ["parse"] }
 softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd.workspace = true
-tray-icon = { workspace = true, features = ["ksni"] }
 glow.workspace = true
 khronos-egl.workspace = true
 libloading.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
+zbus = { workspace = true, features = ["proxy", "service"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 global-hotkey.workspace = true
+tray-icon.workspace = true
 uds_windows.workspace = true
 windows-core.workspace = true
 windows = { version = "0.62.2", features = [
@@ -101,3 +100,4 @@ block2.workspace = true
 dispatch2.workspace = true
 mach2.workspace = true
 global-hotkey.workspace = true
+tray-icon.workspace = true

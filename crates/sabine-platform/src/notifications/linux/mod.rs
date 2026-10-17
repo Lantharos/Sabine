@@ -5,13 +5,9 @@
 mod freedesktop;
 mod portal;
 
-use std::{
-    sync::{Arc, mpsc},
-    thread::{self, JoinHandle},
-};
-
-use ashpd::zbus::{Connection, fdo::DBusProxy};
-use futures_util::future::{AbortHandle, Abortable};
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+use zbus::{Connection, fdo::DBusProxy, names::BusName};
 
 use super::{Notification, NotificationEvent, NotificationEvents};
 use freedesktop::Freedesktop;
@@ -27,81 +23,53 @@ enum Service {
     Portal(Portal),
 }
 
+/// Shows and closes notifications in the order they were asked for, while
+/// listening for clicks and closes, on Sabine's async runtime.
 pub(super) struct Backend {
-    commands: Option<mpsc::Sender<Command>>,
-    listener: AbortHandle,
-    worker: Option<JoinHandle<()>>,
+    commands: mpsc::UnboundedSender<Command>,
+    worker: JoinHandle<()>,
 }
 
 impl Backend {
     pub(super) fn new(app_id: &str, app_name: &str, events: NotificationEvents) -> Self {
-        let (commands, queue) = mpsc::channel();
-        let (listener, registration) = AbortHandle::new_pair();
+        let (commands, queue) = mpsc::unbounded_channel();
         let app_id = app_id.to_string();
         let app_name = app_name.to_string();
-        let worker = thread::spawn(move || {
-            let service = pollster::block_on(Service::connect(&app_id)).map(Arc::new);
-            let listener = service.as_ref().ok().map(|service| {
-                let service = Arc::clone(service);
-                let events = Arc::clone(&events);
-                let listen =
-                    Abortable::new(async move { service.listen(&events).await }, registration);
-                thread::spawn(move || {
-                    let _ = pollster::block_on(listen);
-                })
-            });
-            for command in queue {
-                match (&service, command) {
-                    (Ok(service), Command::Show(notification)) => {
-                        let id = notification.id.clone();
-                        if let Err(message) =
-                            pollster::block_on(service.show(&app_id, &app_name, notification))
-                        {
-                            events(NotificationEvent::Failed { id, message });
-                        }
-                    }
-                    (Ok(service), Command::Close(id)) => {
-                        pollster::block_on(service.close(&id, &events));
-                    }
-                    (Err(message), Command::Show(notification)) => {
-                        events(NotificationEvent::Failed {
-                            id: notification.id,
-                            message: message.clone(),
-                        });
-                    }
-                    (Err(_), Command::Close(_)) => {}
-                }
-            }
-            if let Some(listener) = listener {
-                let _ = listener.join();
+        let worker = crate::async_runtime().spawn(async move {
+            match Service::connect(&app_id).await {
+                Ok(service) => service.run(&app_id, &app_name, queue, &events).await,
+                Err(message) => refuse(queue, &events, &message).await,
             }
         });
-        Self {
-            commands: Some(commands),
-            listener,
-            worker: Some(worker),
-        }
+        Self { commands, worker }
     }
 
     pub(super) fn show(&self, notification: Notification) {
-        if let Some(commands) = &self.commands {
-            let _ = commands.send(Command::Show(notification));
-        }
+        let _ = self.commands.send(Command::Show(notification));
     }
 
     pub(super) fn close(&self, id: &str) {
-        if let Some(commands) = &self.commands {
-            let _ = commands.send(Command::Close(id.to_string()));
-        }
+        let _ = self.commands.send(Command::Close(id.to_string()));
     }
 }
 
 impl Drop for Backend {
     fn drop(&mut self) {
-        self.commands = None;
-        self.listener.abort();
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+        self.worker.abort();
+    }
+}
+
+async fn refuse(
+    mut queue: mpsc::UnboundedReceiver<Command>,
+    events: &NotificationEvents,
+    message: &str,
+) {
+    while let Some(command) = queue.recv().await {
+        if let Command::Show(notification) = command {
+            events(NotificationEvent::Failed {
+                id: notification.id,
+                message: message.to_string(),
+            });
         }
     }
 }
@@ -117,9 +85,8 @@ impl Service {
             .await
             .map_err(|error| error.to_string())?
             .name_has_owner(
-                freedesktop::SERVICE
-                    .try_into()
-                    .map_err(|error: ashpd::zbus::names::Error| error.to_string())?,
+                BusName::from_static_str(freedesktop::SERVICE)
+                    .map_err(|error| error.to_string())?,
             )
             .await
             .unwrap_or(false);
@@ -129,29 +96,58 @@ impl Service {
                 .map(Self::Freedesktop)
                 .map_err(|error| error.to_string())
         } else {
-            Portal::connect(app_id)
+            Portal::connect(&connection, app_id)
                 .await
                 .map(Self::Portal)
                 .map_err(|error| error.to_string())
         }
     }
 
-    async fn show(
+    async fn run(
         &self,
         app_id: &str,
         app_name: &str,
-        notification: Notification,
-    ) -> Result<(), String> {
-        match self {
-            Self::Freedesktop(service) => service.show(app_id, app_name, notification).await,
-            Self::Portal(service) => service.show(notification).await,
+        mut queue: mpsc::UnboundedReceiver<Command>,
+        events: &NotificationEvents,
+    ) {
+        let listen = self.listen(events);
+        tokio::pin!(listen);
+        let mut listening = true;
+        loop {
+            tokio::select! {
+                () = &mut listen, if listening => listening = false,
+                command = queue.recv() => match command {
+                    Some(command) => self.handle(app_id, app_name, command, events).await,
+                    None => break,
+                },
+            }
         }
     }
 
-    async fn close(&self, id: &str, events: &NotificationEvents) {
-        match self {
-            Self::Freedesktop(service) => service.close(id).await,
-            Self::Portal(service) => service.close(id, events).await,
+    async fn handle(
+        &self,
+        app_id: &str,
+        app_name: &str,
+        command: Command,
+        events: &NotificationEvents,
+    ) {
+        match command {
+            Command::Show(notification) => {
+                let id = notification.id.clone();
+                let shown = match self {
+                    Self::Freedesktop(service) => {
+                        service.show(app_id, app_name, notification).await
+                    }
+                    Self::Portal(service) => service.show(notification).await,
+                };
+                if let Err(message) = shown {
+                    events(NotificationEvent::Failed { id, message });
+                }
+            }
+            Command::Close(id) => match self {
+                Self::Freedesktop(service) => service.close(&id).await,
+                Self::Portal(service) => service.close(&id, events).await,
+            },
         }
     }
 

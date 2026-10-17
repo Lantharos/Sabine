@@ -1,4 +1,4 @@
-use std::{panic::AssertUnwindSafe, sync::OnceLock, thread};
+use std::{panic::AssertUnwindSafe, thread};
 
 use futures_util::FutureExt;
 use sabine_bridge::{BridgeCommand, BridgeError, BridgeFuture, BridgeOutcome, BridgeResult};
@@ -73,8 +73,8 @@ impl BridgeIpcResponse {
 }
 
 /// Runs bridge handlers off the window's reader thread. Synchronous handlers
-/// run on a small pool of workers; async handlers are awaited on one shared
-/// runtime, so a handler that waits does not hold a worker.
+/// run on a small pool of workers; async handlers are awaited on Sabine's
+/// async runtime, so a handler that waits does not hold a worker.
 pub(super) struct BridgeRequestDispatcher {
     requests: crossbeam_channel::Sender<BridgeIpcRequest>,
     responses: crossbeam_channel::Sender<BridgeIpcResponse>,
@@ -119,7 +119,11 @@ impl BridgeRequestDispatcher {
                             }
                         }
                         BridgeOutcome::Pending(future) => {
-                            async_handlers().spawn(answer(reply, future, responses.clone()));
+                            sabine_platform::async_runtime().spawn(answer(
+                                reply,
+                                future,
+                                responses.clone(),
+                            ));
                         }
                     }
                 }
@@ -170,24 +174,6 @@ async fn answer(
 
 fn handler_panicked() -> BridgeError {
     BridgeError::new("Bridge handler panicked")
-}
-
-/// The runtime that awaits async bridge handlers for every window, started
-/// the first time one is called.
-fn async_handlers() -> &'static tokio::runtime::Handle {
-    static HANDLE: OnceLock<tokio::runtime::Handle> = OnceLock::new();
-    HANDLE.get_or_init(|| {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("the bridge's async runtime starts");
-        let handle = runtime.handle().clone();
-        thread::Builder::new()
-            .name("sabine-bridge-async".into())
-            .spawn(move || runtime.block_on(std::future::pending::<()>()))
-            .expect("the bridge's async runtime thread starts");
-        handle
-    })
 }
 
 #[cfg(all(test, unix))]

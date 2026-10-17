@@ -44,7 +44,7 @@ pub use sabine_platform::{
     Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
     NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
     SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
-    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions,
+    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 

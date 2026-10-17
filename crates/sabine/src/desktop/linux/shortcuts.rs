@@ -1,60 +1,45 @@
-use std::{
-    collections::HashMap,
-    thread::{self, JoinHandle},
-};
+use std::collections::HashMap;
 
-use ashpd::desktop::{
-    CreateSessionOptions,
-    global_shortcuts::{BindShortcutsOptions, GlobalShortcuts as Portal, NewShortcut},
-};
-use futures_util::{
-    StreamExt,
-    future::{self, AbortHandle},
-};
+use futures_util::StreamExt;
+use sabine_platform::portal::{self, Options, Results};
 use sabine_platform::{GlobalShortcutActivation, GlobalShortcutRegistration, PlatformEvent};
+use tokio::task::JoinHandle;
+use zbus::{Connection, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::super::{EventQueue, report_shortcut_failure, shortcut_key::key_code};
-use super::{UiQueue, links::ensure_shortcut_host_entry};
+use super::links::ensure_shortcut_host_entry;
 
 type PortalResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type BoundShortcut = (String, HashMap<String, OwnedVariant>);
+
+const GLOBAL_SHORTCUTS: &str = "org.freedesktop.portal.GlobalShortcuts";
 
 /// Every shortcut bound in one GlobalShortcuts portal session, so the
 /// desktop asks about them together.
 pub(in crate::desktop) struct GlobalShortcuts {
-    abort: AbortHandle,
-    thread: Option<JoinHandle<()>>,
+    session: JoinHandle<()>,
 }
 
 impl GlobalShortcuts {
     pub(in crate::desktop) fn register(
-        _queue: &UiQueue,
         registrations: &[GlobalShortcutRegistration],
         events: EventQueue,
     ) -> Self {
         let registrations = registrations.to_vec();
-        let (session, abort) = future::abortable(async move {
+        let session = sabine_platform::async_runtime().spawn(async move {
             if let Err(error) = run_session(&registrations, &events).await {
                 for registration in &registrations {
                     report_shortcut_failure(&events, registration, error.to_string());
                 }
             }
         });
-        let thread = thread::spawn(move || {
-            let _ = pollster::block_on(session);
-        });
-        Self {
-            abort,
-            thread: Some(thread),
-        }
+        Self { session }
     }
 }
 
 impl Drop for GlobalShortcuts {
     fn drop(&mut self) {
-        self.abort.abort();
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        self.session.abort();
     }
 }
 
@@ -62,19 +47,18 @@ async fn run_session(
     registrations: &[GlobalShortcutRegistration],
     events: &EventQueue,
 ) -> PortalResult<()> {
+    let connection = Connection::session().await?;
     if let Some(registration) = registrations
         .iter()
         .find(|registration| registration.app_id.is_some())
     {
-        register_host_app(registration).await?;
+        register_host_app(&connection, registration).await?;
     }
-    let portal = Portal::new().await?;
-    let session = portal
-        .create_session(CreateSessionOptions::default())
-        .await?;
-    let mut activations = portal.receive_activated().await?;
+    let shortcuts = portal::proxy(&connection, GLOBAL_SHORTCUTS).await?;
+    let session = create_session(&connection, &shortcuts).await?;
+    let mut activations = shortcuts.receive_signal("Activated").await?;
     let triggers = registrations.iter().map(portal_trigger).collect::<Vec<_>>();
-    let shortcuts = registrations
+    let requested = registrations
         .iter()
         .zip(&triggers)
         .map(|(registration, trigger)| {
@@ -82,21 +66,43 @@ async fn run_session(
                 .description
                 .as_deref()
                 .unwrap_or(&registration.action);
-            NewShortcut::new(registration.id.as_str(), description)
-                .preferred_trigger(Some(trigger.as_str()))
+            (
+                registration.id.as_str(),
+                Options::from([
+                    ("description", Variant::from(description)),
+                    ("preferred_trigger", Variant::from(trigger.as_str())),
+                ]),
+            )
         })
         .collect::<Vec<_>>();
-    let response = portal
-        .bind_shortcuts(&session, &shortcuts, None, BindShortcutsOptions::default())
-        .await?
-        .response()?;
+    let response = portal::request(&connection, |token| {
+        let shortcuts = &shortcuts;
+        let session = &session;
+        let requested = &requested;
+        async move {
+            shortcuts
+                .call(
+                    "BindShortcuts",
+                    &(
+                        session,
+                        requested,
+                        "",
+                        Options::from([("handle_token", Variant::from(token))]),
+                    ),
+                )
+                .await
+        }
+    })
+    .await?;
+    let accepted = response
+        .get("shortcuts")
+        .map(|shortcuts| Vec::<BoundShortcut>::try_from(shortcuts.try_clone()?))
+        .transpose()?
+        .unwrap_or_default();
     let bound = registrations
         .iter()
         .filter(|registration| {
-            let bound = response
-                .shortcuts()
-                .iter()
-                .any(|shortcut| shortcut.id() == registration.id);
+            let bound = accepted.iter().any(|(id, _)| *id == registration.id);
             if !bound {
                 report_shortcut_failure(events, registration, "the desktop did not bind it");
             }
@@ -105,17 +111,51 @@ async fn run_session(
         .map(|registration| (registration.id.as_str(), registration.action.as_str()))
         .collect::<HashMap<_, _>>();
 
-    while let Some(event) = activations.next().await {
-        let Some(action) = bound.get(event.shortcut_id()) else {
+    while let Some(message) = activations.next().await {
+        let Ok((activated_session, id, _, options)) =
+            message
+                .body()
+                .deserialize::<(OwnedObjectPath, String, u64, Results)>()
+        else {
             continue;
         };
-        let mut activation = GlobalShortcutActivation::new(event.shortcut_id(), *action);
-        if let Some(token) = activation_token(event.options()) {
+        if activated_session != session {
+            continue;
+        }
+        let Some(action) = bound.get(id.as_str()) else {
+            continue;
+        };
+        let mut activation = GlobalShortcutActivation::new(id.as_str(), *action);
+        if let Some(token) = activation_token(&options) {
             activation = activation.activation_token(token);
         }
         let _ = events.send(PlatformEvent::GlobalShortcut(activation));
     }
     Ok(())
+}
+
+async fn create_session(
+    connection: &Connection,
+    shortcuts: &zbus::Proxy<'_>,
+) -> PortalResult<OwnedObjectPath> {
+    let session_token = portal::token();
+    let response = portal::request(connection, |token| async move {
+        shortcuts
+            .call(
+                "CreateSession",
+                &(Options::from([
+                    ("handle_token", Variant::from(token)),
+                    ("session_handle_token", Variant::from(session_token)),
+                ]),),
+            )
+            .await
+    })
+    .await?;
+    let handle = response
+        .get("session_handle")
+        .ok_or("the portal did not open a shortcut session")?
+        .try_clone()?;
+    Ok(OwnedObjectPath::try_from(String::try_from(handle)?)?)
 }
 
 /// The XDG shortcut trigger, such as `CTRL+SHIFT+space`.
@@ -191,7 +231,7 @@ fn keysym(code: &str) -> String {
     named.to_string()
 }
 
-fn activation_token(options: &HashMap<String, ashpd::zvariant::OwnedValue>) -> Option<String> {
+fn activation_token(options: &Results) -> Option<String> {
     let value = options.get("activation_token")?.try_clone().ok()?;
     String::try_from(value)
         .ok()
@@ -199,7 +239,10 @@ fn activation_token(options: &HashMap<String, ashpd::zvariant::OwnedValue>) -> O
 }
 
 /// Tells the portal which desktop entry this unsandboxed process belongs to.
-async fn register_host_app(registration: &GlobalShortcutRegistration) -> PortalResult<()> {
+async fn register_host_app(
+    connection: &Connection,
+    registration: &GlobalShortcutRegistration,
+) -> PortalResult<()> {
     let Some(app_id) = registration.app_id.as_deref() else {
         return Ok(());
     };
@@ -211,15 +254,7 @@ async fn register_host_app(registration: &GlobalShortcutRegistration) -> PortalR
             .unwrap_or(app_id);
         ensure_shortcut_host_entry(app_id, name, command)?;
     }
-    match ashpd::register_host_app(ashpd::AppID::try_from(app_id)?).await {
-        Err(error) if !already_registered(&error) => Err(Box::new(error)),
-        _ => Ok(()),
-    }
-}
-
-fn already_registered(error: &ashpd::Error) -> bool {
-    let message = error.to_string();
-    message.contains("already associated") || message.contains("already registered")
+    Ok(portal::register_host_app(connection, app_id).await?)
 }
 
 #[cfg(test)]

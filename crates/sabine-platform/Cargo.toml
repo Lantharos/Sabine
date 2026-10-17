@@ -13,12 +13,12 @@ authors.workspace = true
 
 [dependencies]
 raw-window-handle.workspace = true
+tokio.workspace = true
 winit.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { workspace = true, features = ["notification", "settings"] }
 futures-util.workspace = true
-pollster.workspace = true
+zbus = { workspace = true, features = ["proxy"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true

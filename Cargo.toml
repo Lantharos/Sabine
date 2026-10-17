@@ -40,7 +40,6 @@ sabine-host = { path = "crates/sabine-host", version = "0.43.0" }
 sabine = { path = "crates/sabine", version = "0.43.0" }
 sabine-service = { path = "crates/sabine-service", version = "0.43.0" }
 
-ashpd = { version = "0.13.13", default-features = false, features = ["async-io", "global_shortcuts"] }
 bzip2 = "0.6.1"
 flate2 = "1.1.10"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2", "deflate64", "bzip2", "lzma", "xz", "zstd"] }
@@ -90,7 +89,7 @@ sha1 = "0.11.0"
 sha2 = "0.11.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
-tokio = { version = "1.53.3", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1.53.3", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 toml = "1.1.8"
 tray-icon = { version = "0.26.1", default-features = false }
 toml_edit = "0.25.17"
@@ -106,6 +105,7 @@ wgpu = "30.0.1"
 winit = { git = "https://github.com/Lantharos/winit", rev = "d53da931269ee450ba64f90a937b4af1b7895d42", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
 windows = "0.62.2"
 windows-core = "0.62.2"
+zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }
 
 [patch.crates-io]
 dpi = { git = "https://github.com/Lantharos/winit", rev = "d53da931269ee450ba64f90a937b4af1b7895d42" }
