@@ -142,8 +142,8 @@ appWindow.revealWhen(loadSettings().then(render));
 ```
 
 The window then appears with the next frame the page paints. If the promise takes longer than five
-seconds, the window shows the page anyway, and a launch slower than 1.5 seconds shows Sabine's
-loading screen in the meantime, which fades into the page.
+seconds, the window shows the page anyway. Apps that enable Sabine's loading screen show it in the
+meantime once the launch takes longer than its delay, and it fades into the page.
 
 ## Tray
 

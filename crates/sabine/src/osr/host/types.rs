@@ -27,13 +27,9 @@ pub(super) const FALLBACK_ACTIVE_FRAME_RATE: u32 = 60;
 /// Wayland briefly drops focus/occlusion around interactive move. Suspending
 /// immediately thrashes lifecycle on the secondary (handed-off) window.
 pub(super) const LIFECYCLE_SUSPEND_DEBOUNCE: Duration = Duration::from_millis(200);
-/// How long a window that is already on screen waits before it shows the
-/// loading screen, such as after a reload.
-pub(super) const LOADING_REVEAL_DELAY: Duration = Duration::from_millis(120);
-/// How long a launching window stays unmapped while its page loads. Most pages
-/// paint well within it, so the window first appears with its real content;
-/// slower ones show the loading screen, which fades into the page.
-pub(super) const LAUNCH_LOADING_REVEAL_DELAY: Duration = Duration::from_millis(1_500);
+/// How long a window that is already on screen and has a loading screen keeps
+/// its last frame before showing it, such as after a reload.
+pub(super) const RELOAD_SPLASH_DELAY: Duration = Duration::from_millis(120);
 pub(super) const LOADING_FADE: Duration = Duration::from_millis(167);
 /// The longest a page may hold back its first frame with `revealWhen`.
 pub(super) const REVEAL_HOLD_LIMIT: Duration = Duration::from_secs(5);
@@ -121,7 +117,7 @@ impl OsrHostEvent {
 #[derive(Clone, Copy, Debug)]
 pub(in crate::osr) struct NativeLoading {
     pub(in crate::osr) started: Instant,
-    pub(in crate::osr) reveal_at: Instant,
+    pub(in crate::osr) splash_at: Option<Instant>,
     pub(in crate::osr) next_frame: Instant,
     pub(in crate::osr) message_seed: u64,
     pub(in crate::osr) ready_at: Option<Instant>,
@@ -181,13 +177,13 @@ impl NativeTooltip {
 }
 
 impl NativeLoading {
-    pub(in crate::osr) fn new(reveal_delay: Duration) -> Self {
+    pub(in crate::osr) fn new(splash_delay: Option<Duration>) -> Self {
         let started = Instant::now();
-        let reveal_at = started + reveal_delay;
+        let splash_at = splash_delay.map(|delay| started + delay);
         Self {
             started,
-            reveal_at,
-            next_frame: reveal_at,
+            splash_at,
+            next_frame: splash_at.unwrap_or(started),
             message_seed: next_loading_seed(),
             ready_at: None,
             rejected_frame: None,
@@ -196,8 +192,8 @@ impl NativeLoading {
         }
     }
 
-    pub(super) fn revealed(self) -> bool {
-        Instant::now() >= self.reveal_at
+    pub(super) fn splash_shown(self) -> bool {
+        self.splash_at.is_some_and(|at| Instant::now() >= at)
     }
 }
 

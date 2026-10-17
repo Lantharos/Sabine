@@ -839,17 +839,33 @@ of the window's adaptive blur, opaque and input regions and of the Sabine chrome
 the window then meets the screen's edges.
 
 A launching window stays unmapped until its page has loaded and painted, so it appears with its
-first frame. Pages that fetch what their first view shows after loading can hold that frame back
-with `appWindow.revealWhen`; the window then maps with the first frame painted after the page
-reveals itself, or after five seconds at most. Only when a launch takes longer than 1.5 seconds does
-Sabine map the window early with a neutral native loading surface, and a window already on screen
-shows it after 120 milliseconds, such as while a page reloads. It uses the same GPU compositor,
-window chrome, and app background configured with `.background_color(SabineColor::rgb8(r, g, b))`.
-The default is `#111113`. The same color seeds CEF before the document paints, avoiding a
-surface-color jump, and once the page is ready the loading surface fades out over it in 167
-milliseconds. Its loading copy rotates every 3.2 seconds from a 70% practical, 20% whimsical, and
-10% strange pool without repeating consecutively. When the browser exits unexpectedly, the window
-shows the same loading surface while Sabine starts a new one.
+first frame, however long that takes. Pages that fetch what their first view shows after loading
+can hold that frame back with `appWindow.revealWhen`; the window then maps with the first frame
+painted after the page reveals itself, or after five seconds at most. A window already on screen
+keeps showing its last frame while its page reloads, or while Sabine restarts a browser that exited
+unexpectedly, and switches to the new page with its first frame.
+
+A page that never shows a frame is reported rather than left without a trace. Sabine writes to
+standard error and to `logs/window.jsonl` in its data folder when a page is still loading after 30
+seconds, and when a page loaded 10 seconds ago without a frame the window could show, with the size
+and scale the window needs against what the browser painted.
+
+Apps can instead show a neutral native loading screen while a slow page loads:
+
+```toml
+[window]
+splash = true
+splash_delay_ms = 1500
+```
+
+The Rust builder does the same with `.splash(true)` or `.splash_after(Duration::from_millis(800))`.
+A launching window then maps on the loading screen once the launch takes longer than the delay, 1.5
+seconds unless set, and a window already on screen shows it after 120 milliseconds, such as while
+its page reloads. It uses the same GPU compositor, window chrome, and app background configured
+with `.background_color(SabineColor::rgb8(r, g, b))`. The default is `#111113`. The same color seeds
+CEF before the document paints, avoiding a surface-color jump, and once the page is ready the
+loading screen fades out over it in 167 milliseconds. Its loading copy rotates every 3.2 seconds
+from a 70% practical, 20% whimsical, and 10% strange pool without repeating consecutively.
 
 Chromium does not keep a spare renderer process warm: Sabine apps rarely open new sites, and the
 spare would cost a whole renderer's memory for every app.

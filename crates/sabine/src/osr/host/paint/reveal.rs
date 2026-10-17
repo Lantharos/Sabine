@@ -1,22 +1,28 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::types::{
-    LAUNCH_LOADING_REVEAL_DELAY, LOADING_REVEAL_DELAY, LoadingFade, NativeLoading,
-    REVEAL_HOLD_LIMIT,
-};
+use crate::osr::host::types::{LoadingFade, NativeLoading, RELOAD_SPLASH_DELAY, REVEAL_HOLD_LIMIT};
 
 impl OsrNativeHost {
-    /// Waits for the page, showing the loading screen if it takes long: soon
-    /// for a window already on screen, only for slow loads while launching.
+    /// Waits for the page while a window on screen keeps its last frame, and
+    /// shows the loading screen after its delay when the app has one.
     pub(in crate::osr::host) fn start_loading(&mut self) {
-        let delay = if self.presented {
-            LOADING_REVEAL_DELAY
-        } else {
-            LAUNCH_LOADING_REVEAL_DELAY
-        };
-        self.loading = Some(NativeLoading::new(delay));
+        self.loading = Some(NativeLoading::new(self.splash_delay()));
         self.loading_fade = None;
+    }
+
+    fn splash_delay(&self) -> Option<Duration> {
+        let launch = self.config.splash?;
+        Some(if self.presented {
+            RELOAD_SPLASH_DELAY
+        } else {
+            launch
+        })
+    }
+
+    /// Whether the window keeps showing its last frame while the page loads.
+    pub(in crate::osr::host) fn holds_last_frame(&self) -> bool {
+        self.presented && self.loading.is_some_and(|loading| !loading.splash_shown())
     }
 
     /// Shows the page, fading out the loading screen if it was on screen.
@@ -24,7 +30,7 @@ impl OsrNativeHost {
         let Some(loading) = self.loading.take() else {
             return;
         };
-        if self.presented && loading.revealed() {
+        if self.presented && loading.splash_shown() {
             self.loading_fade = Some(LoadingFade {
                 loading,
                 started: Instant::now(),

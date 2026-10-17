@@ -150,6 +150,7 @@ pub(crate) fn spawn_osr_host_child(
         "always_on_top": config.always_on_top,
         "transparent": config.transparent,
         "background_color": config.background_color.to_rgba8(),
+        "splash_delay_ms": config.splash.map(|delay| delay.as_millis() as u64),
         "background_effect": config.background_effect.as_str(),
         "chrome": config.chrome.as_str(),
         "titlebar_overlay": config.titlebar_overlay,

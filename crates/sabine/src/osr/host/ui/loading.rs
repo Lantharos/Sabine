@@ -63,9 +63,10 @@ impl OsrNativeHost {
 
     pub(in crate::osr::host) fn drive_loading(&mut self) -> Option<Instant> {
         let mut loading = self.loading?;
+        let splash_at = loading.splash_at?;
         let now = Instant::now();
-        if now < loading.reveal_at {
-            return Some(loading.reveal_at);
+        if now < splash_at {
+            return Some(splash_at);
         }
         if now >= loading.next_frame {
             if !self.presented {

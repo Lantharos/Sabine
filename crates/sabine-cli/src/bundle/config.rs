@@ -26,6 +26,14 @@ pub(super) struct BundleApp {
     pub cargo_package: String,
     pub web: Option<WebBundle>,
     pub updates: Option<sabine_service::AppUpdateConfig>,
+    pub window: WindowSection,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct WindowSection {
+    #[serde(default)]
+    pub splash: bool,
+    pub splash_delay_ms: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -80,6 +88,8 @@ struct SabineFile {
     app: AppSection,
     #[serde(default)]
     web: WebSection,
+    #[serde(default)]
+    window: WindowSection,
     updates: Option<sabine_service::AppUpdateConfig>,
 }
 
@@ -229,6 +239,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         cargo_package,
         web,
         updates,
+        window: sabine.window,
     })
 }
 

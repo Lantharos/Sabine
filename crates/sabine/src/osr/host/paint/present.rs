@@ -37,7 +37,7 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn render(&mut self) -> bool {
-        if self.resize_held() {
+        if self.resize_held() || self.holds_last_frame() {
             return false;
         }
         let scale = self.scale() as f32;
@@ -129,7 +129,7 @@ impl OsrNativeHost {
             }));
         }
         self.draw_titlebar(list, width);
-        if let Some(loading) = self.loading.filter(|loading| loading.revealed()) {
+        if let Some(loading) = self.loading.filter(|loading| loading.splash_shown()) {
             self.draw_loading(list, loading, width, height, 1.0);
             return;
         }

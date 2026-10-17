@@ -8,6 +8,7 @@ use sabine_platform::{
 };
 use sabine_runtime::RuntimeConfig;
 
+use super::config::DEFAULT_SPLASH_DELAY;
 use super::{
     SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
     SabineWindowControlAction, SabineWindowControlRegion,
@@ -184,6 +185,21 @@ impl SabineWindow {
     /// by Sabine's native startup and resume surfaces.
     pub fn background_color(mut self, color: SabineColor) -> Self {
         self.config.background_color = color;
+        self
+    }
+
+    /// Shows Sabine's loading screen when the page takes longer than 1.5
+    /// seconds to appear, and 120 milliseconds into a reload. Without it, a
+    /// window appears with its page's first frame and keeps its last frame
+    /// while the page reloads.
+    pub fn splash(mut self, enabled: bool) -> Self {
+        self.config.splash = enabled.then_some(DEFAULT_SPLASH_DELAY);
+        self
+    }
+
+    /// Shows Sabine's loading screen when a launch takes longer than `delay`.
+    pub fn splash_after(mut self, delay: Duration) -> Self {
+        self.config.splash = Some(delay);
         self
     }
 

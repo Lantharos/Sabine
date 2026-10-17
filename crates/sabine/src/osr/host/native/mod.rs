@@ -141,6 +141,7 @@ impl OsrNativeHost {
         start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
         let visible = config.visible;
+        let splash = config.splash;
         #[cfg(target_os = "linux")]
         let software_paint = !sabine_runtime::runtime_version_at_least(
             &config.runtime_dir,
@@ -217,9 +218,7 @@ impl OsrNativeHost {
             page_media_playing: false,
             presented: false,
             main_frame_presented: false,
-            loading: visible.then(|| {
-                super::types::NativeLoading::new(super::types::LAUNCH_LOADING_REVEAL_DELAY)
-            }),
+            loading: visible.then(|| super::types::NativeLoading::new(splash)),
             loading_fade: None,
             reveal_held_since: None,
             tooltip: None,

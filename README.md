@@ -49,6 +49,8 @@ dev_port = 5173
 build = "bun run build"
 ```
 
+Windows appear with their page's first frame. To show a loading screen while a slow page loads instead, add `splash = true` under `[window]`.
+
 Generated projects already pin the matching Rust crate and TypeScript helper. For an existing project, add them yourself:
 
 ```toml

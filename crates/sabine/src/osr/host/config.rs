@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use sabine_platform::{WindowBackgroundEffect, WindowRegionRect, WindowRegions};
 
@@ -31,6 +32,7 @@ pub(crate) struct OsrHostConfig {
     pub always_on_top: bool,
     pub transparent: bool,
     pub background_color: Color,
+    pub splash: Option<Duration>,
     pub background_effect: WindowBackgroundEffect,
     pub chrome: SabineWindowChrome,
     #[cfg(target_os = "macos")]
@@ -137,6 +139,10 @@ impl OsrHostConfig {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
             background_color: color_value(&value, "background_color")?,
+            splash: value
+                .get("splash_delay_ms")
+                .and_then(serde_json::Value::as_u64)
+                .map(Duration::from_millis),
             background_effect: value
                 .get("background_effect")
                 .and_then(serde_json::Value::as_str)

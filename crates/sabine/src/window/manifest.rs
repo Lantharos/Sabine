@@ -18,6 +18,8 @@ struct SabineFile {
     app: AppSection,
     #[serde(default)]
     web: WebSection,
+    #[serde(default)]
+    window: WindowSection,
     updates: Option<sabine_service::AppUpdateConfig>,
 }
 
@@ -40,6 +42,13 @@ struct WebSection {
     local_files: bool,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct WindowSection {
+    #[serde(default)]
+    splash: bool,
+    splash_delay_ms: Option<u64>,
+}
+
 impl SabineWindow {
     /// Creates another window using the current app's resolved identity and
     /// web entry. The launched process supplies the primary window's bridge.
@@ -51,7 +60,8 @@ impl SabineWindow {
         Ok(window)
     }
 
-    /// Applies `[app]` and production `[web]` fields from a `Sabine.toml`.
+    /// Applies `[app]`, production `[web]` and `[window]` fields from a
+    /// `Sabine.toml`.
     ///
     /// Bridge handlers, chrome, and size stay in Rust; identity and content
     /// paths can live in the manifest shared with the CLI/bundler.
@@ -104,6 +114,12 @@ impl SabineWindow {
             self = self.url(url);
         }
 
+        if file.window.splash {
+            self = match file.window.splash_delay_ms {
+                Some(delay) => self.splash_after(std::time::Duration::from_millis(delay)),
+                None => self.splash(true),
+            };
+        }
         self = self.local_files(file.web.local_files);
         for origin in file.web.allowed_origins {
             self = self.allowed_origin(origin);

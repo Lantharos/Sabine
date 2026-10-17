@@ -54,6 +54,12 @@ pub(super) fn runtime_manifest(
             manifest.push_str("local_files = true\n");
         }
     }
+    if app.window.splash {
+        manifest.push_str("\n[window]\nsplash = true\n");
+        if let Some(delay) = app.window.splash_delay_ms {
+            manifest.push_str(&format!("splash_delay_ms = {delay}\n"));
+        }
+    }
     if let Some(updates) = &app.updates {
         manifest.push_str("\n[updates]\n");
         match &updates.source {

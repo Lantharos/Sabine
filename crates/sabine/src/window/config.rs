@@ -12,6 +12,9 @@ use crate::launch::browser::BrowserOptions;
 use crate::window::style::Color;
 use crate::{SabineError, SabineResult};
 
+/// How long a launching window with a loading screen waits before showing it.
+pub(crate) const DEFAULT_SPLASH_DELAY: Duration = Duration::from_millis(1_500);
+
 #[derive(Clone, Debug)]
 pub(crate) struct SabineWindowConfig {
     pub entry: Option<String>,
@@ -34,6 +37,9 @@ pub(crate) struct SabineWindowConfig {
     pub always_on_top: bool,
     pub transparent: bool,
     pub background_color: Color,
+    /// How long a launching window waits for its page before showing Sabine's
+    /// loading screen. Without it, the window appears with its first frame.
+    pub splash: Option<Duration>,
     pub chrome: SabineWindowChrome,
     /// The page extends under a transparent macOS titlebar that keeps the
     /// system's traffic lights.
@@ -77,6 +83,7 @@ impl Default for SabineWindowConfig {
             always_on_top: false,
             transparent: false,
             background_color: Color::WINDOW,
+            splash: None,
             chrome: SabineWindowChrome::System,
             titlebar_overlay: false,
             background_effect: WindowBackgroundEffect::None,

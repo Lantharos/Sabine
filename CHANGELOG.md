@@ -1,3 +1,11 @@
+# Unreleased
+
+- Sabine's loading screen is off by default. A launching window appears with its page's first
+  frame however long that takes, and a window on screen keeps its last frame while its page reloads
+  or its browser restarts. Apps that want the loading screen enable it with `splash = true` under
+  `[window]` in `Sabine.toml`, optionally with `splash_delay_ms`, or with `.splash(true)` and
+  `.splash_after(delay)` on `SabineWindow`.
+
 # Sabine 0.45
 
 - Launching windows appear with their page's first frame. Sabine no longer maps a window on its
