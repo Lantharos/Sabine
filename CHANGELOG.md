@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.47
 
 - `appWindow.activationToken()` gives a page a token that lets another app's window come to the
   front, for handing something to that app because the person asked to, such as opening a link in
