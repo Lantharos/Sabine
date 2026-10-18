@@ -10,6 +10,9 @@ pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
+/// A token another app's window can present to take focus, made for this
+/// window while the person uses it.
+pub const ACTIVATION_TOKEN_COMMAND: &str = "sabine.window.activationToken";
 /// Holds back the window's first frame until the page sends
 /// [`REVEAL_COMMAND`], so the window appears with the page's first view.
 pub const HOLD_REVEAL_COMMAND: &str = "sabine.window.holdReveal";
@@ -27,12 +30,13 @@ pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
 /// in the drag's `text/uri-list`.
 pub const DRAG_FILES_COMMAND: &str = "sabine.drag.files";
 
-const WINDOW_COMMANDS: [&str; 11] = [
+const WINDOW_COMMANDS: [&str; 12] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
+    ACTIVATION_TOKEN_COMMAND,
     HOLD_REVEAL_COMMAND,
     REVEAL_COMMAND,
     APPEARANCE_COMMAND,

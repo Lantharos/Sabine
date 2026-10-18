@@ -185,6 +185,10 @@ private IPC directory under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`, so
   handed it (`XDG_ACTIVATION_TOKEN`, or `DESKTOP_STARTUP_ID`). The compositor gives it focus only
   if the person hasn't used another window since launching it, and otherwise opens it behind and
   marks it as wanting attention. Windows opened later with `open_window` don't inherit the token.
+- **Handing focus on**: `appWindow.activationToken()` makes a token from the window's keyboard
+  focus (`xdg_activation_v1` with the focus serial and the window's surface), for the app to pass
+  to another app it opens on the person's behalf. A Sabine app that receives one, at launch or
+  through a single-instance activation, brings its window forward with it.
 - **Second OS launch**: optional `single_instance` still focuses an existing process when enabled.
   Without it, a second launch of the same app uses CEF handoff plus a new per-window socket.
   After exit-24 handoff the secondary host waits up to 15s for the primary CEF process to connect.

@@ -8,11 +8,11 @@ use std::{
 use crossbeam_channel::Sender;
 use wayland_backend::client::ObjectId;
 use wayland_client::{
-    Connection, EventQueue, QueueHandle,
+    Connection, EventQueue, Proxy, QueueHandle,
     globals::registry_queue_init,
     protocol::{
         wl_data_device::WlDataDevice, wl_data_device_manager::WlDataDeviceManager,
-        wl_keyboard::WlKeyboard, wl_seat::WlSeat,
+        wl_keyboard::WlKeyboard, wl_seat::WlSeat, wl_surface::WlSurface,
     },
 };
 use wayland_protocols::{
@@ -24,14 +24,16 @@ use wayland_protocols::{
         zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1,
         zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1,
     },
+    xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1,
 };
 
 use super::Command;
+use super::activation;
 use super::drag::Drag;
 use super::objects::{Offer, Source};
 use crate::clipboard::content::read_plan;
 use crate::clipboard::pipe::{pipe, read_to_end};
-use crate::clipboard::{ClipboardContent, DropEvent, Reply, Selection, Waker};
+use crate::clipboard::{ClipboardContent, DropEvent, Reply, Selection, TokenReply, Waker};
 
 const READ_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -67,7 +69,10 @@ pub(super) struct State {
     pub(super) connection: Connection,
     pub(super) handle: QueueHandle<State>,
     pub(super) serial: u32,
+    pub(super) focus_serial: Option<u32>,
+    seat: WlSeat,
     pub(super) keyboard: Option<WlKeyboard>,
+    activation: Option<XdgActivationV1>,
     pub(super) devices: Devices,
     pub(super) offers: [Option<Offer>; 2],
     owned: [Option<Source>; 2],
@@ -112,11 +117,15 @@ impl State {
                 }
             }
         };
+        let activation = globals.bind(&handle, 1..=1, ()).ok();
         let state = Self {
             connection,
             handle,
             serial: 0,
+            focus_serial: None,
+            seat,
             keyboard: None,
+            activation,
             devices,
             offers: [None, None],
             owned: [None, None],
@@ -142,7 +151,23 @@ impl State {
             Command::Write { selection, content } => self.write(selection, content),
             Command::Surface(surface) => self.surface = surface,
             Command::DragData { drag, content } => self.receive_drag_data(drag, content),
+            Command::ActivationToken(reply) => self.request_activation_token(reply),
         }
+    }
+
+    fn request_activation_token(&self, reply: TokenReply) {
+        let surface = self
+            .surface
+            .clone()
+            .and_then(|id| WlSurface::from_id(&self.connection, id).ok());
+        activation::request(
+            self.activation.as_ref(),
+            surface,
+            self.focus_serial.map(|serial| (&self.seat, serial)),
+            &self.handle,
+            reply,
+        );
+        let _ = self.connection.flush();
     }
 
     pub(super) fn set_offer(&mut self, selection: Selection, offer: Option<Offer>) {

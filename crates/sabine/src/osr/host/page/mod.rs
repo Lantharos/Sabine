@@ -1,3 +1,4 @@
+mod activation;
 mod clipboard;
 mod media;
 mod notifications;
@@ -5,8 +6,8 @@ mod notifications;
 mod paste_gesture;
 
 use sabine_bridge::{
-    APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND, HOLD_REVEAL_COMMAND,
-    INHIBIT_SHORTCUTS_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
+    ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND,
+    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -103,6 +104,7 @@ impl OsrNativeHost {
                     Ok(serde_json::Value::Null),
                 );
             }
+            ACTIVATION_TOKEN_COMMAND => self.answer_activation_token(&request),
             CONTROLS_OVERLAY_COMMAND => self.send_bridge_response(
                 request.browser_id,
                 request.request_id,

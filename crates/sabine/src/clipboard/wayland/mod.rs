@@ -1,3 +1,4 @@
+mod activation;
 mod dispatch;
 mod drag;
 mod objects;
@@ -18,7 +19,7 @@ use crossbeam_channel::{Receiver, Sender};
 use wayland_backend::client::{Backend, ObjectId, WaylandError};
 use wayland_client::{Connection, EventQueue, Proxy, protocol::wl_surface::WlSurface};
 
-use super::{ClipboardContent, DropEvent, Reply, Selection, Waker};
+use super::{ClipboardContent, DropEvent, Reply, Selection, TokenReply, Waker};
 use crate::osr::protocol::DragContent;
 use state::{Channels, State};
 
@@ -37,10 +38,12 @@ pub(super) enum Command {
         drag: u64,
         content: DragContent,
     },
+    ActivationToken(TokenReply),
 }
 
 /// The desktop clipboard over the window's Wayland connection, served by a
-/// thread with its own event queue.
+/// thread with its own event queue. The same thread follows the window's
+/// keyboard focus to make activation tokens for it.
 pub(super) struct WaylandClipboard {
     connection: Connection,
     commands: Sender<Command>,
@@ -120,6 +123,10 @@ impl WaylandClipboard {
 
     pub(super) fn write(&self, selection: Selection, content: ClipboardContent) {
         self.send(Command::Write { selection, content });
+    }
+
+    pub(super) fn activation_token(&self, reply: TokenReply) {
+        self.send(Command::ActivationToken(reply));
     }
 
     fn send(&self, command: Command) {

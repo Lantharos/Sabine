@@ -81,6 +81,9 @@
     controlsOverlay() {
       return window.sabine.bridge.invoke("sabine.window.controlsOverlay");
     },
+    activationToken() {
+      return window.sabine.bridge.invoke("sabine.window.activationToken");
+    },
     revealWhen(ready) {
       const reveal = () => requestAnimationFrame(() => {
         window.sabine.bridge.invoke("sabine.window.reveal").catch(() => {});

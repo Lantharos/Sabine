@@ -87,6 +87,19 @@ Cmd+Space and every other combination with Command, Control or Option do. Some c
 user before they allow it, and macOS needs the app to have the Accessibility permission; until it
 does, the call rejects and macOS offers to open the settings that grant it.
 
+Wayland desktops only let a window take focus when it presents a token from the app the person is
+using. Before handing something to another app, such as a link to open in the browser, ask for one
+and pass it on with the request; the app process puts it in the launched app's environment as
+`XDG_ACTIVATION_TOKEN`, or in a portal request as `activation_token`:
+
+```js
+const token = await appWindow.activationToken();
+await invoke("open_link", { url, token });
+```
+
+The token is made from the window's keyboard focus, so it only brings the other window forward
+while this one is still in front. It is `null` where the desktop needs none.
+
 Pages can pause work while nobody can see them. `appWindow.visible` is false while the window is
 hidden or the desktop reports it out of sight, for example when it is minimized or fully covered,
 and `appWindow.suspended` is true while Sabine runs the page at its background frame rate:

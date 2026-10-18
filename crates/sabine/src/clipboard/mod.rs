@@ -25,6 +25,8 @@ pub(crate) use linux::{DropEvent, SystemClipboard, Waker};
 pub(crate) use worker::SystemClipboard;
 
 pub(crate) type Reply = Box<dyn FnOnce(Result<ClipboardContent, String>) + Send>;
+#[cfg(target_os = "linux")]
+pub(crate) type TokenReply = Box<dyn FnOnce(Option<String>) + Send>;
 
 #[cfg(not(target_os = "linux"))]
 impl SystemClipboard {

@@ -5,7 +5,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, Raw
 use winit::window::Window;
 
 use super::wayland::WaylandClipboard;
-use super::{ClipboardContent, Reply, Selection};
+use super::{ClipboardContent, Reply, Selection, TokenReply};
 use crate::osr::protocol::DragContent;
 
 pub(crate) type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -65,6 +65,12 @@ impl SystemClipboard {
     ) -> Result<(), String> {
         self.wayland.write(selection, content);
         Ok(())
+    }
+
+    /// Makes an activation token from the window's keyboard focus, which
+    /// another app's window can present to take focus.
+    pub(crate) fn activation_token(&self, reply: TokenReply) {
+        self.wayland.activation_token(reply);
     }
 
     /// Whether the window's drops arrive here instead of through the window

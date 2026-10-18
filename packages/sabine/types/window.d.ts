@@ -32,6 +32,14 @@ export interface SabineWindowApi {
    */
   controlsOverlay(): Promise<ControlsOverlay>;
   /**
+   * A token that lets the window of another app take focus, for handing
+   * something to that app because the person asked to, such as opening a
+   * link in the browser. Pass it to the app being opened, for example as
+   * `XDG_ACTIVATION_TOKEN` in its environment. It only works while this
+   * window is in front, and is `null` where the desktop needs none.
+   */
+  activationToken(): Promise<string | null>;
+  /**
    * Keeps the window off screen until `ready` settles, so it first appears
    * with the page's first real view instead of an empty one. Call it while the
    * page starts, before it finishes loading, and settle `ready` once that view

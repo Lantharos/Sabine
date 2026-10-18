@@ -27,7 +27,7 @@ use wayland_protocols::{
 };
 
 use super::objects::{Offer, OfferTypes};
-use super::state::{Devices, State};
+use super::state::State;
 use crate::clipboard::pipe::send;
 use crate::clipboard::{ClipboardContent, Selection};
 
@@ -62,9 +62,6 @@ impl Dispatch<WlSeat, ()> for State {
         else {
             return;
         };
-        if !matches!(state.devices, Devices::Seat { .. }) {
-            return;
-        }
         let has_keyboard = capabilities.contains(wl_seat::Capability::Keyboard);
         match (&state.keyboard, has_keyboard) {
             (None, true) => state.keyboard = Some(seat.get_keyboard(handle, ())),
@@ -87,9 +84,12 @@ impl Dispatch<WlKeyboard, ()> for State {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            wl_keyboard::Event::Enter { serial, .. } | wl_keyboard::Event::Key { serial, .. } => {
+            wl_keyboard::Event::Enter { serial, .. } => {
                 state.serial = serial;
+                state.focus_serial = Some(serial);
             }
+            wl_keyboard::Event::Key { serial, .. } => state.serial = serial,
+            wl_keyboard::Event::Leave { .. } => state.focus_serial = None,
             _ => {}
         }
     }

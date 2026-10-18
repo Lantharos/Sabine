@@ -41,6 +41,9 @@ export const appWindow = {
   controlsOverlay() {
     return requireApi().window.controlsOverlay();
   },
+  activationToken() {
+    return requireApi().window.activationToken();
+  },
   revealWhen(ready) {
     requireApi().window.revealWhen(ready);
   },

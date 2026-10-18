@@ -1,3 +1,11 @@
+# Unreleased
+
+- `appWindow.activationToken()` gives a page a token that lets another app's window come to the
+  front, for handing something to that app because the person asked to, such as opening a link in
+  the browser or a folder in a terminal. On Wayland the window makes it from its keyboard focus, so
+  the desktop only honors it while the window is the one being used. Pass it to the app being opened
+  as `XDG_ACTIVATION_TOKEN`, or as the `activation_token` of a portal request.
+
 # Sabine 0.46
 
 - Sabine's loading screen is off by default. A launching window appears with its page's first
