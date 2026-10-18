@@ -112,7 +112,10 @@ impl ApplicationHandler for OsrNativeHost {
                 source,
                 primary,
                 ..
-            } => self.pointer_moved(event_loop, position, source, primary),
+            } => {
+                self.set_occluded(false);
+                self.pointer_moved(event_loop, position, source, primary);
+            }
             WindowEvent::PointerLeft {
                 position,
                 kind,
@@ -125,7 +128,10 @@ impl ApplicationHandler for OsrNativeHost {
                 button,
                 primary,
                 ..
-            } => self.pointer_button(event_loop, state, position, button, primary),
+            } => {
+                self.set_occluded(false);
+                self.pointer_button(event_loop, state, position, button, primary);
+            }
             WindowEvent::MouseWheel { .. } if self.context_menu.is_some() => {}
             WindowEvent::MouseWheel { delta, .. } => self.forward_mouse_wheel(delta),
             WindowEvent::PinchGesture { delta, .. } => self.forward_pinch(delta),

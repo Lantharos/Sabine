@@ -1,3 +1,10 @@
+# Unreleased
+
+- Fix windows that stopped showing anything new while the desktop kept them suspended though they
+  were in plain sight, as Mutter-based desktops can. Hovering, typing and animations stayed
+  invisible while clicks still worked. A window starts drawing again as soon as the pointer moves
+  or clicks on it.
+
 # Sabine 0.47
 
 - `appWindow.activationToken()` gives a page a token that lets another app's window come to the

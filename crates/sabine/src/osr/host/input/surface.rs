@@ -72,7 +72,9 @@ impl OsrNativeHost {
 
     /// Windows reports a minimized window only through its zero-sized surface,
     /// so minimizing there counts as the window being out of sight, as Wayland
-    /// reports it.
+    /// reports it. A window the pointer moves or clicks on is in sight, even
+    /// when the compositor wrongly keeps it suspended, as Mutter can after a
+    /// surface leaves the window.
     pub(super) fn set_occluded(&mut self, occluded: bool) {
         if self.occluded == occluded {
             return;
