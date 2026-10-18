@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.48
 
 - Fix windows that stopped showing anything new while the desktop kept them suspended though they
   were in plain sight, as Mutter-based desktops can. Hovering, typing and animations stayed
