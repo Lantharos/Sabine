@@ -8,6 +8,8 @@ use std::{fs, path::PathBuf};
 mod autostart;
 mod daemon;
 
+#[cfg(target_os = "linux")]
+pub use autostart::install_system_unit;
 use autostart::{install_login_autostart, uninstall_login_autostart};
 pub use daemon::{
     complete_system_update, ensure_daemon_running, resolve_service_executable, run_daemon,

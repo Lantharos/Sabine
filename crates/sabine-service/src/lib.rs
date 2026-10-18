@@ -36,6 +36,8 @@ pub use install::{
     ensure_service_executable, find_service_executable, install_system_service,
     installed_service_version, service_daemon_path, update_components,
 };
+#[cfg(target_os = "linux")]
+pub use lifecycle::install_system_unit;
 pub(crate) use lifecycle::{PrepareProgress, PrepareStage};
 pub use lifecycle::{
     adopt_with_runtime, complete_system_update, ensure_daemon_running, ensure_ready, load_policy,

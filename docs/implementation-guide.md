@@ -537,7 +537,9 @@ failure and identify when no usable runtime is available. All shared state lives
 `$XDG_DATA_HOME/sabine` (by default `~/.local/share/sabine`) on Linux. Cache directories derived from
 file paths use SHA-256, so every Sabine build and the daemon agree on them.
 The user systemd unit follows `XDG_CONFIG_HOME` and preserves custom data, config, and cache paths.
-Executable paths containing spaces or systemd specifier characters are quoted.
+Executable paths containing spaces or systemd specifier characters are quoted. It runs the daemon
+through `bin/current`, a link to the active version that every update and rollback moves
+atomically, so removing an old version never leaves the unit pointing at a missing daemon.
 
 Each maintenance pass also removes apps that are gone for good. An app whose program has been
 missing for a week, which leaves room for an app on a drive that is not mounted, and a development
@@ -1315,6 +1317,12 @@ names the active version under `bin/versions/<version>` with the service, daemon
 `runtimes/cef` holds one runtime with its resource links already in place. The runtime install takes
 its pieces from the installing machine's Sabine: a service next to the CLI or already installed,
 the host built for the runtime, and the newest runtime, downloaded when none is present.
+
+On Linux the runtime install also ships `/usr/lib/systemd/user/sabine.service`, started for every
+user at login, which runs `/usr/lib/sabine/bin/current/sabine-service-daemon`. When a user's own
+installation is newer than the system's, that daemon hands over to it. Sabine writes no unit of its
+own for users on such a system and removes one an older Sabine left behind; to keep the service from
+starting at login, Sabine masks the unit for that user.
 
 A system-wide app goes where native packages put it: `/usr/lib/sabine/<app-id>` with a launcher in
 `/usr/bin` and its desktop entry, icons, AppStream metadata and file types under `/usr/share` on

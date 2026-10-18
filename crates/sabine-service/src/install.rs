@@ -81,6 +81,20 @@ pub fn service_daemon_path(service: &Path) -> PathBuf {
     service.with_file_name(service_daemon_binary_name())
 }
 
+/// `daemon` reached through the active-version link of the installation it
+/// belongs to, when it is that installation's active daemon.
+#[cfg(target_os = "linux")]
+pub(crate) fn stable_daemon_path(daemon: &Path) -> Option<PathBuf> {
+    let daemon = fs::canonicalize(daemon).ok()?;
+    [
+        sabine_runtime::sabine_data_dir(),
+        sabine_runtime::system_dir(),
+    ]
+    .into_iter()
+    .map(|root| state::active_dir_in(&root).join(service_daemon_binary_name()))
+    .find(|stable| fs::canonicalize(stable).ok().as_ref() == Some(&daemon))
+}
+
 fn complete_service_at(path: PathBuf) -> Option<PathBuf> {
     (path.is_file() && service_daemon_path(&path).is_file()).then_some(path)
 }

@@ -15,7 +15,7 @@ use sabine_runtime::{configure_background_command, process_alive, sabine_data_di
 use super::{PID_FILE, autostart::install_login_autostart_with, load_policy};
 
 #[cfg(target_os = "linux")]
-use super::autostart::{run_checked, supervised_daemon_matches};
+use super::autostart::{retire_shadowing_user_unit, run_checked, supervised_daemon_matches};
 
 #[cfg(target_os = "macos")]
 use super::autostart::unload_macos_daemon;
@@ -116,6 +116,13 @@ pub(crate) fn stop_daemon() -> ServiceResult<()> {
 }
 
 pub fn run_daemon() -> ServiceResult<()> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Err(error) = retire_shadowing_user_unit() {
+            sabine_runtime::report_error("maintenance", error);
+        }
+        hand_over_to_newer_installation();
+    }
     let Some(pid_guard) = claim_daemon_pid()? else {
         return Ok(());
     };
@@ -159,6 +166,22 @@ pub fn run_daemon() -> ServiceResult<()> {
             Err(error) => sabine_runtime::report_error("maintenance", error),
         }
         std::thread::sleep(crate::default_maintenance_interval());
+    }
+}
+
+/// Becomes the daemon of the newest installation, so a daemon the system
+/// starts serves a user whose own Sabine is newer.
+#[cfg(target_os = "linux")]
+fn hand_over_to_newer_installation() {
+    use std::os::unix::process::CommandExt;
+    let Some(service) = crate::find_service_executable() else {
+        return;
+    };
+    let newer = service_version(&service)
+        .is_some_and(|version| crate::types::version_is_newer(&version, crate::SABINE_VERSION));
+    if newer {
+        let error = Command::new(service_daemon_path(&service)).exec();
+        sabine_runtime::report_error("maintenance", error);
     }
 }
 

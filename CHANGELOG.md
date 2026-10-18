@@ -4,6 +4,11 @@
   were in plain sight, as Mutter-based desktops can. Hovering, typing and animations stayed
   invisible while clicks still worked. A window starts drawing again as soon as the pointer moves
   or clicks on it.
+- Fix the Sabine service failing at every login after an operating system update replaced the
+  system-wide Sabine with a newer version, until it was restarted by hand. A system-wide install on
+  Linux now ships the user unit that starts the service, pointing at whichever version is active,
+  and the per-user unit an older Sabine wrote is removed. Per-user installs point their unit at the
+  active version the same way, so updates never leave it behind.
 
 # Sabine 0.47
 

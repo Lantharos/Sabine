@@ -20,9 +20,14 @@ mod platform;
 mod platform;
 
 #[cfg(target_os = "linux")]
-pub(super) use platform::supervised_daemon_matches;
+mod systemd_unit;
+
 #[cfg(target_os = "macos")]
 pub(super) use platform::unload_macos_daemon;
+#[cfg(target_os = "linux")]
+pub(super) use platform::{retire_shadowing_user_unit, supervised_daemon_matches};
+#[cfg(target_os = "linux")]
+pub use systemd_unit::install_system_unit;
 
 pub fn install_login_autostart() -> ServiceResult<bool> {
     let executable = ensure_service_executable(|_| {})?;

@@ -25,6 +25,9 @@ pub(super) fn install(root: Option<&Path>) -> Result<(), String> {
     let system = path_in_root(root, &system_dir());
     let version = sabine_service::install_system_service(&service, &host, &system)
         .map_err(|error| format!("failed to install the Sabine service: {error}"))?;
+    #[cfg(target_os = "linux")]
+    sabine_service::install_system_unit(root)
+        .map_err(|error| format!("failed to install the Sabine user unit: {error}"))?;
     sabine_runtime::install_system_runtime(
         runtime.location.path(),
         &path_in_root(root, &system_runtime_path()),

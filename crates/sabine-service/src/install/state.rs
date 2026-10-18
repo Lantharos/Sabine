@@ -44,6 +44,15 @@ pub(super) fn versions_dir_in(root: &Path) -> PathBuf {
 }
 
 const INSTALLATION_STATE: &str = "bin/current.json";
+#[cfg(target_os = "linux")]
+const ACTIVE_LINK: &str = "bin/current";
+
+/// The stable folder of the active version, which follows every update and
+/// rollback, so the service manager never runs a version that is gone.
+#[cfg(target_os = "linux")]
+pub(super) fn active_dir_in(root: &Path) -> PathBuf {
+    root.join(ACTIVE_LINK)
+}
 
 pub(super) fn read_installation_state() -> Option<SystemInstallationState> {
     read_installation_state_in(&sabine_data_dir())
@@ -91,6 +100,18 @@ pub(super) fn write_installation_state_in(
     file.write_all(&serde_json::to_vec_pretty(state).expect("system state is serializable"))?;
     file.sync_all()?;
     replace_file(&temporary, &path)?;
+    #[cfg(target_os = "linux")]
+    link_active_version(root, &state.active)?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn link_active_version(root: &Path, version: &str) -> ServiceResult<()> {
+    let link = active_dir_in(root);
+    let temporary = link.with_extension("new");
+    let _ = fs::remove_file(&temporary);
+    std::os::unix::fs::symlink(Path::new("versions").join(version), &temporary)?;
+    replace_file(&temporary, &link)?;
     Ok(())
 }
 
@@ -207,4 +228,33 @@ pub(super) fn lock_system_installation() -> ServiceResult<sabine_runtime::FileLo
     )?;
     sabine_runtime::recover_directory_installs(&versions_dir())?;
     Ok(lock)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_link_follows_the_installation_state() {
+        let root = std::env::temp_dir().join(format!("sabine-state-test-{}", std::process::id()));
+        for version in ["0.46", "0.47"] {
+            fs::create_dir_all(versions_dir_in(&root).join(version)).unwrap();
+            write_installation_state_in(
+                &root,
+                &SystemInstallationState {
+                    schema: 1,
+                    active: version.to_string(),
+                    previous: None,
+                    compatibility: compatibility_for_version(version),
+                    previous_compatibility: None,
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                fs::canonicalize(active_dir_in(&root)).unwrap(),
+                fs::canonicalize(versions_dir_in(&root).join(version)).unwrap()
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
 }

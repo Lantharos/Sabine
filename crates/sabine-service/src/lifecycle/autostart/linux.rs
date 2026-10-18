@@ -1,42 +1,73 @@
 use std::{
     fs, io,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
 };
 
 use super::run_checked;
+use super::systemd_unit::{
+    UNIT, is_sabine_user_unit, remove_file, system_unit_installed, user_unit_contents,
+    user_unit_path, user_wants_path,
+};
 use crate::{ServiceResult, app::desktop::config_home};
 
-const UNIT: &str = "sabine.service";
 const XDG_ENTRY: &str = "sabine-service.desktop";
 
 /// Uses the user's systemd instance when there is one, so the daemon is
 /// supervised and restarted; other sessions start it from an XDG autostart entry.
+/// Where the system ships the unit, it runs the daemon and this user gets none.
 pub(super) fn install(_executable: &Path, daemon: &Path) -> ServiceResult<bool> {
-    if systemd_main_pid().is_some() {
-        remove_file(&config_home()?.join("autostart").join(XDG_ENTRY))?;
-        install_unit(daemon)?;
-        Ok(true)
-    } else {
-        remove_file(&unit_path()?)?;
+    let config = config_home()?;
+    if systemd_main_pid().is_none() {
+        remove_file(&user_unit_path(&config))?;
         write_xdg_entry(daemon)?;
-        Ok(false)
+        return Ok(false);
     }
+    remove_file(&config.join("autostart").join(XDG_ENTRY))?;
+    if !system_unit_installed() {
+        install_user_unit(daemon)?;
+        return Ok(true);
+    }
+    retire_shadowing_user_unit()?;
+    if !belongs_to_an_installation(daemon) {
+        return Ok(false);
+    }
+    run_checked(Command::new("systemctl").args(["--user", "unmask", UNIT]))?;
+    start_unit(daemon)?;
+    Ok(true)
 }
 
 pub(super) fn uninstall() -> ServiceResult<()> {
-    let unit = unit_path()?;
-    if unit.is_file() {
-        let _ = Command::new("systemctl")
-            .args(["--user", "disable", "--now", UNIT])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        fs::remove_file(unit)?;
+    let config = config_home()?;
+    if system_unit_installed() {
+        retire_shadowing_user_unit()?;
+        let _ = run_checked(Command::new("systemctl").args(["--user", "mask", "--now", UNIT]));
+    } else if user_unit_path(&config).is_file() {
+        let _ = run_checked(Command::new("systemctl").args(["--user", "disable", "--now", UNIT]));
+        fs::remove_file(user_unit_path(&config))?;
         let _ = run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]));
     }
-    remove_file(&config_home()?.join("autostart").join(XDG_ENTRY))?;
+    remove_file(&config.join("autostart").join(XDG_ENTRY))?;
     Ok(())
+}
+
+/// Removes the unit an older Sabine wrote for this user, which would hide the
+/// one the system ships.
+pub(in crate::lifecycle) fn retire_shadowing_user_unit() -> ServiceResult<()> {
+    let config = config_home()?;
+    let unit = user_unit_path(&config);
+    if !system_unit_installed() || !is_sabine_user_unit(&unit) {
+        return Ok(());
+    }
+    fs::remove_file(unit)?;
+    let wants = user_wants_path(&config);
+    if wants
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_symlink())
+    {
+        fs::remove_file(wants)?;
+    }
+    run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))
 }
 
 /// Whether the daemon the service manager supervises is `expected`. Without a
@@ -50,22 +81,33 @@ pub(in crate::lifecycle) fn supervised_daemon_matches(expected: &Path) -> bool {
     }
 }
 
-fn install_unit(daemon: &Path) -> ServiceResult<()> {
-    let path = unit_path()?;
+/// The system unit starts the active system daemon, which hands over to the
+/// user's own installation when that is newer; development builds run elsewhere.
+fn belongs_to_an_installation(daemon: &Path) -> bool {
+    let Ok(daemon) = fs::canonicalize(daemon) else {
+        return false;
+    };
+    [
+        sabine_runtime::sabine_data_dir(),
+        sabine_runtime::system_dir(),
+    ]
+    .iter()
+    .filter_map(|root| fs::canonicalize(root.join("bin/versions")).ok())
+    .any(|versions| daemon.starts_with(versions))
+}
+
+fn install_user_unit(daemon: &Path) -> ServiceResult<()> {
+    let path = user_unit_path(&config_home()?);
     fs::create_dir_all(path.parent().expect("the unit directory has a parent"))?;
-    fs::write(
-        &path,
-        format!(
-            "[Unit]\nDescription=Sabine runtime and app service\n\n[Service]\nExecStart={}\n{}Restart=on-failure\n\n[Install]\nWantedBy=default.target\n",
-            systemd_quote(&daemon.to_string_lossy()),
-            systemd_environment()
-        ),
-    )?;
+    fs::write(&path, user_unit_contents(daemon))?;
     run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-    let _ = Command::new("systemctl")
-        .args(["--user", "reset-failed", UNIT])
-        .status();
-    run_checked(Command::new("systemctl").args(["--user", "enable", "--now", UNIT]))?;
+    run_checked(Command::new("systemctl").args(["--user", "enable", UNIT]))?;
+    start_unit(daemon)
+}
+
+fn start_unit(daemon: &Path) -> ServiceResult<()> {
+    let _ = run_checked(Command::new("systemctl").args(["--user", "reset-failed", UNIT]));
+    run_checked(Command::new("systemctl").args(["--user", "start", UNIT]))?;
     if !supervised_daemon_matches(daemon) {
         run_checked(Command::new("systemctl").args(["--user", "restart", UNIT]))?;
     }
@@ -100,29 +142,6 @@ fn systemd_main_pid() -> Option<u32> {
         .ok()
 }
 
-fn unit_path() -> io::Result<PathBuf> {
-    Ok(config_home()?.join("systemd/user").join(UNIT))
-}
-
-fn remove_file(path: &Path) -> io::Result<()> {
-    match fs::remove_file(path) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
-        _ => Ok(()),
-    }
-}
-
-fn systemd_quote(value: &str) -> String {
-    format!(
-        "\"{}\"",
-        value
-            .replace('\\', "\\\\")
-            .replace('\"', "\\\"")
-            .replace('%', "%%")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-    )
-}
-
 fn desktop_exec(value: &str) -> String {
     let escaped = value
         .replace('\\', "\\\\")
@@ -131,20 +150,4 @@ fn desktop_exec(value: &str) -> String {
         .replace('$', "\\$")
         .replace('%', "%%");
     format!("\"{}\"", escaped.replace('\\', "\\\\"))
-}
-
-fn systemd_environment() -> String {
-    ["XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"]
-        .into_iter()
-        .filter_map(|name| {
-            std::env::var_os(name)
-                .filter(|value| !value.is_empty())
-                .map(|value| {
-                    format!(
-                        "Environment={}\n",
-                        systemd_quote(&format!("{name}={}", value.to_string_lossy()))
-                    )
-                })
-        })
-        .collect()
 }
