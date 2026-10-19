@@ -212,7 +212,7 @@ mod tests {
         let dispatcher = BridgeRequestDispatcher::new(
             BridgeRuntime::new(handlers, registry),
             sabine_bridge::ActivityRegistry::default(),
-            BridgeEventEmitter::new(window.id(), writer.clone()),
+            BridgeEventEmitter::default(),
             writer,
         );
         for id in 0..waiting {

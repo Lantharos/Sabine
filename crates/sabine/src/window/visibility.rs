@@ -32,11 +32,15 @@ impl VisibilityListener {
         let (Some(visible), Some(suspended)) = (parts.next(), parts.next()) else {
             return;
         };
-        (self.0)(WindowVisibility {
+        self.report(WindowVisibility {
             window,
             visible: visible == "1",
             suspended: suspended == "1",
         });
+    }
+
+    pub(crate) fn report(&self, visibility: WindowVisibility) {
+        (self.0)(visibility);
     }
 }
 

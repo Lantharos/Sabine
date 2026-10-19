@@ -591,6 +591,10 @@ Recipes set a window up for its role, and later builder calls refine them:
 - `.palette()`: frameless glass, hidden on blur, out of the taskbar, hidden-window lifecycle
 - `.tray_app()`: starts hidden, out of the taskbar, hidden-window lifecycle; pair it with
   `.tray_icon(...)` and `.single_instance_id(...)`
+- `.background()`: launches without its window, so neither the window host nor the browser runs
+  until the app is activated; closing the window ends both while the app keeps running, and the
+  next activation opens the window again. Pair it with `.single_instance_id(...)`, for example for
+  an app that syncs at login and opens its window when someone launches it
 
 Frameless windows get the system's rounded corners on Windows 11, as on Linux and macOS; Windows 10
 keeps them square. `AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
@@ -627,7 +631,9 @@ services (`tray_icon`, `autostart`, `global_shortcut`, `native_messaging_host`,
 `runtime(RuntimeConfig)`.
 
 The launched `SabineProcess` opens and closes further windows with `open_window` and
-`close_window`, starts activities that keep pages running while their window is out of sight with
+`close_window`, hands out a `SabineProcessHandle` whose `present` shows and focuses the app's
+window, opening it first while a background app runs without one (`on_launched` passes the same
+handle to app code that only builds the window), starts activities that keep pages running while their window is out of sight with
 `begin_activity` or
 `begin_activity_with`, drives guests from Rust with `guest_control`, and reports launch stages
 through `metrics`. Its `BridgeEventEmitter` sends events to every window with `emit` and
@@ -836,7 +842,7 @@ changes through the `window.visibility` bridge event. `visible` is false while t
 or the desktop reports it out of sight; `suspended` is true while the page runs at its background
 frame rate. The native window sends the page its state whenever either changes and again when a page
 finishes loading while hidden or suspended, and reports the same changes to the app's
-`on_visibility_changed` listener.
+`on_visibility_changed` listener, which also hears a window that closes reported as hidden.
 
 The window's `maximized`, `fullscreen` and `tiled` states follow what the desktop configured it
 with: the xdg-toplevel states on Wayland, where `tiled` means any of the tiled edge states, and

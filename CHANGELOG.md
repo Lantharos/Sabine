@@ -1,3 +1,15 @@
+# Unreleased
+
+- `SabineWindow::background()` launches an app without its window, so neither the window host nor
+  the browser runs until someone opens the app. Closing the window ends both while the app keeps
+  running, and opening the app again brings the window back. Apps that sync or listen in the
+  background, such as a mail app started at login, use a fraction of the memory while their window
+  is closed. `SabineProcessHandle::present` opens or focuses the window from app code, for example
+  when someone clicks one of the app's notifications, and `SabineWindow::on_launched` hands app code
+  that handle.
+- `on_visibility_changed` hears a window that closes as hidden.
+- `SabineProcess::id` is `None` while the app has no window.
+
 # Sabine 0.48
 
 - Fix windows that stopped showing anything new while the desktop kept them suspended though they

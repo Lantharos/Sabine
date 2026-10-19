@@ -331,8 +331,20 @@ impl SabineWindow {
         self
     }
 
+    /// Calls `listener` with a handle to the app's process once it launches,
+    /// for app code that presents or opens windows later, such as a
+    /// background app answering a click on one of its notifications.
+    pub fn on_launched(
+        mut self,
+        listener: impl Fn(crate::SabineProcessHandle) + Send + Sync + 'static,
+    ) -> Self {
+        self.config.launched = Some(super::LaunchListener::new(listener));
+        self
+    }
+
     /// Calls `listener` whenever the window becomes visible or hidden, or its
-    /// page is suspended or resumed, starting with the state it opens in.
+    /// page is suspended or resumed, starting with the state it opens in and
+    /// ending with a hidden report when it closes.
     pub fn on_visibility_changed(
         mut self,
         listener: impl Fn(super::WindowVisibility) + Send + Sync + 'static,

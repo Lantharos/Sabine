@@ -33,6 +33,9 @@ pub(crate) struct SabineWindowConfig {
     pub active: bool,
     pub hide_on_blur: bool,
     pub hide_on_close: bool,
+    /// The app launches without its window and keeps running when the window
+    /// closes; activating the app opens the window.
+    pub background: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
     pub transparent: bool,
@@ -58,6 +61,7 @@ pub(crate) struct SabineWindowConfig {
     pub local_files: bool,
     pub browser: BrowserOptions,
     pub listeners: super::WindowListeners,
+    pub launched: Option<super::LaunchListener>,
 }
 
 impl Default for SabineWindowConfig {
@@ -79,6 +83,7 @@ impl Default for SabineWindowConfig {
             active: true,
             hide_on_blur: false,
             hide_on_close: false,
+            background: false,
             skip_taskbar: false,
             always_on_top: false,
             transparent: false,
@@ -100,6 +105,7 @@ impl Default for SabineWindowConfig {
             local_files: false,
             browser: BrowserOptions::default(),
             listeners: super::WindowListeners::default(),
+            launched: None,
         }
     }
 }

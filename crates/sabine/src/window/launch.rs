@@ -101,6 +101,9 @@ impl SabineWindow {
             metrics.clone(),
         )?;
         process.desktop_services = desktop_services;
+        if let Some(listener) = &self.config.launched {
+            listener.deliver(process.handle());
+        }
         process.start_desktop_event_forwarder(self.config.desktop_services.deep_links.clone());
         metrics.mark("launch.ready");
         Ok(process)

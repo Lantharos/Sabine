@@ -4,6 +4,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::bridge::BridgeEventEmitter;
+use crate::host::PrimaryWindow;
 #[cfg(target_os = "linux")]
 use crate::host::ld_library_path;
 use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
@@ -12,7 +14,6 @@ use crate::osr::transport::IpcEndpoint;
 use crate::window::config::SabineWindowConfig;
 use crate::{
     SabineError, SabineProcess, SabineResult, prepare_bridge_command, spawn_bridge_dispatch,
-    spawn_bridge_dispatch_for_window,
 };
 use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
@@ -53,7 +54,7 @@ pub(crate) fn launch_process(
     url: &str,
     metrics: LaunchMetrics,
 ) -> SabineResult<SabineProcess> {
-    let app_id = require_app_id(config)?.to_string();
+    require_app_id(config)?;
     let runtime_lease = sabine_runtime::RuntimeLease::acquire(runtime_dir).map_err(|error| {
         SabineError::CreationFailed {
             message: format!("failed to lease Sabine runtime: {error}"),
@@ -62,68 +63,133 @@ pub(crate) fn launch_process(
     let host_binary = crate::host::ensure_host(runtime_dir)
         .map_err(|message| SabineError::CreationFailed { message })?;
     metrics.mark("host.ready");
-    let mut child = spawn_osr_host_child(runtime_dir, &host_binary, config, url, true)?;
-    metrics.mark(format!("osr_host.spawned.pid.{}", child.id()));
-    let activity = sabine_bridge::ActivityRegistry::default();
-    let bridge_dispatch = spawn_bridge_dispatch(
-        &mut child,
-        BridgeRuntime::new(bridge_handlers.clone(), config.bridge.clone()),
-        activity.clone(),
-        config.listeners.clone(),
-    );
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let (command_sender, command_receiver) = crossbeam_channel::unbounded();
-    Ok(SabineProcess {
+    let mut process = SabineProcess {
         _runtime_lease: runtime_lease,
-        child: ManagedChild::new(child, child_exit_sender.clone()).map_err(|error| {
-            SabineError::CreationFailed {
-                message: format!("failed to own OSR process: {error}"),
-            }
-        })?,
-        primary_alive: true,
+        primary: None,
         primary_status: None,
+        background: config.background,
         extra_windows: Vec::new(),
         child_exit_sender,
         child_exit_receiver,
         command_sender,
         command_receiver,
-        bridge_thread: bridge_dispatch.thread,
-        primary_ready: bridge_dispatch.ready,
-        primary_is_ready: false,
-        extra_bridge_threads: Vec::new(),
-        bridge_emitter: bridge_dispatch.emitter,
+        bridge_threads: Vec::new(),
+        bridge_emitter: BridgeEventEmitter::default(),
         desktop_services: None,
         open_urls: config.open_urls.clone(),
         desktop_event_thread: None,
         desktop_event_stop: None,
-        activity,
+        activity: sabine_bridge::ActivityRegistry::default(),
         metrics,
-        open_window: Some(OpenWindowContext {
+        windows: WindowContext {
             runtime_dir: runtime_dir.to_path_buf(),
             host_binary,
-            app_id,
             bridge_handlers: bridge_handlers.clone(),
-            bridge: config.bridge.clone(),
-        }),
-    })
+            primary: config.clone(),
+            url: url.to_string(),
+        },
+    };
+    if !config.background {
+        open_primary_window(&mut process, launch_activation_token())?;
+        if let Some(id) = process.id() {
+            process.metrics.mark(format!("osr_host.spawned.pid.{id}"));
+        }
+    }
+    Ok(process)
 }
 
-pub(crate) struct OpenWindowContext {
+#[cfg(target_os = "linux")]
+fn launch_activation_token() -> Option<String> {
+    crate::desktop::startup_activation_token()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn launch_activation_token() -> Option<String> {
+    None
+}
+
+pub(crate) struct WindowContext {
     pub(crate) runtime_dir: PathBuf,
     pub(crate) host_binary: PathBuf,
-    pub(crate) app_id: String,
     pub(crate) bridge_handlers: BridgeHandlers,
-    pub(crate) bridge: sabine_bridge::BridgeRegistry,
+    pub(crate) primary: SabineWindowConfig,
+    pub(crate) url: String,
 }
 
-/// Only the window an app opens first was asked for by whoever launched the
-/// app, so only it carries the launch's activation token.
+/// Opens the window the app launches with, again after it closed when the app
+/// runs in the background.
+pub(crate) fn open_primary_window(
+    process: &mut SabineProcess,
+    activation_token: Option<String>,
+) -> SabineResult<()> {
+    let config = process.windows.primary.clone();
+    let url = process.windows.url.clone();
+    let (child, ready) = spawn_window(process, &config, &url, activation_token)?;
+    process.primary = Some(PrimaryWindow {
+        child,
+        ready,
+        is_ready: false,
+    });
+    Ok(())
+}
+
+pub(crate) fn attach_open_window(
+    process: &mut SabineProcess,
+    config: &SabineWindowConfig,
+    url: &str,
+) -> SabineResult<u32> {
+    let mut window_config = config.clone();
+    window_config.app_id = process.windows.primary.app_id.clone();
+    window_config.bridge = process.windows.primary.bridge.clone();
+    let (child, _) = spawn_window(process, &window_config, url, None)?;
+    let window_id = child.id();
+    process.extra_windows.push(child);
+    Ok(window_id)
+}
+
+fn spawn_window(
+    process: &mut SabineProcess,
+    config: &SabineWindowConfig,
+    url: &str,
+    activation_token: Option<String>,
+) -> SabineResult<(ManagedChild, crossbeam_channel::Receiver<()>)> {
+    let context = &process.windows;
+    let mut child = spawn_osr_host_child(
+        &context.runtime_dir,
+        &context.host_binary,
+        config,
+        url,
+        activation_token,
+    )?;
+    let dispatch = spawn_bridge_dispatch(
+        &mut child,
+        BridgeRuntime::new(context.bridge_handlers.clone(), config.bridge.clone()),
+        process.activity.clone(),
+        &process.bridge_emitter,
+        config.listeners.clone(),
+    );
+    process
+        .bridge_threads
+        .retain(|thread| !thread.is_finished());
+    process.bridge_threads.push(dispatch.thread);
+    let child = ManagedChild::new(child, process.child_exit_sender.clone()).map_err(|error| {
+        SabineError::CreationFailed {
+            message: format!("failed to own OSR process: {error}"),
+        }
+    })?;
+    Ok((child, dispatch.ready))
+}
+
+/// Only a window someone asked for carries an activation token: the one the
+/// launch opens, or the one an activation opens for a background app.
 pub(crate) fn spawn_osr_host_child(
     runtime_dir: &Path,
     host_binary: &Path,
     config: &SabineWindowConfig,
     url: &str,
-    launched: bool,
+    activation_token: Option<String>,
 ) -> SabineResult<std::process::Child> {
     let _ = require_app_id(config)?;
     let host_config_path =
@@ -177,12 +243,10 @@ pub(crate) fn spawn_osr_host_child(
     #[cfg(target_os = "linux")]
     {
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
-        if launched {
-            body["activation_token"] = crate::desktop::startup_activation_token().into();
-        }
+        body["activation_token"] = activation_token.into();
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = launched;
+    let _ = activation_token;
     std::fs::write(&host_config_path, body.to_string()).map_err(|error| {
         SabineError::CreationFailed {
             message: format!("failed to write Sabine OSR host config: {error}"),
@@ -209,53 +273,6 @@ pub(crate) fn spawn_osr_host_child(
         })?;
     sabine_runtime::capture_diagnostics(&mut child, "osr");
     Ok(child)
-}
-
-pub(crate) fn attach_open_window(
-    process: &mut SabineProcess,
-    config: &SabineWindowConfig,
-    url: &str,
-) -> SabineResult<u32> {
-    let context = process
-        .open_window
-        .as_ref()
-        .ok_or_else(|| SabineError::CreationFailed {
-            message: "this Sabine process does not support open_window".into(),
-        })?;
-    let mut window_config = config.clone();
-    window_config.app_id = Some(context.app_id.clone());
-    window_config.bridge = context.bridge.clone();
-    let mut child = spawn_osr_host_child(
-        &context.runtime_dir,
-        &context.host_binary,
-        &window_config,
-        url,
-        false,
-    )?;
-    let window_id = child.id();
-    let Some(emitter) = process.bridge_emitter.clone() else {
-        return Err(SabineError::CreationFailed {
-            message: "bridge emitter is unavailable for open_window".into(),
-        });
-    };
-    let thread = spawn_bridge_dispatch_for_window(
-        &mut child,
-        BridgeRuntime::new(context.bridge_handlers.clone(), context.bridge.clone()),
-        process.activity.clone(),
-        &emitter,
-        window_config.listeners.clone(),
-    );
-    if let Some(thread) = thread {
-        process.extra_bridge_threads.push(thread);
-    }
-    process.extra_windows.push(
-        ManagedChild::new(child, process.child_exit_sender.clone()).map_err(|error| {
-            SabineError::CreationFailed {
-                message: format!("failed to own OSR process: {error}"),
-            }
-        })?,
-    );
-    Ok(window_id)
 }
 
 pub(crate) struct CefViewport {

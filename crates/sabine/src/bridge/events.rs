@@ -67,78 +67,50 @@ pub(crate) fn prepare_bridge_command(command: &mut Command) {
 }
 
 pub(crate) struct BridgeDispatch {
-    pub(crate) thread: Option<JoinHandle<()>>,
-    pub(crate) emitter: Option<BridgeEventEmitter>,
+    pub(crate) thread: JoinHandle<()>,
     pub(crate) ready: crossbeam_channel::Receiver<()>,
 }
 
+/// Attaches an OSR-host child to the app's bridge emitter and dispatches the
+/// window's bridge requests through the app's handlers.
 pub(crate) fn spawn_bridge_dispatch(
-    child: &mut Child,
-    bridge_runtime: sabine_bridge::BridgeRuntime,
-    activity: sabine_bridge::ActivityRegistry,
-    listeners: WindowListeners,
-) -> BridgeDispatch {
-    let (ready_sender, ready) = crossbeam_channel::bounded(1);
-    let Some(stdin) = child.stdin.take() else {
-        return BridgeDispatch {
-            thread: None,
-            emitter: None,
-            ready,
-        };
-    };
-    let writer = BridgeWriter::spawn(stdin);
-    let window = child.id();
-    let emitter = BridgeEventEmitter::new(window, writer.clone());
-    let Some(stdout) = child.stdout.take() else {
-        return BridgeDispatch {
-            thread: None,
-            emitter: Some(emitter),
-            ready,
-        };
-    };
-    let dispatcher =
-        BridgeRequestDispatcher::new(bridge_runtime, activity, emitter.clone(), writer);
-    let detach_emitter = emitter.clone();
-    let thread = thread::spawn(move || {
-        read_requests(stdout, window, &dispatcher, listeners, || {
-            let _ = ready_sender.try_send(());
-        });
-        detach_emitter.detach(window);
-    });
-    BridgeDispatch {
-        thread: Some(thread),
-        emitter: Some(emitter),
-        ready,
-    }
-}
-
-/// Attach another OSR-host child to an existing bridge emitter and dispatch
-/// that window's bridge requests through the same handlers.
-pub(crate) fn spawn_bridge_dispatch_for_window(
     child: &mut Child,
     bridge_runtime: sabine_bridge::BridgeRuntime,
     activity: sabine_bridge::ActivityRegistry,
     emitter: &BridgeEventEmitter,
     listeners: WindowListeners,
-) -> Option<JoinHandle<()>> {
-    let writer = BridgeWriter::spawn(child.stdin.take()?);
+) -> BridgeDispatch {
+    let writer = BridgeWriter::spawn(
+        child
+            .stdin
+            .take()
+            .expect("the window host's input is piped"),
+    );
     let window = child.id();
     emitter.attach(window, writer.clone());
-    let stdout = child.stdout.take()?;
-    let activity_emitter = emitter.clone();
+    let stdout = child
+        .stdout
+        .take()
+        .expect("the window host's output is piped");
+    let (ready_sender, ready) = crossbeam_channel::bounded(1);
+    let detach_emitter = emitter.clone();
     let dispatcher =
         BridgeRequestDispatcher::new(bridge_runtime, activity, emitter.clone(), writer);
-    Some(thread::spawn(move || {
-        read_requests(stdout, window, &dispatcher, listeners, || {});
-        activity_emitter.detach(window);
-    }))
+    let thread = thread::spawn(move || {
+        read_requests(stdout, window, &dispatcher, &listeners, || {
+            let _ = ready_sender.try_send(());
+        });
+        detach_emitter.detach(window);
+        listeners.closed(window);
+    });
+    BridgeDispatch { thread, ready }
 }
 
 fn read_requests(
     stdout: ChildStdout,
     window: u32,
     dispatcher: &BridgeRequestDispatcher,
-    listeners: WindowListeners,
+    listeners: &WindowListeners,
     mut ready: impl FnMut(),
 ) {
     let mut reader = BufReader::new(stdout);

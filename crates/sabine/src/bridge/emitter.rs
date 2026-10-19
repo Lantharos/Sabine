@@ -10,7 +10,7 @@ use crate::launch::browser::HOST_CONTROL_PREFIX;
 /// Sends events to the app's pages. Sending waits while a window has not yet
 /// taken earlier events, so a fast producer runs at the pace its pages keep
 /// up with instead of losing events.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BridgeEventEmitter {
     targets: Arc<Mutex<Vec<BridgeTarget>>>,
 }
@@ -21,12 +21,6 @@ struct BridgeTarget {
 }
 
 impl BridgeEventEmitter {
-    pub(super) fn new(window: WindowId, writer: BridgeWriter) -> Self {
-        Self {
-            targets: Arc::new(Mutex::new(vec![BridgeTarget { window, writer }])),
-        }
-    }
-
     /// Sends an event to every window.
     pub fn emit(&self, name: impl Into<String>, payload: serde_json::Value) -> bool {
         self.deliver(None, event_line(&name.into(), &payload), None)
@@ -224,7 +218,8 @@ mod tests {
     fn events_reach_only_the_window_they_are_sent_to() {
         let (mut first, first_writer) = window();
         let (mut second, second_writer) = window();
-        let emitter = BridgeEventEmitter::new(first.id(), first_writer);
+        let emitter = BridgeEventEmitter::default();
+        emitter.attach(first.id(), first_writer);
         emitter.attach(second.id(), second_writer);
         assert!(emitter.emit_to(second.id(), "ping", serde_json::json!(2)));
         assert!(emitter.emit("ping", serde_json::json!(1)));
@@ -239,7 +234,8 @@ mod tests {
     #[test]
     fn detached_windows_receive_nothing() {
         let (mut child, writer) = window();
-        let emitter = BridgeEventEmitter::new(child.id(), writer);
+        let emitter = BridgeEventEmitter::default();
+        emitter.attach(child.id(), writer);
         emitter.detach(child.id());
         assert!(!emitter.emit("ping", serde_json::json!({})));
         let _ = child.kill();

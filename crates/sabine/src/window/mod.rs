@@ -15,7 +15,7 @@ use config::SabineWindowConfig;
 pub use config::{
     SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
 };
-pub(crate) use listeners::{AppearanceListener, WindowListeners, appearance_line};
+pub(crate) use listeners::{AppearanceListener, LaunchListener, WindowListeners, appearance_line};
 pub use style::Color as SabineColor;
 pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
@@ -130,6 +130,16 @@ impl SabineWindow {
         self.hidden()
             .skip_taskbar(true)
             .lifecycle_policy(SabineLifecyclePolicy::hidden_window())
+    }
+
+    /// Background app: launches without its window, so no window host or
+    /// browser runs until the app is activated or
+    /// [`SabineProcessHandle::present`](crate::SabineProcessHandle::present)
+    /// is called. Closing the window ends its host and browser while the app
+    /// keeps running, until the next activation opens the window again.
+    pub fn background(mut self) -> Self {
+        self.config.background = true;
+        self
     }
 
     pub fn new() -> Self {

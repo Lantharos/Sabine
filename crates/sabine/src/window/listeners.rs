@@ -2,8 +2,8 @@ use std::{fmt, sync::Arc};
 
 use sabine_platform::Appearance;
 
-use super::visibility::{VISIBILITY_LINE, VisibilityListener};
-use crate::WindowId;
+use super::visibility::{VISIBILITY_LINE, VisibilityListener, WindowVisibility};
+use crate::{SabineProcessHandle, WindowId};
 
 pub(crate) const APPEARANCE_LINE: &str = "SABINE_SYSTEM_APPEARANCE";
 
@@ -31,6 +31,17 @@ impl WindowListeners {
             return true;
         }
         false
+    }
+
+    /// Reports a window whose host has exited as hidden.
+    pub(crate) fn closed(&self, window: WindowId) {
+        if let Some(listener) = &self.visibility {
+            listener.report(WindowVisibility {
+                window,
+                visible: false,
+                suspended: false,
+            });
+        }
     }
 }
 
@@ -98,5 +109,26 @@ mod tests {
         };
         assert!(listeners.deliver(7, &appearance_line(&appearance)));
         assert_eq!(*delivered.lock().unwrap(), Some(appearance));
+    }
+}
+
+/// The app's listener for its process launching, for app code that presents
+/// or opens windows later on.
+#[derive(Clone)]
+pub(crate) struct LaunchListener(Arc<dyn Fn(SabineProcessHandle) + Send + Sync>);
+
+impl LaunchListener {
+    pub(crate) fn new(listener: impl Fn(SabineProcessHandle) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(listener))
+    }
+
+    pub(crate) fn deliver(&self, handle: SabineProcessHandle) {
+        (self.0)(handle);
+    }
+}
+
+impl fmt::Debug for LaunchListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("LaunchListener")
     }
 }

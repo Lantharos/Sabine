@@ -59,8 +59,5 @@ pub fn dispatch_host_mode_from_args(args: &[String]) -> bool {
     launch::dispatch_host_mode_from_args(args)
 }
 
-pub(crate) use bridge::{
-    parse_host_control, prepare_bridge_command, spawn_bridge_dispatch,
-    spawn_bridge_dispatch_for_window,
-};
+pub(crate) use bridge::{parse_host_control, prepare_bridge_command, spawn_bridge_dispatch};
 pub(crate) use launch::{apply_browser_launch_args, centered_window_position};
