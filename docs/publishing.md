@@ -32,6 +32,7 @@ Unsigned packages build and update normally, but macOS Gatekeeper and Windows Sm
 | `SABINE_NOTARY_APPLE_ID`, `SABINE_NOTARY_TEAM_ID`, `SABINE_NOTARY_PASSWORD` | Notarize and staple disk images; set all three, with an app-specific password |
 | `SABINE_WINDOWS_CERTIFICATE` | Path to a `.pfx` Authenticode certificate; signs every `.exe` in the app and the MSI or setup `.exe` |
 | `SABINE_WINDOWS_CERTIFICATE_PASSWORD` | Password of that certificate |
+| `SABINE_WINDOWS_CERTIFICATE_SHA1` | Thumbprint of a certificate in the Windows certificate store, instead of a `.pfx`; use it for certificates kept on a token or in a cloud signing service, such as Certum SimplySign, whose software puts the certificate in the store |
 | `SABINE_WINDOWS_TIMESTAMP_URL` | RFC 3161 timestamp server, `http://timestamp.digicert.com` by default |
 
 Signing uses `codesign`, `notarytool` and `stapler` from Xcode, and `signtool` from the Windows SDK.

@@ -27,9 +27,18 @@ struct Notary {
 }
 
 struct WindowsSigning {
-    certificate: PathBuf,
-    password: Option<String>,
+    certificate: WindowsCertificate,
     timestamp_url: String,
+}
+
+enum WindowsCertificate {
+    File {
+        path: PathBuf,
+        password: Option<String>,
+    },
+    Store {
+        thumbprint: String,
+    },
 }
 
 impl Signing {
@@ -54,9 +63,25 @@ impl Signing {
         if macos.is_none() && variable("SABINE_NOTARY_APPLE_ID").is_some() {
             return Err("notarization needs SABINE_MACOS_SIGNING_IDENTITY".into());
         }
-        let windows = variable("SABINE_WINDOWS_CERTIFICATE").map(|certificate| WindowsSigning {
-            certificate: PathBuf::from(certificate),
-            password: variable("SABINE_WINDOWS_CERTIFICATE_PASSWORD"),
+        let certificate = match (
+            variable("SABINE_WINDOWS_CERTIFICATE"),
+            variable("SABINE_WINDOWS_CERTIFICATE_SHA1"),
+        ) {
+            (Some(_), Some(_)) => {
+                return Err(
+                    "set SABINE_WINDOWS_CERTIFICATE or SABINE_WINDOWS_CERTIFICATE_SHA1, not both"
+                        .into(),
+                );
+            }
+            (Some(path), None) => Some(WindowsCertificate::File {
+                path: PathBuf::from(path),
+                password: variable("SABINE_WINDOWS_CERTIFICATE_PASSWORD"),
+            }),
+            (None, Some(thumbprint)) => Some(WindowsCertificate::Store { thumbprint }),
+            (None, None) => None,
+        };
+        let windows = certificate.map(|certificate| WindowsSigning {
+            certificate,
             timestamp_url: variable("SABINE_WINDOWS_TIMESTAMP_URL")
                 .unwrap_or_else(|| DEFAULT_TIMESTAMP_URL.to_string()),
         });
@@ -161,20 +186,25 @@ impl Notary {
 impl WindowsSigning {
     fn sign(&self, path: &Path) -> Result<(), String> {
         let mut command = Command::new("signtool");
-        command
-            .args([
-                "sign",
-                "/fd",
-                "SHA256",
-                "/td",
-                "SHA256",
-                "/tr",
-                &self.timestamp_url,
-                "/f",
-            ])
-            .arg(&self.certificate);
-        if let Some(password) = &self.password {
-            command.args(["/p", password]);
+        command.args([
+            "sign",
+            "/fd",
+            "SHA256",
+            "/td",
+            "SHA256",
+            "/tr",
+            &self.timestamp_url,
+        ]);
+        match &self.certificate {
+            WindowsCertificate::File { path, password } => {
+                command.arg("/f").arg(path);
+                if let Some(password) = password {
+                    command.args(["/p", password]);
+                }
+            }
+            WindowsCertificate::Store { thumbprint } => {
+                command.args(["/sha1", thumbprint]);
+            }
         }
         run(command.arg(path), "signtool")
     }
