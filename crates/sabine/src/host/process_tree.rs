@@ -148,7 +148,6 @@ mod platform {
     unsafe extern "C" {
         fn kill(pid: i32, signal: i32) -> i32;
         fn signal(signal: i32, handler: extern "C" fn(i32)) -> usize;
-        fn _exit(status: i32) -> !;
     }
 
     pub(super) fn prepare_child_command(command: &mut Command, die_with_parent: bool) {
@@ -231,6 +230,11 @@ mod platform {
     }
 
     extern "C" fn handle_signal(signal: i32) {
+        end_process_groups();
+        end_by(signal);
+    }
+
+    fn end_process_groups() {
         for slot in &PROCESS_GROUPS {
             let id = slot.load(Ordering::SeqCst);
             if id > 0 {
@@ -240,8 +244,12 @@ mod platform {
                 }
             }
         }
+    }
+
+    fn end_by(signal: i32) {
         unsafe {
-            _exit(128 + signal);
+            libc::signal(signal, libc::SIG_DFL);
+            libc::raise(signal);
         }
     }
 
