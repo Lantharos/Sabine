@@ -1,3 +1,18 @@
+# Unreleased
+
+- Fix Sabine apps crashing as they quit on Linux, most often with NVIDIA's driver, sometimes
+  reported as "double free or corruption". The window tore its graphics device down on another
+  thread while the process was already exiting, so the driver freed its own state twice. The
+  window now destroys its device before it exits, and quitting an app ends it with status 0.
+- An app stopped with `SIGTERM` or `SIGINT`, such as by a system monitor or `systemctl stop`, ends
+  by that signal instead of exiting with a status, so whatever stopped it sees that it did.
+- Tapping or clicking into a text field on Linux asks the desktop for its on-screen keyboard.
+- An app no longer claims the shared Sabine host is out of date when another copy of the app,
+  running with another version of Sabine, has its data open. The window says so and asks to close
+  the other copy, and says the app needs another version of Sabine only when its own host doesn't
+  match. A shared Chromium left over from another Sabine build hands the window to the app's own
+  Chromium, and a browser connection that breaks while it starts is retried.
+
 # Sabine 0.50
 
 - Sabine apps on Linux share one Chromium. Each app keeps its own profile, storage and page
