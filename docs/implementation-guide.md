@@ -983,6 +983,17 @@ main category, such as `Utility`, `System`, `Development`, `Graphics`, `AudioVid
 category to their application category, and Windows Start menu shortcuts use the generic name as
 their description.
 
+Apps that start differently at login, such as in the background, name the arguments the desktop
+should add when someone turns on starting at login:
+
+```toml
+[app]
+autostart_arguments = "--background"
+```
+
+Linux desktop entries carry them as `X-Sabine-Autostart-Arguments`, and desktops that read the key
+append them to `Exec` in the login entry they write.
+
 Apps that should only open from their URL schemes or documents, such as a sign-in window raised by a
 notification, can stay out of launchers:
 

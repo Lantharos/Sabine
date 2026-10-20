@@ -26,6 +26,7 @@ pub(crate) struct Listing {
     pub keywords: Vec<String>,
     #[serde(default = "default_listed")]
     pub listed: bool,
+    pub autostart_arguments: Option<String>,
 }
 
 impl Default for Listing {
@@ -35,6 +36,7 @@ impl Default for Listing {
             categories: default_categories(),
             keywords: Vec::new(),
             listed: default_listed(),
+            autostart_arguments: None,
         }
     }
 }
@@ -71,10 +73,11 @@ impl Listing {
             .generic_name
             .iter()
             .chain(&self.keywords)
+            .chain(&self.autostart_arguments)
             .any(|text| text.trim().is_empty() || text.chars().any(char::is_control))
         {
             return Err(
-                "app generic_name and keywords must be nonempty and contain no control characters"
+                "app generic_name, keywords and autostart_arguments must be nonempty and contain no control characters"
                     .to_string(),
             );
         }
@@ -137,6 +140,12 @@ impl Entry<'_> {
             list(&self.listing.categories),
             string(self.id)
         ));
+        if let Some(arguments) = &self.listing.autostart_arguments {
+            entry.push_str(&format!(
+                "X-Sabine-Autostart-Arguments={}\n",
+                string(arguments.trim())
+            ));
+        }
         entry
     }
 }
@@ -177,6 +186,7 @@ mod tests {
             categories: vec!["System".to_string(), "TerminalEmulator".to_string()],
             keywords: vec!["console".to_string(), "a;b".to_string()],
             listed: true,
+            autostart_arguments: Some("--background".to_string()),
         };
         let entry = Entry {
             id: "com.example.tern",
@@ -190,6 +200,7 @@ mod tests {
         assert!(entry.contains("GenericName=Terminal\n"));
         assert!(entry.contains("Categories=System;TerminalEmulator;\n"));
         assert!(entry.contains("Keywords=console;a\\;b;\n"));
+        assert!(entry.contains("X-Sabine-Autostart-Arguments=--background\n"));
     }
 
     #[test]
