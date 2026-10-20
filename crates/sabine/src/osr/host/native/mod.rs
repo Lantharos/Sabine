@@ -53,6 +53,8 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) renderer_starting: bool,
     #[cfg(target_os = "linux")]
+    pub(super) gpu_starts: Vec<std::thread::JoinHandle<()>>,
+    #[cfg(target_os = "linux")]
     pub(super) direct: Option<direct::DirectPresenter>,
     /// Whether the window's own device holds a page frame to replace the
     /// directly shown one with.
@@ -194,6 +196,8 @@ impl OsrNativeHost {
             window_generation: 0,
             #[cfg(target_os = "linux")]
             renderer_starting: false,
+            #[cfg(target_os = "linux")]
+            gpu_starts: Vec::new(),
             #[cfg(target_os = "linux")]
             direct: None,
             #[cfg(target_os = "linux")]

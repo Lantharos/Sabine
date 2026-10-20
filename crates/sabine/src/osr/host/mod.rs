@@ -38,10 +38,19 @@ pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
     let proxy = event_loop.create_proxy();
     let (sender, receiver) = mpsc::sync_channel(8);
     let mut host = OsrNativeHost::new(config, sender, receiver, proxy);
-    event_loop
+    let ran = event_loop
         .run_app_on_demand(&mut host)
-        .map_err(|error| error.to_string())?;
-    host.failure.take().map_or(Ok(()), Err)
+        .map_err(|error| error.to_string());
+    let failure = host.failure.take();
+    #[cfg(target_os = "linux")]
+    let gpu_starts = host.take_gpu_starts();
+    drop(host);
+    #[cfg(target_os = "linux")]
+    for start in gpu_starts {
+        let _ = start.join();
+    }
+    ran?;
+    failure.map_or(Ok(()), Err)
 }
 
 pub(super) fn trace_host(config: &OsrHostConfig, stage: impl AsRef<str>) {

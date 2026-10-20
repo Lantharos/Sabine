@@ -4,6 +4,13 @@ use super::OsrNativeHost;
 use crate::render::{GpuRenderer, RendererError};
 
 impl OsrNativeHost {
+    /// Graphics devices still starting, which end on their own thread when
+    /// the host is gone. They have to end before the process exits.
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn take_gpu_starts(&mut self) -> Vec<std::thread::JoinHandle<()>> {
+        std::mem::take(&mut self.gpu_starts)
+    }
+
     /// Starts the window's graphics device off the event loop, so the
     /// browser's connection, bridge calls and frames keep flowing while the
     /// drivers start. When the compositor can show the page's frames itself,
@@ -28,6 +35,7 @@ impl OsrNativeHost {
         let transparent = self.config.transparent;
         let sender = self.sender.clone();
         let proxy = self.proxy.clone();
+        self.gpu_starts.retain(|start| !start.is_finished());
         let started = std::thread::Builder::new()
             .name("sabine-gpu-start".to_string())
             .spawn(move || {
@@ -44,9 +52,12 @@ impl OsrNativeHost {
                     proxy.wake_up();
                 }
             });
-        if let Err(error) = started {
-            self.fail(format!("Could not initialize GPU rendering: {error}"));
-            event_loop.exit();
+        match started {
+            Ok(start) => self.gpu_starts.push(start),
+            Err(error) => {
+                self.fail(format!("Could not initialize GPU rendering: {error}"));
+                event_loop.exit();
+            }
         }
     }
 

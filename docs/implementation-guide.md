@@ -303,7 +303,11 @@ to benchmark the GPU in the background.
   compositor imports each slot's texture once, samples it directly, and sends a release acknowledgement only
   after submitted GPU work stops using it. A bounded notification channel wakes a completion
   worker so the last frame also retires while the window is idle or closing. The worker keeps
-  the queue alive through cleanup and sleeps when there is no retirement work. A five-second
+  the queue alive through cleanup and sleeps when there is no retirement work. The window waits
+  for the worker when its renderer goes away, so the graphics device is destroyed before the
+  process exits; drivers such as NVIDIA's crash when a device is destroyed while they tear down
+  their own state at exit. A device still starting when the window closes is waited for the
+  same way. A five-second
   GPU wait failure triggers device recovery without blocking the window thread. The producer
   never reuses a slot before that acknowledgement. Physical texture dimensions remain separate
   from the visible source rectangle and logical window dimensions at non-integer display scales.

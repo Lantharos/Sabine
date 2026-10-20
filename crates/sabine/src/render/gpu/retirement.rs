@@ -6,7 +6,17 @@ use std::{
 
 use super::{RendererError, health::DeviceHealth};
 
-pub(super) struct SubmissionPoller(mpsc::SyncSender<()>);
+/// Waits for submitted GPU work off the render thread, so release callbacks
+/// run as soon as the GPU is done with a frame.
+///
+/// The thread holds the device too, and may be the last to let go of it.
+/// Dropping the poller waits for the thread, so the device is destroyed
+/// before the renderer is gone: graphics drivers tear down their own state
+/// when the process exits and crash if a device is destroyed meanwhile.
+pub(super) struct SubmissionPoller {
+    wake: Option<mpsc::SyncSender<()>>,
+    worker: Option<thread::JoinHandle<()>>,
+}
 
 impl SubmissionPoller {
     pub(super) fn new(
@@ -14,10 +24,10 @@ impl SubmissionPoller {
         queue: &wgpu::Queue,
         health: Arc<DeviceHealth>,
     ) -> Result<Self, RendererError> {
-        let (sender, receiver) = mpsc::sync_channel(1);
+        let (wake, receiver) = mpsc::sync_channel(1);
         let device = device.clone();
         let queue = queue.clone();
-        thread::Builder::new()
+        let worker = thread::Builder::new()
             .name("sabine-gpu-retire".into())
             .spawn(move || {
                 while receiver.recv().is_ok() && health.failure().is_none() {
@@ -31,10 +41,24 @@ impl SubmissionPoller {
                 drop(queue);
             })
             .map_err(|error| RendererError::Device(error.to_string()))?;
-        Ok(Self(sender))
+        Ok(Self {
+            wake: Some(wake),
+            worker: Some(worker),
+        })
     }
 
     pub(super) fn notify(&self) {
-        let _ = self.0.try_send(());
+        if let Some(wake) = &self.wake {
+            let _ = wake.try_send(());
+        }
+    }
+}
+
+impl Drop for SubmissionPoller {
+    fn drop(&mut self) {
+        self.wake = None;
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
     }
 }
