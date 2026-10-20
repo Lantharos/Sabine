@@ -85,6 +85,7 @@ impl OsrNativeHost {
                         self.awaiting_connection = false;
                         continue;
                     }
+                    super::trace_host(&self.config, "browser.connected");
                     self.socket = Some(stream);
                     self.relay.connect(Some(std::sync::Arc::clone(&writer)));
                     self.control_writer = Some(writer);
@@ -192,6 +193,16 @@ impl OsrNativeHost {
                     self.show_file_dialog(request);
                 }
                 OsrHostEvent::FileDialogClosed(_, id, paths) => self.finish_file_dialog(id, paths),
+                #[cfg(target_os = "linux")]
+                OsrHostEvent::RendererStarted(generation, renderer) => {
+                    if generation == self.window_generation && self.window.is_some() {
+                        self.renderer_started(event_loop, *renderer);
+                    }
+                }
+                #[cfg(target_os = "linux")]
+                OsrHostEvent::DirectPresentation(generation, outcome) => {
+                    self.direct_presentation_changed(event_loop, generation, outcome);
+                }
                 OsrHostEvent::Message(_, OsrMessage::MediaPlaying(playing)) => {
                     self.set_page_media_playing(playing);
                 }
@@ -355,9 +366,7 @@ impl OsrNativeHost {
             }
         }
         if needs_initial_present {
-            if self.render() {
-                self.present_rendered_surface("first_paint");
-            }
+            self.present_first_frame();
             return;
         }
         if self.config.visible

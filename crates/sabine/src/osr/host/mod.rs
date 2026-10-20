@@ -11,7 +11,8 @@ mod ui;
 pub(in crate::osr) mod viewport;
 
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{LazyLock, mpsc};
+use std::time::Instant;
 
 use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
 #[cfg(target_os = "macos")]
@@ -21,7 +22,10 @@ pub(crate) use config::OsrHostConfig;
 
 use native::OsrNativeHost;
 
+static STARTED: LazyLock<Instant> = LazyLock::new(Instant::now);
+
 pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
+    LazyLock::force(&STARTED);
     let config = OsrHostConfig::read(config_path)?;
     let mut event_loop_builder = EventLoop::builder();
     #[cfg(target_os = "macos")]
@@ -40,14 +44,15 @@ pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
     host.failure.take().map_or(Ok(()), Err)
 }
 
-fn trace_host(config: &OsrHostConfig, stage: impl AsRef<str>) {
+pub(super) fn trace_host(config: &OsrHostConfig, stage: impl AsRef<str>) {
     if !crate::launch::metrics::trace_enabled() {
         return;
     }
     let label = config.app_id.as_deref().unwrap_or(&*config.title);
     eprintln!(
-        "sabine trace [{label}] osr-host pid={} {}",
+        "sabine trace [{label}] osr-host pid={} +{}ms {}",
         std::process::id(),
+        STARTED.elapsed().as_millis(),
         stage.as_ref()
     );
 }

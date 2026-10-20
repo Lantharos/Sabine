@@ -1,6 +1,12 @@
+#[cfg(target_os = "linux")]
+mod direct;
 mod geometry;
 mod launch;
+mod renderer;
 mod window;
+
+#[cfg(target_os = "linux")]
+pub(super) use direct::DirectOutcome;
 
 use std::{
     cell::Cell,
@@ -40,6 +46,20 @@ pub(super) struct OsrNativeHost {
     pub(super) proxy: EventLoopProxy,
     pub(super) window: Option<Arc<dyn WinitWindow>>,
     pub(super) renderer: Option<GpuRenderer>,
+    /// Counts the windows this host created, so work started for a window
+    /// that is gone is ignored.
+    #[cfg(target_os = "linux")]
+    pub(super) window_generation: u64,
+    #[cfg(target_os = "linux")]
+    pub(super) renderer_starting: bool,
+    #[cfg(target_os = "linux")]
+    pub(super) direct: Option<direct::DirectPresenter>,
+    /// Whether the window's own device holds a page frame to replace the
+    /// directly shown one with.
+    #[cfg(target_os = "linux")]
+    pub(super) direct_handover_ready: bool,
+    #[cfg(target_os = "linux")]
+    pub(super) retiring_direct: Option<direct::DirectPresenter>,
     pub(super) effect: Option<WindowEffect>,
     pub(super) children: Vec<(u64, Child)>,
     pub(super) socket: Option<IpcStream>,
@@ -162,6 +182,16 @@ impl OsrNativeHost {
             proxy,
             window: None,
             renderer: None,
+            #[cfg(target_os = "linux")]
+            window_generation: 0,
+            #[cfg(target_os = "linux")]
+            renderer_starting: false,
+            #[cfg(target_os = "linux")]
+            direct: None,
+            #[cfg(target_os = "linux")]
+            direct_handover_ready: false,
+            #[cfg(target_os = "linux")]
+            retiring_direct: None,
             effect: None,
             children: Vec::new(),
             socket: None,

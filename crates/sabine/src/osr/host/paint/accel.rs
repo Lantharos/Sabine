@@ -29,8 +29,16 @@ impl OsrNativeHost {
         }
         let image = self.image_id(&frame.surface);
         let Some(renderer) = self.renderer.as_mut() else {
-            release_slot();
-            return false;
+            #[cfg(target_os = "linux")]
+            return self
+                .present_directly(frame, Box::new(release_slot))
+                .map_err(|release| release())
+                .is_ok();
+            #[cfg(not(target_os = "linux"))]
+            {
+                release_slot();
+                return false;
+            }
         };
         let slot = ExternalSlot {
             index: frame.resource_slot,
@@ -56,6 +64,10 @@ impl OsrNativeHost {
             if import_unsupported {
                 self.paint_in_software("the window could not import the browser's frames");
             }
+        }
+        #[cfg(target_os = "linux")]
+        if installed.is_ok() && image == ImageId::Main {
+            self.note_main_frame_drawable();
         }
         installed.is_ok()
     }

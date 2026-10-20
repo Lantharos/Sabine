@@ -36,8 +36,27 @@ impl OsrNativeHost {
         }
     }
 
+    /// Shows the window with the page's first frame, drawn by the window's
+    /// device or shown directly by the compositor.
+    pub(in crate::osr::host) fn present_first_frame(&mut self) {
+        #[cfg(target_os = "linux")]
+        if self.renderer.is_none() && self.direct.is_some() {
+            self.note_main_frame_presented();
+            self.present_rendered_surface("first_paint");
+            self.map_direct_presentation();
+            return;
+        }
+        if self.render() {
+            self.present_rendered_surface("first_paint");
+        }
+    }
+
     pub(in crate::osr::host) fn render(&mut self) -> bool {
         if self.resize_held() || self.holds_last_frame() {
+            return false;
+        }
+        #[cfg(target_os = "linux")]
+        if !self.hand_over_direct_presentation() {
             return false;
         }
         let scale = self.scale() as f32;
@@ -59,16 +78,20 @@ impl OsrNativeHost {
             sabine_runtime::report_error("render", format!("drawing the window failed: {error}"));
             return false;
         }
-        if !self.main_frame_presented && self.main_surface_ready() && self.loading.is_none() {
-            self.main_frame_presented = true;
-            crate::osr::host::trace_host(&self.config, "browser.first_paint");
-        }
+        self.note_main_frame_presented();
         if self.effect_regions_dirty {
             self.effect_regions_dirty = false;
             self.update_effect_regions();
         }
         self.drive_loading_fade();
         true
+    }
+
+    fn note_main_frame_presented(&mut self) {
+        if !self.main_frame_presented && self.main_surface_ready() && self.loading.is_none() {
+            self.main_frame_presented = true;
+            crate::osr::host::trace_host(&self.config, "browser.first_paint");
+        }
     }
 
     fn fill_display_list(&self, list: &mut DisplayList, width: f32, height: f32) {

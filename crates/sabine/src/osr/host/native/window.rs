@@ -13,7 +13,6 @@ use winit::{
 };
 
 use crate::osr::host::ui::chrome::resize_direction_at;
-use crate::render::GpuRenderer;
 
 use super::OsrNativeHost;
 
@@ -88,32 +87,25 @@ impl OsrNativeHost {
                 return;
             }
         };
+        #[cfg(not(target_os = "linux"))]
+        let renderer = {
+            let proxy = self.proxy.clone();
+            pollster::block_on(crate::render::GpuRenderer::new(
+                window.clone(),
+                self.config.transparent,
+                move || proxy.wake_up(),
+            ))
+        };
         self.surface_size = window.surface_size();
         self.scale_factor = window.scale_factor();
         self.occluded = false;
-        let proxy = self.proxy.clone();
-        let renderer = match pollster::block_on(GpuRenderer::new(
-            window.clone(),
-            self.config.transparent,
-            move || proxy.wake_up(),
-        )) {
-            Ok(renderer) => renderer,
-            Err(error) => {
-                self.fail(format!("Could not initialize GPU rendering: {error}"));
-                event_loop.exit();
-                return;
-            }
-        };
         #[cfg(target_os = "linux")]
-        let imports_dmabuf = renderer.imports_dmabuf();
-        self.renderer = Some(renderer);
+        {
+            self.window_generation = self.window_generation.wrapping_add(1);
+        }
         self.window = Some(window.clone());
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
             sabine_runtime::report_error("media", error);
-        }
-        #[cfg(target_os = "linux")]
-        if !imports_dmabuf {
-            self.paint_in_software("the window's graphics device cannot import dma-bufs");
         }
         #[cfg(target_os = "linux")]
         {
@@ -130,21 +122,10 @@ impl OsrNativeHost {
         self.send_screen_origin();
         self.send_controls_overlay();
         self.refresh_appearance();
-        self.launch_child();
-        if let Err(error) = self.restore_retained_frames() {
-            self.fail(format!("Could not restore window textures: {error}"));
-            return;
-        }
-        if self.main_surface.is_some() {
-            self.present_rendered_surface("first_paint");
-        } else {
-            self.send_control("repaint\n");
-        }
-        if self.config.visible
-            && let Some(window) = &self.window
-        {
-            window.request_redraw();
-        }
+        #[cfg(target_os = "linux")]
+        self.start_rendering(event_loop);
+        #[cfg(not(target_os = "linux"))]
+        self.renderer_started(event_loop, renderer);
     }
 
     #[cfg(target_os = "linux")]
@@ -239,6 +220,12 @@ impl OsrNativeHost {
         }
         self.release_shortcut_inhibitor();
         self.retain_frames();
+        #[cfg(target_os = "linux")]
+        {
+            self.direct = None;
+            self.retiring_direct = None;
+            self.renderer_starting = false;
+        }
         self.window = None;
         self.renderer = None;
         self.effect = None;

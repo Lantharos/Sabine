@@ -98,6 +98,13 @@ pub(super) enum OsrHostEvent {
     Disconnected(u64),
     IncompatibleHost(u64),
     FileDialogClosed(u64, u32, Option<Vec<std::path::PathBuf>>),
+    #[cfg(target_os = "linux")]
+    RendererStarted(
+        u64,
+        Box<Result<crate::render::GpuRenderer, crate::render::RendererError>>,
+    ),
+    #[cfg(target_os = "linux")]
+    DirectPresentation(u64, super::native::DirectOutcome),
 }
 
 impl OsrHostEvent {
@@ -110,6 +117,8 @@ impl OsrHostEvent {
             | Self::IncompatibleHost(generation)
             | Self::FileDialogClosed(generation, ..) => Some(*generation),
             Self::HostControl(_) => None,
+            #[cfg(target_os = "linux")]
+            Self::RendererStarted(..) | Self::DirectPresentation(..) => None,
         }
     }
 }

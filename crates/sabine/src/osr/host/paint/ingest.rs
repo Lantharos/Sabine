@@ -106,6 +106,8 @@ impl OsrNativeHost {
         }
         self.place_overlay(&image, geometry);
         if batch.surface == OsrSurface::Main {
+            #[cfg(target_os = "linux")]
+            self.note_main_frame_drawable();
             self.main_surface = Some(geometry);
             if self.page_ready() {
                 self.finish_loading();

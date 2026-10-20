@@ -230,6 +230,18 @@ On Linux and macOS, Chromium is launched before the native window and graphics d
 sized for the monitor the window opens on, so browser startup overlaps GPU initialization. Windows
 waits for the compositor device because Chromium must render on the same adapter.
 
+On Linux the window's graphics device starts on a thread of its own, so the browser's connection,
+bridge calls and page events keep flowing while the drivers start. A window without Sabine's own
+titlebar or a loading screen does not wait for that device at all: the page's first frame goes to
+the desktop compositor as it is, a dma-buf shown in a subsurface of the window over a buffer with
+the window's background color (for transparent windows, that color under the opaque region only),
+and the window appears with it. The device starts once that frame is on screen, so it never competes
+with Chromium for the first one. When the device has the page's latest frame, the subsurface comes
+down with the window's first frame of its own in one commit, and the frames the compositor held go
+back to the browser once it gives them back. A compositor without linux-dmabuf, subsurfaces or
+viewports, or one that cannot import the frame's format, leaves the window to wait for its device as
+before.
+
 Chromium's GPU process is on the path to the first frame, so Sabine leaves its graphics features at
 their defaults: overriding any of the Vulkan features makes ANGLE probe every installed Vulkan
 driver before the GPU process can answer, which delayed the first frame by about 200 ms on Linux.
