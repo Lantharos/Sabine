@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.50
 
 - Sabine apps on Linux share one Chromium. Each app keeps its own profile, storage and page
   processes, while the browser, graphics and network processes run once for all of them, so five
