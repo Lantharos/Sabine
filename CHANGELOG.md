@@ -1,5 +1,17 @@
 # Unreleased
 
+- Sabine apps on Linux share one Chromium. Each app keeps its own profile, storage and page
+  processes, while the browser, graphics and network processes run once for all of them, so five
+  apps open together use about half the memory and an app opened while another is running shows its
+  first frame in under 100 ms. If the shared Chromium stops, windows keep their last frame and come
+  back on their own. Apps that want a Chromium of their own set `shared_runtime = false` under
+  `[app]` in `Sabine.toml`, or call `.shared_runtime(false)` on `SabineWindow`. An app's profile
+  moves into the shared Chromium's folder the first time it uses it, and back if it opts out.
+- A launching window shows its page's first frame without waiting for its graphics device to start.
+- Chromium's browser process stays in the app's own systemd unit instead of moving into one named
+  after Chromium, so memory limits, the out-of-memory killer and desktop portals see the right app.
+- `autostart_arguments` under `[app]` names the arguments an app starts with when it's set to start
+  at login, such as `--background`.
 - `SabineWindow::background()` launches an app without its window, so neither the window host nor
   the browser runs until someone opens the app. Closing the window ends both while the app keeps
   running, and opening the app again brings the window back. Apps that sync or listen in the
