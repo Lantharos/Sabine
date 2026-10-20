@@ -198,6 +198,10 @@ is written to a `0600` file beside the socket and referenced by `--sabine-osr-to
 CEF command line (path is not secret; this survives process-singleton handoff). Stale-socket cleanup uses a same-UID health-probe line that listeners
 recognize separately from authenticated CEF connections. Child OSR/CEF processes set
 `PR_SET_PDEATHSIG` on Linux so OSR hosts do not outlive a crashed parent.
+On Linux every Chromium process stays in the systemd unit the app was started in. Chromium would
+otherwise move its browser process into a scope named after Chromium itself, where the desktop's
+portals, memory accounting and out-of-memory handling would treat it as a separate app shared with
+every other Chromium-based program.
 Closing a window stops browser recovery immediately. Transport disconnect forces closure of
 that window's browser, while other windows sharing the CEF process remain alive. A browser
 that cannot connect to its native window closes instead of remaining invisible.

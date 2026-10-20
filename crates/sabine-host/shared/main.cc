@@ -128,8 +128,21 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance,
   return RunSabineHost(main_args, __argc, __argv, sandbox_info);
 }
 #elif !defined(OS_MAC)
+namespace {
+// Outside a Flatpak, Chromium moves its browser process into a systemd scope
+// of its own named after Chromium, which separates it from the app that
+// started it and gives every Sabine app the same identity at the desktop's
+// portals. Chromium 156 and older recognize a Flatpak by
+// FLATPAK_SANDBOX_DIR, newer releases by FLATPAK_ID.
+void StayInLaunchingScope() {
+  setenv("FLATPAK_SANDBOX_DIR", "", 0);
+  setenv("FLATPAK_ID", "sabine", 0);
+}
+}  // namespace
+
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
+  StayInLaunchingScope();
   CefMainArgs main_args(argc, argv);
   return RunSabineHost(main_args, argc, argv);
 }
