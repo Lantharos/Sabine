@@ -20,13 +20,12 @@ namespace {
 
 namespace fs = std::filesystem;
 
-constexpr char kSharedFolder[] = "shared";
-
 std::string Prefix(const fs::path& directory) {
   return directory.parent_path().filename().string() + ".";
 }
 
 #if defined(OS_LINUX)
+constexpr char kSharedFolder[] = "shared";
 constexpr char kRuntimeLock[] = "runtime.lock";
 
 int Lock(const fs::path& directory) {
