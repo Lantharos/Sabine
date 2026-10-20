@@ -68,6 +68,9 @@ pub(super) struct OsrNativeHost {
     pub(super) own_browser: Option<(u64, std::process::Command)>,
     #[cfg(target_os = "linux")]
     pub(super) shared_runtime_refused: bool,
+    /// Whether the browser being connected was asked of the shared runtime.
+    #[cfg(target_os = "linux")]
+    pub(super) browser_shared: bool,
     pub(super) effect: Option<WindowEffect>,
     pub(super) children: Vec<(u64, Child)>,
     pub(super) socket: Option<IpcStream>,
@@ -208,6 +211,8 @@ impl OsrNativeHost {
             own_browser: None,
             #[cfg(target_os = "linux")]
             shared_runtime_refused: false,
+            #[cfg(target_os = "linux")]
+            browser_shared: false,
             effect: None,
             children: Vec::new(),
             socket: None,

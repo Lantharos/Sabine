@@ -166,13 +166,13 @@ pub(super) fn start_socket_reader(
         let mut wire = WireReader::new(stream);
         match wire.read_host_protocol() {
             Ok(Some(version)) if version == sabine_host::HOST_PROTOCOL_VERSION => {}
-            Ok(None) => {
+            Ok(None) | Err(_) => {
                 endpoint.unlink();
                 state.send(&sender, OsrHostEvent::Disconnected(generation));
                 proxy.wake_up();
                 return;
             }
-            Ok(Some(_)) | Err(_) => {
+            Ok(Some(_)) => {
                 endpoint.unlink();
                 state.send(&sender, OsrHostEvent::IncompatibleHost(generation));
                 proxy.wake_up();

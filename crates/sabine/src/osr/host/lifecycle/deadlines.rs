@@ -105,7 +105,40 @@ impl OsrNativeHost {
     }
 }
 
+impl OsrNativeHost {
+    /// Whether the window's own Chromium handed the window to another
+    /// Chromium that holds the app's profile. Chromium exits right after the
+    /// handoff, so this waits for it briefly.
+    pub(in crate::osr::host) fn browser_handed_off(&mut self) -> bool {
+        let deadline = Instant::now() + HANDOFF_EXIT_TIMEOUT;
+        let generation = self.connection_generation;
+        while !self.cef_handed_off {
+            let mut running = false;
+            for (_, child) in self
+                .children
+                .iter_mut()
+                .filter(|(child_generation, _)| *child_generation == generation)
+            {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        self.cef_handed_off |=
+                            status.code() == Some(CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED);
+                    }
+                    Ok(None) => running = true,
+                    Err(_) => {}
+                }
+            }
+            if !running || Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        self.cef_handed_off
+    }
+}
+
 /// CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED — second process for the same
 /// root_cache_path notified the primary and exited.
 const CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: i32 = 24;
 const HANDOFF_CONNECT_TIMEOUT_SECS: u64 = 15;
+const HANDOFF_EXIT_TIMEOUT: Duration = Duration::from_secs(1);

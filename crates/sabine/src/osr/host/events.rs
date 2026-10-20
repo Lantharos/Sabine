@@ -349,12 +349,10 @@ impl OsrNativeHost {
                     self.end_activity(activity)
                 }
                 OsrHostEvent::IncompatibleHost(_) => {
-                    self.fail(
-                        "The shared Sabine host is out of date for this app. Update Sabine, then open the app again."
-                            .to_string(),
-                    );
-                    self.force_close(event_loop);
-                    return;
+                    if self.refuse_incompatible_browser() {
+                        self.force_close(event_loop);
+                        return;
+                    }
                 }
                 OsrHostEvent::Disconnected(_) => {
                     self.page_media_playing = false;
