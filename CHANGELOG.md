@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.51
 
 - Fix Sabine apps crashing as they quit on Linux, most often with NVIDIA's driver, sometimes
   reported as "double free or corruption". The window tore its graphics device down on another
