@@ -2,6 +2,8 @@ mod drag;
 mod drop;
 mod forward;
 mod ime;
+#[cfg(target_os = "linux")]
+mod panel;
 mod pointer;
 mod shortcuts;
 mod surface;
@@ -9,6 +11,8 @@ mod touch;
 
 pub(super) use drag::DragState;
 pub(super) use forward::WheelRemainder;
+#[cfg(target_os = "linux")]
+pub(super) use panel::InputPanelState;
 pub(super) use shortcuts::ShortcutInhibition;
 pub(super) use touch::TouchState;
 

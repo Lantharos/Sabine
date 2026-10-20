@@ -140,6 +140,10 @@ impl OsrNativeHost {
             (false, Some(_)) => self.restore_ime_state(),
             _ => {}
         }
+        #[cfg(target_os = "linux")]
+        if ime_purpose(mode).is_some() {
+            self.show_input_panel();
+        }
     }
 
     pub(in crate::osr::host) fn update_ime_cursor_area(

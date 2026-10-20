@@ -109,6 +109,8 @@ pub(super) struct OsrNativeHost {
     pub(super) ime_cursor_area: (i32, i32, u32, u32),
     pub(super) ime_surrounding: super::types::ImeSurrounding,
     pub(super) ime_preedit: Option<super::types::ImePreedit>,
+    #[cfg(target_os = "linux")]
+    pub(super) input_panel: super::input::InputPanelState,
     pub(super) occluded: bool,
     pub(super) published_window_state: Option<super::types::WindowState>,
     pub(super) toplevel: super::lifecycle::toplevel::ToplevelState,
@@ -244,6 +246,8 @@ impl OsrNativeHost {
             ime_cursor_area: (0, 0, 1, 24),
             ime_surrounding: Default::default(),
             ime_preedit: None,
+            #[cfg(target_os = "linux")]
+            input_panel: Default::default(),
             occluded: false,
             published_window_state: None,
             toplevel: Default::default(),
