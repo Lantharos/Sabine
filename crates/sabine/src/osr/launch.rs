@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
@@ -244,6 +245,7 @@ pub(crate) fn spawn_osr_host_child(
     {
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
         body["activation_token"] = activation_token.into();
+        body["shared_runtime"] = config.browser.shares_runtime(config.dev_mode()).into();
     }
     #[cfg(not(target_os = "linux"))]
     let _ = activation_token;
@@ -282,14 +284,22 @@ pub(crate) struct CefViewport {
     pub(crate) parent_window: Option<u64>,
 }
 
-pub(crate) fn cef_osr_command(
+/// How a window's browser starts: in a Chromium of the window's own, or in
+/// the runtime Sabine apps share.
+pub(crate) struct BrowserLaunch {
+    pub(crate) own: Command,
+    #[cfg(target_os = "linux")]
+    pub(crate) shared: Option<crate::launch::shared::SharedLaunch>,
+}
+
+pub(crate) fn browser_launch(
     runtime_dir: &Path,
     host_binary: &Path,
     endpoint: &IpcEndpoint,
     authentication_token: &str,
     config: &crate::osr::host::OsrHostConfig,
     viewport: CefViewport,
-) -> Result<Command, String> {
+) -> Result<BrowserLaunch, String> {
     let host_binary = host_binary.canonicalize().map_err(|error| {
         format!(
             "could not resolve Sabine host {}: {error}",
@@ -299,8 +309,98 @@ pub(crate) fn cef_osr_command(
     sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
     let host_binary = sabine_host::prepare_host_execution(&host_binary, runtime_dir)?;
     let binary_dir = sabine_host::runtime_binary_directory(runtime_dir);
-    let profile_key = browser_profile_key(config);
-    let cache_dir = browser_profile_dir(&profile_key);
+    let token_file = crate::osr::transport::write_token_file(endpoint, authentication_token)
+        .map_err(|error| format!("could not write Sabine OSR token file: {error}"))?;
+    let window = window_switches(endpoint, &token_file, config, &viewport);
+    #[cfg(target_os = "linux")]
+    let shared = config
+        .shared_runtime
+        .then(|| {
+            crate::launch::shared::SharedLaunch::new(
+                &host_binary,
+                runtime_dir,
+                &binary_dir,
+                &config.browser_options(),
+                &browser_profile_key(config),
+                &window,
+            )
+        })
+        .flatten();
+    let own = own_browser_command(runtime_dir, &host_binary, &binary_dir, config, &window)?;
+    Ok(BrowserLaunch {
+        own,
+        #[cfg(target_os = "linux")]
+        shared,
+    })
+}
+
+/// The switches of one window's browser, which apply to it alone.
+fn window_switches(
+    endpoint: &IpcEndpoint,
+    token_file: &Path,
+    config: &crate::osr::host::OsrHostConfig,
+    viewport: &CefViewport,
+) -> Vec<OsString> {
+    let mut switches: Vec<OsString> = vec![
+        format!("--url={}", config.url).into(),
+        "--sabine-osr".into(),
+        format!("--sabine-osr-endpoint={}", endpoint.argument()).into(),
+        format!("--sabine-parent-pid={}", std::process::id()).into(),
+    ];
+    if viewport.accelerated_paint {
+        switches.push("--sabine-shared-texture".into());
+    }
+    if let Some(parent) = viewport.parent_window {
+        switches.push(format!("--sabine-parent-window={parent}").into());
+    }
+    switches.extend([
+        format!("--sabine-osr-token-file={}", token_file.display()).into(),
+        format!("--sabine-width={}", viewport.page.width).into(),
+        format!("--sabine-height={}", viewport.page.height).into(),
+        format!("--sabine-scale={}", viewport.page.scale_argument()).into(),
+        format!("--sabine-bridge-policy={}", config.bridge_policy).into(),
+        format!("--sabine-active-frame-rate={}", viewport.frame_rate.max(1)).into(),
+        format!(
+            "--sabine-background-frame-rate={}",
+            config.lifecycle.background_frame_rate.max(1)
+        )
+        .into(),
+        format!(
+            "--sabine-background-color={}",
+            config.background_color.to_opaque_argb_hex()
+        )
+        .into(),
+    ]);
+    if config.dev_mode {
+        switches.push("--sabine-dev-mode".into());
+    }
+    if config.lifecycle.retain_hidden_frame {
+        switches.push("--sabine-retain-hidden-frame".into());
+    }
+    if let Some(root) = &config.web_root {
+        let mut argument = OsString::from("--sabine-app-root=");
+        argument.push(root);
+        switches.push(argument);
+    }
+    if config.local_files {
+        switches.push("--sabine-local-files".into());
+    }
+    if config.transparent {
+        switches.push("--sabine-transparent".into());
+    }
+    switches
+}
+
+/// A Chromium of the window's own, sharing its profile only with the app's
+/// other windows.
+fn own_browser_command(
+    runtime_dir: &Path,
+    host_binary: &Path,
+    binary_dir: &Path,
+    config: &crate::osr::host::OsrHostConfig,
+    window: &[OsString],
+) -> Result<Command, String> {
+    let cache_dir = browser_profile_dir(&browser_profile_key(config));
     let cache_dir = std::fs::create_dir_all(&cache_dir)
         .and_then(|()| dunce::canonicalize(&cache_dir))
         .map_err(|error| {
@@ -309,61 +409,22 @@ pub(crate) fn cef_osr_command(
                 cache_dir.display()
             )
         })?;
-    let token_file = crate::osr::transport::write_token_file(endpoint, authentication_token)
-        .map_err(|error| format!("could not write Sabine OSR token file: {error}"))?;
-    let mut command = Command::new(&host_binary);
+    let mut command = Command::new(host_binary);
     sabine_runtime::configure_background_command(&mut command);
     sabine_host::apply_runtime_resource_args(&mut command, runtime_dir);
     command
-        .arg(format!("--url={}", config.url))
-        .arg("--sabine-osr")
-        .arg(format!("--sabine-osr-endpoint={}", endpoint.argument()))
-        .arg(format!("--sabine-parent-pid={}", std::process::id()));
-    if viewport.accelerated_paint {
-        command.arg("--sabine-shared-texture");
-    }
-    if let Some(parent) = viewport.parent_window {
-        command.arg(format!("--sabine-parent-window={parent}"));
-    }
-    command.arg(format!("--sabine-osr-token-file={}", token_file.display()));
-    command
-        .arg(format!("--sabine-width={}", viewport.page.width))
-        .arg(format!("--sabine-height={}", viewport.page.height))
-        .arg(format!("--sabine-scale={}", viewport.page.scale_argument()))
-        .arg(format!("--sabine-bridge-policy={}", config.bridge_policy))
-        .arg(format!(
-            "--sabine-active-frame-rate={}",
-            viewport.frame_rate.max(1)
-        ))
-        .arg(format!(
-            "--sabine-background-frame-rate={}",
-            config.lifecycle.background_frame_rate.max(1)
-        ))
+        .args(window)
         .arg(format!("--root-cache-path={}", cache_dir.display()))
         .arg(format!(
             "--cache-path={}",
             cache_dir.join("browser").display()
         ));
     crate::apply_browser_launch_args(&mut command, &config.browser_options(), config.dev_mode);
-    if config.dev_mode {
-        command.arg("--sabine-dev-mode");
-    }
-    if config.lifecycle.retain_hidden_frame {
-        command.arg("--sabine-retain-hidden-frame");
-    }
-    if let Some(root) = &config.web_root {
-        let mut argument = std::ffi::OsString::from("--sabine-app-root=");
-        argument.push(root);
-        command.arg(argument);
-    }
-    if config.local_files {
-        command.arg("--sabine-local-files");
-    }
     crate::host::prepare_detachable_child_command(&mut command);
-    command.current_dir(&binary_dir);
+    command.current_dir(binary_dir);
     #[cfg(target_os = "linux")]
     {
-        command.env("LD_LIBRARY_PATH", ld_library_path(&binary_dir));
+        command.env("LD_LIBRARY_PATH", ld_library_path(binary_dir));
     }
     #[cfg(target_os = "windows")]
     {
@@ -378,15 +439,14 @@ pub(crate) fn cef_osr_command(
             },
         );
     }
-    let background_color = config.background_color.to_opaque_argb_hex();
-    command.arg(format!("--sabine-background-color={background_color}"));
-    if config.transparent {
-        command
-            .arg("--sabine-transparent")
-            .arg("--default-background-color=0x00000000");
-    } else {
-        command.arg(format!("--default-background-color={background_color}"));
-    }
+    command.arg(format!(
+        "--default-background-color={}",
+        if config.transparent {
+            "0x00000000".to_string()
+        } else {
+            config.background_color.to_opaque_argb_hex()
+        }
+    ));
     command.stdin(Stdio::null());
     command.stdout(Stdio::null());
     command.stderr(Stdio::inherit());

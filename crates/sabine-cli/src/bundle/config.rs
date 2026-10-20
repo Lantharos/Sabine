@@ -27,6 +27,7 @@ pub(super) struct BundleApp {
     pub web: Option<WebBundle>,
     pub updates: Option<sabine_service::AppUpdateConfig>,
     pub window: WindowSection,
+    pub shared_runtime: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -104,6 +105,7 @@ struct AppSection {
     homepage: Option<String>,
     icon: Option<String>,
     installer_image: Option<String>,
+    shared_runtime: Option<bool>,
     #[serde(flatten)]
     associations: Associations,
     #[serde(flatten)]
@@ -240,6 +242,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         web,
         updates,
         window: sabine.window,
+        shared_runtime: sabine.app.shared_runtime.unwrap_or(true),
     })
 }
 

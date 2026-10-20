@@ -1,4 +1,7 @@
 #include "osr/handler.h"
+#if defined(OS_LINUX)
+#include "runtime/server.h"
+#endif
 
 #include <algorithm>
 #include <cstdint>
@@ -176,6 +179,13 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
       }
     }
     if (!HasRegisteredHandlers()) {
+#if defined(OS_LINUX)
+      if (sabine_runtime::IsSharedRuntime(
+              CefCommandLine::GetGlobalCommandLine())) {
+        sabine_runtime::WindowsClosed();
+        return;
+      }
+#endif
       CefQuitMessageLoop();
     }
   }

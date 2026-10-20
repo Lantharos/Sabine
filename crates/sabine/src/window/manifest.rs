@@ -26,6 +26,8 @@ struct SabineFile {
 #[derive(Debug, Default, Deserialize)]
 struct AppSection {
     id: Option<String>,
+    #[cfg(target_os = "linux")]
+    shared_runtime: Option<bool>,
     name: Option<String>,
     version: Option<String>,
     #[serde(default)]
@@ -79,6 +81,10 @@ impl SabineWindow {
         let base = path.parent().unwrap_or_else(|| Path::new("."));
         if base.join("runtimes/cef").is_dir() {
             self.config.runtime.bundled_dir = Some(base.to_path_buf());
+        }
+        #[cfg(target_os = "linux")]
+        if file.app.shared_runtime == Some(false) {
+            self = self.shared_runtime(false);
         }
         if let Some(id) = file.app.id {
             self = self.app_id(id);

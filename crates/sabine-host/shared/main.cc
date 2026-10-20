@@ -9,6 +9,10 @@
 
 #include "app/app.h"
 #include "runtime/probe.h"
+#if defined(OS_LINUX)
+#include "app/profile.h"
+#include "runtime/server.h"
+#endif
 
 #if defined(OS_WIN) || defined(_WIN32)
 #include <windows.h>
@@ -74,6 +78,15 @@ int RunSabineHost(CefMainArgs main_args,
     CefString(&settings.root_cache_path).FromString(root_cache_path);
   }
 
+#if defined(OS_LINUX)
+  if (!runtime_smoke_test && !sabine_runtime::IsSharedRuntime(command_line) &&
+      !root_cache_path.empty() &&
+      !sabine_profile::ReclaimFromSharedRuntime(root_cache_path)) {
+    std::cerr << "The app's profile is open in the shared Sabine runtime"
+              << std::endl;
+    return 1;
+  }
+#endif
   const std::string cache_path = command_line->GetSwitchValue("cache-path");
   if (!cache_path.empty()) {
     CefString(&settings.cache_path).FromString(cache_path);
@@ -84,6 +97,11 @@ int RunSabineHost(CefMainArgs main_args,
   }
 
   CefRunMessageLoop();
+#if defined(OS_LINUX)
+  if (sabine_runtime::IsSharedRuntime(command_line)) {
+    sabine_runtime::Stop();
+  }
+#endif
   const int result = runtime_smoke_test ? RuntimeProbeResult() : 0;
   CefShutdown();
   return result;

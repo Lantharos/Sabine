@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/profile.h"
 #include "guest/manager.h"
 #include "osr/transport/message_kinds.h"
 #ifndef _WIN32
@@ -253,6 +254,7 @@ class SabineOsrHandler : public CefClient,
 #ifndef _WIN32
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
 #endif
+  void UseProfile(BrowserProfile profile, bool shared_texture);
   void ReleaseAcceleratedFrame(uint64_t slot_token);
   void RetireAcceleratedBrowser(int browser_id);
   void RepaintAll();
@@ -561,10 +563,13 @@ class SabineOsrHandler : public CefClient,
   bool awaiting_dropped_paths_ = false;
   std::vector<std::vector<std::string>> held_drag_controls_;
   bool dev_mode_ = false;
+  BrowserProfile profile_;
+  bool shared_texture_ = false;
 
   IMPLEMENT_REFCOUNTING(SabineOsrHandler);
 };
 
-bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line);
+bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
+                            const BrowserProfile& profile);
 
 #endif

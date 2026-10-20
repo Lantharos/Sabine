@@ -80,13 +80,11 @@ CefRefPtr<CefRequestContext> SabineOsrHandler::CreateGuestRequestContext(
   if (cached != guest_contexts_.end()) {
     return cached->second;
   }
-  CefRefPtr<CefCommandLine> command_line =
-      CefCommandLine::GetGlobalCommandLine();
-  const std::string root =
-      command_line ? command_line->GetSwitchValue("root-cache-path").ToString()
-                   : std::string();
   CefRequestContextSettings settings;
-  const std::string cache_path = GuestCachePath(root, partition);
+  const std::string cache_path =
+      profile_.directory.empty()
+          ? std::string()
+          : sabine_profile::CachePath(profile_, GuestFolder(partition));
   if (!cache_path.empty()) {
     CefString(&settings.cache_path).FromString(cache_path);
   }
@@ -199,9 +197,7 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   CefWindowInfo window_info;
   window_info.SetAsWindowless(browser_ ? browser_->GetHost()->GetWindowHandle()
                                        : kNullWindowHandle);
-  sabine_osr::ApplySharedTexture(
-      &window_info,
-      sabine_osr::PreferSharedTexture(CefCommandLine::GetGlobalCommandLine()));
+  sabine_osr::ApplySharedTexture(&window_info, shared_texture_);
 
   CefRefPtr<CefDictionaryValue> extra_info = bridge_policy_->Copy(false);
   extra_info->SetBool("enabled", request.allow_bridge);
@@ -216,7 +212,8 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   extra_info->SetString("sabineGuestId", request.id);
 
   CefRefPtr<CefBrowser> browser = CefBrowserHost::CreateBrowserSync(
-      window_info, this, initial_url, settings, extra_info, context);
+      window_info, this, initial_url, settings, extra_info,
+      context ? context : profile_.context);
   pending_guest_id_.clear();
 
   GuestView* created = guests_.Find(request.id);

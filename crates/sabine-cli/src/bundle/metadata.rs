@@ -13,6 +13,9 @@ pub(super) fn runtime_manifest(
         quote(&app.name),
         quote(&app.version)
     );
+    if !app.shared_runtime {
+        manifest.push_str("shared_runtime = false\n");
+    }
     let associations = &app.associations;
     if !associations.mime_types.is_empty() {
         manifest.push_str(&format!(

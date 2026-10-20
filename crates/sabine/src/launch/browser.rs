@@ -38,11 +38,24 @@ pub(crate) struct BrowserOptions {
     pub remote_devtools_disabled: bool,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
+    /// Runs the app's pages in a Chromium of its own instead of the runtime
+    /// Sabine apps share.
+    #[cfg(target_os = "linux")]
+    pub separate_runtime: bool,
 }
 
 impl BrowserOptions {
     /// Development runs take their port from `SABINE_DEVTOOLS_PORT` first, so
     /// several apps can be debugged at once; `0` lets Chromium pick a free one.
+    /// Whether the app's pages can join the runtime Sabine apps share: its
+    /// Chromium flags are the same as every other app's.
+    #[cfg(target_os = "linux")]
+    pub fn shares_runtime(&self, dev_mode: bool) -> bool {
+        !self.separate_runtime
+            && !dev_mode
+            && self.effective_remote_devtools_port(dev_mode).is_none()
+    }
+
     pub fn effective_remote_devtools_port(&self, dev_mode: bool) -> Option<u16> {
         if self.remote_devtools_disabled {
             return None;

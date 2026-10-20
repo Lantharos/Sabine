@@ -11,6 +11,30 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/runtime/probe.cc"),
     ),
     ("runtime/probe.h", include_str!("../shared/runtime/probe.h")),
+    (
+        "runtime/identity.cc",
+        include_str!("../shared/runtime/identity.cc"),
+    ),
+    (
+        "runtime/identity.h",
+        include_str!("../shared/runtime/identity.h"),
+    ),
+    (
+        "runtime/renderers.cc",
+        include_str!("../shared/runtime/renderers.cc"),
+    ),
+    (
+        "runtime/renderers.h",
+        include_str!("../shared/runtime/renderers.h"),
+    ),
+    (
+        "runtime/server.cc",
+        include_str!("../shared/runtime/server.cc"),
+    ),
+    (
+        "runtime/server.h",
+        include_str!("../shared/runtime/server.h"),
+    ),
     ("main_mac.mm", include_str!("../shared/main_mac.mm")),
     (
         "mac/Info.plist.in",
@@ -18,6 +42,8 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ),
     ("app/app.cc", include_str!("../shared/app/app.cc")),
     ("app/app.h", include_str!("../shared/app/app.h")),
+    ("app/profile.cc", include_str!("../shared/app/profile.cc")),
+    ("app/profile.h", include_str!("../shared/app/profile.h")),
     ("app/bridge.cc", include_str!("../shared/app/bridge.cc")),
     ("app/bridge.h", include_str!("../shared/app/bridge.h")),
     (

@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use super::{data::browser_profile_path, forget::remove_path, registry::RegistryLock};
+use super::{
+    data::{browser_profile_path, shared_browser_profile_paths},
+    forget::remove_path,
+    registry::RegistryLock,
+};
 use crate::{RegisteredApp, SabineService, ServiceResult, types::unix_timestamp};
 
 const DAY: u64 = 24 * 60 * 60;
@@ -62,6 +66,9 @@ impl SabineService {
         remove_path(&directory)?;
         if let Some(profile) = browser_profile_path(id).parent() {
             remove_path(profile)?;
+        }
+        for shared in shared_browser_profile_paths(id) {
+            remove_path(&shared)?;
         }
         Ok(())
     }

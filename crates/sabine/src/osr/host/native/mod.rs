@@ -60,6 +60,12 @@ pub(super) struct OsrNativeHost {
     pub(super) direct_handover_ready: bool,
     #[cfg(target_os = "linux")]
     pub(super) retiring_direct: Option<direct::DirectPresenter>,
+    /// The app's own Chromium, started if the shared runtime cannot serve
+    /// the window being opened.
+    #[cfg(target_os = "linux")]
+    pub(super) own_browser: Option<(u64, std::process::Command)>,
+    #[cfg(target_os = "linux")]
+    pub(super) shared_runtime_refused: bool,
     pub(super) effect: Option<WindowEffect>,
     pub(super) children: Vec<(u64, Child)>,
     pub(super) socket: Option<IpcStream>,
@@ -192,6 +198,10 @@ impl OsrNativeHost {
             direct_handover_ready: false,
             #[cfg(target_os = "linux")]
             retiring_direct: None,
+            #[cfg(target_os = "linux")]
+            own_browser: None,
+            #[cfg(target_os = "linux")]
+            shared_runtime_refused: false,
             effect: None,
             children: Vec::new(),
             socket: None,

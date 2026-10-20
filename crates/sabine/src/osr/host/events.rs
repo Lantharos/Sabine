@@ -200,6 +200,10 @@ impl OsrNativeHost {
                     }
                 }
                 #[cfg(target_os = "linux")]
+                OsrHostEvent::SharedRuntimeOpened(generation, opened) => {
+                    self.shared_runtime_opened(generation, opened);
+                }
+                #[cfg(target_os = "linux")]
                 OsrHostEvent::DirectPresentation(generation, outcome) => {
                     self.direct_presentation_changed(event_loop, generation, outcome);
                 }

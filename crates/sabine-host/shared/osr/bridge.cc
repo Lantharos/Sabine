@@ -1,4 +1,7 @@
 #include "osr/handler.h"
+#if defined(OS_LINUX)
+#include "runtime/renderers.h"
+#endif
 
 #include <cstdint>
 #include <cstdlib>
@@ -45,6 +48,14 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       return true;
     }
   }
+#if defined(OS_LINUX)
+  if (message->GetName() == sabine_bridge::kRendererMessage) {
+    if (!profile_.renderer_cgroup.empty())
+      sabine_runtime::AdoptRenderer(arguments->GetString(0),
+                                    profile_.renderer_cgroup);
+    return true;
+  }
+#endif
   if (message->GetName() == "sabine.clipboard") {
     if (arguments->GetSize() == 1)
       ForwardClipboardRequest(browser, frame, arguments->GetString(0));

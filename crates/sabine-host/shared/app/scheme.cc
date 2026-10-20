@@ -264,7 +264,22 @@ void RegisterAppScheme(CefRawPtr<CefSchemeRegistrar> registrar) {
                                           CEF_SCHEME_OPTION_FETCH_ENABLED);
 }
 
-void ServeAppFiles(const std::string& root) {
+namespace {
+
+void Register(CefRefPtr<CefRequestContext> context,
+              const char* host,
+              CefRefPtr<CefSchemeHandlerFactory> factory) {
+  if (context) {
+    context->RegisterSchemeHandlerFactory(kScheme, host, factory);
+  } else {
+    CefRegisterSchemeHandlerFactory(kScheme, host, factory);
+  }
+}
+
+}  // namespace
+
+void ServeAppFiles(const std::string& root,
+                   CefRefPtr<CefRequestContext> context) {
   std::error_code error;
   const fs::path canonical =
       fs::canonical(fs::path(std::u8string(root.begin(), root.end())), error);
@@ -273,13 +288,11 @@ void ServeAppFiles(const std::string& root) {
                  root.c_str());
     return;
   }
-  CefRegisterSchemeHandlerFactory(kScheme, kAppHost,
-                                  new FileSchemeHandlerFactory(canonical));
+  Register(context, kAppHost, new FileSchemeHandlerFactory(canonical));
 }
 
-void ServeLocalFiles() {
-  CefRegisterSchemeHandlerFactory(kScheme, kFileHost,
-                                  new FileSchemeHandlerFactory(std::nullopt));
+void ServeLocalFiles(CefRefPtr<CefRequestContext> context) {
+  Register(context, kFileHost, new FileSchemeHandlerFactory(std::nullopt));
 }
 
 }  // namespace sabine_app

@@ -51,7 +51,10 @@ class SabineApp : public CefApp,
   };
   std::vector<BrowserPolicy> bridge_policies_;
   CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
+  void ReportRenderer(CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefDictionaryValue> policy);
   const bool runtime_smoke_test_;
+  bool renderer_reported_ = false;
 
   IMPLEMENT_REFCOUNTING(SabineApp);
 };

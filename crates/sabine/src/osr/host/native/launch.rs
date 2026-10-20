@@ -12,6 +12,8 @@ use winit::event_loop::ActiveEventLoop;
 use super::OsrNativeHost;
 use crate::osr;
 use crate::osr::host::socket::start_socket_reader;
+#[cfg(target_os = "linux")]
+use crate::osr::host::types::OsrHostEvent;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn launch_child(&mut self) {
@@ -69,7 +71,7 @@ impl OsrNativeHost {
         {
             self.accelerated_launch = accelerated_paint;
         }
-        let mut command = match osr::cef_osr_command(
+        let launch = match osr::browser_launch(
             &self.config.runtime_dir,
             &self.config.host_binary,
             &endpoint,
@@ -88,7 +90,7 @@ impl OsrNativeHost {
                 accelerated_paint,
             },
         ) {
-            Ok(command) => command,
+            Ok(launch) => launch,
             Err(error) => {
                 self.awaiting_connection = false;
                 endpoint.unlink();
@@ -96,6 +98,8 @@ impl OsrNativeHost {
                 return;
             }
         };
+        #[cfg_attr(target_os = "linux", allow(unused_mut))]
+        let mut command = launch.own;
         #[cfg(target_os = "macos")]
         command.arg(format!(
             "--sabine-surface-service={}",
@@ -118,7 +122,17 @@ impl OsrNativeHost {
                 luid
             });
         }
-        let child = match command.spawn() {
+        #[cfg(target_os = "linux")]
+        let spawned = match launch.shared.filter(|_| !self.shared_runtime_refused) {
+            Some(shared) => {
+                self.open_in_shared_runtime(generation, shared, command);
+                Ok(None)
+            }
+            None => command.spawn().map(Some),
+        };
+        #[cfg(not(target_os = "linux"))]
+        let spawned = command.spawn().map(Some);
+        let child = match spawned {
             Ok(child) => child,
             Err(error) => {
                 self.awaiting_connection = false;
@@ -141,7 +155,66 @@ impl OsrNativeHost {
         {
             self.surface_broker = Some(surface_broker);
         }
-        self.children.push((generation, child));
+        if let Some(child) = child {
+            self.children.push((generation, child));
+        }
+    }
+
+    /// Asks the shared runtime for the window's browser off the event loop,
+    /// keeping the app's own Chromium ready in case the runtime cannot serve
+    /// the app.
+    #[cfg(target_os = "linux")]
+    fn open_in_shared_runtime(
+        &mut self,
+        generation: u64,
+        shared: crate::launch::shared::SharedLaunch,
+        own: std::process::Command,
+    ) {
+        self.own_browser = Some((generation, own));
+        let sender = self.sender.clone();
+        let proxy = self.proxy.clone();
+        let opening = std::thread::Builder::new()
+            .name("sabine-runtime-open".to_string())
+            .spawn(move || {
+                let event = OsrHostEvent::SharedRuntimeOpened(generation, shared.open());
+                if sender.send(event).is_ok() {
+                    proxy.wake_up();
+                }
+            });
+        if let Err(error) = opening {
+            self.shared_runtime_opened(generation, Err(error.to_string()));
+        }
+    }
+
+    /// Starts the app's own Chromium when the shared runtime could not open
+    /// the window, and keeps doing so for this window's later browsers.
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn shared_runtime_opened(
+        &mut self,
+        generation: u64,
+        opened: Result<(), String>,
+    ) {
+        let Some((own_generation, mut command)) = self.own_browser.take() else {
+            return;
+        };
+        let Err(reason) = opened else {
+            crate::osr::host::trace_host(&self.config, "browser.shared");
+            return;
+        };
+        if own_generation != generation {
+            return;
+        }
+        sabine_runtime::report_error(
+            "window",
+            format!(
+                "the shared runtime could not open this window, so the app starts its own: {reason}"
+            ),
+        );
+        self.shared_runtime_refused = true;
+        match command.spawn() {
+            Ok(child) => self.children.push((generation, child)),
+            Err(error) => self.fail(format!("Could not launch the browser: {error}")),
+        }
     }
 
     /// Closes the browser and starts it again, so it picks up how the window

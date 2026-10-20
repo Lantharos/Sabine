@@ -105,6 +105,8 @@ pub(super) enum OsrHostEvent {
     ),
     #[cfg(target_os = "linux")]
     DirectPresentation(u64, super::native::DirectOutcome),
+    #[cfg(target_os = "linux")]
+    SharedRuntimeOpened(u64, Result<(), String>),
 }
 
 impl OsrHostEvent {
@@ -116,6 +118,8 @@ impl OsrHostEvent {
             | Self::Disconnected(generation)
             | Self::IncompatibleHost(generation)
             | Self::FileDialogClosed(generation, ..) => Some(*generation),
+            #[cfg(target_os = "linux")]
+            Self::SharedRuntimeOpened(generation, _) => Some(*generation),
             Self::HostControl(_) => None,
             #[cfg(target_os = "linux")]
             Self::RendererStarted(..) | Self::DirectPresentation(..) => None,

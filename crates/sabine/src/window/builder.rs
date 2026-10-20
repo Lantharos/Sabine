@@ -74,6 +74,14 @@ impl SabineWindow {
         self
     }
 
+    /// Linux only: whether the app's pages run in the Chromium Sabine apps
+    /// share, which is the default. Without it the app starts its own.
+    #[cfg(target_os = "linux")]
+    pub fn shared_runtime(mut self, enabled: bool) -> Self {
+        self.config.browser.separate_runtime = !enabled;
+        self
+    }
+
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.config.title = title.into();
         self

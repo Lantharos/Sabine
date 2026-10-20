@@ -36,8 +36,16 @@ set(SABINE_HOST_SOURCES
   entry.h
   runtime/probe.cc
   runtime/probe.h
+  runtime/identity.cc
+  runtime/identity.h
+  runtime/renderers.cc
+  runtime/renderers.h
+  runtime/server.cc
+  runtime/server.h
   app/app.cc
   app/app.h
+  app/profile.cc
+  app/profile.h
   app/bridge.cc
   app/bridge.h
   app/clipboard.cc
@@ -122,6 +130,12 @@ endif()
 
 if(NOT OS_LINUX)
   list(REMOVE_ITEM SABINE_HOST_SOURCES
+    runtime/identity.cc
+    runtime/identity.h
+    runtime/renderers.cc
+    runtime/renderers.h
+    runtime/server.cc
+    runtime/server.h
     osr/accelerated/linux/device_loss.cc
     osr/accelerated/linux/dmabuf_copy.cc
     osr/accelerated/linux/dmabuf_copy.h

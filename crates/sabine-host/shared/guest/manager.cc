@@ -5,9 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <sstream>
-#include <system_error>
 
 #include "include/cef_parser.h"
 #include "common/json.h"
@@ -134,19 +132,8 @@ std::string DefaultGuestPartition(const std::string& id) {
   return "guest:" + id;
 }
 
-std::string GuestCachePath(const std::string& root_cache_path,
-                           const std::string& partition) {
-  if (root_cache_path.empty() || partition.empty()) {
-    return "";
-  }
-  const std::filesystem::path path = std::filesystem::path(root_cache_path) /
-                                     ("guest-" + SanitizePartition(partition));
-  std::error_code error;
-  std::filesystem::create_directories(path, error);
-  if (error) {
-    return "";
-  }
-  return path.string();
+std::string GuestFolder(const std::string& partition) {
+  return "guest-" + SanitizePartition(partition);
 }
 
 std::string HtmlDataUri(const std::string& body) {

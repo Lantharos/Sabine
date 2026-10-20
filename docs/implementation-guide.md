@@ -169,7 +169,8 @@ configuration from the framework-managed `Sabine.toml` before applying the app's
 explicit Rust settings remain authoritative. That id selects the CEF profile directory and the
 private IPC directory under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`, sockets `0600`).
 
-- **Different `app_id`**: separate CEF processes and profiles; no handoff between apps.
+- **Different `app_id`**: separate profiles. On Linux the apps share one Chromium (see Shared
+  runtime below); elsewhere, and for apps that opt out, each app runs its own.
 - **Same `app_id`**: windows share one CEF browser process (process-singleton handoff). Each window
   still has its own OSR host and authenticated Unix socket. Paint, input, and bridge
   request/response/events all travel on that per-window socket so invokes reach the owning app
@@ -217,6 +218,49 @@ closes the failed browser; a main-page failure becomes a native error. Apps can 
 Windows owns each OSR host through a kill-on-close job, requests graceful native-window
 closure, and bounds the wait before terminating a stalled host. CEF children can leave
 that job so the shared browser process remains available to sibling windows.
+
+### Shared runtime
+
+On Linux, Sabine apps share one Chromium per user: one browser process, GPU process and network
+service serve every app's windows, while each app keeps its own profile, and with it its own
+cookies, storage and renderers, since pages of different profiles never share a renderer. A window
+asks the runtime for its browser over a socket, and the browser then connects to the window as it
+would to a Chromium of the app's own, so paint, input and bridge traffic are unchanged.
+
+The runtime is a socket-activated user service, `sabine-runtime@<key>.service`, which the first app
+to need it starts as a transient unit. The key covers the CEF runtime, the Sabine host and every
+Chromium flag that applies to the whole browser, so apps that need different flags get a runtime of
+their own, and an update starts a new runtime for the apps launched after it while the old one keeps
+serving its windows. A runtime quits 30 seconds after its last window closed, and its socket goes
+with it; one that crashes is started again by systemd, and its windows reconnect and reload their
+pages while they keep showing their last frame.
+
+A request names the app and carries the switches that apply to that window alone: its page, bridge
+policy, app files, local file access, frame rates, background color and transparency. The runtime
+answers only processes of the same user whose executable is the one Sabine registered for that app,
+or one installed for every user below `/usr/lib/sabine/<app id>/`, so no process can open another
+app's profile. The browser's renderers move into the systemd unit of the window that asked for them,
+so the desktop's memory accounting and out-of-memory handling see an app's pages as part of the app,
+while the browser, GPU and network processes stay in the runtime's unit. File dialogs already open
+from the app's own window, so the desktop's portals see the app itself.
+
+Chromium opens profiles only directly inside its user data folder, so the runtime keeps each app's
+profile in its own folder, `profiles/shared/` in Sabine's cache, and moves it there from the app's
+profile folder the first time the app uses the runtime. An app that later runs its own Chromium
+moves it back. A profile is never open in both at once: the runtime does not take an app whose own
+Chromium is running, which instead receives the window, and an app's own Chromium does not start
+while a runtime holds its profile.
+
+Apps can run their own Chromium instead, as on other platforms:
+
+```toml
+[app]
+shared_runtime = false
+```
+
+The Rust builder does the same with `.shared_runtime(false)`. Apps in development, apps with remote
+DevTools, and apps on a system without a user systemd instance always run their own, and so does a
+window the runtime refuses.
 
 ## Paint and composition
 

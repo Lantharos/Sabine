@@ -20,6 +20,9 @@
 #include "include/wrapper/cef_helpers.h"
 #include "osr/handler.h"
 #include "osr/common/registry.h"
+#if defined(OS_LINUX)
+#include "runtime/server.h"
+#endif
 
 namespace {
 const char kImeStateScript[] = R"JS(
@@ -130,7 +133,11 @@ std::string BridgeInstallScript(const std::vector<std::string>& commands) {
 }
 
 void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
-  if (!CreateSabineOsrBrowser(command_line)) {
+  const BrowserProfile profile{
+      nullptr,
+      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("root-cache-path"),
+      std::string(), std::string()};
+  if (!CreateSabineOsrBrowser(command_line, profile)) {
     std::fprintf(stderr, "Sabine OSR: browser creation failed\n");
     if (!sabine_osr::HasRegisteredHandlers())
       CefQuitMessageLoop();
@@ -154,6 +161,12 @@ void SabineApp::OnContextInitialized() {
   }
   CefRefPtr<CefCommandLine> command_line =
       CefCommandLine::GetGlobalCommandLine();
+#if defined(OS_LINUX)
+  if (sabine_runtime::IsSharedRuntime(command_line)) {
+    sabine_runtime::Serve(command_line);
+    return;
+  }
+#endif
   const std::string app_root = command_line->GetSwitchValue("sabine-app-root");
   if (!app_root.empty()) {
     sabine_app::ServeAppFiles(app_root);
@@ -178,8 +191,29 @@ void SabineApp::OnBeforeChildProcessLaunch(
 void SabineApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDictionaryValue> extra_info) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (browser)
-    bridge_policies_.push_back({browser, extra_info});
+  if (!browser)
+    return;
+  bridge_policies_.push_back({browser, extra_info});
+  ReportRenderer(browser->GetMainFrame(), extra_info);
+}
+
+void SabineApp::ReportRenderer(CefRefPtr<CefFrame> frame,
+                               CefRefPtr<CefDictionaryValue> policy) {
+  if (renderer_reported_ || !frame || !frame->IsValid() || !policy ||
+      !policy->GetBool(sabine_bridge::kReportRendererKey)) {
+    return;
+  }
+  const CefString client_id =
+      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue(
+          "renderer-client-id");
+  if (client_id.empty()) {
+    return;
+  }
+  CefRefPtr<CefProcessMessage> message =
+      CefProcessMessage::Create(sabine_bridge::kRendererMessage);
+  message->GetArgumentList()->SetString(0, client_id);
+  frame->SendProcessMessage(PID_BROWSER, message);
+  renderer_reported_ = true;
 }
 
 void SabineApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
@@ -215,6 +249,8 @@ void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                   "sabine.media_state");
   frame->ExecuteJavaScript(SABINE_MEDIA_STATE_JS_RAW, frame->GetURL(), 0);
   const auto policy = BridgePolicyFor(browser);
+  if (frame->IsMain())
+    ReportRenderer(frame, policy);
   const std::string url = frame->GetURL();
   const std::string security_origin = sabine_bridge::RememberContext(context);
   const bool bridged =
@@ -255,6 +291,11 @@ bool SabineApp::OnAlreadyRunningAppRelaunch(
     CefRefPtr<CefCommandLine> command_line,
     const CefString& current_directory) {
   CEF_REQUIRE_UI_THREAD();
+#if defined(OS_LINUX)
+  if (sabine_runtime::IsSharedRuntime(CefCommandLine::GetGlobalCommandLine())) {
+    return true;
+  }
+#endif
   CreateBrowser(command_line);
   return true;
 }

@@ -71,6 +71,9 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
         remove_path(&directory)?;
         let profile = sabine_service::browser_profile_path(&id);
         remove_path(profile.parent().ok_or("browser profile has no parent")?)?;
+        for shared in sabine_service::shared_browser_profile_paths(&id) {
+            remove_path(&shared)?;
+        }
     } else {
         remove_empty_dir(&install)?;
         remove_empty_dir(&directory)?;

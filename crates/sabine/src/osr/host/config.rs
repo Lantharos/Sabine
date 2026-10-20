@@ -50,6 +50,8 @@ pub(crate) struct OsrHostConfig {
     pub vaapi_hardware_decode: bool,
     #[cfg(target_os = "linux")]
     pub activation_token: Option<String>,
+    #[cfg(target_os = "linux")]
+    pub shared_runtime: bool,
 }
 
 impl OsrHostConfig {
@@ -59,6 +61,8 @@ impl OsrHostConfig {
             remote_devtools_disabled: self.remote_devtools_disabled,
             #[cfg(target_os = "linux")]
             vaapi_hardware_decode: self.vaapi_hardware_decode,
+            #[cfg(target_os = "linux")]
+            separate_runtime: !self.shared_runtime,
         }
     }
 
@@ -189,6 +193,11 @@ impl OsrHostConfig {
                 .get("activation_token")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string),
+            #[cfg(target_os = "linux")]
+            shared_runtime: value
+                .get("shared_runtime")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
         })
     }
 }

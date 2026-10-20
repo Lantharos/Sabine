@@ -11,7 +11,10 @@ mod updates;
 pub mod windows_registry;
 
 pub use app::cleanup::AppCleanup;
-pub use app::data::browser_profile_path;
+pub use app::data::{
+    browser_profile_path, browser_profiles_root, shared_browser_profile_paths,
+    shared_browser_profiles_root,
+};
 #[cfg(windows)]
 pub use app::desktop::autostart::APP_AUTOSTART_KEY;
 #[cfg(target_os = "macos")]

@@ -2,6 +2,8 @@ pub(crate) mod bootstrap;
 pub(crate) mod browser;
 pub(crate) mod executable;
 pub(crate) mod metrics;
+#[cfg(target_os = "linux")]
+pub(crate) mod shared;
 
 pub(crate) use browser::apply_browser_launch_args;
 

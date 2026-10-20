@@ -7,4 +7,4 @@ pub(crate) mod paint_rects;
 pub(crate) mod protocol;
 pub(crate) mod transport;
 
-pub(crate) use launch::{CefViewport, cef_osr_command, launch_process, run_from_args};
+pub(crate) use launch::{CefViewport, browser_launch, launch_process, run_from_args};

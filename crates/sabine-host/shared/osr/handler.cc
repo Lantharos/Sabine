@@ -115,7 +115,13 @@ cef_color_t SwitchColor(CefRefPtr<CefCommandLine> command_line,
   return static_cast<cef_color_t>(parsed);
 }
 
-bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
+void SabineOsrHandler::UseProfile(BrowserProfile profile, bool shared_texture) {
+  profile_ = std::move(profile);
+  shared_texture_ = shared_texture;
+}
+
+bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
+                            const BrowserProfile& profile) {
   const std::string url_value = command_line->GetSwitchValue("url");
   const std::string url =
       url_value.empty() ? "about:blank" : std::string(url_value);
@@ -156,6 +162,9 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
     std::cerr << "Sabine OSR: missing bridge policy" << std::endl;
     return false;
   }
+  if (!profile.renderer_cgroup.empty()) {
+    policy->SetBool(sabine_bridge::kReportRendererKey, true);
+  }
   CefBrowserSettings browser_settings;
   browser_settings.windowless_frame_rate = active_frame_rate;
   if (command_line->HasSwitch("sabine-transparent")) {
@@ -193,12 +202,13 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line) {
       command_line->HasSwitch("sabine-transparent"),
       command_line->HasSwitch("sabine-retain-hidden-frame"), active_frame_rate,
       background_frame_rate));
+  handler->UseProfile(profile, shared_texture);
 #if defined(OS_MAC)
   handler->UseSurfaceService(
       command_line->GetSwitchValue("sabine-surface-service"));
 #elif defined(OS_LINUX)
   handler->UseAcceleratedPaint(shared_texture);
 #endif
-  return CefBrowserHost::CreateBrowser(window_info, handler, url,
-                                       browser_settings, policy, nullptr);
+  return CefBrowserHost::CreateBrowser(
+      window_info, handler, url, browser_settings, policy, profile.context);
 }

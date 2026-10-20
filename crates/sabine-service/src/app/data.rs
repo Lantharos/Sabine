@@ -2,8 +2,30 @@ use std::path::PathBuf;
 
 pub fn browser_profile_path(profile_key: &str) -> PathBuf {
     browser_profiles_root()
-        .join(format!("{:016x}", stable_hash(&[profile_key])))
+        .join(profile_folder(profile_key))
         .join("profile")
+}
+
+/// Where the runtime Sabine apps share keeps Chromium's data, and each app's
+/// profile while the app uses it, since Chromium opens profiles only there.
+pub fn shared_browser_profiles_root() -> PathBuf {
+    browser_profiles_root().join("shared")
+}
+
+/// The folders the shared runtime keeps the app's profile in.
+pub fn shared_browser_profile_paths(profile_key: &str) -> Vec<PathBuf> {
+    let prefix = format!("{}.", profile_folder(profile_key));
+    std::fs::read_dir(shared_browser_profiles_root())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+        .map(|entry| entry.path())
+        .collect()
+}
+
+fn profile_folder(profile_key: &str) -> String {
+    format!("{:016x}", stable_hash(&[profile_key]))
 }
 
 fn user_cache_home() -> PathBuf {
@@ -35,6 +57,6 @@ fn stable_hash(parts: &[&str]) -> u64 {
     hash
 }
 
-pub(crate) fn browser_profiles_root() -> PathBuf {
+pub fn browser_profiles_root() -> PathBuf {
     user_cache_home().join("sabine/profiles")
 }

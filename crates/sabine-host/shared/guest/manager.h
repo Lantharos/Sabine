@@ -83,8 +83,8 @@ bool IsGuestBridgeCommand(const std::string& command);
 std::string GuestOperationName(const std::string& command,
                                const std::string& prefix);
 std::string DefaultGuestPartition(const std::string& id);
-std::string GuestCachePath(const std::string& root_cache_path,
-                           const std::string& partition);
+// The profile folder a guest partition keeps its data in.
+std::string GuestFolder(const std::string& partition);
 std::string HtmlDataUri(const std::string& body);
 cef_color_t ParseGuestBackgroundColor(const std::string& value,
                                       cef_color_t fallback);
