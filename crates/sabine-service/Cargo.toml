@@ -40,6 +40,9 @@ ed25519-dalek.workspace = true
 getrandom.workspace = true
 self-replace.workspace = true
 
+[build-dependencies]
+embed-resource.workspace = true
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",

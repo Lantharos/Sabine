@@ -34,6 +34,7 @@ pub(super) fn install(executable: &Path, daemon: &Path) -> ServiceResult<bool> {
         ("DisplayName", "Sabine".to_string()),
         ("DisplayVersion", crate::SABINE_VERSION.to_string()),
         ("Publisher", "Lantharos".to_string()),
+        ("DisplayIcon", format!("{},0", executable.display())),
         (
             "UninstallString",
             format!("\"{}\" uninstall", executable.display()),

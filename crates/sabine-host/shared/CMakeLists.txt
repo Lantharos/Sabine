@@ -125,7 +125,8 @@ if(OS_MAC)
 endif()
 
 if(OS_MAC)
-  list(APPEND SABINE_HOST_SOURCES main_mac.mm)
+  list(APPEND SABINE_HOST_SOURCES main_mac.mm mac/sabine.icns)
+  set_source_files_properties(mac/sabine.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 endif()
 
 if(NOT OS_LINUX)

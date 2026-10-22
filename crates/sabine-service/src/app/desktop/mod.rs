@@ -28,3 +28,15 @@ pub(crate) fn data_home() -> io::Result<PathBuf> {
         None => Ok(home_dir()?.join(".local/share")),
     }
 }
+
+/// Quotes `value` as one argument of a desktop entry's `Exec` key.
+#[cfg(target_os = "linux")]
+pub(crate) fn desktop_exec(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('`', "\\`")
+        .replace('$', "\\$")
+        .replace('%', "%%");
+    format!("\"{}\"", escaped.replace('\\', "\\\\"))
+}

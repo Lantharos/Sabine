@@ -265,6 +265,17 @@ The Rust builder does the same with `.shared_runtime(false)`. Apps in developmen
 DevTools, and apps on a system without a user systemd instance always run their own, and so does a
 window the runtime refuses.
 
+### Sabine's own icon
+
+Sabine shows its own icon wherever it speaks for itself rather than for an app: the window that
+prepares Sabine, the notices that explain why an app could not start, the service and the shared
+runtime. Each time the service starts on Linux it makes sure the user has a hidden
+`com.lantharos.sabine` desktop entry and matching icons in the hicolor theme, unless the system
+already ships them, which a system-wide installation does for every user. Task lists and system
+monitors find the runtime's name and icon there. On Windows the service executables carry the icon,
+and Installed apps shows it as well; on macOS the host bundle carries it. An app's own windows,
+update prompts and bundles always use the app's icon.
+
 ## Paint and composition
 
 Sabine uses one paint policy per platform. Apps cannot select a renderer or opt into experimental

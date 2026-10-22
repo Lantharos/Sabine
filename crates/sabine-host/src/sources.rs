@@ -288,8 +288,20 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ),
 ];
 
+const HOST_ASSETS: &[(&str, &[u8])] = &[(
+    "mac/sabine.icns",
+    include_bytes!("../shared/mac/sabine.icns"),
+)];
+
+fn host_files() -> impl Iterator<Item = (&'static str, &'static [u8])> {
+    HOST_SOURCES
+        .iter()
+        .map(|(name, body)| (*name, body.as_bytes()))
+        .chain(HOST_ASSETS.iter().copied())
+}
+
 pub(crate) fn write_host_source(source_dir: &Path) -> Result<(), String> {
-    for (name, body) in HOST_SOURCES {
+    for (name, body) in host_files() {
         let path = source_dir.join(name);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -341,10 +353,10 @@ fn script_header(source: &str, constant: &str, script: &str) -> String {
 
 pub(crate) fn host_source_fingerprint() -> String {
     let mut hash = 0xcbf29ce484222325u64;
-    for (name, body) in HOST_SOURCES {
+    for (name, body) in host_files() {
         hash_bytes(&mut hash, name.as_bytes());
         hash_bytes(&mut hash, &[0xff]);
-        hash_bytes(&mut hash, body.as_bytes());
+        hash_bytes(&mut hash, body);
     }
     hash_bytes(&mut hash, INSTALL_SCRIPT.as_bytes());
     hash_bytes(&mut hash, clipboard::SCRIPT.as_bytes());

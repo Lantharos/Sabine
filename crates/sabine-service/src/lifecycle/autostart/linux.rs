@@ -9,7 +9,11 @@ use super::systemd_unit::{
     UNIT, is_sabine_user_unit, remove_file, system_unit_installed, user_unit_contents,
     user_unit_path, user_wants_path,
 };
-use crate::{ServiceResult, app::desktop::config_home};
+use crate::{
+    ServiceResult,
+    app::desktop::{config_home, desktop_exec},
+    identity::ICON_NAME,
+};
 
 const XDG_ENTRY: &str = "sabine-service.desktop";
 
@@ -120,7 +124,7 @@ fn write_xdg_entry(daemon: &Path) -> io::Result<()> {
     fs::write(
         directory.join(XDG_ENTRY),
         format!(
-            "[Desktop Entry]\nType=Application\nName=Sabine\nComment=Sabine runtime and app service\nExec={}\nTerminal=false\nNoDisplay=true\n",
+            "[Desktop Entry]\nType=Application\nName=Sabine\nComment=Sabine runtime and app service\nIcon={ICON_NAME}\nExec={}\nTerminal=false\nNoDisplay=true\n",
             desktop_exec(&daemon.to_string_lossy())
         ),
     )
@@ -140,14 +144,4 @@ fn systemd_main_pid() -> Option<u32> {
         .trim()
         .parse()
         .ok()
-}
-
-fn desktop_exec(value: &str) -> String {
-    let escaped = value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('`', "\\`")
-        .replace('$', "\\$")
-        .replace('%', "%%");
-    format!("\"{}\"", escaped.replace('\\', "\\\\"))
 }

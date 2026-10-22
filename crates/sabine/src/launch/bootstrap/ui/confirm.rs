@@ -16,6 +16,7 @@ use winit::{
 use super::{
     diagnostics,
     dialog_paint::{Document, paint},
+    identity,
 };
 
 const WIDTH: f64 = 720.0;
@@ -59,6 +60,21 @@ fn run(title: String, message: String, notice: bool) -> Result<bool, String> {
     outcome.lock().map_err(|error| error.to_string())?.clone()
 }
 
+/// An update prompt speaks for the app, so it carries the app's own icon.
+#[cfg(target_os = "windows")]
+fn app_icon(attributes: WindowAttributes) -> WindowAttributes {
+    crate::desktop::with_app_icon(
+        attributes,
+        winit::platform::windows::WindowAttributesWindows::default(),
+    )
+}
+
+/// Other desktops find the app's icon from the app itself.
+#[cfg(not(target_os = "windows"))]
+fn app_icon(attributes: WindowAttributes) -> WindowAttributes {
+    attributes
+}
+
 pub(super) struct Dialog {
     window: Option<Arc<dyn Window>>,
     context: Option<Context<Arc<dyn Window>>>,
@@ -98,11 +114,11 @@ impl ApplicationHandler for Dialog {
                 560.0,
                 if self.notice { 360.0 } else { 300.0 },
             ));
-        #[cfg(target_os = "windows")]
-        let attributes = crate::desktop::with_app_icon(
-            attributes,
-            winit::platform::windows::WindowAttributesWindows::default(),
-        );
+        let attributes = if self.notice {
+            identity::with_sabine_icon(attributes)
+        } else {
+            app_icon(attributes)
+        };
         let result = (|| {
             let window: Arc<dyn Window> = Arc::from(
                 event_loop

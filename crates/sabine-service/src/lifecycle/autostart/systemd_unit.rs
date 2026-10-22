@@ -18,9 +18,10 @@ pub(super) fn system_unit_installed() -> bool {
     Path::new(SYSTEM_UNIT_DIR).join(UNIT).is_file()
 }
 
-/// Installs the user unit every user's service manager starts at login into
-/// the system rooted at `root`. Its daemon is the active system version, which
-/// hands over to a newer installation of the user's own when there is one.
+/// Installs the user unit every user's service manager starts at login, and
+/// Sabine's desktop entry and icons, into the system rooted at `root`. Its
+/// daemon is the active system version, which hands over to a newer
+/// installation of the user's own when there is one.
 pub fn install_system_unit(root: Option<&Path>) -> ServiceResult<()> {
     let units = path_in_root(root, Path::new(SYSTEM_UNIT_DIR));
     let daemon = system_dir().join("bin/current/sabine-service-daemon");
@@ -37,6 +38,7 @@ pub fn install_system_unit(root: Option<&Path>) -> ServiceResult<()> {
         fs::remove_file(&link)?;
     }
     std::os::unix::fs::symlink(Path::new("..").join(UNIT), link)?;
+    crate::identity::install_for_system(root, &daemon)?;
     Ok(())
 }
 

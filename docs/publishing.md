@@ -56,3 +56,5 @@ The shared system runs one native host for every app. When the host protocol has
 Publication updates version references, runs format, build, test, and Clippy checks, signs and pushes the release commit, waits for CI, signs and pushes the tag, and monitors artifact publication. It never replaces an existing tag. The release initially remains outside GitHub's `latest` channel during the normal soak period. See the [implementation guide](implementation-guide.md#release-and-update-model) for the shared-system update policy.
 
 The changelog retains release history; each GitHub release page shows only its own version section.
+
+Sabine's icon masters live in `assets/icon`: a light and a dark tile, each with a simplified drawing for 32 pixels and below, and a macOS tile on Apple's icon grid. After changing one, run `python3 scripts/icons.py`, which needs ImageMagick with librsvg, to render the hicolor PNGs, Windows icon and macOS icon set that the crates embed.

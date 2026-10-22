@@ -126,6 +126,8 @@ pub fn run_daemon() -> ServiceResult<()> {
     let Some(pid_guard) = claim_daemon_pid()? else {
         return Ok(());
     };
+    #[cfg(target_os = "linux")]
+    show_sabine_in_desktop();
     schedule_installation_finalization(pid_guard.pid);
     let service = SabineService::default();
     loop {
@@ -181,6 +183,17 @@ fn hand_over_to_newer_installation() {
         .is_some_and(|version| crate::types::version_is_newer(&version, crate::SABINE_VERSION));
     if newer {
         let error = Command::new(service_daemon_path(&service)).exec();
+        sabine_runtime::report_error("maintenance", error);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn show_sabine_in_desktop() {
+    let result = std::env::current_exe().and_then(|daemon| {
+        let daemon = crate::install::stable_daemon_path(&daemon).unwrap_or(daemon);
+        crate::identity::install_for_user(&daemon)
+    });
+    if let Err(error) = result {
         sabine_runtime::report_error("maintenance", error);
     }
 }

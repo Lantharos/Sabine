@@ -26,6 +26,8 @@ pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
     )?;
     crate::set_login_autostart(false)?;
     crate::lifecycle::stop_daemon()?;
+    #[cfg(target_os = "linux")]
+    crate::identity::remove_for_user()?;
     for runtime in sabine_runtime::detect_runtime(&Default::default()) {
         if matches!(
             runtime.location,

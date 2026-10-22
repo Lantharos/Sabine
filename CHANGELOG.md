@@ -1,3 +1,12 @@
+# Unreleased
+
+- Sabine has an icon of its own, a navy swallow on an ivory tile. The window that prepares Sabine
+  and the notices it shows when an app can't start carry it, and on Linux the Sabine service adds a
+  hidden `com.lantharos.sabine` desktop entry and icon, for every user when Sabine is installed
+  system-wide, so task lists and system monitors can show the shared Chromium as Sabine. On
+  Windows the Sabine service carries the icon in Task Manager and Installed apps, and on macOS the
+  shared host does in Activity Monitor. Apps keep their own icons, including on their update prompts.
+
 # Sabine 0.52
 
 - Fix Sabine apps failing to open on Linux with "The application could not continue" after the

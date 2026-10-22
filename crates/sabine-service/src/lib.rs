@@ -1,6 +1,7 @@
 mod app;
 mod archive;
 mod http;
+mod identity;
 mod install;
 mod lifecycle;
 mod release;
@@ -28,6 +29,7 @@ pub use app::desktop::native_messaging::native_messaging_registry_keys;
 pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messaging_manifest_dirs};
 pub use app::environment::AppEnvironment;
 pub use app::payload::remove_app_payload;
+pub use identity::{ICON_NAME, icon_png};
 pub use uninstall::uninstall_system;
 
 pub use app::registry::SabineService;

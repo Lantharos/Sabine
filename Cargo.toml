@@ -49,6 +49,7 @@ cc = "1.8.0"
 crossbeam-channel = "0.5.17"
 ctrlc = "3.5.2"
 dunce = "1.0.5"
+embed-resource = "3.0.12"
 editpe = { version = "0.2.4", default-features = false, features = ["std"] }
 fontconfig = "0.11.0"
 futures-util = "0.3.34"

@@ -46,6 +46,7 @@ fn show_platform(title: &str, message: &str) {
     let _ = sabine_runtime::background_command("notify-send")
         .args([
             "--app-name=Sabine",
+            &format!("--icon={}", sabine_service::ICON_NAME),
             "--urgency=critical",
             "--",
             title,
