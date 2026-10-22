@@ -86,6 +86,9 @@ int RunSabineHost(CefMainArgs main_args,
               << std::endl;
     return 1;
   }
+  if (!root_cache_path.empty()) {
+    sabine_profile::ClearStaleSingleton(root_cache_path);
+  }
 #endif
   const std::string cache_path = command_line->GetSwitchValue("cache-path");
   if (!cache_path.empty()) {

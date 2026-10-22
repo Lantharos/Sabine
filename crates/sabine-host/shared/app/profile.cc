@@ -8,10 +8,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include <cerrno>
-#include <climits>
-#include <csignal>
-#include <cstdlib>
 #include <set>
 #endif
 
@@ -38,19 +34,23 @@ int Lock(const fs::path& directory) {
   return fd;
 }
 
-bool OwnChromiumRuns(const fs::path& directory) {
+std::string ExecutableName(const fs::path& link) {
+  std::error_code error;
+  const std::string name = fs::read_symlink(link, error).filename().string();
+  return name.substr(0, name.find(" (deleted)"));
+}
+
+bool HostHoldsSingleton(const fs::path& directory) {
   std::error_code error;
   const std::string owner =
       fs::read_symlink(directory / "SingletonLock", error).string();
   const size_t dash = owner.rfind('-');
-  char host[HOST_NAME_MAX + 1] = {};
-  if (error || dash == std::string::npos ||
-      gethostname(host, sizeof(host) - 1) != 0 ||
-      owner.substr(0, dash) != host) {
+  if (error || dash == std::string::npos) {
     return false;
   }
-  const pid_t pid = std::atoi(owner.c_str() + dash + 1);
-  return pid > 0 && (kill(pid, 0) == 0 || errno == EPERM);
+  const std::string pid = owner.substr(dash + 1);
+  const std::string name = ExecutableName(fs::path("/proc") / pid / "exe");
+  return !name.empty() && name == ExecutableName("/proc/self/exe");
 }
 #endif
 
@@ -82,7 +82,7 @@ bool ClaimForSharedRuntime(const std::string& directory) {
   if (lock < 0) {
     return false;
   }
-  if (OwnChromiumRuns(directory)) {
+  if (HostHoldsSingleton(directory)) {
     close(lock);
     return false;
   }
@@ -112,6 +112,24 @@ bool ReclaimFromSharedRuntime(const std::string& directory) {
   }
   close(lock);
   return true;
+}
+
+void ClearStaleSingleton(const std::string& directory) {
+  const int fd = open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  if (fd < 0) {
+    return;
+  }
+  flock(fd, LOCK_EX);
+  const fs::path path(directory);
+  std::error_code error;
+  if (fs::is_symlink(path / "SingletonLock", error) &&
+      !HostHoldsSingleton(path)) {
+    for (const char* name :
+         {"SingletonLock", "SingletonCookie", "SingletonSocket"}) {
+      fs::remove(path / name, error);
+    }
+  }
+  close(fd);
 }
 #endif
 

@@ -249,7 +249,10 @@ profile in its own folder, `profiles/shared/` in Sabine's cache, and moves it th
 profile folder the first time the app uses the runtime. An app that later runs its own Chromium
 moves it back. A profile is never open in both at once: the runtime does not take an app whose own
 Chromium is running, which instead receives the window, and an app's own Chromium does not start
-while a runtime holds its profile.
+while a runtime holds its profile. Before either opens a profile, Sabine removes the singleton files
+a browser left there without quitting cleanly, judged by whether a Sabine browser still runs as the
+process the lock names, so neither a crash nor a hostname that changed since keeps Chromium from
+opening it.
 
 Apps can run their own Chromium instead, as on other platforms:
 

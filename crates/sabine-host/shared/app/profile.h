@@ -33,6 +33,14 @@ bool ClaimForSharedRuntime(const std::string& directory);
 // Before the app's own Chromium opens |directory|, takes back what the shared
 // runtime moved out of it. Fails while a shared runtime has it open.
 bool ReclaimFromSharedRuntime(const std::string& directory);
+
+// Removes the singleton files Chromium leaves in its user data |directory|
+// when its browser ended without cleaning up, such as on a crash or power
+// loss. Chromium would otherwise ask in a dialog whether another computer
+// still uses the profile when the system's hostname has changed since. Only
+// whether a Sabine host still runs as the pid in "hostname-pid" counts, as a
+// laptop's hostname can change with the network while its browser runs.
+void ClearStaleSingleton(const std::string& directory);
 #endif
 
 }  // namespace sabine_profile

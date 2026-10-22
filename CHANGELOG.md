@@ -1,3 +1,13 @@
+# Unreleased
+
+- Fix Sabine apps failing to open on Linux with "The application could not continue" after the
+  computer's hostname changed, as it does on laptops that take their name from the network, or
+  after a crash or power loss. Chromium found the lock its last run left in the app's profile,
+  took it for another computer using that profile and tried to ask in a dialog the desktop can't
+  show. Sabine now clears a lock no running Sabine browser holds before Chromium starts, and a
+  shared Chromium no longer takes an app's profile while the app's own Chromium still runs after a
+  hostname change.
+
 # Sabine 0.51
 
 - Fix Sabine apps crashing as they quit on Linux, most often with NVIDIA's driver, sometimes
