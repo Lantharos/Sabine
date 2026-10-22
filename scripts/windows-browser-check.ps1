@@ -18,7 +18,7 @@ function Wait-SabineAppFrame([Diagnostics.Process] $Application, [string] $LogPa
         if ($Application.HasExited) {
             throw "Installed app exited with code $($Application.ExitCode): $diagnostics"
         }
-        if ($null -eq $firstPaint -and $diagnostics -match 'osr-host pid=\d+ browser\.first_paint') {
+        if ($null -eq $firstPaint -and $diagnostics -match 'osr-host pid=\d+ \+\d+ms browser\.first_paint') {
             $firstPaint = Get-Date
         }
         if ($null -ne $firstPaint -and ((Get-Date) - $firstPaint).TotalSeconds -ge 5) {
