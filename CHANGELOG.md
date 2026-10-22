@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.52
 
 - Fix Sabine apps failing to open on Linux with "The application could not continue" after the
   computer's hostname changed, as it does on laptops that take their name from the network, or
