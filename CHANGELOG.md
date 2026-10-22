@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.53
 
 - Sabine has an icon of its own, a navy swallow on an ivory tile. The window that prepares Sabine
   and the notices it shows when an app can't start carry it, and on Linux the Sabine service adds a
