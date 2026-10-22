@@ -87,6 +87,13 @@ pub(crate) enum OsrMessage {
     },
     ContextMenuDismissed,
     FileDialog(FileDialogRequest),
+    /// A page asked to print, and Chromium waits for the print dialog's answer.
+    #[cfg(target_os = "linux")]
+    PrintDialog(PrintDialogRequest),
+    /// Chromium rendered the page to print into a PDF file.
+    #[cfg(target_os = "linux")]
+    PrintJob(PrintJobRequest),
+    PrintDocument(PrintDocumentOutcome),
     /// Whether any frame plays audio or video, or holds a call's camera or microphone.
     MediaPlaying(bool),
     MainLoadStarted,
@@ -163,6 +170,32 @@ pub(crate) enum FileDialogMode {
 pub(crate) struct FileDialogFilter {
     pub description: String,
     pub extensions: Vec<String>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PrintDialogRequest {
+    pub id: u32,
+    pub browser: i32,
+    pub has_selection: bool,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PrintJobRequest {
+    pub id: u32,
+    pub browser: i32,
+    pub title: String,
+    pub path: std::path::PathBuf,
+}
+
+/// Whether a document loaded out of sight to print was rendered, or handed
+/// to the system's print dialog.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PrintDocumentOutcome {
+    pub id: u32,
+    pub ok: bool,
 }
 
 /// Content dragged out of a page or dropped into one.

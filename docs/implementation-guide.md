@@ -887,6 +887,7 @@ window.sabine.window
 window.sabine.activity
 window.sabine.guest
 window.sabine.popup
+window.sabine.print
 window.sabine.clipboard   (Linux)
 ```
 
@@ -1174,6 +1175,31 @@ along with a bitmap for apps that do not read PNG (and reads a bitmap when no PN
 `text/uri-list` to the shell's file list; any other MIME type is a clipboard format registered
 under its name. macOS maps the common types to their pasteboard types, file URIs to one pasteboard
 item per file, and keeps any other MIME type under its own name.
+
+### Printing
+
+Chromium on Linux shows no print dialog of its own, so the browser host hands every print to the
+window: `window.print()`, `print.page()`, `print.element()` and pages printed from guests. The
+window asks the XDG print portal with `PreparePrint`, and Chromium lays the page out on the paper,
+orientation, pages and selection people chose. The PDF Chromium makes goes back to the portal with
+`Print` and the token `PreparePrint` returned, so the desktop applies copies, two-sided printing
+and color without asking again. The printer and paper people chose are offered first the next time
+the app prints.
+
+`print.files()` and `BridgeEventEmitter::print_files` print PDF, image and text files as one
+document. A job of only PDF files goes to the portal's `Print` as it is, so the desktop's dialog
+chooses its pages and the printer lays them out. A job with images or text asks with `PreparePrint`
+first. Chromium renders each run of images and text in a browser out of sight, every file on a new
+sheet of the chosen paper, and Sabine joins those pages and the PDF files' in the files' order,
+keeps the chosen pages and prints the result with the token. Sabine tells files apart by their
+contents: PDF, the images Chromium shows (PNG, JPEG, GIF, WebP, AVIF, BMP, ICO and SVG), and text,
+which is anything else without NUL bytes.
+
+macOS and Windows keep Chromium's printing with the system's print dialog. `print.files()` puts the
+files into one PDF, with images and text on the default printer's paper on macOS and on the
+region's paper on Windows, and opens it in a browser out of sight that prints it through the same
+dialog. That browser stays open until the window prints again or closes, so the job can finish
+spooling.
 
 ## Bundles and installs
 

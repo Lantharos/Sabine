@@ -1,5 +1,5 @@
 //! Calls to the XDG desktop portal, shared by Sabine's notifications,
-//! appearance, and global shortcuts.
+//! appearance, global shortcuts, and printing.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -53,10 +53,16 @@ pub fn token() -> String {
     )
 }
 
+/// How the person or the portal answered a request.
+pub enum Response {
+    Answered(Results),
+    Cancelled,
+    Ended,
+}
+
 /// Calls a portal method that answers through a `Request` object, and waits
 /// for that answer. `call` receives the `handle_token` to pass in its options.
-/// A request the person cancelled or the portal turned down is an error.
-pub async fn request<F, Fut>(connection: &Connection, call: F) -> zbus::Result<Results>
+pub async fn respond<F, Fut>(connection: &Connection, call: F) -> zbus::Result<Response>
 where
     F: FnOnce(String) -> Fut,
     Fut: Future<Output = zbus::Result<OwnedObjectPath>>,
@@ -81,10 +87,24 @@ where
         .await
         .ok_or_else(|| zbus::Error::Failure("the portal closed the request".into()))??;
     let (response, results): (u32, Results) = message.body().deserialize()?;
-    match response {
-        0 => Ok(results),
-        1 => Err(zbus::Error::Failure("the request was cancelled".into())),
-        _ => Err(zbus::Error::Failure(
+    Ok(match response {
+        0 => Response::Answered(results),
+        1 => Response::Cancelled,
+        _ => Response::Ended,
+    })
+}
+
+/// Like [`respond`], with a request the person cancelled or the portal turned
+/// down as an error.
+pub async fn request<F, Fut>(connection: &Connection, call: F) -> zbus::Result<Results>
+where
+    F: FnOnce(String) -> Fut,
+    Fut: Future<Output = zbus::Result<OwnedObjectPath>>,
+{
+    match respond(connection, call).await? {
+        Response::Answered(results) => Ok(results),
+        Response::Cancelled => Err(zbus::Error::Failure("the request was cancelled".into())),
+        Response::Ended => Err(zbus::Error::Failure(
             "the portal turned the request down".into(),
         )),
     }

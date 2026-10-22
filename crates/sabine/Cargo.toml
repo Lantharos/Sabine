@@ -33,6 +33,7 @@ glyphon.workspace = true
 image.workspace = true
 base64.workspace = true
 libc.workspace = true
+lopdf.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
 rfd.workspace = true
@@ -62,6 +63,7 @@ uds_windows.workspace = true
 windows-core.workspace = true
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_Ole",
@@ -87,8 +89,8 @@ windows = { version = "0.62.2", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSPasteboard", "NSPasteboardItem", "objc2-quartz-core"] }
-objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true
 objc2-metal.workspace = true

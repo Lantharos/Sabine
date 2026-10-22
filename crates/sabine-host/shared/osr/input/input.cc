@@ -56,6 +56,20 @@ void SabineOsrHandler::HandleControlLine(
     FinishFileDialog(parts);
     return;
   }
+  if (parts.size() == 7 && parts[0] == "print_document") {
+    OpenPrintDocument(parts);
+    return;
+  }
+#if defined(OS_LINUX)
+  if (parts.size() >= 2 && parts[0] == "print_dialog") {
+    FinishPrintDialog(parts);
+    return;
+  }
+  if (parts.size() == 2 && parts[0] == "print_job") {
+    FinishPrintJob(parts);
+    return;
+  }
+#endif
   if (parts.size() == 2 && parts[0] == "context_menu") {
     ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;

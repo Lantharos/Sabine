@@ -112,6 +112,25 @@ impl BridgeEventEmitter {
         )
     }
 
+    /// Prints PDF, image and text files as one document from one window,
+    /// through the desktop's print dialog. Pages get the outcome from
+    /// `print.files` instead.
+    pub fn print_files(
+        &self,
+        window: WindowId,
+        paths: &[std::path::PathBuf],
+        title: Option<&str>,
+    ) -> bool {
+        self.deliver(
+            Some(window),
+            format!(
+                "{HOST_CONTROL_PREFIX}\tprint\t{}",
+                serde_json::json!({ "paths": paths, "title": title })
+            ),
+            None,
+        )
+    }
+
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool {
         self.emit_host_control(
             "focus",

@@ -237,6 +237,28 @@ Text types arrive as strings and other types as `Uint8Array`s. Every desktop car
 type, including files as `text/uri-list`, which Windows and macOS exchange as their own file lists.
 The primary selection is Linux only.
 
+## Printing
+
+```js
+import { print } from "@lantharos/sabine";
+
+await print.page();
+await print.element(document.querySelector("#receipt"));
+const printed = await print.files(["/home/ana/Invoice.pdf", "/home/ana/Beach.jpg"]);
+```
+
+`print.page()` prints the page, like `window.print()`. `print.element()` prints one element on its
+own, with images, canvases and videos scaled to fit the paper. `print.files()` prints PDF, image and
+text files as one document, each image and text file on a sheet of its own. It resolves `false`
+when the person cancels, and rejects with a message naming any file it can't print.
+
+On Linux people choose the printer, pages, paper and orientation in the desktop's own print dialog,
+through its print portal. Pages, images and text are laid out on the paper chosen there, and PDF
+files go to the printer as they are. On macOS and Windows the system's print dialog opens, and
+`print.files()` resolves once it does.
+
+Rust code prints files from a window with `print_files` on the app's `BridgeEventEmitter`.
+
 ## Guests
 
 ```js

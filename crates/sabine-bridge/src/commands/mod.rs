@@ -29,8 +29,10 @@ pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
 /// The files a page's drag carries to other apps, from the file URIs it put
 /// in the drag's `text/uri-list`.
 pub const DRAG_FILES_COMMAND: &str = "sabine.drag.files";
+/// Prints PDF, image and text files through the desktop's print dialog.
+pub const PRINT_FILES_COMMAND: &str = "sabine.print.files";
 
-const WINDOW_COMMANDS: [&str; 12] = [
+const WINDOW_COMMANDS: [&str; 13] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
@@ -43,6 +45,7 @@ const WINDOW_COMMANDS: [&str; 12] = [
     NOTIFICATION_SHOW_COMMAND,
     NOTIFICATION_CLOSE_COMMAND,
     DRAG_FILES_COMMAND,
+    PRINT_FILES_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

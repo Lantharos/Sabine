@@ -68,6 +68,11 @@ pub(super) const KIND_CONTEXT_MENU: u32 = 41;
 pub(super) const KIND_CONTEXT_MENU_DISMISSED: u32 = 42;
 pub(super) const KIND_FILE_DIALOG: u32 = 43;
 pub(super) const KIND_MEDIA_PLAYING: u32 = 44;
+#[cfg(target_os = "linux")]
+pub(super) const KIND_PRINT_DIALOG: u32 = 47;
+#[cfg(target_os = "linux")]
+pub(super) const KIND_PRINT_JOB: u32 = 48;
+pub(super) const KIND_PRINT_DOCUMENT: u32 = 49;
 const MAX_HELLO_BYTES: usize = 64;
 pub(super) const BATCH_ENTRY_LEN: usize = 28;
 
@@ -291,6 +296,20 @@ impl WireReader {
             },
             KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
             KIND_FILE_DIALOG => OsrMessage::FileDialog(
+                serde_json::from_slice(&payload)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
+            #[cfg(target_os = "linux")]
+            KIND_PRINT_DIALOG => OsrMessage::PrintDialog(
+                serde_json::from_slice(&payload)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
+            #[cfg(target_os = "linux")]
+            KIND_PRINT_JOB => OsrMessage::PrintJob(
+                serde_json::from_slice(&payload)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
+            KIND_PRINT_DOCUMENT => OsrMessage::PrintDocument(
                 serde_json::from_slice(&payload)
                     .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
             ),

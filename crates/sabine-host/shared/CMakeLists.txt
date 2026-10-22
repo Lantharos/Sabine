@@ -72,6 +72,10 @@ set(SABINE_HOST_SOURCES
   osr/browser/recovery.cc
   osr/browser/downloads.cc
   osr/browser/permissions.cc
+  osr/print/document.cc
+  osr/print/document.h
+  osr/print/documents.cc
+  osr/print/page.cc
   osr/input/drag.cc
   osr/guest/commands.cc
   osr/guest/lifecycle.cc

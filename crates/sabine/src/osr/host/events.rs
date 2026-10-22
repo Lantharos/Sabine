@@ -194,6 +194,15 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::FileDialogClosed(_, id, paths) => self.finish_file_dialog(id, paths),
                 #[cfg(target_os = "linux")]
+                OsrHostEvent::Message(_, OsrMessage::PrintDialog(request)) => {
+                    self.show_page_print_dialog(request);
+                }
+                #[cfg(target_os = "linux")]
+                OsrHostEvent::Message(_, OsrMessage::PrintJob(job)) => self.print_page(job),
+                OsrHostEvent::Message(_, OsrMessage::PrintDocument(outcome)) => {
+                    self.finish_print_document(outcome);
+                }
+                #[cfg(target_os = "linux")]
                 OsrHostEvent::RendererStarted(generation, renderer) => {
                     if generation == self.window_generation && self.window.is_some() {
                         self.renderer_started(event_loop, *renderer);
@@ -338,6 +347,7 @@ impl OsrNativeHost {
                 OsrHostEvent::HostControl(HostControl::Notify(notification)) => {
                     self.show_notification(notification)
                 }
+                OsrHostEvent::HostControl(HostControl::Print(files)) => self.print_files(files),
                 OsrHostEvent::HostControl(HostControl::Quit) => {
                     self.begin_close(event_loop);
                     return;
@@ -355,6 +365,7 @@ impl OsrNativeHost {
                     }
                 }
                 OsrHostEvent::Disconnected(_) => {
+                    self.abandon_printing();
                     self.page_media_playing = false;
                     self.clear_media();
                     self.drop_connection();
@@ -449,6 +460,7 @@ pub(super) fn host_control_from_parts(command: &str, value: &str) -> Option<Host
             value.to_string(),
         )))),
         "notify" => crate::osr::protocol::notification_from_json(value).map(HostControl::Notify),
+        "print" => serde_json::from_str(value).ok().map(HostControl::Print),
         "activity.begin" => activity_control_value(value).map(HostControl::ActivityBegin),
         "activity.end" => activity_control_value(value).map(HostControl::ActivityEnd),
         "regions" => serde_json::from_str(value).ok().map(|regions| {

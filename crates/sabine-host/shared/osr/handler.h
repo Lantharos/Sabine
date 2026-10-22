@@ -17,6 +17,7 @@
 
 #include "app/profile.h"
 #include "guest/manager.h"
+#include "osr/print/document.h"
 #include "osr/transport/message_kinds.h"
 #ifndef _WIN32
 #include "osr/paint/shared_pool.h"
@@ -29,6 +30,9 @@
 #include "include/cef_download_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_permission_handler.h"
+#if defined(OS_LINUX)
+#include "include/cef_print_handler.h"
+#endif
 #include "include/cef_render_handler.h"
 #include "include/cef_request_handler.h"
 #include "include/cef_request_context.h"
@@ -49,6 +53,14 @@ constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
 
 enum class PaintSurface { kMain, kPopup, kGuest };
 
+#if defined(OS_LINUX)
+struct PrintPaper {
+  double width_mm = 210;
+  double height_mm = 297;
+  bool landscape = false;
+};
+#endif
+
 class SabineOsrHandler : public CefClient,
                          public CefContextMenuHandler,
                          public CefDialogHandler,
@@ -61,6 +73,9 @@ class SabineOsrHandler : public CefClient,
                          public CefLifeSpanHandler,
                          public CefLoadHandler,
                          public CefPermissionHandler,
+#if defined(OS_LINUX)
+                         public CefPrintHandler,
+#endif
                          public CefRenderHandler,
                          public CefRequestHandler {
  public:
@@ -99,6 +114,21 @@ class SabineOsrHandler : public CefClient,
   }
   CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+#if defined(OS_LINUX)
+  CefRefPtr<CefPrintHandler> GetPrintHandler() override { return this; }
+  void OnPrintStart(CefRefPtr<CefBrowser> browser) override {}
+  void OnPrintSettings(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefPrintSettings> settings,
+                       bool get_defaults) override;
+  bool OnPrintDialog(CefRefPtr<CefBrowser> browser,
+                     bool has_selection,
+                     CefRefPtr<CefPrintDialogCallback> callback) override;
+  bool OnPrintJob(CefRefPtr<CefBrowser> browser,
+                  const CefString& document_name,
+                  const CefString& pdf_file_path,
+                  CefRefPtr<CefPrintJobCallback> callback) override;
+  void OnPrintReset(CefRefPtr<CefBrowser> browser) override {}
+#endif
   bool OnShowPermissionPrompt(
       CefRefPtr<CefBrowser> browser,
       uint64_t prompt_id,
@@ -354,6 +384,15 @@ class SabineOsrHandler : public CefClient,
   void DroppedPathsDelivered(const std::string& serial);
   void ChooseContextMenuCommand(int command_id);
   void FinishFileDialog(const std::vector<std::string>& parts);
+#if defined(OS_LINUX)
+  void FinishPrintDialog(const std::vector<std::string>& parts);
+  void FinishPrintJob(const std::vector<std::string>& parts);
+#endif
+  void OpenPrintDocument(const std::vector<std::string>& parts);
+  void ReportPrintDocument(uint32_t id, bool ok);
+  void PrintDocumentClosed(uint32_t id);
+  void ClosePrintDocuments();
+  void QuitWhenClosed();
   void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
   bool ConnectSocket();
   bool QueueControl(std::string line, std::optional<std::string> body);
@@ -552,6 +591,13 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefRunContextMenuCallback> context_menu_callback_;
   uint32_t file_dialog_serial_ = 0;
   std::map<uint32_t, CefRefPtr<CefFileDialogCallback>> file_dialogs_;
+#if defined(OS_LINUX)
+  PrintPaper print_paper_;
+  uint32_t print_serial_ = 0;
+  std::map<uint32_t, CefRefPtr<CefPrintDialogCallback>> print_dialogs_;
+  std::map<uint32_t, CefRefPtr<CefPrintJobCallback>> print_jobs_;
+#endif
+  std::map<uint32_t, CefRefPtr<sabine_osr::PrintDocument>> print_documents_;
   CefRefPtr<CefBrowser> drag_source_browser_;
   CefRefPtr<CefDragData> drag_source_data_;
   cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;

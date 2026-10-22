@@ -6,6 +6,13 @@
   system-wide, so task lists and system monitors can show the shared Chromium as Sabine. On
   Windows the Sabine service carries the icon in Task Manager and Installed apps, and on macOS the
   shared host does in Activity Monitor. Apps keep their own icons, including on their update prompts.
+- Pages print through the desktop's own print dialog. On Linux, `window.print()` and the new
+  `print.page()` and `print.element()` ask the print portal how to print, lay the page out on the
+  chosen paper and pages, and send it to the printer without asking again. macOS and Windows show
+  the system's print dialog.
+- `print.files()` prints PDF, image and text files as one document, and Rust code does the same with
+  `BridgeEventEmitter::print_files`. On Linux PDF files go to the printer as they are, with their
+  pages chosen in the print dialog, and images and text are laid out on the paper chosen in it.
 
 # Sabine 0.52
 

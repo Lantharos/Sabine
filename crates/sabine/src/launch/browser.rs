@@ -2,8 +2,11 @@ use std::process::Command;
 
 pub(crate) const HOST_CONTROL_PREFIX: &str = "SABINE_HOST_CONTROL";
 
-/// CEF features Sabine does not use.
+/// CEF features Sabine does not use. Printing stays in the browser process,
+/// since Chromium's out-of-process print drivers expect Chromium's own print
+/// dialog and crash the browser when Sabine's dialog prints.
 const DISABLED_CEF_FEATURES: &str = concat!(
+    "EnableOopPrintDrivers,",
     "OptimizationGuideOnDeviceModel,",
     "AutofillServerCommunication,",
     "MediaRouter,",

@@ -4,6 +4,7 @@ import { clipboard } from "./src/clipboard.js";
 import { events } from "./src/events.js";
 import { Guest, guest } from "./src/guest.js";
 import { NativeVideo } from "./src/media.js";
+import { print } from "./src/print.js";
 import { region } from "./src/regions.js";
 import { system } from "./src/system.js";
 import { tray } from "./src/tray.js";
@@ -24,6 +25,7 @@ export {
   listen,
   NativeVideo,
   popup,
+  print,
   region,
   sabine,
   system,
@@ -45,6 +47,7 @@ export default {
   activity,
   popup,
   clipboard,
+  print,
   region,
   NativeVideo,
   system,

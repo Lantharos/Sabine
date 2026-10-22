@@ -5,6 +5,7 @@ mod lifecycle;
 mod native;
 mod page;
 mod paint;
+mod print;
 mod socket;
 pub(in crate::osr) mod types;
 mod ui;

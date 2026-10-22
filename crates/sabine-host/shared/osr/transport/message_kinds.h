@@ -42,5 +42,8 @@ constexpr uint32_t kContextMenu = 41;
 constexpr uint32_t kContextMenuDismissed = 42;
 constexpr uint32_t kFileDialog = 43;
 constexpr uint32_t kMediaPlaying = 44;
+constexpr uint32_t kPrintDialog = 47;
+constexpr uint32_t kPrintJob = 48;
+constexpr uint32_t kPrintDocument = 49;
 
 #endif

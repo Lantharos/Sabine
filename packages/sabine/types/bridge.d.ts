@@ -1,6 +1,7 @@
 import type { SabineActivityApi } from "./activity.js";
 import type { SabineClipboardApi } from "./clipboard.js";
 import type { SabineGuestApi } from "./guest.js";
+import type { SabinePrintApi } from "./print.js";
 import type { SystemAppearance } from "./system.js";
 import type { SabinePopupApi, SabineWindowApi } from "./window.js";
 
@@ -35,6 +36,7 @@ export interface SabineApi {
   activity: SabineActivityApi;
   popup: SabinePopupApi;
   system: { appearance(): Promise<SystemAppearance> };
+  print: SabinePrintApi;
   /** Present in the app's own pages. */
   clipboard?: SabineClipboardApi;
 }

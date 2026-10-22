@@ -110,6 +110,22 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         include_str!("../shared/osr/browser/permissions.cc"),
     ),
     (
+        "osr/print/document.cc",
+        include_str!("../shared/osr/print/document.cc"),
+    ),
+    (
+        "osr/print/document.h",
+        include_str!("../shared/osr/print/document.h"),
+    ),
+    (
+        "osr/print/documents.cc",
+        include_str!("../shared/osr/print/documents.cc"),
+    ),
+    (
+        "osr/print/page.cc",
+        include_str!("../shared/osr/print/page.cc"),
+    ),
+    (
         "osr/input/drag.cc",
         include_str!("../shared/osr/input/drag.cc"),
     ),

@@ -160,6 +160,7 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     for (const auto& id : ids) {
       DestroyGuest(id);
     }
+    ClosePrintDocuments();
     browser_ = nullptr;
   }
   for (auto it = browsers_.begin(); it != browsers_.end(); ++it) {
@@ -168,7 +169,11 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
       break;
     }
   }
-  if (browsers_.empty()) {
+  QuitWhenClosed();
+}
+
+void SabineOsrHandler::QuitWhenClosed() {
+  if (browsers_.empty() && print_documents_.empty()) {
     CloseTransport();
     UnregisterHandler(this);
     if (g_instance == this) {
