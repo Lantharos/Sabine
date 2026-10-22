@@ -73,8 +73,11 @@ pub fn install_bundle(
         sabine: sabine_service::SabineVersion::current(),
     };
     manifest.validate().map_err(|error| error.to_string())?;
+    let mut log = sabine_runtime::ProgressLog::default();
     sabine_service::prepare_machine_with_progress(Default::default(), None, |progress| {
-        println!("{}", progress.message)
+        if let Some(line) = log.line(&progress.message, progress.fraction) {
+            println!("{line}");
+        }
     })
     .map_err(|error| error.to_string())?;
     service

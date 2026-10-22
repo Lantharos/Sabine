@@ -13,6 +13,11 @@
 - `print.files()` prints PDF, image and text files as one document, and Rust code does the same with
   `BridgeEventEmitter::print_files`. On Linux PDF files go to the printer as they are, with their
   pages chosen in the print dialog, and images and text are laid out on the paper chosen in it.
+- Windows setup no longer fills its log with a line for every moment of the Chromium download and
+  unpacking. The setup log, and the output of `sabine runtime install`, `sabine update` and
+  `sabine-service ensure-runtime`, record each step once with a percentage every tenth of the way
+  and the result, while the progress bar of the `.exe` and MSI setup wizards follows the work
+  smoothly.
 
 # Sabine 0.52
 

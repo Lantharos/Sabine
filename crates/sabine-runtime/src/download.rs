@@ -26,7 +26,7 @@ pub(crate) fn download_file(
         let message = if update.attempt > 1 {
             format!("Resuming runtime download (attempt {})", update.attempt)
         } else {
-            format!("Downloading runtime ({:.0}%)", portion * 100.0)
+            "Downloading runtime".to_string()
         };
         progress(RuntimeInstallProgress::new(
             RuntimeInstallStep::Downloading,

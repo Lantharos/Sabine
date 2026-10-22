@@ -1,8 +1,9 @@
 use std::process::ExitCode;
 
 use sabine_runtime::{
-    RuntimeConfig, RuntimeError, detect_runtime, latest_install_plan, prune_user_runtimes,
-    remove_user_runtime_version, resolve_runtime, update_user_runtime_with_progress,
+    ProgressLog, RuntimeConfig, RuntimeError, detect_runtime, latest_install_plan,
+    prune_user_runtimes, remove_user_runtime_version, resolve_runtime,
+    update_user_runtime_with_progress,
 };
 
 mod sandbox;
@@ -80,18 +81,11 @@ fn install_default_runtime(config: &RuntimeConfig) -> Result<sabine_runtime::Run
     let plan = latest_install_plan(config)
         .map_err(|error| format!("failed to plan runtime install: {error}"))?;
     eprintln!("sabine: installing CEF runtime {}…", plan.version);
-    let mut last_message = String::new();
+    let mut log = ProgressLog::default();
     update_user_runtime_with_progress(config, |progress| {
-        let percent = progress
-            .fraction
-            .map(|fraction| format!(" {:>3}%", (fraction * 100.0).round() as u8))
-            .unwrap_or_default();
-        let line = format!("{}{}", progress.message, percent);
-        if line == last_message {
-            return;
+        if let Some(line) = log.line(&progress.message, progress.fraction) {
+            eprintln!("sabine: {line}");
         }
-        last_message = line.clone();
-        eprintln!("sabine: {line}");
     })
     .map_err(|error| format!("failed to install runtime: {error}"))
 }
@@ -176,12 +170,11 @@ fn install_runtime() -> ExitCode {
     println!("Download: {}", plan.url);
     println!("Destination: {}", plan.install_dir.display());
 
+    let mut log = ProgressLog::default();
     match update_user_runtime_with_progress(&config, |progress| {
-        let percent = progress
-            .fraction
-            .map(|fraction| format!(" {:>3}%", (fraction * 100.0).round() as u8))
-            .unwrap_or_default();
-        eprintln!("sabine: {}{}", progress.message, percent);
+        if let Some(line) = log.line(&progress.message, progress.fraction) {
+            eprintln!("sabine: {line}");
+        }
     }) {
         Ok(runtime) => {
             println!(

@@ -90,7 +90,7 @@ pub(super) fn download_file(
             let portion = update.downloaded as f32 / size as f32;
             on_progress(PrepareProgress {
                 stage: PrepareStage::Service,
-                message: format!("Downloading Sabine service ({:.0}%)", portion * 100.0),
+                message: "Downloading Sabine service".to_string(),
                 fraction: Some(0.02 + portion * 0.06),
             });
         },

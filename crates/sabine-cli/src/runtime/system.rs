@@ -17,10 +17,15 @@ pub(super) fn install(root: Option<&Path>) -> Result<(), String> {
         .map_err(|error| format!("failed to prepare the Sabine CEF host: {error}"))?;
     let service = match sabine_service::find_service_executable() {
         Some(service) => service,
-        None => sabine_service::ensure_service_executable(|progress| {
-            eprintln!("sabine: {}", progress.message)
-        })
-        .map_err(|error| format!("failed to prepare the Sabine service: {error}"))?,
+        None => {
+            let mut log = sabine_runtime::ProgressLog::default();
+            sabine_service::ensure_service_executable(|progress| {
+                if let Some(line) = log.line(&progress.message, progress.fraction) {
+                    eprintln!("sabine: {line}");
+                }
+            })
+            .map_err(|error| format!("failed to prepare the Sabine service: {error}"))?
+        }
     };
     let system = path_in_root(root, &system_dir());
     let version = sabine_service::install_system_service(&service, &host, &system)

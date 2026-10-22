@@ -72,8 +72,10 @@ pub(in crate::bundle) fn wix_source(
     </UI>
     <UIRef Id="WixUI_ErrorProgressText"/>
     <Binary Id="SabineSetupActions" SourceFile="{}"/>
+    <CustomAction Id="SabineReserveProgress" BinaryRef="SabineSetupActions" DllEntry="SabineReserveProgress" Execute="immediate" Return="ignore"/>
 {}
     <InstallExecuteSequence>
+      <Custom Action="SabineReserveProgress" Before="SabinePrepare" Condition="NOT REMOVE~=&quot;ALL&quot;"/>
       <Custom Action="SabineRollbackPrepare" Before="SabinePrepare" Condition="NOT Installed"/>
       <Custom Action="SabinePrepare" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;"/>
       <Custom Action="SabineRollbackUnregister" Before="SabineUnregister" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE"/>

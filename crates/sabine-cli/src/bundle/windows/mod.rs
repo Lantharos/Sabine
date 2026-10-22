@@ -78,8 +78,9 @@ pub(super) fn nsis_script(
         Default::default()
     };
     Ok(format!(
-        r#"Unicode true
+        r##"Unicode true
 !include "MUI2.nsh"
+!include "WinMessages.nsh"
 Name "{name}"
 OutFile "{output}"
 RequestExecutionLevel user
@@ -92,6 +93,8 @@ Var SetupRunning
 Var SetupCancelled
 Var CancelHandle
 Var CancelButton
+Var ProgressBar
+Var ProgressStart
 {icon}
 {welcome_bitmap}!define MUI_CUSTOMFUNCTION_ABORT CancelSetup
 !define MUI_WELCOMEPAGE_TEXT "Setup installs {name} and prepares its shared Sabine runtime.$\r$\n$\r$\nIf the runtime is not already available, setup downloads it before finishing. You can rerun this installer to repair the installation."
@@ -123,14 +126,22 @@ Section "Install"
   File /r "{source}"
   WriteUninstaller "$PLUGINSDIR\payload\Uninstall.exe"
   IfErrors setup_failed
+  StrCpy $ProgressBar 0
+  StrCpy $ProgressStart 0
+  IfSilent progress_found
+  FindWindow $ProgressBar "#32770" "" $HWNDPARENT
+  GetDlgItem $ProgressBar $ProgressBar 1004
+  SendMessage $ProgressBar ${{PBM_GETPOS}} 0 0 $ProgressStart
+progress_found:
 setup_retry:
+  SendMessage $ProgressBar ${{PBM_SETPOS}} $ProgressStart 0
   Delete "$PLUGINSDIR\cancel"
   StrCpy $SetupCancelled "0"
   StrCpy $SetupRunning "1"
   GetDlgItem $CancelButton $HWNDPARENT 2
   EnableWindow $CancelButton 1
   DetailPrint "Preparing the shared Sabine runtime..."
-  nsExec::ExecToLog '"$PLUGINSDIR\payload\{executable}" --sabine-install --sabine-install-to "$INSTDIR" --sabine-install-cancel "$PLUGINSDIR\cancel"'
+  nsExec::ExecToLog '"$PLUGINSDIR\payload\{executable}" --sabine-install --sabine-install-to "$INSTDIR" --sabine-install-cancel "$PLUGINSDIR\cancel" --sabine-install-progress-bar $ProgressBar'
   Pop $0
   StrCpy $SetupRunning "0"
   GetDlgItem $CancelButton $HWNDPARENT 2
@@ -176,7 +187,7 @@ unregister_done:
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}"
   DeleteRegKey HKCU "Software\{id}"
 SectionEnd
-"#,
+"##,
         output = escape(&dunce::simplified(Path::new(output)).to_string_lossy()),
         source = escape(&source.join("*").display().to_string()),
         version = escape(&app.version),

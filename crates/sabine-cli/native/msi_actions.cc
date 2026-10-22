@@ -10,12 +10,17 @@
 #include <windows.h>
 #include <msiquery.h>
 
+#include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace {
+constexpr int kSetupTicks = 64 * 1024 * 1024;
+constexpr char kProgressPrefix[] = "sabine-progress ";
+
 class Handle {
  public:
   explicit Handle(HANDLE value = nullptr) : value_(value) {}
@@ -121,7 +126,42 @@ std::wstring CommandLine(MSIHANDLE install) {
   return command;
 }
 
-bool DrainOutput(MSIHANDLE install, HANDLE pipe, std::string& pending) {
+bool SendProgress(MSIHANDLE install, int type, int ticks) {
+  PMSIHANDLE record = MsiCreateRecord(2);
+  MsiRecordSetInteger(record, 1, type);
+  MsiRecordSetInteger(record, 2, ticks);
+  return MsiProcessMessage(install, INSTALLMESSAGE_PROGRESS, record) ==
+         IDCANCEL;
+}
+
+class SetupOutput {
+ public:
+  SetupOutput(MSIHANDLE install, bool rollback)
+      : install_(install), rollback_(rollback) {}
+
+  bool Line(const std::string& line) {
+    if (line.rfind(kProgressPrefix, 0) != 0)
+      return Log(install_, line);
+    if (rollback_)
+      return false;
+    const long long permille =
+        std::strtoll(line.c_str() + sizeof(kProgressPrefix) - 1, nullptr, 10);
+    const int ticks = static_cast<int>(std::clamp(permille, 0LL, 1000LL) *
+                                       kSetupTicks / 1000);
+    if (ticks <= ticks_)
+      return false;
+    const int step = ticks - ticks_;
+    ticks_ = ticks;
+    return SendProgress(install_, 2, step);
+  }
+
+ private:
+  MSIHANDLE install_;
+  bool rollback_;
+  int ticks_ = 0;
+};
+
+bool DrainOutput(HANDLE pipe, std::string& pending, SetupOutput& output) {
   bool cancelled = false;
   std::array<char, 8192> buffer{};
   DWORD available = 0;
@@ -139,12 +179,12 @@ bool DrainOutput(MSIHANDLE install, HANDLE pipe, std::string& pending) {
     size_t start = 0;
     for (size_t end = pending.find('\n'); end != std::string::npos;
          end = pending.find('\n', start)) {
-      cancelled |= Log(install, pending.substr(start, end - start));
+      cancelled |= output.Line(pending.substr(start, end - start));
       start = end + 1;
     }
     pending.erase(0, start);
     if (pending.size() >= 65536) {
-      cancelled |= Log(install, pending);
+      cancelled |= output.Line(pending);
       pending.clear();
     }
   }
@@ -154,7 +194,8 @@ bool DrainOutput(MSIHANDLE install, HANDLE pipe, std::string& pending) {
 UINT Run(MSIHANDLE install) {
   CancellationFile cancellation;
   std::wstring command = CommandLine(install) + L" --sabine-install-cancel \"" +
-                         cancellation.Path() + L"\"";
+                         cancellation.Path() +
+                         L"\" --sabine-install-progress-lines";
   SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
   HANDLE read = nullptr;
   HANDLE write = nullptr;
@@ -200,10 +241,8 @@ UINT Run(MSIHANDLE install) {
   Handle thread(info.hThread);
   writer.Reset();
   input.Reset();
-  PMSIHANDLE progress = MsiCreateRecord(2);
-  MsiRecordSetInteger(progress, 1, 2);
-  MsiRecordSetInteger(progress, 2, 0);
   const bool rollback = MsiGetMode(install, MSIRUNMODE_ROLLBACK) != FALSE;
+  SetupOutput setup_output(install, rollback);
   if (!rollback) {
     PMSIHANDLE controls = MsiCreateRecord(2);
     MsiRecordSetInteger(controls, 1, 2);
@@ -214,9 +253,8 @@ UINT Run(MSIHANDLE install) {
   ULONGLONG cancelled_at = 0;
   std::string pending;
   while (WaitForSingleObject(process.Get(), 100) == WAIT_TIMEOUT) {
-    const bool requested = DrainOutput(install, output.Get(), pending) |
-                           (MsiProcessMessage(install, INSTALLMESSAGE_PROGRESS,
-                                              progress) == IDCANCEL);
+    const bool requested = DrainOutput(output.Get(), pending, setup_output) |
+                           SendProgress(install, 2, 0);
     if (requested && !rollback && !cancelled_at) {
       cancellation.Request();
       cancelled_at = GetTickCount64();
@@ -233,9 +271,9 @@ UINT Run(MSIHANDLE install) {
       return cancelled_at ? ERROR_INSTALL_USEREXIT : ERROR_INSTALL_FAILURE;
     }
   }
-  if (DrainOutput(install, output.Get(), pending) && !rollback)
+  if (DrainOutput(output.Get(), pending, setup_output) && !rollback)
     cancelled_at = GetTickCount64();
-  if (!pending.empty() && Log(install, pending) && !rollback)
+  if (!pending.empty() && setup_output.Line(pending) && !rollback)
     cancelled_at = GetTickCount64();
   DWORD exit_code = ERROR_INSTALL_FAILURE;
   Check(GetExitCodeProcess(process.Get(), &exit_code) != FALSE,
@@ -247,6 +285,12 @@ UINT Run(MSIHANDLE install) {
   return exit_code == 0 ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
 }
 }  // namespace
+
+extern "C" __declspec(dllexport) UINT __stdcall SabineReserveProgress(
+    MSIHANDLE install) {
+  SendProgress(install, 3, kSetupTicks);
+  return ERROR_SUCCESS;
+}
 
 extern "C" __declspec(dllexport) UINT __stdcall SabineSetup(MSIHANDLE install) {
   try {

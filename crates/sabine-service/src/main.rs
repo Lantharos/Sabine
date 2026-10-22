@@ -88,12 +88,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             println!("Sabine will start at login");
         }
         Command::EnsureRuntime => {
+            let mut log = sabine_runtime::ProgressLog::default();
             let runtime = service.ensure_runtime_with_progress(|progress| {
-                let percent = progress
-                    .fraction
-                    .map(|fraction| format!(" {:>3}%", (fraction * 100.0).round() as u8))
-                    .unwrap_or_default();
-                eprintln!("{}{}", progress.message, percent);
+                if let Some(line) = log.line(&progress.message, progress.fraction) {
+                    eprintln!("{line}");
+                }
             })?;
             println!("{}", runtime.location.path().display());
         }

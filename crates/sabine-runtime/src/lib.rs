@@ -36,6 +36,7 @@ pub use install::archive::extract_tar_archive;
 pub use install::assets::prepare_runtime_assets;
 pub use install::directory::{install_directory, recover_directory_installs};
 pub use install::payload::copy_runtime_payload;
+pub use install::progress_log::ProgressLog;
 pub use install::system::install_system_runtime;
 pub use install::{
     install_user_runtime_with_progress, prune_user_runtimes, quarantine_user_runtime,

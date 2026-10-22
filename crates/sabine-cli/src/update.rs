@@ -1,3 +1,4 @@
+use sabine_runtime::ProgressLog;
 use sabine_service::{AppUpdateStatus, SabineService};
 use std::{path::Path, process::ExitCode};
 
@@ -30,12 +31,11 @@ pub fn run(target: Option<String>, all: bool, force: bool) -> Result<ExitCode, S
 
 fn update_sabine(force: bool) -> Result<(), String> {
     println!("Checking Sabine components…");
-    let mut last = String::new();
+    let mut log = ProgressLog::default();
     let report =
         sabine_service::update_components(force, sabine_service::SABINE_VERSION, |progress| {
-            if progress.message != last {
-                println!("{}", progress.message);
-                last = progress.message;
+            if let Some(line) = log.line(&progress.message, progress.fraction) {
+                println!("{line}");
             }
         })
         .map_err(|error| error.to_string())?;
@@ -65,14 +65,18 @@ fn update_sabine(force: bool) -> Result<(), String> {
 
 fn update_cef() -> Result<(), String> {
     println!("Checking CEF and validating Chromium startup…");
-    sabine_service::ensure_service_executable(|progress| println!("{}", progress.message))
-        .map_err(|error| error.to_string())?;
-    let mut last = String::new();
+    let mut log = ProgressLog::default();
+    sabine_service::ensure_service_executable(|progress| {
+        if let Some(line) = log.line(&progress.message, progress.fraction) {
+            println!("{line}");
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    let mut log = ProgressLog::default();
     let runtime = SabineService::default()
         .update_runtime_with_progress(|progress| {
-            if progress.message != last {
-                println!("{}", progress.message);
-                last = progress.message;
+            if let Some(line) = log.line(&progress.message, progress.fraction) {
+                println!("{line}");
             }
         })
         .map_err(|error| error.to_string())?;

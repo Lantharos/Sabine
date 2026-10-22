@@ -1,9 +1,12 @@
+mod progress;
+
 use crate::window::config::SabineWindowConfig;
+use progress::SetupProgress;
 use sabine_service::{SabineService, prepare_machine_with_progress};
-use std::io::Write;
 
 pub(crate) const INSTALL_ARG: &str = "--sabine-install";
 pub(crate) const UNINSTALL_ARG: &str = "--sabine-uninstall";
+const PREPARE_SHARE: f32 = 0.9;
 
 pub(crate) fn requested(args: &[String]) -> bool {
     args.iter()
@@ -18,7 +21,12 @@ pub(crate) fn run(config: &SabineWindowConfig, args: &[String]) -> ! {
     let result = if args.iter().any(|arg| arg == UNINSTALL_ARG) {
         unregister(config)
     } else {
-        prepare(config, option(args, "--sabine-install-to"), cancelled)
+        prepare(
+            config,
+            option(args, "--sabine-install-to"),
+            cancelled,
+            SetupProgress::from_args(args),
+        )
     };
     match result {
         Ok(()) => std::process::exit(0),
@@ -49,24 +57,17 @@ fn prepare(
     config: &SabineWindowConfig,
     destination: Option<&str>,
     cancelled: impl Fn() -> bool,
+    mut progress: SetupProgress,
 ) -> Result<(), String> {
     config.validate().map_err(|error| error.to_string())?;
     let manifest = super::app_manifest(config).ok_or("The app has no installation identity")?;
-    let report = prepare_machine_with_progress(config.runtime.clone(), None, |progress| {
+    let report = prepare_machine_with_progress(config.runtime.clone(), None, |update| {
         if cancelled() {
             println!("Installation cancelled.");
             std::process::exit(1602);
         }
-        if let Some(fraction) = progress.fraction {
-            println!(
-                "{:>3}% {}",
-                (fraction * 100.0).round() as u32,
-                progress.message
-            );
-        } else {
-            println!("{}", progress.message);
-        }
-        let _ = std::io::stdout().flush();
+        let fraction = update.fraction.map(|fraction| fraction * PREPARE_SHARE);
+        progress.report(&update.message, fraction);
     })
     .map_err(|error| error.to_string())?;
     if !report.daemon_running {
@@ -82,7 +83,7 @@ fn prepare(
         .map_err(|error| error.to_string())?;
     sabine_host::validate_host_protocol(&host, runtime.location.path())?;
     if let Some(destination) = destination {
-        println!("Installing application files...");
+        progress.report("Installing application files", Some(PREPARE_SHARE));
         let source = manifest
             .executable
             .parent()
@@ -101,7 +102,7 @@ fn prepare(
             .register(manifest)
             .map_err(|error| error.to_string())?;
     }
-    println!("Installation is ready.");
+    progress.report("Installation is ready", Some(1.0));
     Ok(())
 }
 

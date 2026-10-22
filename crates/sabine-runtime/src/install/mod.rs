@@ -2,6 +2,7 @@ pub(crate) mod archive;
 pub(crate) mod assets;
 pub(crate) mod directory;
 pub(crate) mod payload;
+pub(crate) mod progress_log;
 #[cfg(windows)]
 pub(crate) mod sandbox_windows;
 pub(crate) mod system;

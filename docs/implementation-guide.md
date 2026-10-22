@@ -1365,8 +1365,9 @@ selected by their native protocol rather than requiring an identical app framewo
 The `exe` bundle target generates an NSIS wizard. The installer runs the app with
 `--sabine-install` from a temporary payload, passing the chosen destination and cancellation
 file. This prepares the service and Chromium runtime before replacing the installed app,
-checks native host compatibility, and registers the final executable without launching its window. Progress
-and failures go to the installer details pane; failure returns a nonzero exit code.
+checks native host compatibility, and registers the final executable without launching its window. The
+app moves the wizard's progress bar itself; the details pane gets each step once, a line for every
+further tenth of the work, and any failure. Failure returns a nonzero exit code.
 `--sabine-uninstall` removes the registration before the uninstaller deletes packaged files.
 These modes are handled by `SabineWindow::main` and its process variants.
 
@@ -1395,8 +1396,10 @@ an interrupted replacement is recovered on the next setup attempt. Obsolete pack
 removed. Cancel stops preparation or rolls back staging, returning Windows Installer cancellation
 code 1602. Choose an empty directory when replacing a package from another installation system.
 
-MSI packages embed a native setup action with a static C runtime. It forwards UTF-8 progress to
-Windows Installer, suppresses console windows, and passes cancellation to the app. An unresponsive
+MSI packages embed a native setup action with a static C runtime. It reserves room on the Windows
+Installer progress bar and advances it from the app's progress, forwards the same step lines as the
+NSIS wizard to the installer's status text and log, suppresses console windows, and passes
+cancellation to the app. An unresponsive
 setup process is stopped after 30 seconds of cancellation; the entire action has a one-hour deadline.
 Rollback actions complete restoration without accepting a second cancellation. MSI architecture is
 read from the app’s PE header; x86_64 and ARM64 packages use matching action DLLs.
