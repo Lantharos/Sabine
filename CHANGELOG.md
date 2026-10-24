@@ -1,3 +1,9 @@
+# Sabine 0.55
+
+- Merge pull request #4 from Lantharos/claude/sabine-apps-not-opening-wjho3t
+- Prepare Sabine 0.54
+- Render the runtime probe with SwiftShader on Linux
+
 # Sabine 0.54
 
 - Fix Sabine apps on Linux whose window never appeared when Chromium couldn't hand the page over
