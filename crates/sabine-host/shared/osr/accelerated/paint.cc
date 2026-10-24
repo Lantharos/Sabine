@@ -288,6 +288,13 @@ void SabineOsrHandler::ReportMissingAcceleratedPaint() {
                                        : accelerated_drop_reason_.c_str(),
       width_, height_, scale_);
   std::fflush(stderr);
+  // A loaded page that still has no shared frame won't get one, such as when
+  // Chromium can't allocate the buffers it shares frames in, so the window
+  // takes software frames instead of waiting.
+  if (!accelerated_paint_failed_) {
+    accelerated_paint_failed_ = true;
+    SendMessage(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
+  }
 }
 
 void SabineOsrHandler::ReportAcceleratedPaintUnavailable() {

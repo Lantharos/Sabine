@@ -1,10 +1,11 @@
 # Unreleased
 
-- Fix Sabine apps on Linux whose window never appeared when Chromium painted without the GPU,
-  such as when it had no GPU it could use. The window waited for GPU frames that never came: it
-  starts its own graphics device only once the compositor shows the first GPU frame directly, and
-  Chromium's software frames need that device. Chromium now tells the window as soon as it paints
-  without the GPU, and the window starts its device and shows the software frames.
+- Fix Sabine apps on Linux whose window never appeared when Chromium couldn't hand the page over
+  in GPU frames, such as when it couldn't allocate the buffers it shares them in or painted
+  without the GPU. The window kept waiting for GPU frames: it starts its own graphics device only
+  once the compositor shows the first of them directly, and software frames need that device.
+  When Chromium paints without the GPU, or the loaded page still has no GPU frame 2 seconds
+  later, the window now starts its device and shows the page in software frames.
 
 # Sabine 0.53
 
