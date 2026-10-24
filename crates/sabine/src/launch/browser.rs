@@ -28,6 +28,11 @@ const LINUX_DISABLED_CEF_FEATURES: &str = "WaylandFractionalScaleV1";
 #[cfg(target_os = "linux")]
 const LINUX_GTK_VERSION: &str = "--gtk-version=3";
 
+/// Mesa's radeonsi gives the buffers Chromium hands each frame over in a layout with delta color
+/// compression, which Chromium can't use, so on AMD graphics no frame ever reaches the window.
+#[cfg(target_os = "linux")]
+const LINUX_AMD_DEBUG_NO_DCC: &str = "nodcc";
+
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
 const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
 /// A file for the browser process's log; sandboxed Chromium processes keep logging to the window
@@ -130,5 +135,49 @@ pub(crate) fn apply_browser_launch_args(
             .arg("--enable-logging")
             .arg(log_file)
             .arg("--log-severity=info");
+    }
+}
+
+/// `AMD_DEBUG` for Chromium, keeping whatever the app was started with.
+#[cfg(target_os = "linux")]
+pub(crate) fn chromium_amd_debug() -> String {
+    amd_debug_without_dcc(std::env::var("AMD_DEBUG").ok().as_deref())
+}
+
+#[cfg(target_os = "linux")]
+fn amd_debug_without_dcc(existing: Option<&str>) -> String {
+    match existing
+        .map(str::trim)
+        .filter(|existing| !existing.is_empty())
+    {
+        Some(existing)
+            if existing
+                .split(',')
+                .any(|option| option.trim() == LINUX_AMD_DEBUG_NO_DCC) =>
+        {
+            existing.to_string()
+        }
+        Some(existing) => format!("{existing},{LINUX_AMD_DEBUG_NO_DCC}"),
+        None => LINUX_AMD_DEBUG_NO_DCC.to_string(),
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::amd_debug_without_dcc;
+
+    #[test]
+    fn turns_off_dcc_for_chromium() {
+        assert_eq!(amd_debug_without_dcc(None), "nodcc");
+        assert_eq!(amd_debug_without_dcc(Some(" ")), "nodcc");
+    }
+
+    #[test]
+    fn keeps_the_app_s_amd_debug_options() {
+        assert_eq!(amd_debug_without_dcc(Some("nohyperz")), "nohyperz,nodcc");
+        assert_eq!(
+            amd_debug_without_dcc(Some("nodcc,nohyperz")),
+            "nodcc,nohyperz"
+        );
     }
 }

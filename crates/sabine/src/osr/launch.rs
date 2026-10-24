@@ -425,6 +425,7 @@ fn own_browser_command(
     #[cfg(target_os = "linux")]
     {
         command.env("LD_LIBRARY_PATH", ld_library_path(binary_dir));
+        command.env("AMD_DEBUG", crate::launch::browser::chromium_amd_debug());
     }
     #[cfg(target_os = "windows")]
     {
