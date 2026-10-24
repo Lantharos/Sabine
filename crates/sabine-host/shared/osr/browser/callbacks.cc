@@ -422,6 +422,15 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
   if (view_hidden_ || !browser_ || !browser_->IsSame(browser)) {
     return;
   }
+#if defined(OS_LINUX)
+  // Chromium hands over shared textures only while it composites on the GPU.
+  // Software frames mean its GPU process is gone or was never usable, so no
+  // shared frame will come and the window has to take these instead.
+  if (accelerated_paint_ && type == PET_VIEW) {
+    accelerated_drop_reason_ = "Chromium paints without the GPU";
+    ReportAcceleratedPaintUnavailable();
+  }
+#endif
   const PaintSurface surface =
       type == PET_POPUP ? PaintSurface::kPopup : PaintSurface::kMain;
   const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
