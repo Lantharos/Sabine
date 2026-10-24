@@ -68,7 +68,10 @@ impl SharedLaunch {
             .get_args()
             .map(OsStr::to_os_string)
             .collect::<Vec<_>>();
-        let mut environment = vec![format!("LD_LIBRARY_PATH={}", binary_dir.display())];
+        let mut environment = vec![
+            format!("LD_LIBRARY_PATH={}", binary_dir.display()),
+            format!("AMD_DEBUG={}", crate::launch::browser::chromium_amd_debug()),
+        ];
         if let Ok(display) = std::env::var("WAYLAND_DISPLAY") {
             environment.push(format!("WAYLAND_DISPLAY={display}"));
         }

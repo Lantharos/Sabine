@@ -6,6 +6,10 @@
   once the compositor shows the first of them directly, and software frames need that device.
   When Chromium paints without the GPU, or the loaded page still has no GPU frame 2 seconds
   later, the window now starts its device and shows the page in software frames.
+- Fix Sabine apps on Linux with AMD graphics never getting GPU frames. Mesa laid the
+  buffers Chromium hands each frame over in out with delta color compression, which Chromium
+  couldn't use, so no frame reached the window. Sabine's Chromium now runs with `AMD_DEBUG=nodcc`,
+  added to whatever `AMD_DEBUG` the app was started with.
 
 # Sabine 0.53
 
