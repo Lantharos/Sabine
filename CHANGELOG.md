@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.54
 
 - Fix Sabine apps on Linux whose window never appeared when Chromium couldn't hand the page over
   in GPU frames, such as when it couldn't allocate the buffers it shares them in or painted
