@@ -10,6 +10,9 @@
   buffers Chromium hands each frame over in out with delta color compression, which Chromium
   couldn't use, so no frame reached the window. Sabine's Chromium now runs with `AMD_DEBUG=nodcc`,
   added to whatever `AMD_DEBUG` the app was started with.
+- The runtime check that runs when Sabine installs or updates Chromium renders its test page with
+  SwiftShader on Linux. From CEF 156, Chromium renders nothing when its GPU process can't start,
+  as on machines without a display, so the check failed and a working runtime was set aside.
 
 # Sabine 0.53
 

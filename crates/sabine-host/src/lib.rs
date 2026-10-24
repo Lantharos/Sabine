@@ -208,11 +208,15 @@ pub fn smoke_test_runtime(host: &Path, runtime_dir: &Path) -> Result<(), String>
     apply_runtime_resource_args(&mut command, runtime_dir);
     #[cfg(target_os = "macos")]
     command.arg("--use-mock-keychain");
+    // From CEF 156, a headless Chromium whose GPU process can't start renders nothing instead of
+    // falling back to software, as on build machines without a display. The probe renders with
+    // SwiftShader, which the runtime ships, so it checks the runtime rather than the graphics.
     #[cfg(target_os = "linux")]
     {
         command
             .arg("--headless")
             .arg("--ozone-platform=headless")
+            .arg("--use-angle=swiftshader")
             .arg("--password-store=basic");
         let release = binary_dir.to_string_lossy();
         let existing = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
