@@ -127,6 +127,7 @@ impl OsrNativeHost {
                 #[cfg(target_os = "linux")]
                 OsrHostEvent::Message(_, OsrMessage::AccelUnavailable) => {
                     self.paint_in_software("the browser could not share its frames");
+                    self.draw_without_direct_presentation(event_loop);
                 }
                 OsrHostEvent::Message(_, OsrMessage::PopupHidden) => {
                     self.clear_overlay(POPUP_OVERLAY_ID);

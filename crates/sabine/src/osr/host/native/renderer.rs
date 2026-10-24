@@ -22,6 +22,22 @@ impl OsrNativeHost {
         }
     }
 
+    /// Starts the window's graphics device for software frames, which the
+    /// compositor can't show itself. A window waiting to show its first
+    /// frame directly would otherwise never start one, as no frame it could
+    /// show is coming.
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn draw_without_direct_presentation(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+    ) {
+        if self.renderer.is_some() || self.renderer_starting {
+            return;
+        }
+        self.direct = None;
+        self.start_renderer(event_loop);
+    }
+
     #[cfg(target_os = "linux")]
     pub(in crate::osr::host) fn start_renderer(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.renderer.is_some() || self.renderer_starting {

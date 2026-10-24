@@ -1,3 +1,11 @@
+# Unreleased
+
+- Fix Sabine apps on Linux whose window never appeared when Chromium painted without the GPU,
+  such as when it had no GPU it could use. The window waited for GPU frames that never came: it
+  starts its own graphics device only once the compositor shows the first GPU frame directly, and
+  Chromium's software frames need that device. Chromium now tells the window as soon as it paints
+  without the GPU, and the window starts its device and shows the software frames.
+
 # Sabine 0.53
 
 - Sabine has an icon of its own, a navy swallow on an ivory tile. The window that prepares Sabine
