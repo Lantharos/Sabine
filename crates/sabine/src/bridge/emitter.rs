@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sabine_platform::WindowRegions;
@@ -14,7 +13,9 @@ use crate::launch::browser::HOST_CONTROL_PREFIX;
 #[derive(Clone, Default)]
 pub struct BridgeEventEmitter {
     targets: Arc<Mutex<Vec<BridgeTarget>>>,
-    square_corners: Arc<AtomicBool>,
+    /// Held while the setting is sent and while windows attach, so every
+    /// window ends up with the latest value.
+    square_corners: Arc<Mutex<bool>>,
 }
 
 struct BridgeTarget {
@@ -58,7 +59,8 @@ impl BridgeEventEmitter {
     }
 
     pub(crate) fn attach(&self, window: WindowId, writer: BridgeWriter) {
-        if self.square_corners.load(Ordering::Relaxed) {
+        let square_corners = self.square_corners.lock();
+        if square_corners.as_deref().is_ok_and(|square| *square) {
             writer.send(Frame::encode(&square_corners_control(true), None).into());
         }
         if let Ok(mut targets) = self.targets.lock() {
@@ -109,7 +111,10 @@ impl BridgeEventEmitter {
     /// opened later follow it too. Windows that are maximized, fullscreen or
     /// tiled have square corners either way.
     pub fn set_square_corners(&self, square: bool) -> bool {
-        self.square_corners.store(square, Ordering::Relaxed);
+        let Ok(mut current) = self.square_corners.lock() else {
+            return false;
+        };
+        *current = square;
         self.deliver(None, square_corners_control(square), None)
     }
 

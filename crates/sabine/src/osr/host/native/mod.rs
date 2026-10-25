@@ -325,10 +325,15 @@ impl OsrNativeHost {
         }
     }
 
-    /// The app's regions, with square corners while the window is not floating
-    /// or the app asked for square corners.
+    /// Whether the window's corners are rounded: only while it floats and the
+    /// app didn't ask for square corners.
+    pub(super) fn rounds_corners(&self) -> bool {
+        self.toplevel.floating() && !self.square_corners
+    }
+
+    /// The app's regions, with square corners unless the window rounds them.
     pub(super) fn regions(&self) -> WindowRegions {
-        if self.toplevel.floating() && !self.square_corners {
+        if self.rounds_corners() {
             self.config.regions.clone()
         } else {
             self.config.regions.squared()

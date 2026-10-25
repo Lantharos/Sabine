@@ -22,7 +22,7 @@ impl OsrNativeHost {
             return;
         }
         let titlebar_color = Color::rgba(0.07, 0.07, 0.075, 0.58);
-        let titlebar_radius = 12.0;
+        let titlebar_radius = if self.square_corners { 0.0 } else { 12.0 };
         list.push(RoundedRectCommand {
             x: 0.0,
             y: 0.0,
