@@ -13,6 +13,9 @@ use crate::launch::browser::HOST_CONTROL_PREFIX;
 #[derive(Clone, Default)]
 pub struct BridgeEventEmitter {
     targets: Arc<Mutex<Vec<BridgeTarget>>>,
+    /// Held while the setting is sent and while windows attach, so every
+    /// window ends up with the latest value.
+    square_corners: Arc<Mutex<bool>>,
 }
 
 struct BridgeTarget {
@@ -56,6 +59,10 @@ impl BridgeEventEmitter {
     }
 
     pub(crate) fn attach(&self, window: WindowId, writer: BridgeWriter) {
+        let square_corners = self.square_corners.lock();
+        if square_corners.as_deref().is_ok_and(|square| *square) {
+            writer.send(Frame::encode(&square_corners_control(true), None).into());
+        }
         if let Ok(mut targets) = self.targets.lock() {
             targets.retain(|target| target.window != window);
             targets.push(BridgeTarget { window, writer });
@@ -97,6 +104,18 @@ impl BridgeEventEmitter {
     /// Replaces the blur, opaque and input regions of one window.
     pub fn set_regions_of(&self, window: WindowId, regions: &WindowRegions) -> bool {
         self.deliver(Some(window), regions_control(regions), None)
+    }
+
+    /// Squares the corners of every window's regions even while it floats,
+    /// for desktops where people turned rounded window corners off. Windows
+    /// opened later follow it too. Windows that are maximized, fullscreen or
+    /// tiled have square corners either way.
+    pub fn set_square_corners(&self, square: bool) -> bool {
+        let Ok(mut current) = self.square_corners.lock() else {
+            return false;
+        };
+        *current = square;
+        self.deliver(None, square_corners_control(square), None)
     }
 
     /// Shows a desktop notification from one window. Its pages hear about
@@ -203,6 +222,13 @@ fn regions_control(regions: &WindowRegions) -> String {
     )
 }
 
+fn square_corners_control(square: bool) -> String {
+    format!(
+        "{HOST_CONTROL_PREFIX}\tsquare-corners\t{}",
+        u8::from(square)
+    )
+}
+
 fn event_line(name: &str, payload: &serde_json::Value) -> String {
     let name = serde_json::to_string(name).unwrap_or_else(|_| "\"event\"".to_string());
     format!("SABINE_BRIDGE_EVENT\t{name}\t{payload}")
@@ -244,6 +270,23 @@ mod tests {
         assert!(emitter.emit("ping", serde_json::json!(1)));
         assert_eq!(next_line(&mut first), "SABINE_BRIDGE_EVENT\t\"ping\"\t1\n");
         assert_eq!(next_line(&mut second), "SABINE_BRIDGE_EVENT\t\"ping\"\t2\n");
+        for mut child in [first, second] {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
+    #[test]
+    fn windows_opened_later_get_square_corners() {
+        let (mut first, first_writer) = window();
+        let emitter = BridgeEventEmitter::default();
+        emitter.attach(first.id(), first_writer);
+        assert!(emitter.set_square_corners(true));
+        let (mut second, second_writer) = window();
+        emitter.attach(second.id(), second_writer);
+        let control = format!("{HOST_CONTROL_PREFIX}\tsquare-corners\t1\n");
+        assert_eq!(next_line(&mut first), control);
+        assert_eq!(next_line(&mut second), control);
         for mut child in [first, second] {
             let _ = child.kill();
             let _ = child.wait();

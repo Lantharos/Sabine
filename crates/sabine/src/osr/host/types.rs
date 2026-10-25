@@ -242,6 +242,7 @@ pub(super) enum HostControl {
     ActivityBegin(HostActivity),
     ActivityEnd(HostActivity),
     Regions(sabine_platform::WindowRegions),
+    SquareCorners(bool),
     Notify(sabine_platform::Notification),
     Print(super::print::PrintFiles),
 }

@@ -345,6 +345,9 @@ impl OsrNativeHost {
                 OsrHostEvent::HostControl(HostControl::Regions(regions)) => {
                     self.set_regions(regions)
                 }
+                OsrHostEvent::HostControl(HostControl::SquareCorners(square)) => {
+                    self.set_square_corners(square)
+                }
                 OsrHostEvent::HostControl(HostControl::Notify(notification)) => {
                     self.show_notification(notification)
                 }
@@ -467,6 +470,7 @@ pub(super) fn host_control_from_parts(command: &str, value: &str) -> Option<Host
         "regions" => serde_json::from_str(value).ok().map(|regions| {
             HostControl::Regions(crate::osr::protocol::regions_from_json(Some(&regions)))
         }),
+        "square-corners" => bool_control_value(value).map(HostControl::SquareCorners),
         _ => None,
     }
 }
@@ -480,4 +484,21 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn square_corners_follow_the_value_sent() {
+        assert_eq!(
+            host_control_from_parts("square-corners", "1"),
+            Some(HostControl::SquareCorners(true))
+        );
+        assert_eq!(
+            host_control_from_parts("square-corners", "0"),
+            Some(HostControl::SquareCorners(false))
+        );
+    }
 }

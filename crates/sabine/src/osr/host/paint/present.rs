@@ -106,12 +106,11 @@ impl OsrNativeHost {
         };
         list.reset(background);
         if !self.config.transparent || uses_sabine_chrome(self.config.chrome) {
-            let radius =
-                if self.config.chrome.uses_native_decorations() || !self.toplevel.floating() {
-                    0.0
-                } else {
-                    12.0
-                };
+            let radius = if self.config.chrome.uses_native_decorations() || !self.rounds_corners() {
+                0.0
+            } else {
+                12.0
+            };
             list.push(RoundedRectCommand {
                 x: 0.0,
                 y: 0.0,

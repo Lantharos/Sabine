@@ -308,6 +308,17 @@ impl OsrNativeHost {
         }
     }
 
+    pub(in crate::osr::host) fn set_square_corners(&mut self, square: bool) {
+        if self.square_corners == square {
+            return;
+        }
+        self.square_corners = square;
+        self.update_effect_regions();
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
     pub(in crate::osr::host) fn update_effect_regions(&mut self) {
         let options = self.window_options();
         let width = self.logical_width().round().max(1.0) as i32;
