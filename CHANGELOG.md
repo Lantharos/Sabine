@@ -1,3 +1,9 @@
+# Sabine 0.56
+
+- Merge pull request #5 from Lantharos/claude/laughing-mccarthy-0v3wo5
+- Paint square corners and keep the setting in step with new windows
+- Let apps square their window corners while they float
+
 # Sabine 0.55
 
 - Merge pull request #4 from Lantharos/claude/sabine-apps-not-opening-wjho3t
