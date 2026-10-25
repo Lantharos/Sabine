@@ -119,6 +119,7 @@ pub(super) struct OsrNativeHost {
     pub(super) occluded: bool,
     pub(super) published_window_state: Option<super::types::WindowState>,
     pub(super) toplevel: super::lifecycle::toplevel::ToplevelState,
+    pub(super) square_corners: bool,
     pub(super) lifecycle_state: LifecycleState,
     pub(super) last_frame_rate: Cell<Option<u32>>,
     pub(super) freeze_deadline: Option<Instant>,
@@ -261,6 +262,7 @@ impl OsrNativeHost {
             occluded: false,
             published_window_state: None,
             toplevel: Default::default(),
+            square_corners: false,
             lifecycle_state,
             last_frame_rate: Cell::new(None),
             freeze_deadline: None,
@@ -323,9 +325,10 @@ impl OsrNativeHost {
         }
     }
 
-    /// The app's regions, with square corners while the window is not floating.
+    /// The app's regions, with square corners while the window is not floating
+    /// or the app asked for square corners.
     pub(super) fn regions(&self) -> WindowRegions {
-        if self.toplevel.floating() {
+        if self.toplevel.floating() && !self.square_corners {
             self.config.regions.clone()
         } else {
             self.config.regions.squared()

@@ -716,7 +716,7 @@ handle to app code that only builds the window), starts activities that keep pag
 `begin_activity_with`, drives guests from Rust with `guest_control`, and reports launch stages
 through `metrics`. Its `BridgeEventEmitter` sends events to every window with `emit` and
 `emit_bytes`, or to one with `emit_to` and `emit_bytes_to`, and changes regions with `set_regions`
-and `set_regions_of`. Guest controls take effect without an answer; the page observes the results
+and `set_regions_of`, and squares their corners while they float with `set_square_corners`. Guest controls take effect without an answer; the page observes the results
 through guest events.
 
 The API avoids backend types. Apps do not select paint transports or Chromium launch flags.
@@ -727,6 +727,9 @@ Blur, opaque and input regions can change while the window runs, from Rust throu
 `BridgeEventEmitter::set_regions` or `set_regions_of`, and from pages through
 `appWindow.setRegions`. A region left out returns to its default: blur behind the whole window,
 nothing opaque, and input everywhere. Regions follow the window's size as before.
+Rounded regions turn square while the window is maximized, fullscreen or tiled, and while it
+floats after `BridgeEventEmitter::set_square_corners(true)`, which a desktop setting for square
+window corners can follow.
 
 Each desktop applies regions with its own compositor:
 
