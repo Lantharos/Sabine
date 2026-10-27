@@ -58,6 +58,60 @@ at those paths can also use this namespace permission. If the kernel disables us
 entirely, an administrator must enable them or provide Chromium’s trusted, root-owned setuid
 helper through `CHROME_DEVEL_SANDBOX`. Running the application as root is unsupported.
 
+## App sandbox
+
+An app declares what it needs from a sandbox in `Sabine.toml`, using the names Flatpak uses, so a
+store or the system can show it before installing the app and enforce it when the app starts:
+
+```toml
+[sandbox]
+network = true
+filesystems = ["xdg-documents", "xdg-download:ro"]
+devices = ["usb"]
+talk = ["org.mpris.MediaPlayer2.notes"]
+```
+
+| Key | Default | Means |
+| --- | --- | --- |
+| `network` | `true` | The app goes online |
+| `filesystems` | none | `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`; `:ro` makes it read-only. Files a person picks in a file dialog reach the app without this |
+| `devices` | none | `usb`, `serial` or `all` |
+| `talk` | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`; a trailing `.*` covers the names below it |
+
+`talk` refuses names that would let an app leave its sandbox: the portal backends and permission
+store (`org.freedesktop.impl.portal.*`), `org.freedesktop.portal.Flatpak`, `org.freedesktop.Flatpak`,
+`org.freedesktop.systemd1` and `org.freedesktop.DBus`. An app that can't work in a sandbox says so
+instead, with a reason shown to the person who decides:
+
+```toml
+[sandbox]
+unsandboxed = true
+reason = "It manages the containers Podman runs for you."
+```
+
+Without a `[sandbox]` table the app declares nothing. `sabine dev` and `sabine bundle` check the
+table, and every bundle carries it, normalized, in the production manifest a store or the system
+reads without starting the app: `usr/lib/sabine/<app id>/Sabine.toml` in AppImages, deb and rpm
+packages and tarballs, `Contents/Resources/Sabine.toml` in macOS apps, and `Sabine.toml` next to the
+program on Windows.
+
+On Linux, a system that runs the app in a sandbox enforces the declaration; Luft's Schelf does for
+AppImages. Inside a sandbox that marks its processes with `/.flatpak-info`, as Flatpak's do, the app
+runs its own Chromium in the sandbox and never asks the shared runtime. Chromium can't create the
+namespaces of its renderer sandbox there, so when the sandbox names Zypak in `ZYPAK_BIN`, Sabine
+starts Chromium as `$ZYPAK_BIN/zypak-helper host - <host> …`, with `ZYPAK_LD_PRELOAD` and
+`ZYPAK_CEF_LIBRARY_PATH` pointing at the runtime's `libcef.so`. Zypak then starts Chromium's helpers
+through the sandbox's Flatpak Spawn portal, in a smaller sandbox of their own, and renderers keep
+their namespaces and system call filter. The helpers start from `/` without the host's library
+path, which is why libcef reaches them preloaded. The runtime and host have to be visible inside
+the helpers' sandbox, so a sandboxed app uses a runtime installed for every user or bundled with
+it. Sabine never turns Chromium's sandbox off.
+
+Windows and macOS carry the declaration in every bundle but don't enforce it yet. The plan there is
+an AppContainer on Windows, with `network` as the internet client capability and `filesystems` as
+library capabilities, and the App Sandbox on macOS, with entitlements written from the same keys
+when the bundle is signed. Chromium's renderers are sandboxed on both already.
+
 ## Release and update model
 
 Sabine publishes the CLI, service, daemon, and prebuilt CEF host as one `vMAJOR.BUILD` release train.
@@ -221,8 +275,8 @@ that job so the shared browser process remains available to sibling windows.
 
 ### Shared runtime
 
-On Linux, Sabine apps share one Chromium per user: one browser process, GPU process and network
-service serve every app's windows, while each app keeps its own profile, and with it its own
+On Linux, Sabine apps installed for every user share one Chromium: one browser process, GPU
+process and network service serve every such app's windows, while each app keeps its own profile, and with it its own
 cookies, storage and renderers, since pages of different profiles never share a renderer. A window
 asks the runtime for its browser over a socket, and the browser then connects to the window as it
 would to a Chromium of the app's own, so paint, input and bridge traffic are unchanged.
@@ -262,8 +316,14 @@ shared_runtime = false
 ```
 
 The Rust builder does the same with `.shared_runtime(false)`. Apps in development, apps with remote
-DevTools, and apps on a system without a user systemd instance always run their own, and so does a
-window the runtime refuses.
+DevTools, apps in an [app sandbox](#app-sandbox), and apps on a system without a user systemd
+instance always run their own, and so does a window the runtime refuses.
+
+Only apps installed for every user, whose program lies below `/usr/lib/sabine/<app id>/`, share a
+runtime with each other: only an administrator or the system image can put them there. Every other
+app, such as one a person installed for themselves or an AppImage, adds its app ID to the runtime's
+key, so its windows still share one browser process among themselves but never one with another
+app. A page that took over the browser process can then reach only its own app's profile.
 
 ### Sabine's own icon
 

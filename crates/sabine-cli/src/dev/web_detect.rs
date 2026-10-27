@@ -29,6 +29,7 @@ struct SabineFile {
     app: AppSection,
     #[serde(default)]
     web: WebSection,
+    sandbox: Option<crate::bundle::sandbox::SandboxSection>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -228,7 +229,12 @@ fn read_package_json(path: &Path) -> Result<serde_json::Value, String> {
 
 fn read_sabine_file(path: &Path) -> Result<SabineFile, String> {
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    toml::from_str(&text).map_err(|error| format!("failed to parse {}: {error}", path.display()))
+    let mut file: SabineFile = toml::from_str(&text)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    if let Some(sandbox) = file.sandbox.take() {
+        sandbox.resolve()?;
+    }
+    Ok(file)
 }
 
 fn absolute_path(path: &Path) -> Result<PathBuf, String> {

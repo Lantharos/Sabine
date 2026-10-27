@@ -409,6 +409,9 @@ fn own_browser_command(
                 cache_dir.display()
             )
         })?;
+    #[cfg(target_os = "linux")]
+    let mut command = crate::launch::sandbox::browser_command(host_binary, binary_dir);
+    #[cfg(not(target_os = "linux"))]
     let mut command = Command::new(host_binary);
     sabine_runtime::configure_background_command(&mut command);
     sabine_host::apply_runtime_resource_args(&mut command, runtime_dir);

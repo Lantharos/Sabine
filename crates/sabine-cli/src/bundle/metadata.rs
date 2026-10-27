@@ -57,6 +57,9 @@ pub(super) fn runtime_manifest(
             manifest.push_str("local_files = true\n");
         }
     }
+    if let Some(sandbox) = &app.sandbox {
+        manifest.push_str(&sandbox.manifest());
+    }
     if app.window.splash {
         manifest.push_str("\n[window]\nsplash = true\n");
         if let Some(delay) = app.window.splash_delay_ms {

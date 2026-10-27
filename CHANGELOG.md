@@ -1,3 +1,16 @@
+# Unreleased
+
+- Apps declare what they need from a sandbox in a `[sandbox]` table in `Sabine.toml`: `network`,
+  `filesystems`, `devices` and the session bus names they `talk` to, in Flatpak's terms, or
+  `unsandboxed = true` with a `reason`. `sabine dev` and `sabine bundle` check it, and every bundle
+  carries it in its manifest, so a store or the system can show and enforce it before the app
+  starts. See [App sandbox](docs/implementation-guide.md#app-sandbox).
+- Only apps installed for every user, below `/usr/lib/sabine`, share a Chromium with each other.
+  Other apps get a shared runtime of their own, so a page can never reach into another app's
+  browser process.
+- Inside a Flatpak-style sandbox, apps run their own Chromium, started through Zypak when the
+  sandbox provides it, so renderers keep Chromium's sandbox.
+
 # Sabine 0.57
 
 - Sabine writes a TypeScript client for an app's bridge commands and events, so the page and the

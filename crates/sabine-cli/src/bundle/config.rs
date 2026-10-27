@@ -6,6 +6,7 @@ use std::{
 use sabine_service::{AppInstallMode, AppUpdateConfig, AppUpdateSource, UpdatePolicy};
 use serde::Deserialize;
 
+use super::sandbox::{Sandbox, SandboxSection};
 use crate::desktop::{entry::Listing, types::Associations};
 
 #[derive(Debug)]
@@ -28,6 +29,7 @@ pub(super) struct BundleApp {
     pub updates: Option<sabine_service::AppUpdateConfig>,
     pub window: WindowSection,
     pub shared_runtime: bool,
+    pub sandbox: Option<Sandbox>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -92,6 +94,7 @@ struct SabineFile {
     #[serde(default)]
     window: WindowSection,
     updates: Option<sabine_service::AppUpdateConfig>,
+    sandbox: Option<SandboxSection>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -131,6 +134,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
     let source_dir = absolute_path(source)?;
     let sabine = read_sabine_file(&source_dir)?;
     let updates = resolve_updates(sabine.updates.clone())?;
+    let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
     let cargo_manifest = sabine
         .app
         .cargo_manifest
@@ -243,6 +247,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         updates,
         window: sabine.window,
         shared_runtime: sabine.app.shared_runtime.unwrap_or(true),
+        sandbox,
     })
 }
 

@@ -53,17 +53,19 @@ pub(crate) struct BrowserOptions {
 }
 
 impl BrowserOptions {
-    /// Development runs take their port from `SABINE_DEVTOOLS_PORT` first, so
-    /// several apps can be debugged at once; `0` lets Chromium pick a free one.
-    /// Whether the app's pages can join the runtime Sabine apps share: its
-    /// Chromium flags are the same as every other app's.
+    /// Whether the app's pages can join a shared runtime: its Chromium flags
+    /// are the same as every other app's, and it doesn't run in an app sandbox,
+    /// which the runtime's service can't reach into.
     #[cfg(target_os = "linux")]
     pub fn shares_runtime(&self, dev_mode: bool) -> bool {
         !self.separate_runtime
             && !dev_mode
+            && !crate::launch::sandbox::in_app_sandbox()
             && self.effective_remote_devtools_port(dev_mode).is_none()
     }
 
+    /// Development runs take their port from `SABINE_DEVTOOLS_PORT` first, so
+    /// several apps can be debugged at once; `0` lets Chromium pick a free one.
     pub fn effective_remote_devtools_port(&self, dev_mode: bool) -> Option<u16> {
         if self.remote_devtools_disabled {
             return None;

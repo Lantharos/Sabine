@@ -6,6 +6,7 @@ mod config;
 mod linux;
 mod metadata;
 mod package;
+pub(crate) mod sandbox;
 mod signing;
 mod stage;
 mod system;
