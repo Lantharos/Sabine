@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.58
 
 - Apps declare what they need from a sandbox in a `[sandbox]` table in `Sabine.toml`: `network`,
   `filesystems`, `devices` and the session bus names they `talk` to, in Flatpak's terms, or
