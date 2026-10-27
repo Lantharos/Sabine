@@ -1,3 +1,19 @@
+# Sabine 0.57
+
+- Sabine writes a TypeScript client for an app's bridge commands and events, so the page and the
+  app share one contract instead of copies kept in step by hand. Commands registered with
+  `bridge_typed` or `bridge_typed_async`, and events declared with the new `bridge_event`, go into
+  the file `[bindings] path` names in `Sabine.toml`, as `commands` and `events` with the app's own
+  types. Each type reads as the app sends it, and params as the app accepts them.
+- `bridge_typed` and `bridge_typed_async` need params and results that derive `specta::Type`, next
+  to serde's derives. Add `specta = { version = "=2.0.0-rc.27", features = ["derive"] }` to the
+  app's dependencies.
+- `sabine bindings` writes the file, `sabine bindings --check` fails when it is out of date, for CI,
+  and `sabine dev` rewrites it before it starts the page. New apps from `sabine new` call their
+  commands through it.
+- Events declared as `BridgeEvent<T>` are sent with `BridgeEventEmitter::send`, and bytes events,
+  `BridgeEvent<Bytes>`, with `send_bytes`.
+
 # Sabine 0.56
 
 - Merge pull request #5 from Lantharos/claude/laughing-mccarthy-0v3wo5
