@@ -72,7 +72,8 @@ pub(super) fn render(bindings: &BridgeBindings) -> Result<String, String> {
     )?;
     unique_keys(events.iter().map(|event| event.name), "event")?;
 
-    let referenced = referenced(&types, &commands, &events);
+    let exported = &outputs[commands.len() + events.len()..];
+    let referenced = referenced(&types, &commands, &events, exported);
     types.iter_mut(|named| {
         if inlined.contains(&key(named)) && !referenced.contains(&key(named)) {
             named.ty = None;
@@ -111,7 +112,12 @@ fn has_no_fields(fields: &Fields) -> bool {
     }
 }
 
-fn referenced(types: &Types, commands: &[Command], events: &[Event]) -> HashSet<TypeKey> {
+fn referenced(
+    types: &Types,
+    commands: &[Command],
+    events: &[Event],
+    exported: &[DataType],
+) -> HashSet<TypeKey> {
     let mut roots = types
         .into_unsorted_iter()
         .filter_map(|named| named.ty.clone())
@@ -123,6 +129,7 @@ fn referenced(types: &Types, commands: &[Command], events: &[Event]) -> HashSet<
         }
     }
     roots.extend(events.iter().map(|event| event.payload.clone()));
+    roots.extend(exported.iter().cloned());
 
     let mut referenced = HashSet::new();
     for root in &mut roots {
