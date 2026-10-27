@@ -45,6 +45,9 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         &[],
         sabine_service::AppEnvironment::Development,
     )?;
+    if !options.web_only && options.command.is_none() {
+        bindings::refresh(&project.source, &environment, options.release)?;
+    }
     let interrupted = interrupt_flag()?;
     let mut frontend = None;
     if let Some(dev_frontend) = &project.frontend {

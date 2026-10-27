@@ -34,6 +34,9 @@ dist = "ui/dist"
 entry = "ui/dist/index.html"
 dev_port = 5173
 build = "bun run build"
+
+[bindings]
+path = "ui/src/bindings.ts"
 "#
     )
 }
@@ -105,11 +108,12 @@ fn app_main_rs() -> &'static str {
 
 use sabine::prelude::*;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Type)]
 struct VersionRequest {}
 
-#[derive(Serialize)]
+#[derive(Serialize, Type)]
 struct VersionResponse {
     version: &'static str,
 }
@@ -152,7 +156,7 @@ fn app_index_html(name: &str) -> String {
 }
 
 fn app_main_ts() -> &'static str {
-    r##"import { invoke } from "@lantharos/sabine";
+    r##"import { commands } from "./bindings";
 import "./style.css";
 
 const status = document.querySelector("#status");
@@ -164,9 +168,9 @@ if (status instanceof HTMLElement) {
 
 button?.addEventListener("click", async () => {
   try {
-    const result = await invoke<{ version?: string }>("app.version");
+    const { version } = await commands.appVersion();
     if (status instanceof HTMLElement) {
-      status.textContent = `Version ${result.version ?? "unknown"}`;
+      status.textContent = `Version ${version}`;
     }
   } catch (error) {
     if (status instanceof HTMLElement) {

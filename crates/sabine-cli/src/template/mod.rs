@@ -120,6 +120,7 @@ edition = "2024"
 sabine = {sabine_dep}
 serde = {{ version = "1", features = ["derive"] }}
 serde_json = "1"
+specta = {{ version = "=2.0.0-rc.27", features = ["derive"] }}
 
 [profile.release]
 lto = "fat"

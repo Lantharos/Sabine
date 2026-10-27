@@ -1,5 +1,6 @@
 mod event;
 mod numbers;
+mod phases;
 mod render;
 mod walk;
 

@@ -686,7 +686,9 @@ and every page gets the same values as the `--sabine-controls-left`, `--sabine-c
 
 Bridge commands are registered on the builder:
 
-- `bridge_typed` deserializes params into a request type and serializes the result as JSON.
+- `bridge_typed` deserializes params into a request type and serializes the result as JSON. Both
+  types derive `specta::Type`, and the command is part of the app's
+  [TypeScript bindings](web-api.md#typed-bindings), as are events declared with `bridge_event`.
 - `bridge_handler` receives the raw `BridgeCommand`, including `body` bytes and the calling
   `window`, and answers with `BridgeResponse::json` or `BridgeResponse::bytes`.
 - `bridge_handler_async` and `bridge_typed_async` register handlers whose futures are awaited on

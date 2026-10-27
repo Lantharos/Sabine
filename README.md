@@ -56,6 +56,7 @@ Generated projects already pin the matching Rust crate and TypeScript helper. Fo
 ```toml
 [dependencies]
 sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.56" }
+specta = { version = "=2.0.0-rc.27", features = ["derive"] }
 
 [profile.release]
 lto = "fat"

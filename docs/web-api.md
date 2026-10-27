@@ -61,6 +61,62 @@ const contents = await invoke("file.read", { path }); // Uint8Array
 listen(`terminal.output.${id}`, (bytes) => terminal.write(bytes));
 ```
 
+## Typed bindings
+
+Sabine writes a TypeScript client for the commands and events an app registers, so the page and
+the app share one contract. Name the file in `Sabine.toml`:
+
+```toml
+[bindings]
+path = "ui/src/bindings.ts"
+```
+
+Commands registered with `bridge_typed` or `bridge_typed_async`, and events declared with
+`bridge_event`, end up in it. Their params and results derive `specta::Type` next to serde's
+derives, and serde's attributes shape the TypeScript types:
+
+```rust
+use sabine::BridgeEvent;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+#[derive(Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+struct Save {
+    path: String,
+    keep_backup: Option<bool>,
+}
+
+#[derive(Serialize, Type)]
+struct Saved {
+    bytes: u64,
+}
+
+const SAVED: BridgeEvent<Saved> = BridgeEvent::new("notes.saved");
+
+window
+    .bridge_typed("notes.save", |save: Save| save_note(save))
+    .bridge_event(&SAVED)
+```
+
+```ts
+import { commands, events } from "./bindings";
+
+const { bytes } = await commands.notesSave({ path, keepBackup: true }, { timeoutMs: 10000 });
+events.notesSaved(({ bytes }) => console.log(bytes));
+```
+
+Command and event names become camelCase keys. Params with no fields leave the function without a
+`params` argument. Each type reads as the app sends it, and params as the app accepts them, so a
+field with a default may be left out. Numbers of every width are `number`, which is what the page
+receives. The app sends declared events with `BridgeEventEmitter::send`, and bytes events, typed
+`BridgeEvent<Bytes>`, with `send_bytes`.
+
+`sabine dev` rewrites the file before it starts the page. `sabine bindings` writes it on its own,
+and `sabine bindings --check` fails without writing when it is out of date, for CI. Both build and
+run the app, which writes the file and exits before it opens a window, so check the file in with
+the rest of the page.
+
 ## Window controls
 
 ```js
