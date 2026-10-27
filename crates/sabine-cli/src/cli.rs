@@ -32,6 +32,14 @@ pub(crate) enum Command {
         #[arg(last = true)]
         args: Vec<String>,
     },
+    /// Write the app's TypeScript bindings, or check that they are current.
+    Bindings {
+        #[arg(default_value = ".")]
+        source: PathBuf,
+        /// Fail instead of writing when the bindings are out of date.
+        #[arg(long)]
+        check: bool,
+    },
     Runtime {
         #[command(subcommand)]
         command: RuntimeSubcommand,

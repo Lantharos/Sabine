@@ -1,8 +1,9 @@
 use std::future::Future;
 
 use sabine_bridge::{
-    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeResponse, BridgeResult,
+    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeEvent, BridgeResponse, BridgeResult,
 };
+use specta::Type;
 
 use super::SabineWindow;
 
@@ -18,13 +19,17 @@ impl SabineWindow {
     }
 
     /// Registers a command that deserializes params into `Req` and
-    /// serializes the handler return value as JSON.
-    pub fn bridge_typed<Req, Res, F>(self, command_name: impl Into<String>, handler: F) -> Self
+    /// serializes the handler return value as JSON. The command is part of
+    /// the app's TypeScript bindings.
+    pub fn bridge_typed<Req, Res, F>(mut self, command_name: impl Into<String>, handler: F) -> Self
     where
-        Req: serde::de::DeserializeOwned,
-        Res: serde::Serialize,
+        Req: serde::de::DeserializeOwned + Type,
+        Res: serde::Serialize + Type,
         F: Fn(Req) -> Result<Res, BridgeError> + Send + Sync + 'static,
     {
+        let command_name = command_name.into();
+        self.bridge_bindings
+            .command::<Req, Res>(command_name.clone());
         self.bridge_handler(command_name, move |command| {
             let request = serde_json::from_value(command.params)
                 .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")))?;
@@ -36,22 +41,33 @@ impl SabineWindow {
     /// serializes the handler's answer as JSON. It is awaited like
     /// [`Self::bridge_handler_async`].
     pub fn bridge_typed_async<Req, Res, F, Fut>(
-        self,
+        mut self,
         command_name: impl Into<String>,
         handler: F,
     ) -> Self
     where
-        Req: serde::de::DeserializeOwned,
-        Res: serde::Serialize,
+        Req: serde::de::DeserializeOwned + Type,
+        Res: serde::Serialize + Type,
         F: Fn(Req) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Res, BridgeError>> + Send + 'static,
     {
+        let command_name = command_name.into();
+        self.bridge_bindings
+            .command::<Req, Res>(command_name.clone());
         self.bridge_handler_async(command_name, move |command| {
             let request = serde_json::from_value::<Req>(command.params)
                 .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")));
             let answer = request.map(&handler);
             async move { json_response(answer?.await?) }
         })
+    }
+
+    /// Adds an event the app sends with
+    /// [`BridgeEventEmitter::send`](crate::BridgeEventEmitter::send) to the
+    /// app's TypeScript bindings.
+    pub fn bridge_event<T: Type>(mut self, event: &BridgeEvent<T>) -> Self {
+        self.bridge_bindings.event(event);
+        self
     }
 
     /// Registers a command limited to the descriptor's targets, which the

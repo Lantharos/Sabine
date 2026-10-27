@@ -3,9 +3,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sabine::prelude::*;
-use serde::{Serialize, de::IgnoredAny};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Serialize)]
+#[derive(Deserialize, Type)]
+struct NewNote {}
+
+#[derive(Serialize, Type)]
 struct CreatedNote {
     id: String,
 }
@@ -18,7 +22,7 @@ fn main() {
             .glass()
             .app_chrome(AppChrome::default())
             .content_suffix("?chrome=app")
-            .bridge_typed("notes.create", |_: IgnoredAny| Ok(create_note())))
+            .bridge_typed("notes.create", |NewNote {}| Ok(create_note())))
     });
 }
 

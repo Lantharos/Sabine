@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use sabine_bridge::{BridgeEvent, Bytes};
 use sabine_platform::WindowRegions;
 
 use super::frame::Frame;
@@ -37,6 +38,17 @@ impl BridgeEventEmitter {
         payload: serde_json::Value,
     ) -> bool {
         self.deliver(Some(window), event_line(&name.into(), &payload), None)
+    }
+
+    /// Sends a typed event to every window. Returns `false` when the payload
+    /// does not serialize or no window takes it.
+    pub fn send<T: serde::Serialize>(&self, event: &BridgeEvent<T>, payload: &T) -> bool {
+        serde_json::to_value(payload).is_ok_and(|payload| self.emit(event.name(), payload))
+    }
+
+    /// Sends a typed bytes event to every window.
+    pub fn send_bytes(&self, event: &BridgeEvent<Bytes>, bytes: &[u8]) -> bool {
+        self.emit_bytes(event.name(), bytes)
     }
 
     /// Sends bytes to every window; listeners receive a `Uint8Array`. Use this

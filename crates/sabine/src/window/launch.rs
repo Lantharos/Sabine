@@ -19,6 +19,7 @@ use crate::osr;
 
 impl SabineWindow {
     pub fn launch(mut self) -> SabineResult<SabineProcess> {
+        crate::bridge::export_requested_bindings(&self.bridge_bindings);
         self.apply_launch_environment();
         let metrics = LaunchMetrics::new(metrics_label(&self.config));
         metrics.mark("launch.start");

@@ -9,10 +9,12 @@
 //! - `sabine` — drives the C++ CEF OSR host and re-exports these types.
 //! - Apps depend on `sabine` (which re-exports the bridge surface).
 
+mod bindings;
 mod bridge;
 mod commands;
 mod guest;
 
+pub use bindings::{BridgeBindings, BridgeEvent, Bytes};
 pub use bridge::{
     BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeFuture, BridgeHandlers,
     BridgeOutcome, BridgeRegistry, BridgeResponse, BridgeResult, BridgeRuntime, ContentSecurity,

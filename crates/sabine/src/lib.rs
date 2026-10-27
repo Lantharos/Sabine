@@ -34,8 +34,8 @@ pub use window::SabineWindowControlRegion;
 pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
 pub use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
 pub use sabine_bridge::{
-    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeResponse, BridgeResult,
-    ContentSecurity,
+    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeEvent, BridgeResponse, BridgeResult,
+    Bytes, ContentSecurity,
 };
 pub use sabine_bridge::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,

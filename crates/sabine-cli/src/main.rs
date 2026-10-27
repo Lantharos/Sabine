@@ -63,6 +63,13 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Command::Bindings { source, check } => match dev::run_bindings(&source, check) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
         Command::Runtime { command } => runtime::run_runtime(match command {
             RuntimeSubcommand::Prepare => RuntimeCommand::Prepare,
             RuntimeSubcommand::SandboxProfile => RuntimeCommand::SandboxProfile,

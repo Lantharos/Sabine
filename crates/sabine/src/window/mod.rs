@@ -1,4 +1,4 @@
-use sabine_bridge::BridgeHandlers;
+use sabine_bridge::{BridgeBindings, BridgeHandlers};
 
 mod app_chrome;
 mod bridge;
@@ -27,6 +27,7 @@ use crate::{error::SabineResult, host::SabineProcess};
 pub struct SabineWindow {
     pub(crate) config: SabineWindowConfig,
     bridge_handlers: BridgeHandlers,
+    bridge_bindings: BridgeBindings,
 }
 
 impl SabineWindow {
@@ -146,6 +147,7 @@ impl SabineWindow {
         Self {
             config: SabineWindowConfig::default(),
             bridge_handlers: BridgeHandlers::default(),
+            bridge_bindings: BridgeBindings::default(),
         }
     }
 }

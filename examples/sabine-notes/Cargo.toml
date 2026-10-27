@@ -9,3 +9,4 @@ publish = false
 [dependencies]
 sabine.workspace = true
 serde.workspace = true
+specta.workspace = true

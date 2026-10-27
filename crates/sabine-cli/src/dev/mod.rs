@@ -1,3 +1,4 @@
+mod bindings;
 pub(crate) mod process_tree;
 pub(crate) mod web_detect;
 
@@ -12,6 +13,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+pub use bindings::run_bindings;
 
 use crate::runtime;
 use process_tree::ProcessTree;
