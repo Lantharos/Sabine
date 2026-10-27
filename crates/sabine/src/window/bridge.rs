@@ -70,6 +70,13 @@ impl SabineWindow {
         self
     }
 
+    /// Adds a type to the app's TypeScript bindings that no command or event
+    /// names, such as one a shared page package uses.
+    pub fn bridge_type<T: Type>(mut self) -> Self {
+        self.bridge_bindings.export::<T>();
+        self
+    }
+
     /// Registers a command limited to the descriptor's targets, which the
     /// descriptor's extra origins may also call.
     pub fn bridge_descriptor_handler<F>(

@@ -25,6 +25,7 @@ struct CommandSignature {
 pub struct BridgeBindings {
     commands: BTreeMap<String, CommandSignature>,
     events: BTreeMap<&'static str, Definition>,
+    types: Vec<Definition>,
 }
 
 impl BridgeBindings {
@@ -40,6 +41,12 @@ impl BridgeBindings {
 
     pub fn event<T: Type>(&mut self, event: &BridgeEvent<T>) {
         self.events.insert(event.name(), T::definition);
+    }
+
+    /// Adds a type pages use without a command or event naming it, such as
+    /// one a shared package passes around.
+    pub fn export<T: Type>(&mut self) {
+        self.types.push(T::definition);
     }
 
     /// Renders the bindings as a TypeScript module that imports

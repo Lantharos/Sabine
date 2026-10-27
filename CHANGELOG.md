@@ -4,7 +4,8 @@
   app share one contract instead of copies kept in step by hand. Commands registered with
   `bridge_typed` or `bridge_typed_async`, and events declared with the new `bridge_event`, go into
   the file `[bindings] path` names in `Sabine.toml`, as `commands` and `events` with the app's own
-  types. Each type reads as the app sends it, and params as the app accepts them.
+  types. Each type reads as the app sends it, and params as the app accepts them. `bridge_type`
+  adds a type no command or event names, so shared page packages can have bindings too.
 - `bridge_typed` and `bridge_typed_async` need params and results that derive `specta::Type`, next
   to serde's derives. Add `specta = { version = "=2.0.0-rc.27", features = ["derive"] }` to the
   app's dependencies.

@@ -40,6 +40,9 @@ pub(super) fn render(bindings: &BridgeBindings) -> Result<String, String> {
     for payload in bindings.events.values() {
         outputs.push(payload(&mut types));
     }
+    for definition in &bindings.types {
+        outputs.push(definition(&mut types));
+    }
     let mut types = phases::resolve(&types, &mut outputs, &mut inputs)?;
 
     let mut inlined = HashSet::new();

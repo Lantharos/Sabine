@@ -109,7 +109,7 @@ events.notesSaved(({ bytes }) => console.log(bytes));
 Command and event names become camelCase keys. Params with no fields leave the function without a
 `params` argument. Each type reads as the app sends it, and params as the app accepts them, so a
 field with a default may be left out. Numbers of every width are `number`, which is what the page
-receives. The app sends declared events with `BridgeEventEmitter::send`, and bytes events, typed
+receives. `bridge_type::<T>()` adds a type that no command or event names, for a package of shared page code that works with it. The app sends declared events with `BridgeEventEmitter::send`, and bytes events, typed
 `BridgeEvent<Bytes>`, with `send_bytes`.
 
 `sabine dev` rewrites the file before it starts the page. `sabine bindings` writes it on its own,
