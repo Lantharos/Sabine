@@ -150,6 +150,15 @@ it accepts. Apps older than that floor are not registered again and receive a na
 notice. The service fetches their newest release right away instead of waiting for the soak period,
 and an app offers a downloaded update before showing that notice.
 
+A Sabine update never retires an app that is installed. Before installing a release, the service
+weighs its oldest accepted build against every app on the machine: the apps each user registered and
+the apps installed for every user, read from the `sabine` build in their bundled `Sabine.toml`. When
+the release would stop one of them, the service holds it and installs the newest earlier release
+that runs them all, so fixes keep arriving. The held release, with the apps it waits for, is recorded
+in `bin/held-update.json` and returned by `held_system_update()`; it installs on the next check after
+those apps update or are removed. An app whose own update needs a newer Sabine still pulls that
+release, unless it would stop a different app.
+
 App releases are separate from Sabine releases. `[updates]` in `Sabine.toml` identifies a GitHub
 repository or HTTPS manifest endpoint. Sabine's reusable GitHub Actions workflow builds native
 artifacts and emits a signed `sabine-update.json`. The service verifies its configured app public
@@ -1486,7 +1495,8 @@ requires an empty app registry and stops the verified daemon before deleting its
 
 `sabine update` checks published stable releases independently of GitHub's latest-release promotion,
 verifies the signed system manifest, applies the soak policy, updates the CLI and shared components,
-and validates the newest compatible CEF runtime. `--force` skips the soak policy only. Failed-release
+and validates the newest compatible CEF runtime. It holds a release that would stop an installed app
+the same way the service does, and names the apps it waits for. `--force` skips the soak policy only. Failed-release
 backoff, signatures, checksums and version ordering remain enforced.
 
 ## System-wide installation
@@ -1517,6 +1527,8 @@ A system-wide app goes where native packages put it: `/usr/lib/sabine/<app-id>` 
 `/usr/bin` and its desktop entry, icons, AppStream metadata and file types under `/usr/share` on
 Linux, `/Applications` on macOS, and `%ProgramFiles%` with an all-users Start menu shortcut on
 Windows. The bundle carries no update source; whoever installed it updates it.
+An image build can run `sabine-service check-apps` from the system installation, which fails when
+that Sabine would not run one of the apps installed for every user.
 
 Apps and services prefer the system installation unless it is older than an app requires or than a
 user's own installation, which a newer third-party app or `sabine update` may bring. Each user still

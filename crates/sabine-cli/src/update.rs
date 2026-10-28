@@ -52,13 +52,22 @@ fn update_sabine(force: bool) -> Result<(), String> {
         std::fs::remove_file(cli).map_err(|error| error.to_string())?;
         println!("Updated Sabine CLI to {}", report.version);
     }
-    if report.system_updated {
+    match &report.system {
+        Some(version) => println!("Updated Sabine service, daemon and host to {version}"),
+        None if report.held.is_none() => println!("Sabine service and host are current"),
+        None => {}
+    }
+    if let Some(held) = &report.held {
+        let apps = held
+            .apps
+            .iter()
+            .map(|app| app.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
         println!(
-            "Updated Sabine service, daemon and host to {}",
-            report.version
+            "Sabine {} is waiting for {apps}, which it would no longer run; update or remove them to install it",
+            held.version
         );
-    } else {
-        println!("Sabine service and host are current");
     }
     Ok(())
 }

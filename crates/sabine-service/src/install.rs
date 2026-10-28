@@ -1,6 +1,6 @@
 use crate::{
     PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult, SystemCompatibility,
-    SystemReleaseManifest, verify_system_release,
+    SystemReleaseManifest, SystemRequirement, verify_system_release,
 };
 use std::{
     fs,
@@ -8,11 +8,14 @@ use std::{
 };
 
 mod artifacts;
+mod hold;
 mod manual;
 mod payload;
 use payload::{install_system_archive, seed_managed_install};
 mod state;
 mod system;
+pub use hold::held_system_update;
+use hold::installable_release;
 pub use manual::update_components;
 pub use system::install_system_service;
 use system::stage_system_files;
@@ -34,7 +37,7 @@ const SYSTEM_UPDATE_PUBLIC_KEYS: &str = include_str!("../update-public-key.txt")
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SystemUpdateMode {
-    Required(SabineVersion),
+    Required(SystemRequirement),
     Repair {
         required: SabineVersion,
         release_version: String,
@@ -151,7 +154,7 @@ pub fn ensure_service_executable(
             return seed_managed_install(&path);
         }
         if let Some(update) = install_latest_system(
-            SystemUpdateMode::Required(SabineVersion::current()),
+            SystemUpdateMode::Required(this_app_requirement()),
             &mut on_progress,
         )? {
             return Ok(update.service);
@@ -169,7 +172,7 @@ pub fn ensure_service_executable(
                 return seed_managed_install(&path);
             }
             if let Some(update) = install_latest_system(
-                SystemUpdateMode::Required(SabineVersion::current()),
+                SystemUpdateMode::Required(this_app_requirement()),
                 &mut on_progress,
             )? {
                 return Ok(update.service);
@@ -213,7 +216,7 @@ pub fn ensure_service_executable(
     });
 
     let update = install_latest_system(
-        SystemUpdateMode::Required(SabineVersion::current()),
+        SystemUpdateMode::Required(this_app_requirement()),
         &mut on_progress,
     )?;
     let destination = update
@@ -226,6 +229,13 @@ pub fn ensure_service_executable(
         fraction: Some(0.08),
     });
     Ok(destination)
+}
+
+fn this_app_requirement() -> SystemRequirement {
+    SystemRequirement {
+        sabine: SabineVersion::current(),
+        apps: Vec::new(),
+    }
 }
 
 fn managed_system_is_older(installed: &str) -> bool {
@@ -261,17 +271,32 @@ pub fn stage_system_update() -> ServiceResult<Option<StagedSystemUpdate>> {
 }
 
 pub(crate) fn stage_required_system_update(
-    required: SabineVersion,
+    required: SystemRequirement,
 ) -> ServiceResult<Option<StagedSystemUpdate>> {
     install_latest_system(SystemUpdateMode::Required(required), &mut |_| {})
 }
 
-pub(crate) fn install_required_system_update(required: SabineVersion) -> ServiceResult<()> {
-    let Some(_) = stage_required_system_update(required)? else {
-        return Err(ServiceError::Update(format!(
-            "Sabine {} is not available",
-            required.label()
-        )));
+pub(crate) fn install_required_system_update(
+    required: SabineVersion,
+    app: &str,
+) -> ServiceResult<()> {
+    let requirement = SystemRequirement {
+        sabine: required,
+        apps: vec![app.to_string()],
+    };
+    let Some(_) = stage_required_system_update(requirement)? else {
+        return Err(ServiceError::Update(match held_system_update() {
+            Some(held) => format!(
+                "Sabine {} is waiting for {} to update",
+                held.version,
+                held.apps
+                    .iter()
+                    .map(|app| app.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            None => format!("Sabine {} is not available", required.label()),
+        }));
     };
     crate::ensure_daemon_running()?;
     let installed = installed_system_compatibility();
@@ -346,13 +371,21 @@ fn install_latest_system(
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<Option<StagedSystemUpdate>> {
     let requested_version = match &mode {
-        SystemUpdateMode::Required(required) => Some(required.label()),
+        SystemUpdateMode::Required(required) => Some(required.sabine.label()),
         SystemUpdateMode::Repair {
             release_version, ..
         } => Some(release_version.clone()),
         SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
     };
     let manifest = fetch_system_manifest(requested_version.as_deref())?;
+    let manifest = if matches!(mode, SystemUpdateMode::Repair { .. }) {
+        manifest
+    } else {
+        let Some(manifest) = installable_release(&mode, manifest)? else {
+            return Ok(None);
+        };
+        manifest
+    };
     install_system_release(mode, manifest, on_progress)
 }
 
@@ -365,9 +398,8 @@ fn install_system_release(
     validate_system_release(&manifest)?;
     let compatibility = normalized_release_compatibility(&manifest)?;
     let required = match &mode {
-        SystemUpdateMode::Required(required) | SystemUpdateMode::Repair { required, .. } => {
-            Some(*required)
-        }
+        SystemUpdateMode::Required(required) => Some(required.sabine),
+        SystemUpdateMode::Repair { required, .. } => Some(*required),
         SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
     };
     if let Some(required) = required
@@ -448,11 +480,14 @@ pub fn installed_system_compatibility() -> SystemCompatibility {
     system_compatibility_in(&sabine_runtime::sabine_data_dir())
 }
 
-/// What the Sabine installed under `root` accepts.
+/// What the newest Sabine accepts, of the one installed under `root` and the
+/// one installed for every user.
 pub(crate) fn system_compatibility_in(root: &Path) -> SystemCompatibility {
-    read_installation_state_in(root)
-        .or_else(|| read_installation_state_in(&sabine_runtime::system_dir()))
+    [root, &sabine_runtime::system_dir()]
+        .into_iter()
+        .filter_map(read_installation_state_in)
         .map(|state| normalized_state_compatibility(&state))
+        .max_by_key(|compatibility| (compatibility.major, compatibility.build))
         .unwrap_or_else(SystemCompatibility::current)
 }
 

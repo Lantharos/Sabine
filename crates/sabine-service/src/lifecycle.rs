@@ -111,8 +111,9 @@ pub fn adopt_with_runtime(
     register: Option<AppManifest>,
 ) -> ServiceResult<ServiceReadyReport> {
     let policy = load_policy();
-    let daemon_running = ensure_daemon_running().unwrap_or(false);
     let service = SabineService::default().with_runtime(runtime);
+    record_launched_build(&service, register.as_ref())?;
+    let daemon_running = ensure_daemon_running().unwrap_or(false);
     let runtime = service.runtime()?;
     let registered_app = if let Some(manifest) = register {
         Some(service.register(manifest)?.manifest.id)
@@ -126,6 +127,16 @@ pub fn adopt_with_runtime(
         runtime_version: runtime.version,
         registered_app,
     })
+}
+
+fn record_launched_build(
+    service: &SabineService,
+    launched: Option<&AppManifest>,
+) -> ServiceResult<()> {
+    let Some(app) = launched else {
+        return Ok(());
+    };
+    service.record_installed_build(&app.id, &app.version, app.sabine)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +164,8 @@ pub fn prepare_machine_with_progress(
         fraction: Some(0.05),
     });
 
+    let service = SabineService::default().with_runtime(runtime);
+    record_launched_build(&service, register.as_ref())?;
     let _ = crate::ensure_service_executable(&mut on_progress)?;
 
     let policy = load_policy();
@@ -164,7 +177,6 @@ pub fn prepare_machine_with_progress(
         fraction: Some(0.1),
     });
 
-    let service = SabineService::default().with_runtime(runtime);
     let runtime_info = service.ensure_runtime_with_progress(|progress| {
         let fraction = progress
             .fraction

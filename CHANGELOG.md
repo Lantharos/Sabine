@@ -1,3 +1,14 @@
+# Unreleased
+
+- A Sabine update never stops an installed app from running. When a release no longer accepts the
+  build of an app on the machine, including apps installed for every user, Sabine holds it until
+  those apps update or are removed and installs the newest earlier release meanwhile.
+  `held_system_update()` reports what is waiting and for which apps; `sabine update` and
+  `sabine-service maintain` print it.
+- Bundles record the Sabine build they were made with as `sabine` in their manifest's `[app]` table.
+- `sabine-service check-apps` fails when the Sabine it belongs to would not run an app installed for
+  every user, for operating system image builds.
+
 # Sabine 0.58
 
 - Apps declare what they need from a sandbox in a `[sandbox]` table in `Sabine.toml`: `network`,

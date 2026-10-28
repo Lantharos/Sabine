@@ -43,7 +43,7 @@ impl SabineService {
         let apps = self.apps()?;
         let mut updated_apps = Vec::new();
         let mut pending_apps = Vec::new();
-        let mut required_system_update = None;
+        let mut required_system_update: Option<crate::SystemRequirement> = None;
         for app in &apps {
             let Some(update) = &app.manifest.update else {
                 continue;
@@ -62,11 +62,13 @@ impl SabineService {
                     pending_apps.push(app.manifest.id.clone())
                 }
                 Ok(AppUpdateStatus::RequiresSystem { sabine, .. }) => {
-                    required_system_update = Some(
-                        required_system_update.map_or(sabine, |required: crate::SabineVersion| {
-                            required.max(sabine)
-                        }),
-                    );
+                    let required =
+                        required_system_update.get_or_insert_with(|| crate::SystemRequirement {
+                            sabine,
+                            apps: Vec::new(),
+                        });
+                    required.sabine = required.sabine.max(sabine);
+                    required.apps.push(app.manifest.id.clone());
                 }
                 Ok(
                     AppUpdateStatus::Current
@@ -188,7 +190,7 @@ impl SabineService {
         };
         if release.requires_sabine > installed {
             if !require_soak {
-                crate::install::install_required_system_update(release.requires_sabine)?;
+                crate::install::install_required_system_update(release.requires_sabine, id)?;
             } else {
                 return Ok(AppUpdateStatus::RequiresSystem {
                     app_version: release.version,
@@ -237,7 +239,12 @@ impl SabineService {
             install_archive(&self.root, id, &release.version, artifact, &release_dir)?;
         }
         installers::validate_executable(&installed_executable)?;
-        self.activate_managed_update(id, &release.version, installed_executable)?;
+        self.activate_managed_update(
+            id,
+            &release.version,
+            release.requires_sabine,
+            installed_executable,
+        )?;
         Ok(AppUpdateStatus::Installed {
             version: release.version,
         })
@@ -343,6 +350,7 @@ impl SabineService {
         &self,
         id: &str,
         version: &str,
+        sabine: crate::SabineVersion,
         executable: PathBuf,
     ) -> ServiceResult<()> {
         let _lock = RegistryLock::acquire(&self.root)?;
@@ -355,6 +363,7 @@ impl SabineService {
             return Ok(());
         }
         registered.manifest.version = version.to_string();
+        registered.manifest.sabine = sabine;
         registered.manifest.executable = executable;
         registered.updated_at = unix_timestamp();
         self.save_registry(&registry)

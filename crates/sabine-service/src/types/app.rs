@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::{
-    SabineVersion, ServiceError, ServiceResult, is_https_url, unix_timestamp, valid_app_id,
+    SabineVersion, ServiceError, ServiceResult, SystemRequirement, is_https_url, unix_timestamp,
+    valid_app_id,
 };
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -257,7 +258,7 @@ pub struct MaintenanceReport {
     pub pending_apps: Vec<String>,
     pub update_failures: Vec<String>,
     pub incompatible_apps: Vec<String>,
-    pub required_system_update: Option<SabineVersion>,
+    pub required_system_update: Option<SystemRequirement>,
 }
 
 fn release_schema() -> u32 {

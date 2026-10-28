@@ -8,10 +8,11 @@ pub(super) fn runtime_manifest(
     package_kind: Option<AppArtifactKind>,
 ) -> Result<String, String> {
     let mut manifest = format!(
-        "[app]\nid = \"{}\"\nname = \"{}\"\nversion = \"{}\"\n",
+        "[app]\nid = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsabine = \"{}\"\n",
         quote(&app.id),
         quote(&app.name),
-        quote(&app.version)
+        quote(&app.version),
+        sabine_service::SABINE_VERSION
     );
     if !app.shared_runtime {
         manifest.push_str("shared_runtime = false\n");

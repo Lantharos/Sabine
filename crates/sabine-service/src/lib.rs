@@ -28,6 +28,7 @@ pub use app::desktop::entries::{SHORTCUT_HOST_KEY, forget_desktop_entries};
 pub use app::desktop::native_messaging::native_messaging_registry_keys;
 pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messaging_manifest_dirs};
 pub use app::environment::AppEnvironment;
+pub use app::installed::unsupported_system_apps;
 pub use app::payload::remove_app_payload;
 pub use identity::{ICON_NAME, icon_png};
 pub use uninstall::uninstall_system;
@@ -38,7 +39,7 @@ pub(crate) use install::{
     stage_system_update,
 };
 pub use install::{
-    ensure_service_executable, find_service_executable, install_system_service,
+    ensure_service_executable, find_service_executable, held_system_update, install_system_service,
     installed_service_version, service_daemon_path, update_components,
 };
 #[cfg(target_os = "linux")]
@@ -54,9 +55,9 @@ pub use release::signing::{public_key_from_private, sign_app_release, sign_syste
 pub(crate) use release::signing::{verify_app_release, verify_system_release};
 pub use types::{
     APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
-    AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, SABINE_VERSION,
-    SabineVersion, ServiceError, SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest,
-    UpdatePolicy, valid_app_id,
+    AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, HeldSystemUpdate,
+    InstalledApp, SABINE_VERSION, SabineVersion, ServiceError, SystemCompatibility,
+    SystemReleaseArtifact, SystemReleaseManifest, SystemRequirement, UpdatePolicy, valid_app_id,
 };
 pub(crate) use types::{
     RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,

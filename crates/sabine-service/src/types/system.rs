@@ -76,6 +76,32 @@ impl SystemCompatibility {
     }
 }
 
+/// An app on this machine, by the Sabine build it was made with.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct InstalledApp {
+    pub id: String,
+    pub name: String,
+    pub sabine: SabineVersion,
+    /// Installed for every user, so it updates with the operating system.
+    pub system: bool,
+}
+
+/// A Sabine release that is not installed because it would stop running
+/// `apps`, until they update or are removed.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct HeldSystemUpdate {
+    pub version: String,
+    pub compatibility: SystemCompatibility,
+    pub apps: Vec<InstalledApp>,
+}
+
+/// A newer Sabine that updates of `apps` need.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemRequirement {
+    pub sabine: SabineVersion,
+    pub apps: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SystemReleaseManifest {
     pub schema: u32,

@@ -81,6 +81,29 @@ impl SabineService {
         Ok(app)
     }
 
+    /// Records the version and Sabine build of a registered app as installed,
+    /// even when this Sabine cannot run it yet, so Sabine updates are weighed
+    /// against the app on disk rather than the one that registered last.
+    pub fn record_installed_build(
+        &self,
+        id: &str,
+        version: &str,
+        sabine: crate::SabineVersion,
+    ) -> ServiceResult<()> {
+        let _lock = RegistryLock::acquire(&self.root)?;
+        let mut registry = self.load_registry()?;
+        let Some(app) = registry.apps.get_mut(id) else {
+            return Ok(());
+        };
+        let unchanged = app.manifest.version == version && app.manifest.sabine == sabine;
+        if unchanged || version_is_newer(&app.manifest.version, version) {
+            return Ok(());
+        }
+        app.manifest.version = version.to_string();
+        app.manifest.sabine = sabine;
+        self.save_registry(&registry)
+    }
+
     pub fn unregister(&self, id: &str) -> ServiceResult<RegisteredApp> {
         let _lock = RegistryLock::acquire(&self.root)?;
         let mut registry = self.load_registry()?;

@@ -56,6 +56,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Fail when this Sabine would not run an app installed for every user.
+    CheckApps,
 }
 
 fn main() -> ExitCode {
@@ -117,6 +119,15 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 report.automatic_updates,
                 report.pruned_runtimes
             );
+            if let Some(held) = sabine_service::held_system_update() {
+                let apps = held
+                    .apps
+                    .iter()
+                    .map(|app| app.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                println!("Sabine {} is waiting for {apps}", held.version);
+            }
             if !report.update_failures.is_empty() {
                 return Err(report.update_failures.join("; ").into());
             }
@@ -173,6 +184,21 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::CompleteSystemUpdate { from_pid, version } => {
             sabine_service::complete_system_update(from_pid, &version)?;
+        }
+        Command::CheckApps => {
+            let unsupported = sabine_service::unsupported_system_apps();
+            if !unsupported.is_empty() {
+                let apps = unsupported
+                    .iter()
+                    .map(|app| format!("{} (Sabine {})", app.id, app.sabine.label()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!(
+                    "Sabine {} does not run {apps}",
+                    sabine_service::SABINE_VERSION
+                )
+                .into());
+            }
         }
         Command::List { json } => {
             let apps = service.apps()?;

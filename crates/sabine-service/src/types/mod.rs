@@ -13,7 +13,8 @@ pub use app::{
     PendingAppUpdate, RegisteredApp, UpdatePolicy,
 };
 pub use system::{
-    SabineVersion, SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest,
+    HeldSystemUpdate, InstalledApp, SabineVersion, SystemCompatibility, SystemReleaseArtifact,
+    SystemReleaseManifest, SystemRequirement,
 };
 
 pub const REGISTRY_VERSION: u32 = 1;

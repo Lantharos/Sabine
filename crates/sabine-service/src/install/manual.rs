@@ -6,7 +6,8 @@ pub struct ComponentUpdate {
     _lock: sabine_runtime::FileLock,
     pub version: String,
     pub deferred: bool,
-    pub system_updated: bool,
+    pub system: Option<String>,
+    pub held: Option<crate::HeldSystemUpdate>,
     pub cli: Option<PathBuf>,
 }
 
@@ -26,7 +27,8 @@ pub fn update_components(
         _lock,
         version: manifest.version.clone(),
         deferred: false,
-        system_updated: false,
+        system: None,
+        held: None,
         cli: None,
     };
     let update_cli = crate::types::version_is_newer(&manifest.version, cli_version);
@@ -49,14 +51,18 @@ pub fn update_components(
         result.cli = Some(stage_cli(&manifest, &mut progress)?);
     }
     if update_system {
-        install_system_release(SystemUpdateMode::Manual, manifest, &mut progress)?;
-        crate::ensure_daemon_running()?;
-        if installed_service_version().as_deref() != Some(&result.version) {
-            return Err(ServiceError::Update(
-                "Sabine update rolled back during startup".into(),
-            ));
+        if let Some(release) = installable_release(&SystemUpdateMode::Manual, manifest)? {
+            let version = release.version.clone();
+            install_system_release(SystemUpdateMode::Manual, release, &mut progress)?;
+            crate::ensure_daemon_running()?;
+            if installed_service_version().as_deref() != Some(&version) {
+                return Err(ServiceError::Update(
+                    "Sabine update rolled back during startup".into(),
+                ));
+            }
+            result.system = Some(version);
         }
-        result.system_updated = true;
+        result.held = held_system_update();
     }
     Ok(result)
 }
