@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.60
 
 - On Linux, windows survive a crash of the Wayland compositor when the desktop starts it again on
   the same socket, as Luft's Kestrel and KDE Plasma do: they reconnect and come back with their
