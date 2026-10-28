@@ -18,6 +18,8 @@ use std::time::Instant;
 use winit::event_loop::{EventLoop, run_on_demand::EventLoopExtRunOnDemand};
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+#[cfg(target_os = "linux")]
+use winit::platform::wayland::EventLoopBuilderExtWayland;
 
 pub(crate) use config::OsrHostConfig;
 
@@ -29,6 +31,8 @@ pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
     LazyLock::force(&STARTED);
     let config = OsrHostConfig::read(config_path)?;
     let mut event_loop_builder = EventLoop::builder();
+    #[cfg(target_os = "linux")]
+    event_loop_builder.with_reconnect(true);
     #[cfg(target_os = "macos")]
     if config.skip_taskbar {
         event_loop_builder.with_activation_policy(ActivationPolicy::Accessory);

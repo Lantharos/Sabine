@@ -28,6 +28,11 @@ use crate::osr::host::native::OsrNativeHost;
 
 impl ApplicationHandler for OsrNativeHost {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
+        #[cfg(target_os = "linux")]
+        if self.display_lost {
+            self.regain_display(event_loop);
+            return;
+        }
         if self.window.is_some() {
             return;
         }
@@ -42,6 +47,11 @@ impl ApplicationHandler for OsrNativeHost {
         #[cfg(not(windows))]
         self.launch_child_before_window(event_loop);
         self.create_window(event_loop);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn destroy_surfaces(&mut self, _event_loop: &dyn ActiveEventLoop) {
+        self.lose_display();
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {

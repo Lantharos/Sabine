@@ -1,4 +1,6 @@
 mod deadlines;
+#[cfg(target_os = "linux")]
+mod reconnect;
 mod recovery;
 pub(super) mod toplevel;
 pub(super) mod visibility;

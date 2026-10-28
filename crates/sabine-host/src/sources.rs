@@ -35,6 +35,35 @@ pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
         "runtime/server.h",
         include_str!("../shared/runtime/server.h"),
     ),
+    (
+        "display/offer.cc",
+        include_str!("../shared/display/offer.cc"),
+    ),
+    ("display/offer.h", include_str!("../shared/display/offer.h")),
+    (
+        "display/private_display.cc",
+        include_str!("../shared/display/private_display.cc"),
+    ),
+    (
+        "display/private_display.h",
+        include_str!("../shared/display/private_display.h"),
+    ),
+    (
+        "display/protocols.cc",
+        include_str!("../shared/display/protocols.cc"),
+    ),
+    (
+        "display/protocols.h",
+        include_str!("../shared/display/protocols.h"),
+    ),
+    (
+        "display/wayland.cc",
+        include_str!("../shared/display/wayland.cc"),
+    ),
+    (
+        "display/wayland.h",
+        include_str!("../shared/display/wayland.h"),
+    ),
     ("main_mac.mm", include_str!("../shared/main_mac.mm")),
     (
         "mac/Info.plist.in",

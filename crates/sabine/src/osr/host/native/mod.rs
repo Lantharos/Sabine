@@ -52,6 +52,10 @@ pub(super) struct OsrNativeHost {
     pub(super) window_generation: u64,
     #[cfg(target_os = "linux")]
     pub(super) renderer_starting: bool,
+    /// The compositor went away and the window waits for the one that
+    /// takes over its display.
+    #[cfg(target_os = "linux")]
+    pub(super) display_lost: bool,
     #[cfg(target_os = "linux")]
     pub(super) gpu_starts: Vec<std::thread::JoinHandle<()>>,
     #[cfg(target_os = "linux")]
@@ -201,6 +205,8 @@ impl OsrNativeHost {
             window_generation: 0,
             #[cfg(target_os = "linux")]
             renderer_starting: false,
+            #[cfg(target_os = "linux")]
+            display_lost: false,
             #[cfg(target_os = "linux")]
             gpu_starts: Vec::new(),
             #[cfg(target_os = "linux")]

@@ -42,6 +42,14 @@ set(SABINE_HOST_SOURCES
   runtime/renderers.h
   runtime/server.cc
   runtime/server.h
+  display/offer.cc
+  display/offer.h
+  display/private_display.cc
+  display/private_display.h
+  display/protocols.cc
+  display/protocols.h
+  display/wayland.cc
+  display/wayland.h
   app/app.cc
   app/app.h
   app/profile.cc
@@ -141,6 +149,14 @@ if(NOT OS_LINUX)
     runtime/renderers.h
     runtime/server.cc
     runtime/server.h
+    display/offer.cc
+    display/offer.h
+    display/private_display.cc
+    display/private_display.h
+    display/protocols.cc
+    display/protocols.h
+    display/wayland.cc
+    display/wayland.h
     osr/accelerated/linux/device_loss.cc
     osr/accelerated/linux/dmabuf_copy.cc
     osr/accelerated/linux/dmabuf_copy.h

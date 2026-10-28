@@ -1,3 +1,11 @@
+# Unreleased
+
+- On Linux, windows survive a crash of the Wayland compositor when the desktop starts it again on
+  the same socket, as Luft's Kestrel and KDE Plasma do: they reconnect and come back with their
+  page as it was. Chromium gets a Wayland display of its own in the Sabine host, so the browser and
+  its pages keep running while the compositor restarts. See
+  [Compositor restarts](docs/implementation-guide.md#compositor-restarts).
+
 # Sabine 0.59
 
 - A Sabine update never stops an installed app from running. When a release no longer accepts the

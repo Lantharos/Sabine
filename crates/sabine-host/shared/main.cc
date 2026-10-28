@@ -11,6 +11,7 @@
 #include "runtime/probe.h"
 #if defined(OS_LINUX)
 #include "app/profile.h"
+#include "display/private_display.h"
 #include "runtime/server.h"
 #endif
 
@@ -95,6 +96,11 @@ int RunSabineHost(CefMainArgs main_args,
     CefString(&settings.cache_path).FromString(cache_path);
   }
 
+#if defined(OS_LINUX)
+  if (!runtime_smoke_test) {
+    sabine_display::UsePrivateDisplay();
+  }
+#endif
   if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
     return CefGetExitCode();
   }
@@ -107,6 +113,9 @@ int RunSabineHost(CefMainArgs main_args,
 #endif
   const int result = runtime_smoke_test ? RuntimeProbeResult() : 0;
   CefShutdown();
+#if defined(OS_LINUX)
+  sabine_display::ClosePrivateDisplay();
+#endif
   return result;
 }
 

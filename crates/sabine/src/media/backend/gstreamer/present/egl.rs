@@ -1,6 +1,6 @@
 use std::{
     ffi::{c_int, c_void},
-    sync::OnceLock,
+    sync::{Arc, Mutex},
 };
 
 use khronos_egl as egl;
@@ -12,13 +12,14 @@ type Egl = egl::DynamicInstance<egl::EGL1_5>;
 
 const PLATFORM_WAYLAND: egl::Enum = 0x31D8;
 
-/// The process-wide EGL display on the window's Wayland connection, shared
-/// with GStreamer so decoded textures and the presenter share one namespace.
+/// The EGL display on the window's Wayland connection, shared with GStreamer
+/// so decoded textures and the presenter share one namespace.
 pub(super) struct Display {
     pub(super) egl: Egl,
     pub(super) display: egl::Display,
     pub(super) config: egl::Config,
     pub(super) gst_display: Handle,
+    gst: &'static Gst,
     window: WaylandEgl,
 }
 
@@ -39,24 +40,34 @@ pub(super) struct WindowSurface {
     size: (i32, i32),
 }
 
-static DISPLAY: OnceLock<Result<Display, String>> = OnceLock::new();
+static DISPLAY: Mutex<Option<Result<Arc<Display>, String>>> = Mutex::new(None);
 
-pub(super) fn display(gst: &Gst, wayland: Handle) -> Result<&'static Display, String> {
+pub(super) fn display(gst: &'static Gst, wayland: Handle) -> Result<Arc<Display>, String> {
     DISPLAY
-        .get_or_init(|| Display::open(gst, wayland))
-        .as_ref()
-        .map_err(Clone::clone)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get_or_insert_with(|| Display::open(gst, wayland).map(Arc::new))
+        .clone()
 }
 
-/// Releases the EGL display before the Wayland connection it was opened on closes.
+/// Lets go of the EGL display, which closes once its last presenter is gone,
+/// before the Wayland connection it was opened on closes.
 pub(in crate::media) fn terminate() {
-    if let Some(Ok(display)) = DISPLAY.get() {
-        let _ = display.egl.terminate(display.display);
+    DISPLAY
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take();
+}
+
+impl Drop for Display {
+    fn drop(&mut self) {
+        unsafe { (self.gst.gst_object_unref)(self.gst_display.0) };
+        let _ = self.egl.terminate(self.display);
     }
 }
 
 impl Display {
-    fn open(gst: &Gst, wayland: Handle) -> Result<Self, String> {
+    fn open(gst: &'static Gst, wayland: Handle) -> Result<Self, String> {
         let egl = unsafe { Egl::load_required() }.map_err(|error| error.to_string())?;
         let display =
             unsafe { egl.get_platform_display(PLATFORM_WAYLAND, wayland.0, &[egl::ATTRIB_NONE]) }
@@ -95,6 +106,7 @@ impl Display {
             display,
             config,
             gst_display,
+            gst,
             window,
         })
     }

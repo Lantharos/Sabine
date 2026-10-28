@@ -28,6 +28,24 @@ seconds, and only then does the page fall back to software painting. A window wh
 import because its own device was lost waits for its renderer to come back instead. Recovery is
 limited to three losses per minute; persistent failure closes the app with a diagnostic.
 
+## Compositor restarts
+
+On Linux, a window outlives the Wayland compositor when the desktop starts a new one on the same
+socket after a crash, as Luft's Kestrel and KDE Plasma do. The window's event loop connects to the
+new compositor, and the window drops everything it made on the old connection: its renderer,
+surfaces, clipboard, on-screen keyboard request and native media. It then opens again with the same
+size and state and shows the page's last frame until the next one arrives, while the page, its
+bridge connections and the app keep running. Native media stops with an `error` event, since its
+decoder drew into the lost connection.
+
+Chromium renders off screen, yet its Wayland platform still connects to a compositor, and ends the
+browser when that connection breaks. The browser process gets a Wayland display of its own instead,
+inside the Sabine host: a socket in `$XDG_RUNTIME_DIR/sabine/` that offers what Chromium binds,
+with the buffer formats, render device and keyboard layout the desktop's compositor had when the
+browser started. Chromium's frames still travel to the window as dma-bufs, so nothing about painting
+changes. When the desktop has no compositor that takes dma-bufs, the browser connects to it
+directly, as before.
+
 ## Browser sandbox
 
 On macOS, every Chromium helper initializes the sandbox from the selected runtime’s

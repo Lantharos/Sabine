@@ -44,6 +44,8 @@ pub(crate) struct MediaHost {
 
 struct Session {
     player: <Native as Backend>::Player,
+    #[cfg(target_os = "linux")]
+    events: Events,
     mounted: bool,
     rect: Option<PageRect>,
     layout: Option<Layout>,
@@ -100,9 +102,8 @@ impl MediaHost {
     ) -> Result<u64, String> {
         self.next_id += 1;
         let id = self.next_id;
-        let mut player = self
-            .backend
-            .spawn(options, self.playing.track(id, events(id)))?;
+        let events = self.playing.track(id, events(id));
+        let mut player = self.backend.spawn(options, events.clone())?;
         if self.attached
             && let Err(error) = self.backend.mount(&mut player)
         {
@@ -116,6 +117,8 @@ impl MediaHost {
             id,
             Session {
                 player,
+                #[cfg(target_os = "linux")]
+                events,
                 mounted: self.attached,
                 rect: None,
                 layout: None,
@@ -153,6 +156,24 @@ impl MediaHost {
         self.attached = false;
         self.changed = true;
         self.backend.flush();
+    }
+
+    /// The window's display went away with every surface on it. Players
+    /// stop and tell their pages, and media opens on the next display.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn disconnect(&mut self) {
+        for session in std::mem::take(&mut self.sessions).into_values() {
+            self.backend.stop(session.player);
+            command::emit(
+                &session.events,
+                "error",
+                json!({ "message": "the desktop restarted, so the media stopped" }),
+            );
+        }
+        self.playing.clear();
+        self.backend = Native::default();
+        self.attached = false;
+        self.changed = true;
     }
 
     /// Stops every player, as when the page that created them goes away.

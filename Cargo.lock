@@ -705,7 +705,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "dpi"
 version = "0.1.2"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 
 [[package]]
 name = "dunce"
@@ -4327,7 +4327,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "winit"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "cfg_aliases",
@@ -4352,7 +4352,7 @@ dependencies = [
 [[package]]
 name = "winit-android"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "android-activity",
  "bitflags",
@@ -4367,7 +4367,7 @@ dependencies = [
 [[package]]
 name = "winit-appkit"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "block2",
@@ -4389,7 +4389,7 @@ dependencies = [
 [[package]]
 name = "winit-common"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "block2",
  "dpi",
@@ -4406,7 +4406,7 @@ dependencies = [
 [[package]]
 name = "winit-core"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "cursor-icon",
@@ -4420,7 +4420,7 @@ dependencies = [
 [[package]]
 name = "winit-orbital"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "dpi",
@@ -4436,7 +4436,7 @@ dependencies = [
 [[package]]
 name = "winit-uikit"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "block2",
@@ -4456,7 +4456,7 @@ dependencies = [
 [[package]]
 name = "winit-wayland"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "calloop",
@@ -4483,7 +4483,7 @@ dependencies = [
 [[package]]
 name = "winit-web"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "atomic-waker",
  "bitflags",
@@ -4505,7 +4505,7 @@ dependencies = [
 [[package]]
 name = "winit-win32"
 version = "0.31.0-beta.3"
-source = "git+https://github.com/Lantharos/winit?rev=d53da931269ee450ba64f90a937b4af1b7895d42#d53da931269ee450ba64f90a937b4af1b7895d42"
+source = "git+https://github.com/Lantharos/winit?rev=b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2#b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2"
 dependencies = [
  "bitflags",
  "cursor-icon",

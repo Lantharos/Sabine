@@ -3,6 +3,8 @@ mod shader;
 
 pub(super) use egl::terminate;
 
+use std::sync::Arc;
+
 use glow::HasContext;
 use khronos_egl as khronos;
 
@@ -15,7 +17,7 @@ use shader::{Picture, VideoProgram};
 /// player thread, sampling GStreamer's texture directly.
 pub(super) struct Presenter {
     gst: &'static Gst,
-    display: &'static egl::Display,
+    display: Arc<egl::Display>,
     context: khronos::Context,
     gst_context: Handle,
     gl: glow::Context,
@@ -53,7 +55,7 @@ impl Presenter {
             })
         };
         let (program, gst_context) = VideoProgram::new(&gl)
-            .and_then(|program| Ok((program, egl::wrap_context(gst, display, context)?)))
+            .and_then(|program| Ok((program, egl::wrap_context(gst, &display, context)?)))
             .inspect_err(|_| {
                 let _ = display.egl.make_current(display.display, None, None, None);
                 let _ = display.egl.destroy_context(display.display, context);
