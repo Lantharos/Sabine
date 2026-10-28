@@ -91,9 +91,9 @@ reason = "It manages the containers Podman runs for you."
 
 Without a `[sandbox]` table the app declares nothing. `sabine dev` and `sabine bundle` check the
 table, and every bundle carries it, normalized, in the production manifest a store or the system
-reads without starting the app: `usr/lib/sabine/<app id>/Sabine.toml` in AppImages, deb and rpm
-packages and tarballs, `Contents/Resources/Sabine.toml` in macOS apps, and `Sabine.toml` next to the
-program on Windows.
+reads without starting the app: `usr/lib/sabine/<app id>/resources/Sabine.toml` in AppImages, deb
+and rpm packages and tarballs, `Contents/Resources/Sabine.toml` in macOS apps, and
+`resources/Sabine.toml` next to the program on Windows.
 
 On Linux, a system that runs the app in a sandbox enforces the declaration; Luft's Schelf does for
 AppImages. Inside a sandbox that marks its processes with `/.flatpak-info`, as Flatpak's do, the app
