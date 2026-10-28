@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.59
 
 - A Sabine update never stops an installed app from running. When a release no longer accepts the
   build of an app on the machine, including apps installed for every user, Sabine holds it until
