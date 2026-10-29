@@ -3,10 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sabine_service::{AppInstallMode, AppUpdateConfig, AppUpdateSource, UpdatePolicy};
+use sabine_service::{
+    AppInstallMode, AppUpdateConfig, AppUpdateSource, Sandbox, SandboxSection, UpdatePolicy,
+};
 use serde::Deserialize;
 
-use super::sandbox::{Sandbox, SandboxSection};
 use crate::desktop::{entry::Listing, types::Associations};
 
 #[derive(Debug)]

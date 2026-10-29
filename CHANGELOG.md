@@ -1,3 +1,10 @@
+# Unreleased
+
+- On Linux outside an app sandbox, Sabine holds an app to its `[sandbox]` declaration with Landlock
+  and a system call filter, without root or bubblewrap: its files, devices, TCP network, abstract
+  sockets and signals, for the app and every process it starts. See
+  [App sandbox](docs/implementation-guide.md#app-sandbox).
+
 # Sabine 0.60
 
 - On Linux, windows survive a crash of the Wayland compositor when the desktop starts it again on

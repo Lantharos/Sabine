@@ -23,6 +23,8 @@ pub(crate) struct SabineWindowConfig {
     pub app_id: Option<String>,
     pub app_version: Option<String>,
     pub app_update: Option<AppUpdateConfig>,
+    #[cfg(target_os = "linux")]
+    pub sandbox: Option<sabine_service::Sandbox>,
     pub title: String,
     pub width: u32,
     pub height: u32,
@@ -73,6 +75,8 @@ impl Default for SabineWindowConfig {
             app_id: None,
             app_version: None,
             app_update: None,
+            #[cfg(target_os = "linux")]
+            sandbox: None,
             title: "Sabine".to_string(),
             width: 900,
             height: 640,

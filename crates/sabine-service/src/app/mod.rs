@@ -6,3 +6,4 @@ pub(crate) mod forget;
 pub(crate) mod installed;
 pub(crate) mod payload;
 pub(crate) mod registry;
+pub(crate) mod sandbox;

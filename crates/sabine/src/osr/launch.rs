@@ -63,6 +63,8 @@ pub(crate) fn launch_process(
     })?;
     let host_binary = crate::host::ensure_host(runtime_dir)
         .map_err(|message| SabineError::CreationFailed { message })?;
+    #[cfg(target_os = "linux")]
+    crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let (command_sender, command_receiver) = crossbeam_channel::unbounded();

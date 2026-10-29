@@ -114,7 +114,22 @@ and rpm packages and tarballs, `Contents/Resources/Sabine.toml` in macOS apps, a
 `resources/Sabine.toml` next to the program on Windows.
 
 On Linux, a system that runs the app in a sandbox enforces the declaration; Luft's Schelf does for
-AppImages. Inside a sandbox that marks its processes with `/.flatpak-info`, as Flatpak's do, the app
+AppImages. Everywhere else on Linux, Sabine enforces it itself as the app launches, with Landlock
+and a system call filter that every process the app starts inherits, Chromium included. It needs
+neither root nor bubblewrap. The app reads the system, writes its own folders named after its app ID
+in the XDG data, config, cache and state folders, uses its Chromium profile and runtime, and reaches
+the declared `filesystems` and `devices`; nothing else in your home folder. It can't reach abstract
+sockets or signal processes outside the app, and with `network = false` it can't open or accept TCP
+connections, apart from its dev server and DevTools port in development. The filter refuses the
+kernel keyrings and log, `ptrace` and typing into the terminal. A browser or other program the app
+starts is confined with it, so a confined app opens links and files through the desktop portal's
+OpenURI. Each kernel applies what its Landlock version supports; one without Landlock gets only the
+filter, and the app logs that once. Apps with `unsandboxed = true` or without a `[sandbox]` table
+run unconfined, and so does an app started with `SABINE_FULL_ACCESS` set, which a system sets for an
+app you gave full access. The session bus isn't filtered, and pages in the shared runtime run in its
+Chromium, which only Chromium's own sandbox confines.
+
+Inside a sandbox that marks its processes with `/.flatpak-info`, as Flatpak's do, the app
 runs its own Chromium in the sandbox and never asks the shared runtime. Chromium can't create the
 namespaces of its renderer sandbox there, so when the sandbox names Zypak in `ZYPAK_BIN`, Sabine
 starts Chromium as `$ZYPAK_BIN/zypak-helper host - <host> …`, with `ZYPAK_LD_PRELOAD` and

@@ -21,6 +21,8 @@ struct SabineFile {
     #[serde(default)]
     window: WindowSection,
     updates: Option<sabine_service::AppUpdateConfig>,
+    #[cfg(target_os = "linux")]
+    sandbox: Option<sabine_service::SandboxSection>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -112,6 +114,14 @@ impl SabineWindow {
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
         self.config.app_update = file.updates;
+        #[cfg(target_os = "linux")]
+        {
+            self.config.sandbox = file
+                .sandbox
+                .map(sabine_service::SandboxSection::resolve)
+                .transpose()
+                .map_err(|message| SabineError::CreationFailed { message })?;
+        }
         if let Some(entry) = file.web.entry {
             let entry_path = base.join(&entry);
             self = self.entry(entry_path.display().to_string());

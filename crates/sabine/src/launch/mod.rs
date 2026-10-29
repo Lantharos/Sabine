@@ -1,5 +1,7 @@
 pub(crate) mod bootstrap;
 pub(crate) mod browser;
+#[cfg(target_os = "linux")]
+pub(crate) mod confine;
 pub(crate) mod executable;
 pub(crate) mod metrics;
 #[cfg(target_os = "linux")]

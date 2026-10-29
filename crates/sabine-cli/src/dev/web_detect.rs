@@ -29,7 +29,7 @@ struct SabineFile {
     app: AppSection,
     #[serde(default)]
     web: WebSection,
-    sandbox: Option<crate::bundle::sandbox::SandboxSection>,
+    sandbox: Option<sabine_service::SandboxSection>,
 }
 
 #[derive(Debug, Default, Deserialize)]

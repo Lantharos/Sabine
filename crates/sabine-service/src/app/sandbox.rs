@@ -27,7 +27,7 @@ const REFUSED_NAMES: [&str; 5] = [
 /// `[sandbox]` as written in `Sabine.toml`.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SandboxSection {
+pub struct SandboxSection {
     network: Option<bool>,
     filesystems: Option<Vec<String>>,
     devices: Option<Vec<String>>,
@@ -38,8 +38,8 @@ pub(crate) struct SandboxSection {
 }
 
 /// What the app declares it needs from a sandbox.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Sandbox {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Sandbox {
     Confined {
         network: bool,
         filesystems: Vec<String>,
@@ -52,7 +52,7 @@ pub(crate) enum Sandbox {
 }
 
 impl SandboxSection {
-    pub(crate) fn resolve(self) -> Result<Sandbox, String> {
+    pub fn resolve(self) -> Result<Sandbox, String> {
         if self.unsandboxed {
             if self.network.is_some()
                 || self.filesystems.is_some()
@@ -118,7 +118,7 @@ impl SandboxSection {
 
 impl Sandbox {
     /// The normalized `[sandbox]` table of the runtime manifest.
-    pub(crate) fn manifest(&self) -> String {
+    pub fn manifest(&self) -> String {
         match self {
             Self::Unsandboxed { reason } => format!(
                 "\n[sandbox]\nunsandboxed = true\nreason = {}\n",

@@ -49,8 +49,10 @@ toml = { workspace = true, features = ["parse"] }
 softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+dirs.workspace = true
 glow.workspace = true
 khronos-egl.workspace = true
+landlock.workspace = true
 libloading.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
