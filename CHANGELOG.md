@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.61
 
 - On Linux outside an app sandbox, Sabine holds an app to its `[sandbox]` declaration with Landlock
   and a system call filter, without root or bubblewrap: its files, devices, TCP network, abstract
