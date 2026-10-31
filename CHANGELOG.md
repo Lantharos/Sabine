@@ -1,3 +1,11 @@
+# Sabine 0.63
+
+- On Linux, an update of Sabine or its CEF runtime no longer stops apps from opening while the
+  shared runtime from before the update still runs: apps join it until it quits, and the next one
+  starts from the update.
+- An app installed for one person, rather than for every user, keeps its runtime's data beside its
+  own profile, so it opens while the shared runtime runs.
+
 # Sabine 0.62
 
 - On Linux, pages get the desktop's pointer and touch input again, so hover effects work.
