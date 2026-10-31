@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.64
 
 - Uninstalling Sabine from Windows Settings shows which apps still run on it and offers to
   uninstall them too, instead of doing nothing while any app remains.
