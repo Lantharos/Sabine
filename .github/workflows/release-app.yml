@@ -67,57 +67,24 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            target: msi
-            update_target: windows-x86_64-msi
-          - os: windows-latest
-            target: exe
-            update_target: windows-x86_64-exe
-          - os: windows-latest
-            target: windows
-            update_target: windows-x86_64
+            platform: windows-x86_64
+            targets: msi exe windows
           - os: windows-11-arm
-            target: msi
-            update_target: windows-aarch64-msi
-          - os: windows-11-arm
-            target: exe
-            update_target: windows-aarch64-exe
-          - os: windows-11-arm
-            target: windows
-            update_target: windows-aarch64
+            platform: windows-aarch64
+            targets: msi exe windows
           - os: macos-15
-            target: dmg
-            update_target: macos-aarch64-dmg
-          - os: macos-15
-            target: macos
-            update_target: macos-aarch64
+            platform: macos-aarch64
+            targets: dmg macos
           - os: ubuntu-24.04
-            target: appimage
-            update_target: linux-x86_64-appimage
+            platform: linux-x86_64
+            targets: appimage deb rpm portable
             appimagetool: x86_64
             appimagetool_sha256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-          - os: ubuntu-24.04
-            target: deb
-            update_target: linux-x86_64-deb
-          - os: ubuntu-24.04
-            target: rpm
-            update_target: linux-x86_64-rpm
-          - os: ubuntu-24.04
-            target: portable
-            update_target: linux-x86_64
           - os: ubuntu-24.04-arm
-            target: appimage
-            update_target: linux-aarch64-appimage
+            platform: linux-aarch64
+            targets: appimage deb rpm portable
             appimagetool: aarch64
             appimagetool_sha256: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
-          - os: ubuntu-24.04-arm
-            target: deb
-            update_target: linux-aarch64-deb
-          - os: ubuntu-24.04-arm
-            target: rpm
-            update_target: linux-aarch64-rpm
-          - os: ubuntu-24.04-arm
-            target: portable
-            update_target: linux-aarch64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -149,14 +116,14 @@ jobs:
             sudo install -m 755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
           fi
       - name: Install NSIS
-        if: matrix.target == 'exe'
+        if: contains(matrix.targets, 'exe')
         shell: pwsh
         run: |
           choco install nsis --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
           "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
       - name: Install WiX
-        if: matrix.target == 'msi'
+        if: contains(matrix.targets, 'msi')
         shell: pwsh
         run: |
           if ('${{ inputs.accept_wix_eula }}' -ne 'true') {
@@ -220,26 +187,35 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
-          $bundle = sabine bundle . --target "${{ matrix.target }}" --release --json | Select-Object -Last 1
-          if ($LASTEXITCODE -ne 0) { throw 'Bundling failed' }
-          $result = $bundle | ConvertFrom-Json
-          if ($result.artifacts.Count -ne 1) { throw "Bundling produced no artifact: $($result.notes -join '; ')" }
-          if ('${{ matrix.target }}' -in @('portable', 'windows', 'macos')) {
-            $executable = $result.executable.Replace('\', '/')
-            Set-Content -NoNewline "dist/artifacts/${{ matrix.update_target }}.executable" $executable
+          $platform = '${{ matrix.platform }}'
+          foreach ($target in -split '${{ matrix.targets }}') {
+            $bundle = sabine bundle . --target $target --release --json | Select-Object -Last 1
+            if ($LASTEXITCODE -ne 0) { throw "Bundling $target failed" }
+            $result = $bundle | ConvertFrom-Json
+            if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact: $($result.notes -join '; ')" }
+            $updateTarget = if ($target -in @('portable', 'windows', 'macos')) { $platform } else { "$platform-$target" }
+            $destination = New-Item "dist/release/$updateTarget" -ItemType Directory -Force
+            $artifact = Get-Item $result.artifacts[0]
+            $extension = if ($artifact.Name.EndsWith('.tar.gz')) { '.tar.gz' } else { $artifact.Extension }
+            $base = $artifact.Name.Substring(0, $artifact.Name.Length - $extension.Length)
+            Move-Item $artifact.FullName (Join-Path $destination "$base-$updateTarget$extension")
+            if ($target -in @('portable', 'windows', 'macos')) {
+              $executable = $result.executable.Replace('\', '/')
+              Set-Content -NoNewline (Join-Path $destination "$updateTarget.executable") $executable
+            }
           }
       - name: Check out Windows validation tools
-        if: matrix.update_target == 'windows-x86_64-msi'
+        if: matrix.platform == 'windows-x86_64'
         uses: actions/checkout@v7
         with:
           repository: Lantharos/Sabine
           ref: 58b3100dfea00d7e8dff68258dd19de3ff99f4b3
           path: .sabine-release
       - name: Verify installed Windows application
-        if: matrix.update_target == 'windows-x86_64-msi'
+        if: matrix.platform == 'windows-x86_64'
         shell: pwsh
         run: |
-          $msi = @(Get-ChildItem dist/artifacts -Filter *.msi -File)
+          $msi = @(Get-ChildItem dist/release/windows-x86_64-msi -Filter *.msi -File)
           $stagedExe = @(Get-ChildItem dist/msi -Filter *.exe -File -Recurse)
           if ($msi.Count -ne 1 -or $stagedExe.Count -ne 1) {
             throw "expected one MSI and one staged executable"
@@ -335,23 +311,16 @@ jobs:
             Start-Process msiexec.exe -ArgumentList @('/x', $msi[0].FullName, '/qn', '/norestart') -Wait
           }
       - name: Preserve Windows startup diagnostics
-        if: always() && matrix.update_target == 'windows-x86_64-msi'
+        if: always() && matrix.platform == 'windows-x86_64'
         uses: actions/upload-artifact@v7
         with:
           name: startup-diagnostics
           path: ${{ runner.temp }}/sabine-msi-*.log
           if-no-files-found: ignore
-      - name: Name release asset
-        shell: pwsh
-        run: |
-          $artifact = Get-ChildItem dist/artifacts -File | Where-Object Extension -ne '.executable' | Select-Object -First 1
-          $extension = if ($artifact.Name.EndsWith('.tar.gz')) { '.tar.gz' } else { $artifact.Extension }
-          $base = $artifact.Name.Substring(0, $artifact.Name.Length - $extension.Length)
-          Rename-Item $artifact.FullName "$base-${{ matrix.update_target }}$extension"
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.update_target }}
-          path: dist/artifacts/*
+          name: release-${{ matrix.platform }}
+          path: dist/release
           if-no-files-found: error
 
   publish:
@@ -371,8 +340,9 @@ jobs:
         run: cargo install --git https://github.com/Lantharos/Sabine --tag "${{ inputs.sabine_version }}" --locked sabine-cli
       - uses: actions/download-artifact@v8
         with:
-          pattern: "{linux,windows,macos}-*"
+          pattern: release-*
           path: release
+          merge-multiple: true
       - name: Generate updater manifest
         shell: pwsh
         run: |
