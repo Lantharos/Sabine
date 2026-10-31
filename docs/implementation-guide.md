@@ -1456,7 +1456,7 @@ Failed setup keeps its progress window open, displays the error and log location
 and closes with Enter, Escape, or the window close button. Startup failures before
 the app window opens display a separate notice. The windows render Unicode text
 using installed fonts and wrap messages; the log retains text beyond the visible
-window area.
+window area. They follow the desktop's light or dark style, and change with it while they're open.
 
 The native host and app must support the same host protocol. Setup and runtime maintenance run
 the host once to confirm its protocol, allowing up to 30 seconds for cold starts on slower
@@ -1495,6 +1495,11 @@ default artwork.
 The default destination is `%LOCALAPPDATA%\Programs\<app-id>`. Installation and shortcuts belong
 to the current user. The uninstaller deletes the files included by the package and leaves other
 files in place. Shared runtimes and the service remain available to other Sabine apps.
+
+Sabine itself appears under Settings › Apps as well. Uninstalling it there first lists the apps
+that still run on it and asks whether to uninstall them too, with Cancel as the default. Confirming
+runs each app's own uninstaller, forgets apps installed without one, such as apps in development,
+then removes Sabine, showing each step; app data stays on the computer.
 Offline bundles supply the same setup path with embedded dependencies.
 
 Setup records the files owned by the package. Repair and upgrade stage the new payload on the

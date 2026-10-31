@@ -37,7 +37,7 @@ pub(super) fn install(executable: &Path, daemon: &Path) -> ServiceResult<bool> {
         ("DisplayIcon", format!("{},0", executable.display())),
         (
             "UninstallString",
-            format!("\"{}\" uninstall", executable.display()),
+            format!("\"{}\" uninstall", daemon.display()),
         ),
     ] {
         windows_registry::set_current_user_value(UNINSTALL_KEY, name, &value)?;

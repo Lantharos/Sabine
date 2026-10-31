@@ -12,41 +12,32 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-mod confirm;
-mod diagnostics;
-mod dialog_paint;
-mod emergency;
-mod identity;
-pub(super) use confirm::{confirm_update, show_notice};
-pub(super) use emergency::show as emergency_notice;
+use crate::IconHook;
+use crate::palette::Theme;
 
 const WIDTH: u32 = 480;
 const HEIGHT: u32 = 148;
-const BG: u32 = 0xFF_16_16_18;
-const TRACK: u32 = 0xFF_2A_2A_2E;
-const FILL: u32 = 0xFF_E8_E8_EA;
-const TEXT: u32 = 0xFF_F4_F4_F5;
-const MUTED: u32 = 0xFF_A1_A1_AA;
 const MIN_PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
 #[derive(Default)]
-pub(super) struct ProgressState {
-    pub(super) message: String,
-    pub(super) fraction: Option<f32>,
-    pub(super) done: Option<Result<(), String>>,
-    pub(super) dirty: bool,
+pub struct ProgressState {
+    message: String,
+    fraction: Option<f32>,
+    done: Option<Result<(), String>>,
+    dirty: bool,
     cancelled: bool,
     ui_error: Option<String>,
 }
 
-pub(super) enum ProgressOutcome {
+pub enum ProgressOutcome {
     Complete,
     Cancelled,
     Failed(String),
 }
 
-pub(super) fn run_progress_window(
+pub fn run_progress_window(
     title: &str,
+    icon: IconHook,
     work: impl FnOnce(Arc<Mutex<ProgressState>>, EventLoopProxy) + Send + 'static,
 ) -> Result<ProgressOutcome, String> {
     let event_loop = EventLoop::new().map_err(|error| error.to_string())?;
@@ -66,6 +57,8 @@ pub(super) fn run_progress_window(
         context: None,
         surface: None,
         title: title.to_string(),
+        icon,
+        theme: Theme::follow(proxy.clone()),
     };
     event_loop.run_app(app).map_err(|error| error.to_string())?;
 
@@ -85,7 +78,7 @@ pub(super) fn run_progress_window(
 
 static LAST_PROGRESS_MS: AtomicU64 = AtomicU64::new(0);
 
-pub(super) fn set_progress(
+pub fn set_progress(
     state: &Mutex<ProgressState>,
     proxy: &EventLoopProxy,
     message: impl Into<String>,
@@ -110,11 +103,7 @@ pub(super) fn set_progress(
     proxy.wake_up();
 }
 
-pub(super) fn finish(
-    state: &Mutex<ProgressState>,
-    proxy: &EventLoopProxy,
-    result: Result<(), String>,
-) {
+pub fn finish(state: &Mutex<ProgressState>, proxy: &EventLoopProxy, result: Result<(), String>) {
     if let Ok(mut guard) = state.lock() {
         guard.done = Some(result);
         guard.dirty = true;
@@ -128,6 +117,8 @@ struct ProgressApp {
     context: Option<Context<Arc<dyn Window>>>,
     surface: Option<Surface<Arc<dyn Window>, Arc<dyn Window>>>,
     title: String,
+    icon: IconHook,
+    theme: Theme,
 }
 
 impl ApplicationHandler for ProgressApp {
@@ -146,7 +137,7 @@ impl ApplicationHandler for ProgressApp {
             .with_surface_size(LogicalSize::new(f64::from(WIDTH), f64::from(HEIGHT)))
             .with_resizable(false)
             .with_decorations(true);
-        let attributes = identity::with_sabine_icon(attributes);
+        let attributes = (self.icon)(attributes);
         let window: Arc<dyn Window> = match event_loop.create_window(attributes) {
             Ok(window) => Arc::from(window),
             Err(error) => {
@@ -203,7 +194,9 @@ impl ApplicationHandler for ProgressApp {
                 event_loop.exit()
             }
             WindowEvent::RedrawRequested => self.paint(event_loop, false),
-            WindowEvent::SurfaceResized(_) => self.paint(event_loop, true),
+            WindowEvent::SurfaceResized(_) | WindowEvent::ThemeChanged(_) => {
+                self.paint(event_loop, true)
+            }
             _ => {}
         }
     }
@@ -221,7 +214,7 @@ impl ApplicationHandler for ProgressApp {
             }
             None => {}
         }
-        self.paint(event_loop, false);
+        self.paint(event_loop, true);
     }
 }
 
@@ -276,8 +269,9 @@ impl ProgressApp {
         surface
             .resize(width_nz, height_nz)
             .map_err(|error| error.to_string())?;
+        let palette = self.theme.palette(window.as_ref());
         let mut buffer = surface.buffer_mut().map_err(|error| error.to_string())?;
-        buffer.fill(BG);
+        buffer.fill(palette.background);
 
         let scale = (width as f32 / WIDTH as f32).max(1.0);
         let pad = (20.0 * scale) as i32;
@@ -288,7 +282,7 @@ impl ProgressApp {
             &mut buffer,
             (width, height),
             (pad, bar_y, bar_w, bar_h),
-            TRACK,
+            palette.track,
         );
         let filled = (fraction.unwrap_or(0.0).clamp(0.0, 1.0) * bar_w as f32).round() as i32;
         if filled > 0 {
@@ -296,7 +290,7 @@ impl ProgressApp {
                 &mut buffer,
                 (width, height),
                 (pad, bar_y, filled, bar_h),
-                FILL,
+                palette.primary,
             );
         }
 
@@ -305,7 +299,7 @@ impl ProgressApp {
             (width, height),
             (pad, pad + (8.0 * scale) as i32),
             status,
-            TEXT,
+            palette.text,
             scale,
         );
         if let Some(value) = fraction {
@@ -314,7 +308,7 @@ impl ProgressApp {
                 (width, height),
                 (pad, bar_y - (22.0 * scale) as i32),
                 &format!("{}%", (value * 100.0).round() as u8),
-                MUTED,
+                palette.muted,
                 scale,
             );
         }
@@ -323,7 +317,12 @@ impl ProgressApp {
     }
 }
 
-fn fill_rect(buffer: &mut [u32], surface: (u32, u32), rect: (i32, i32, i32, i32), color: u32) {
+pub(crate) fn fill_rect(
+    buffer: &mut [u32],
+    surface: (u32, u32),
+    rect: (i32, i32, i32, i32),
+    color: u32,
+) {
     let (width, height) = surface;
     let (x, y, w, h) = rect;
     let x0 = x.max(0) as u32;
@@ -349,8 +348,8 @@ fn draw_text(
     scale: f32,
 ) {
     thread_local! {
-        static TEXT_RENDERER: std::cell::RefCell<crate::render::raster_text::RasterText> =
-            std::cell::RefCell::new(crate::render::raster_text::RasterText::new());
+        static TEXT_RENDERER: std::cell::RefCell<crate::text::RasterText> =
+            std::cell::RefCell::new(crate::text::RasterText::new());
     }
     TEXT_RENDERER.with(|renderer| {
         renderer.borrow_mut().draw_wrapped(

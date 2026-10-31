@@ -1,11 +1,10 @@
-use super::{BG, FILL, MUTED, TEXT, confirm::Dialog, fill_rect};
-use crate::render::raster_text::blend_rect;
+use crate::{choice::Dialog, palette::Palette, progress::fill_rect, text::blend_rect};
 use glyphon::cosmic_text::{Align, Scroll};
 use glyphon::{Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, SwashCache, Wrap};
 
 type Rect = (i32, i32, i32, i32);
 
-pub(super) struct Document {
+pub(crate) struct Document {
     fonts: FontSystem,
     cache: SwashCache,
     body: Buffer,
@@ -15,7 +14,7 @@ pub(super) struct Document {
 }
 
 impl Document {
-    pub(super) fn new(text: &str) -> Self {
+    pub(crate) fn new(text: &str) -> Self {
         let mut fonts = FontSystem::new();
         let mut body = Buffer::new(&mut fonts, Metrics::new(14.0, 21.0));
         body.set_wrap(Wrap::WordOrGlyph);
@@ -43,6 +42,7 @@ impl Document {
         bounds: Rect,
         scale: f32,
         scroll: &mut f32,
+        tint: u32,
     ) -> f32 {
         if self.layout != Some((bounds.2, scale)) {
             self.body.set_metrics_and_size(
@@ -68,7 +68,7 @@ impl Document {
         self.body.draw(
             &mut self.fonts,
             &mut self.cache,
-            color(TEXT),
+            color(tint),
             |x, y, w, h, c| {
                 glyph(pixels, surface, bounds, (x, y, w, h), c);
             },
@@ -148,8 +148,8 @@ fn glyph(
     }
 }
 
-pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
-    pixels.fill(BG);
+pub(crate) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32), palette: Palette) {
+    pixels.fill(palette.background);
     let scale = app.scale();
     let unit = |value: f32| (value * scale).round() as i32;
     let width = surface.0 as i32;
@@ -162,7 +162,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
             bounds: (pad, unit(24.0), width - pad * 2, unit(66.0)),
             text: &app.title,
             size: 24.0 * scale,
-            tint: TEXT,
+            tint: palette.text,
             center: false,
         },
     );
@@ -174,7 +174,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
                 bounds: (pad, unit(100.0), width - pad * 2, unit(24.0)),
                 text: "What happened",
                 size: 14.0 * scale,
-                tint: MUTED,
+                tint: palette.muted,
                 center: false,
             },
         );
@@ -187,7 +187,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
         height - unit(panel_top + 120.0),
     );
     if app.notice {
-        rounded_rect(pixels, surface, panel, unit(10.0), 0xFF_20_20_23);
+        rounded_rect(pixels, surface, panel, unit(10.0), palette.panel);
     }
     let inset = if app.notice { unit(16.0) } else { 0 };
     let bounds = (
@@ -196,9 +196,14 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
         panel.2 - inset * 2 - unit(8.0),
         panel.3 - inset * 2,
     );
-    app.max_scroll = app
-        .document
-        .body(pixels, surface, bounds, scale, &mut app.scroll);
+    app.max_scroll = app.document.body(
+        pixels,
+        surface,
+        bounds,
+        scale,
+        &mut app.scroll,
+        palette.text,
+    );
     if app.max_scroll > 0.0 {
         let track = panel.3 - inset * 2;
         let thumb = ((track as f32 * bounds.3 as f32 / (bounds.3 as f32 + app.max_scroll)) as i32)
@@ -214,7 +219,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
                 thumb,
             ),
             unit(1.0),
-            MUTED,
+            palette.muted,
         );
     }
     let hint = if !app.status.is_empty() {
@@ -233,7 +238,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
             bounds: (pad, height - unit(109.0), width - pad * 2, unit(28.0)),
             text: hint,
             size: 12.0 * scale,
-            tint: MUTED,
+            tint: palette.muted,
             center: false,
         },
     );
@@ -252,7 +257,7 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
                     rect.3 + ring * 4,
                 ),
                 unit(10.0),
-                MUTED,
+                palette.muted,
             );
             rounded_rect(
                 pixels,
@@ -264,34 +269,33 @@ pub(super) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32)) {
                     rect.3 + ring * 2,
                 ),
                 unit(8.0),
-                BG,
+                palette.background,
             );
         }
         let hovered = app.hovered() == Some(index);
         let pressed = hovered && app.pressed == Some(index);
         let tint = match (index == 1, pressed, hovered) {
-            (true, true, _) => 0xFF_BB_BB_BF,
-            (true, false, true) => 0xFF_FF_FF_FF,
-            (true, _, _) => FILL,
-            (false, true, _) => 0xFF_46_46_4B,
-            (false, false, true) => 0xFF_3A_3A_40,
-            _ => 0xFF_2A_2A_2E,
+            (true, true, _) => palette.primary_pressed,
+            (true, false, true) => palette.primary_hovered,
+            (true, _, _) => palette.primary,
+            (false, true, _) => palette.button_pressed,
+            (false, false, true) => palette.button_hovered,
+            _ => palette.button,
         };
         rounded_rect(pixels, surface, rect, unit(6.0), tint);
-        let label = match (app.notice, index) {
-            (true, 0) => "Open logs",
-            (true, _) => "Close",
-            (false, 0) => "Later",
-            _ => "Install update",
-        };
+        let label = app.buttons[index].clone();
         app.document.label(
             pixels,
             surface,
             Label {
                 bounds: (rect.0, rect.1 + unit(10.0), rect.2, rect.3 - unit(10.0)),
-                text: label,
+                text: &label,
                 size: 14.0 * scale,
-                tint: if index == 1 { BG } else { TEXT },
+                tint: if index == 1 {
+                    palette.background
+                } else {
+                    palette.text
+                },
                 center: true,
             },
         );

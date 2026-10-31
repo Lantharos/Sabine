@@ -5,6 +5,7 @@ members = [
     "crates/sabine-runtime",
     "crates/sabine-bridge",
     "crates/sabine-host",
+    "crates/sabine-dialog",
     "crates/sabine",
     "crates/sabine-service",
     "crates/sabine-cli",
@@ -15,6 +16,7 @@ default-members = [
     "crates/sabine-runtime",
     "crates/sabine-bridge",
     "crates/sabine-host",
+    "crates/sabine-dialog",
     "crates/sabine",
     "crates/sabine-service",
     "crates/sabine-cli",
@@ -35,6 +37,7 @@ categories = ["gui", "rendering"]
 [workspace.dependencies]
 sabine-runtime = { path = "crates/sabine-runtime", version = "0.63.0" }
 sabine-platform = { path = "crates/sabine-platform", version = "0.63.0" }
+sabine-dialog = { path = "crates/sabine-dialog", version = "0.63.0" }
 sabine-bridge = { path = "crates/sabine-bridge", version = "0.63.0" }
 sabine-host = { path = "crates/sabine-host", version = "0.63.0" }
 sabine = { path = "crates/sabine", version = "0.63.0" }

@@ -1,7 +1,7 @@
 pub(crate) fn show(title: &str, message: &str) {
     let message = format!(
         "{message}\n\nLogs: {}",
-        super::diagnostics::log_directory().display()
+        sabine_dialog::log_directory().display()
     );
     eprintln!("{title}: {message}");
     show_platform(title, &message);

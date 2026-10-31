@@ -1,5 +1,6 @@
+mod emergency;
+mod icons;
 pub(crate) mod installer;
-mod ui;
 
 use crate::launch::executable::launch_executable;
 use crate::window::config::SabineWindowConfig;
@@ -29,7 +30,7 @@ pub(crate) fn show_failure(title: &str, error: &dyn std::fmt::Display) {
             .is_ok_and(|status| status.success())
     });
     if !shown {
-        ui::emergency_notice(title, &message);
+        emergency::show(title, &message);
     }
 }
 
@@ -41,9 +42,9 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
             args.get(index + 1)
                 .zip(args.get(index + 2))
                 .is_some_and(|(title, version)| {
-                    ui::confirm_update(title, version).unwrap_or_else(|error| {
+                    confirm_update(title, version).unwrap_or_else(|error| {
                         sabine_runtime::report_error("notice", &error);
-                        ui::emergency_notice("Could not display the update prompt", &error);
+                        emergency::show("Could not display the update prompt", &error);
                         false
                     })
                 });
@@ -51,10 +52,10 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
     }
     if let Some(index) = args.iter().position(|arg| arg == NOTICE_ARG) {
         if let (Some(title), Some(message)) = (args.get(index + 1), args.get(index + 2))
-            && let Err(error) = ui::show_notice(title, message)
+            && let Err(error) = sabine_dialog::show_notice(title, message, icons::sabine)
         {
             sabine_runtime::report_error("startup", error);
-            ui::emergency_notice(title, message);
+            emergency::show(title, message);
         }
         return true;
     }
@@ -72,23 +73,27 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
             std::process::exit(1);
         }
     };
-    let result = ui::run_progress_window("Preparing Sabine", move |state, proxy| {
-        let result = prepare_machine_with_progress(config, register, |progress| {
-            ui::set_progress(&state, &proxy, progress.message, progress.fraction);
-        });
-        if let Err(error) = &result {
-            sabine_runtime::report_error("setup", error);
-        }
-        ui::finish(
-            &state,
-            &proxy,
-            result.map(|_| ()).map_err(|error| error.to_string()),
-        );
-    });
+    let result = sabine_dialog::run_progress_window(
+        "Preparing Sabine",
+        icons::sabine,
+        move |state, proxy| {
+            let result = prepare_machine_with_progress(config, register, |progress| {
+                sabine_dialog::set_progress(&state, &proxy, progress.message, progress.fraction);
+            });
+            if let Err(error) = &result {
+                sabine_runtime::report_error("setup", error);
+            }
+            sabine_dialog::finish(
+                &state,
+                &proxy,
+                result.map(|_| ()).map_err(|error| error.to_string()),
+            );
+        },
+    );
     match result {
-        Ok(ui::ProgressOutcome::Complete) => true,
-        Ok(ui::ProgressOutcome::Cancelled) => std::process::exit(2),
-        Ok(ui::ProgressOutcome::Failed(error)) => {
+        Ok(sabine_dialog::ProgressOutcome::Complete) => true,
+        Ok(sabine_dialog::ProgressOutcome::Cancelled) => std::process::exit(2),
+        Ok(sabine_dialog::ProgressOutcome::Failed(error)) => {
             show_failure("Sabine setup failed", &error);
             std::process::exit(3);
         }
@@ -97,6 +102,19 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
             std::process::exit(1);
         }
     }
+}
+
+fn confirm_update(app_name: &str, version: &str) -> Result<bool, String> {
+    sabine_dialog::confirm(sabine_dialog::Prompt {
+        title: format!("Update {app_name}"),
+        body: format!(
+            "Version {version} is ready to install.\n\nThe app will close while the update is installed. You can choose Later to keep using this version."
+        ),
+        cancel: "Later".into(),
+        confirm: "Install update".into(),
+        cancel_by_default: false,
+        icon: icons::app,
+    })
 }
 
 pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<()> {

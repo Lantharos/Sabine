@@ -4,7 +4,6 @@ mod composition;
 mod display_list;
 mod gpu;
 mod pixel_rect;
-pub(crate) mod raster_text;
 mod rect_pipeline;
 
 pub(crate) use bgra::{BgraImage, BgraRect};

@@ -24,6 +24,7 @@ sabine-bridge.workspace = true
 sabine-host.workspace = true
 sabine-platform.workspace = true
 sabine-service.workspace = true
+sabine-dialog.workspace = true
 bytemuck.workspace = true
 crossbeam-channel.workspace = true
 dunce.workspace = true
@@ -46,7 +47,6 @@ wgpu.workspace = true
 winit.workspace = true
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
-softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dirs.workspace = true

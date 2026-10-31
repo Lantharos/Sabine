@@ -3,6 +3,15 @@
 // Stop the verified daemon before removing its binaries. A running Windows
 // uninstaller must move itself outside that directory before deleting it.
 
+mod apps;
+mod guid;
+mod prompt;
+#[cfg(target_os = "windows")]
+mod windows;
+
+pub use guid::installer_guid;
+pub use prompt::uninstall_with_prompt;
+
 use crate::{SabineService, ServiceError, ServiceResult, app::forget::remove_path};
 use sabine_runtime::sabine_data_dir;
 use std::time::Duration;

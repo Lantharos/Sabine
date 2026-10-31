@@ -2689,6 +2689,7 @@ dependencies = [
  "raw-window-handle",
  "rfd",
  "sabine-bridge",
+ "sabine-dialog",
  "sabine-host",
  "sabine-platform",
  "sabine-runtime",
@@ -2696,7 +2697,6 @@ dependencies = [
  "serde",
  "serde_json",
  "shell-words",
- "softbuffer",
  "specta",
  "thiserror 2.0.21",
  "tokio",
@@ -2754,6 +2754,21 @@ dependencies = [
  "toml",
  "toml_edit",
  "windows",
+]
+
+[[package]]
+name = "sabine-dialog"
+version = "0.63.0"
+dependencies = [
+ "bytemuck",
+ "glyphon",
+ "image",
+ "sabine-platform",
+ "sabine-runtime",
+ "serde_json",
+ "softbuffer",
+ "windows",
+ "winit",
 ]
 
 [[package]]
@@ -2822,6 +2837,7 @@ dependencies = [
  "flate2",
  "getrandom 0.4.3",
  "libc",
+ "sabine-dialog",
  "sabine-host",
  "sabine-runtime",
  "self-replace",

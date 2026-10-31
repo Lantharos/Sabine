@@ -13,32 +13,85 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-use super::{
-    diagnostics,
-    dialog_paint::{Document, paint},
-    identity,
+use crate::{
+    IconHook, diagnostics,
+    paint::{Document, paint},
+    palette::Theme,
 };
 
 const WIDTH: f64 = 720.0;
+const PROMPT_HEIGHT: (f64, f64) = (300.0, 600.0);
+const PROMPT_CHROME: f64 = 228.0;
+const LINE_HEIGHT: f64 = 22.0;
+const LINE_CHARACTERS: usize = 80;
 
-pub(crate) fn confirm_update(app_name: &str, version: &str) -> Result<bool, String> {
+/// A question with two answers: `cancel` on the left, `confirm` on the right.
+pub struct Prompt {
+    pub title: String,
+    pub body: String,
+    pub cancel: String,
+    pub confirm: String,
+    /// Whether Enter chooses `cancel`, for answers that are hard to undo.
+    pub cancel_by_default: bool,
+    pub icon: IconHook,
+}
+
+/// Asks `prompt`, and returns whether its confirm button was chosen.
+pub fn confirm(prompt: Prompt) -> Result<bool, String> {
     run(
-        format!("Update {app_name}"),
-        format!(
-            "Version {version} is ready to install.\n\nThe app will close while the update is installed. You can choose Later to keep using this version."
-        ),
+        prompt.title,
+        prompt.body,
+        [prompt.cancel, prompt.confirm],
+        if prompt.cancel_by_default { 0 } else { 1 },
         false,
+        prompt.icon,
     )
 }
 
-pub(crate) fn show_notice(title: &str, message: &str) -> Result<(), String> {
-    run(title.to_owned(), diagnostics::details(message), true).map(|_| ())
+/// Shows what went wrong, with recent activity from Sabine's logs and a way
+/// to open them.
+pub fn show_notice(title: &str, message: &str, icon: IconHook) -> Result<(), String> {
+    run(
+        title.to_owned(),
+        diagnostics::details(message),
+        ["Open logs".into(), "Close".into()],
+        1,
+        true,
+        icon,
+    )
+    .map(|_| ())
 }
 
-fn run(title: String, message: String, notice: bool) -> Result<bool, String> {
+/// Tall enough to show `body` without scrolling, up to a limit.
+fn prompt_height(body: &str) -> f64 {
+    let lines: usize = body
+        .lines()
+        .map(|line| 1 + line.len() / LINE_CHARACTERS)
+        .sum();
+    (PROMPT_CHROME + lines as f64 * LINE_HEIGHT).clamp(PROMPT_HEIGHT.0, PROMPT_HEIGHT.1)
+}
+
+fn run(
+    title: String,
+    message: String,
+    buttons: [String; 2],
+    focus: usize,
+    notice: bool,
+    icon: IconHook,
+) -> Result<bool, String> {
     let event_loop = EventLoop::new().map_err(|error| error.to_string())?;
     let outcome = Arc::new(Mutex::new(Ok(false)));
+    let proxy = event_loop.create_proxy();
+    let height = if notice {
+        460.0
+    } else {
+        prompt_height(&message)
+    };
     let app = Dialog {
+        height,
+        theme: Theme::follow(proxy.clone()),
+        icon,
+        buttons,
         window: None,
         context: None,
         surface: None,
@@ -47,49 +100,38 @@ fn run(title: String, message: String, notice: bool) -> Result<bool, String> {
         title,
         notice,
         document: Document::new(&message),
-        focus: 1,
+        focus,
         pressed: None,
         modifiers: ModifiersState::empty(),
         scroll: 0.0,
         max_scroll: 0.0,
         status: String::new(),
         log_result: None,
-        proxy: event_loop.create_proxy(),
+        proxy,
     };
     event_loop.run_app(app).map_err(|error| error.to_string())?;
     outcome.lock().map_err(|error| error.to_string())?.clone()
 }
 
-/// An update prompt speaks for the app, so it carries the app's own icon.
-#[cfg(target_os = "windows")]
-fn app_icon(attributes: WindowAttributes) -> WindowAttributes {
-    crate::desktop::with_app_icon(
-        attributes,
-        winit::platform::windows::WindowAttributesWindows::default(),
-    )
-}
-
-/// Other desktops find the app's icon from the app itself.
-#[cfg(not(target_os = "windows"))]
-fn app_icon(attributes: WindowAttributes) -> WindowAttributes {
-    attributes
-}
-
-pub(super) struct Dialog {
+pub(crate) struct Dialog {
+    height: f64,
+    theme: Theme,
+    icon: IconHook,
+    pub(crate) buttons: [String; 2],
     window: Option<Arc<dyn Window>>,
     context: Option<Context<Arc<dyn Window>>>,
     surface: Option<Surface<Arc<dyn Window>, Arc<dyn Window>>>,
     cursor: PhysicalPosition<f64>,
     outcome: Arc<Mutex<Result<bool, String>>>,
-    pub(super) title: String,
-    pub(super) notice: bool,
-    pub(super) document: Document,
-    pub(super) focus: usize,
-    pub(super) pressed: Option<usize>,
+    pub(crate) title: String,
+    pub(crate) notice: bool,
+    pub(crate) document: Document,
+    pub(crate) focus: usize,
+    pub(crate) pressed: Option<usize>,
     modifiers: ModifiersState,
-    pub(super) scroll: f32,
-    pub(super) max_scroll: f32,
-    pub(super) status: String,
+    pub(crate) scroll: f32,
+    pub(crate) max_scroll: f32,
+    pub(crate) status: String,
     log_result: Option<mpsc::Receiver<Result<(), String>>>,
     proxy: EventLoopProxy,
 }
@@ -106,19 +148,12 @@ impl ApplicationHandler for Dialog {
         }
         let attributes = WindowAttributes::default()
             .with_title(&self.title)
-            .with_surface_size(LogicalSize::new(
-                WIDTH,
-                if self.notice { 460.0 } else { 300.0 },
-            ))
+            .with_surface_size(LogicalSize::new(WIDTH, self.height))
             .with_min_surface_size(LogicalSize::new(
                 560.0,
                 if self.notice { 360.0 } else { 300.0 },
             ));
-        let attributes = if self.notice {
-            identity::with_sabine_icon(attributes)
-        } else {
-            app_icon(attributes)
-        };
+        let attributes = (self.icon)(attributes);
         let result = (|| {
             let window: Arc<dyn Window> = Arc::from(
                 event_loop
@@ -140,6 +175,7 @@ impl ApplicationHandler for Dialog {
     }
 
     fn proxy_wake_up(&mut self, _event_loop: &dyn ActiveEventLoop) {
+        self.request_redraw();
         if let Some(result) = self
             .log_result
             .as_ref()
@@ -247,6 +283,7 @@ impl ApplicationHandler for Dialog {
             }
             WindowEvent::RedrawRequested
             | WindowEvent::SurfaceResized(_)
+            | WindowEvent::ThemeChanged(_)
             | WindowEvent::ScaleFactorChanged { .. } => self.redraw(event_loop),
             _ => {}
         }
@@ -254,13 +291,13 @@ impl ApplicationHandler for Dialog {
 }
 
 impl Dialog {
-    pub(super) fn scale(&self) -> f32 {
+    pub(crate) fn scale(&self) -> f32 {
         self.window
             .as_ref()
             .map_or(1.0, |window| window.scale_factor() as f32)
     }
 
-    pub(super) fn button_rect(&self, index: usize) -> (i32, i32, i32, i32) {
+    pub(crate) fn button_rect(&self, index: usize) -> (i32, i32, i32, i32) {
         let size = self.window.as_ref().unwrap().surface_size();
         let scale = self.scale();
         let x = if index == 0 {
@@ -276,7 +313,7 @@ impl Dialog {
         )
     }
 
-    pub(super) fn hovered(&self) -> Option<usize> {
+    pub(crate) fn hovered(&self) -> Option<usize> {
         self.window.as_ref()?;
         (0..2).find(|index| {
             let (x, y, w, h) = self.button_rect(*index);
@@ -343,6 +380,7 @@ impl Dialog {
             return;
         };
         let size = window.surface_size();
+        let palette = self.theme.palette(window.as_ref());
         let (Some(width), Some(height)) =
             (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
         else {
@@ -354,7 +392,7 @@ impl Dialog {
         let result = (|| {
             surface.resize(width, height).map_err(|e| e.to_string())?;
             let mut buffer = surface.buffer_mut().map_err(|e| e.to_string())?;
-            paint(self, &mut buffer, (size.width, size.height));
+            paint(self, &mut buffer, (size.width, size.height), palette);
             buffer.present().map_err(|e| e.to_string())
         })();
         self.surface = Some(surface);

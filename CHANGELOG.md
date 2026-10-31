@@ -1,3 +1,9 @@
+# Unreleased
+
+- Uninstalling Sabine from Windows Settings shows which apps still run on it and offers to
+  uninstall them too, instead of doing nothing while any app remains.
+- Sabine's setup, update and error windows follow the desktop's light or dark style.
+
 # Sabine 0.63
 
 - On Linux, an update of Sabine or its CEF runtime no longer stops apps from opening while the

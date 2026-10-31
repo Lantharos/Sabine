@@ -32,7 +32,7 @@ pub use app::installed::unsupported_system_apps;
 pub use app::payload::remove_app_payload;
 pub use app::sandbox::{Sandbox, SandboxSection};
 pub use identity::{ICON_NAME, icon_png};
-pub use uninstall::uninstall_system;
+pub use uninstall::{installer_guid, uninstall_system, uninstall_with_prompt};
 
 pub use app::registry::SabineService;
 pub(crate) use install::{

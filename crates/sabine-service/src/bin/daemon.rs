@@ -7,8 +7,14 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 fn main() {
-    if let Err(error) = sabine_service::run_daemon() {
-        sabine_runtime::report_error("daemon", error);
+    let uninstall = std::env::args().nth(1).as_deref() == Some("uninstall");
+    let result = if uninstall {
+        sabine_service::uninstall_with_prompt()
+    } else {
+        sabine_service::run_daemon()
+    };
+    if let Err(error) = result {
+        sabine_runtime::report_error(if uninstall { "uninstall" } else { "daemon" }, error);
         std::process::exit(1);
     }
 }

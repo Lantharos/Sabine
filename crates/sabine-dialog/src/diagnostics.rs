@@ -5,14 +5,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(super) fn log_directory() -> PathBuf {
+pub fn log_directory() -> PathBuf {
     sabine_runtime::diagnostic_path("startup")
         .parent()
         .expect("diagnostic files have a parent directory")
         .to_path_buf()
 }
 
-pub(super) fn details(message: &str) -> String {
+pub(crate) fn details(message: &str) -> String {
     let failure = message.trim();
     let mut text = format!("{message}\n\nLogs: {}", log_directory().display());
     let since = SystemTime::now()
@@ -74,7 +74,7 @@ pub(super) fn details(message: &str) -> String {
     text
 }
 
-pub(super) fn open_logs(
+pub(crate) fn open_logs(
     finished: impl FnOnce(Result<(), String>) + Send + 'static,
 ) -> Result<(), String> {
     let directory = log_directory();

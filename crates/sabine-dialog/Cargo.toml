@@ -1,0 +1,25 @@
+[package]
+name = "sabine-dialog"
+description = "Sabine's own setup, update and notice windows"
+keywords = ["sabine", "dialog", "desktop"]
+categories = ["gui"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+sabine-runtime.workspace = true
+sabine-platform.workspace = true
+bytemuck.workspace = true
+serde_json.workspace = true
+glyphon.workspace = true
+image.workspace = true
+winit.workspace = true
+softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging"] }
