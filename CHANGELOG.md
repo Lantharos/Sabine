@@ -1,3 +1,9 @@
+# Sabine 0.62
+
+- On Linux, pages get the desktop's pointer and touch input again, so hover effects work.
+- Logging out and shutting down no longer wait on an app's runtime socket to stop.
+- App releases build each platform once and package every format from that build.
+
 # Sabine 0.61
 
 - On Linux outside an app sandbox, Sabine holds an app to its `[sandbox]` declaration with Landlock
