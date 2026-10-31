@@ -195,10 +195,11 @@ jobs:
             if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact: $($result.notes -join '; ')" }
             $updateTarget = if ($target -in @('portable', 'windows', 'macos')) { $platform } else { "$platform-$target" }
             $destination = New-Item "dist/release/$updateTarget" -ItemType Directory -Force
-            $artifact = Get-Item $result.artifacts[0]
+            $artifact = [IO.FileInfo]::new($result.artifacts[0])
+            if (-not $artifact.Exists) { throw "Bundling $target reported a missing artifact: $($artifact.FullName)" }
             $extension = if ($artifact.Name.EndsWith('.tar.gz')) { '.tar.gz' } else { $artifact.Extension }
             $base = $artifact.Name.Substring(0, $artifact.Name.Length - $extension.Length)
-            Move-Item $artifact.FullName (Join-Path $destination.FullName "$base-$updateTarget$extension")
+            $artifact.MoveTo((Join-Path $destination.FullName "$base-$updateTarget$extension"))
             if ($target -in @('portable', 'windows', 'macos')) {
               $executable = $result.executable.Replace('\', '/')
               [IO.File]::WriteAllText((Join-Path $destination.FullName "$updateTarget.executable"), $executable)
