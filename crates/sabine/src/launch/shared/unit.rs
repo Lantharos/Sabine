@@ -97,8 +97,9 @@ impl RuntimeUnit {
 /// that failed keeps its socket for systemd to start it again.
 fn stop_socket(socket: &str) -> (String, Vec<String>, bool) {
     let shell = "/bin/sh".to_string();
-    let script =
-        format!("[ \"$SERVICE_RESULT\" = success ] && exec systemctl --user stop {socket}");
+    let script = format!(
+        "[ \"$SERVICE_RESULT\" = success ] && exec systemctl --user --no-block stop {socket}"
+    );
     (shell.clone(), vec![shell, "-c".to_string(), script], true)
 }
 
