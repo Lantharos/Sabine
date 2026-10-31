@@ -3,6 +3,8 @@
 - Uninstalling Sabine from Windows Settings shows which apps still run on it and offers to
   uninstall them too, instead of doing nothing while any app remains.
 - Sabine's setup, update and error windows follow the desktop's light or dark style.
+- AppImages build on Ubuntu 24.04: the AppStream metadata of Linux packages names its developer
+  by the app id's domain, which appimagetool's validator requires.
 
 # Sabine 0.63
 

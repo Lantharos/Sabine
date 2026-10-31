@@ -40,7 +40,7 @@ pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<S
   <description>
     <p>{summary}</p>
   </description>
-  <developer>
+  <developer id="{developer_id}">
     <name>{publisher}</name>
   </developer>
   <url type="homepage">{homepage}</url>
@@ -55,12 +55,19 @@ pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<S
 </component>
 "#,
         id = app.id,
+        developer_id = developer_id(&app.id),
         name = xml(&app.name),
         publisher = xml(&app.publisher),
         executable = xml(executable),
         version = xml(&app.version),
         timestamp = release_timestamp(),
     ))
+}
+
+/// The reverse-DNS domain the app id is named under, such as `com.example` for
+/// `com.example.notes`. AppStream 1.0 validators reject a developer without one.
+fn developer_id(app_id: &str) -> &str {
+    app_id.rsplit_once('.').map_or(app_id, |(domain, _)| domain)
 }
 
 fn release_timestamp() -> u64 {
