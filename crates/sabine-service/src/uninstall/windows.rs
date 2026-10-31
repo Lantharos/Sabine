@@ -77,7 +77,7 @@ fn msi_products(id: &str) -> Vec<String> {
     for index in 0.. {
         let mut product = [0u16; 39];
         let status = unsafe {
-            MsiEnumRelatedProductsW(&upgrade_code, 0, index, PWSTR(product.as_mut_ptr()))
+            MsiEnumRelatedProductsW(&upgrade_code, None, index, PWSTR(product.as_mut_ptr()))
         };
         if status != ERROR_SUCCESS.0 {
             break;
