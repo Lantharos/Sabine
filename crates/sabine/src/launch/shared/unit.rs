@@ -11,9 +11,8 @@ const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
 const MANAGER: &str = "org.freedesktop.systemd1.Manager";
 const UNIT_EXISTS: &str = "org.freedesktop.systemd1.UnitExists";
 
-/// The Chromium a group of apps with the same flags shares: a socket-activated
-/// user service the first of them starts, which serves them all until the
-/// last one closes.
+/// The Chromium the apps share: a socket-activated user service the first of
+/// them starts, which serves them all until the last one closes.
 pub(super) struct RuntimeUnit {
     pub(super) key: String,
     pub(super) program: PathBuf,
@@ -93,8 +92,8 @@ impl RuntimeUnit {
 }
 
 /// Takes the socket down with a runtime that quit because no app needed it,
-/// so the sockets of runtimes an update replaced do not pile up. A runtime
-/// that failed keeps its socket for systemd to start it again.
+/// so the next app starts the runtime afresh, from the newest Sabine and CEF.
+/// A runtime that failed keeps its socket for systemd to start it again.
 fn stop_socket(socket: &str) -> (String, Vec<String>, bool) {
     let shell = "/bin/sh".to_string();
     let script = format!(

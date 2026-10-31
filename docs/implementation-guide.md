@@ -324,10 +324,10 @@ asks the runtime for its browser over a socket, and the browser then connects to
 would to a Chromium of the app's own, so paint, input and bridge traffic are unchanged.
 
 The runtime is a socket-activated user service, `sabine-runtime@<key>.service`, which the first app
-to need it starts as a transient unit. The key covers the CEF runtime, the Sabine host and every
-Chromium flag that applies to the whole browser, so apps that need different flags get a runtime of
-their own, and an update starts a new runtime for the apps launched after it while the old one keeps
-serving its windows. A runtime quits 30 seconds after its last window closed, and its socket goes
+to need it starts as a transient unit. Only one Chromium can hold the shared profiles, so the key
+names that folder, and the runtime keeps the CEF runtime, Sabine host and Chromium flags it started
+with: after an update, apps launched while it still runs join it, and the next runtime starts from
+the update once it has quit. A runtime quits 30 seconds after its last window closed, and its socket goes
 with it; one that crashes is started again by systemd, and its windows reconnect and reload their
 pages while they keep showing their last frame.
 

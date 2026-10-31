@@ -20,9 +20,9 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 const SOCKET_DELAY: Duration = Duration::from_millis(5);
 
-/// A window's browser in a shared runtime: the runtime that serves apps with
-/// this app's Chromium flags, or this app alone when it isn't installed for
-/// every user, and the window's own switches.
+/// A window's browser in a shared runtime: the one Chromium that holds the
+/// shared profiles, or this app alone when it isn't installed for every user,
+/// and the window's own switches.
 pub(crate) struct SharedLaunch {
     unit: RuntimeUnit,
     request: Vec<String>,
@@ -90,7 +90,7 @@ impl SharedLaunch {
             return None;
         }
         let owner = (!installed_for_every_user(app_id)).then_some(app_id);
-        let key = instance_key(host, &arguments, &environment, binary_dir, owner);
+        let key = instance_key(&user_data, owner);
         if runtime_dir.starts_with(sabine_runtime::user_runtime_path()) {
             let leases = runtime_dir.join(".leases");
             std::fs::create_dir_all(&leases).ok()?;
@@ -177,18 +177,13 @@ fn installed_for_every_user(app_id: &str) -> bool {
         .is_ok_and(|executable| executable.starts_with(sabine_runtime::system_dir().join(app_id)))
 }
 
-fn instance_key(
-    host: &Path,
-    arguments: &[OsString],
-    environment: &[String],
-    directory: &Path,
-    owner: Option<&str>,
-) -> String {
+/// Names the runtime after the user data folder it opens, since only one
+/// Chromium can hold it: an update reaches the runtime once the one already
+/// running has quit.
+fn instance_key(user_data: &Path, owner: Option<&str>) -> String {
     let mut hash = 0xcbf29ce484222325u64;
-    let parts = std::iter::once(host.as_os_str())
-        .chain(arguments.iter().map(OsString::as_os_str))
-        .chain(environment.iter().map(OsStr::new))
-        .chain(std::iter::once(directory.as_os_str()))
+    let parts = [OsStr::new(PROTOCOL), user_data.as_os_str()]
+        .into_iter()
         .chain(owner.map(OsStr::new));
     for part in parts {
         for byte in part.as_encoded_bytes().iter().chain(&[0xff]) {
