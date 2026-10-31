@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.64
 
 - Pages open web and mail links in the person's browser or mail app with `shell.openLink`, and
   folders in their file manager with `shell.showFolder`, through the desktop portal on Linux.
@@ -16,9 +16,6 @@
   whether to delete the app's data folder.
 - Development builds use the installed Sabine's host when the runtime has no CEF SDK or cmake isn't
   installed, instead of failing to build one.
-
-# Sabine 0.64
-
 - Uninstalling Sabine from Windows Settings shows which apps still run on it and offers to
   uninstall them too, instead of doing nothing while any app remains.
 - Sabine's setup, update and error windows follow the desktop's light or dark style.
