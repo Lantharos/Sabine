@@ -157,6 +157,8 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) placement: Option<sabine_platform::WindowPlacement>,
     #[cfg(target_os = "linux")]
+    pub(super) resized_from_outside: bool,
+    #[cfg(target_os = "linux")]
     pub(super) appearance: sabine_platform::AppearanceWatcher,
     pub(super) published_appearance: Option<sabine_platform::Appearance>,
     pub(super) notifier: Option<sabine_platform::Notifier>,
@@ -297,6 +299,8 @@ impl OsrNativeHost {
             clipboard: None,
             #[cfg(target_os = "linux")]
             placement: None,
+            #[cfg(target_os = "linux")]
+            resized_from_outside: false,
             #[cfg(target_os = "linux")]
             appearance: sabine_platform::AppearanceWatcher::start(move || {
                 appearance_proxy.wake_up()

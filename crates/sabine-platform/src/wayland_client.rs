@@ -133,6 +133,10 @@ impl Globals {
         (!proxy.is_null()).then_some(proxy)
     }
 
+    pub(crate) fn version(&self, interface: &WlInterface) -> Option<u32> {
+        self.find(interface).map(|global| global.version)
+    }
+
     fn find(&self, interface: &WlInterface) -> Option<&Global> {
         let name = unsafe { CStr::from_ptr(interface.name) }.to_bytes();
         self.entries

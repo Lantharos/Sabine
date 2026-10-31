@@ -5,6 +5,8 @@
 - Sabine's setup, update and error windows follow the desktop's light or dark style.
 - AppImages build on Ubuntu 24.04: the AppStream metadata of Linux packages names its developer
   by the app id's domain, which appimagetool's validator requires.
+- On Kestrel, windows leave their edges to their pages, so scrollbars there can be grabbed:
+  Kestrel resizes them from just outside instead.
 
 # Sabine 0.63
 

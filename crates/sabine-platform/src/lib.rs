@@ -39,4 +39,4 @@ pub use window_options::{
     PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
 };
 #[cfg(target_os = "linux")]
-pub use window_placement::WindowPlacement;
+pub use window_placement::{WindowPlacement, resizes_from_outside};

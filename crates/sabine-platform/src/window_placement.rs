@@ -69,6 +69,20 @@ static STATE_INTERFACE: WlInterface = WlInterface {
     events: ptr::null(),
 };
 
+const RESIZES_FROM_OUTSIDE_VERSION: u32 = 2;
+
+/// Whether the compositor lets people resize the window from just outside its
+/// edges, as Kestrel does from version 2 of `kestrel_window_v1`, so the window
+/// needs no resize area of its own over its content.
+pub fn resizes_from_outside(window: &dyn Window) -> bool {
+    let Some(display) = wayland_display(window) else {
+        return false;
+    };
+    unsafe { Globals::discover(display) }
+        .and_then(|globals| globals.version(&MANAGER_INTERFACE))
+        .is_some_and(|version| version >= RESIZES_FROM_OUTSIDE_VERSION)
+}
+
 /// Keeps a Wayland window out of the taskbar and window switcher, or above
 /// other windows, through `kestrel_window_v1`. Dropping it returns the window
 /// to its default placement.

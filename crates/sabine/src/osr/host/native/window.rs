@@ -111,6 +111,7 @@ impl OsrNativeHost {
         {
             self.attach_clipboard(window.as_ref());
             self.place_window(window.as_ref());
+            self.resized_from_outside = sabine_platform::resizes_from_outside(window.as_ref());
         }
         self.restore_ime_state();
         if let Err(error) = self.restore_shortcut_inhibitor() {
@@ -237,11 +238,16 @@ impl OsrNativeHost {
     }
 
     /// The edge Sabine resizes the window from, for windows without system
-    /// decorations. AppKit resizes borderless windows from their edges itself.
+    /// decorations. AppKit resizes borderless windows from their edges itself,
+    /// and so does Kestrel, from just outside them.
     pub(in crate::osr::host) fn resize_edge_under_cursor(&self) -> Option<ResizeDirection> {
+        #[cfg(target_os = "linux")]
+        let resized_elsewhere = self.resized_from_outside;
+        #[cfg(not(target_os = "linux"))]
+        let resized_elsewhere = cfg!(target_os = "macos");
         let draws_edges = self.config.resizable
             && !self.config.chrome.uses_native_decorations()
-            && !cfg!(target_os = "macos");
+            && !resized_elsewhere;
         draws_edges
             .then(|| {
                 resize_direction_at(
