@@ -363,9 +363,10 @@ instance always run their own, and so does a window the runtime refuses.
 
 Only apps installed for every user, whose program lies below `/usr/lib/sabine/<app id>/`, share a
 runtime with each other: only an administrator or the system image can put them there. Every other
-app, such as one a person installed for themselves or an AppImage, adds its app ID to the runtime's
-key, so its windows still share one browser process among themselves but never one with another
-app. A page that took over the browser process can then reach only its own app's profile.
+app, such as one a person installed for themselves or an AppImage, gets a runtime of its own, which
+keeps Chromium's data in `runtime/` beside the app's profile folder, so its windows still share one
+browser process among themselves but never one with another app, and it opens while the shared
+runtime runs. A page that took over the browser process can then reach only its own app's profile.
 
 ### Sabine's own icon
 

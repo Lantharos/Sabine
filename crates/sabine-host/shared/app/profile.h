@@ -30,8 +30,9 @@ std::string CachePath(const BrowserProfile& profile, const std::string& name);
 // the app's own Chromium or another runtime has the profile open.
 bool ClaimForSharedRuntime(const std::string& directory);
 
-// Before the app's own Chromium opens |directory|, takes back what the shared
-// runtime moved out of it. Fails while a shared runtime has it open.
+// Before the app's own Chromium opens |directory|, takes back what a shared
+// runtime, or the app's own runtime, moved out of it. Fails while a runtime
+// has it open.
 bool ReclaimFromSharedRuntime(const std::string& directory);
 
 // Removes the singleton files Chromium leaves in its user data |directory|

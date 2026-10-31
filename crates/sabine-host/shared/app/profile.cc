@@ -16,12 +16,18 @@ namespace {
 
 namespace fs = std::filesystem;
 
+constexpr char kSharedFolder[] = "shared";
+
 std::string Prefix(const fs::path& directory) {
   return directory.parent_path().filename().string() + ".";
 }
 
+fs::path SharedFolder(const fs::path& directory) {
+  return directory.parent_path().parent_path() / kSharedFolder;
+}
+
 #if defined(OS_LINUX)
-constexpr char kSharedFolder[] = "shared";
+constexpr char kOwnRuntimeFolder[] = "runtime";
 constexpr char kRuntimeLock[] = "runtime.lock";
 
 int Lock(const fs::path& directory) {
@@ -57,14 +63,18 @@ bool HostHoldsSingleton(const fs::path& directory) {
 }  // namespace
 
 std::string CachePath(const BrowserProfile& profile, const std::string& name) {
-  const fs::path own = fs::path(profile.directory) / name;
-  const fs::path path =
-      profile.shared.empty()
-          ? own
-          : fs::path(profile.shared) / (Prefix(profile.directory) + name);
+  const fs::path directory(profile.directory);
+  const fs::path own = directory / name;
+  const fs::path path = profile.shared.empty() ? own
+                                               : fs::path(profile.shared) /
+                                                     (Prefix(directory) + name);
   std::error_code error;
-  if (path != own && !fs::exists(path, error) && fs::exists(own, error)) {
-    fs::rename(own, path, error);
+  for (const fs::path& source :
+       {own, SharedFolder(directory) / (Prefix(directory) + name)}) {
+    if (path != source && !fs::exists(path, error) &&
+        fs::exists(source, error)) {
+      fs::rename(source, path, error);
+    }
   }
   fs::create_directories(path, error);
   return error ? std::string() : path.string();
@@ -92,22 +102,22 @@ bool ClaimForSharedRuntime(const std::string& directory) {
 
 bool ReclaimFromSharedRuntime(const std::string& directory) {
   const fs::path own(directory);
-  const fs::path shared = own.parent_path().parent_path() / kSharedFolder;
   std::error_code error;
-  if (!fs::is_directory(shared, error)) {
-    return true;
-  }
+  fs::create_directories(own, error);
   const int lock = Lock(own);
   if (lock < 0) {
     return false;
   }
   const std::string prefix = Prefix(own);
-  for (const fs::directory_entry& entry :
-       fs::directory_iterator(shared, error)) {
-    const std::string name = entry.path().filename().string();
-    if (name.rfind(prefix, 0) == 0 &&
-        !fs::exists(own / name.substr(prefix.size()), error)) {
-      fs::rename(entry.path(), own / name.substr(prefix.size()), error);
+  for (const fs::path& shared :
+       {SharedFolder(own), own.parent_path() / kOwnRuntimeFolder}) {
+    for (const fs::directory_entry& entry :
+         fs::directory_iterator(shared, error)) {
+      const std::string name = entry.path().filename().string();
+      if (name.rfind(prefix, 0) == 0 &&
+          !fs::exists(own / name.substr(prefix.size()), error)) {
+        fs::rename(entry.path(), own / name.substr(prefix.size()), error);
+      }
     }
   }
   close(lock);

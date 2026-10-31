@@ -12,6 +12,14 @@ pub fn shared_browser_profiles_root() -> PathBuf {
     browser_profiles_root().join("shared")
 }
 
+/// Where the runtime of an app that isn't installed for every user keeps
+/// Chromium's data, beside the app's own profile.
+pub fn own_runtime_profiles_root(profile_key: &str) -> PathBuf {
+    browser_profiles_root()
+        .join(profile_folder(profile_key))
+        .join("runtime")
+}
+
 /// The folders the shared runtime keeps the app's profile in.
 pub fn shared_browser_profile_paths(profile_key: &str) -> Vec<PathBuf> {
     let prefix = format!("{}.", profile_folder(profile_key));

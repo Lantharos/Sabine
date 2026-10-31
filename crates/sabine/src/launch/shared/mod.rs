@@ -53,7 +53,11 @@ impl SharedLaunch {
         let socket_directory =
             PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join(SOCKET_DIRECTORY);
         let profiles = sabine_service::browser_profiles_root();
-        let user_data = sabine_service::shared_browser_profiles_root();
+        let user_data = if installed_for_every_user(app_id) {
+            sabine_service::shared_browser_profiles_root()
+        } else {
+            sabine_service::own_runtime_profiles_root(app_id)
+        };
         let mut global = Command::new(host);
         sabine_host::apply_runtime_resource_args(&mut global, runtime_dir);
         crate::apply_browser_launch_args(&mut global, options, false);
@@ -89,8 +93,7 @@ impl SharedLaunch {
         {
             return None;
         }
-        let owner = (!installed_for_every_user(app_id)).then_some(app_id);
-        let key = instance_key(&user_data, owner);
+        let key = instance_key(&user_data);
         if runtime_dir.starts_with(sabine_runtime::user_runtime_path()) {
             let leases = runtime_dir.join(".leases");
             std::fs::create_dir_all(&leases).ok()?;
@@ -170,7 +173,7 @@ impl SharedLaunch {
 
 /// Whether the app is installed for every user, by an administrator or the
 /// system image. Only those apps share a runtime with each other; every other
-/// app gets a runtime of its own.
+/// app gets a runtime of its own, with its own user data folder.
 fn installed_for_every_user(app_id: &str) -> bool {
     std::env::current_exe()
         .and_then(std::fs::canonicalize)
@@ -180,12 +183,9 @@ fn installed_for_every_user(app_id: &str) -> bool {
 /// Names the runtime after the user data folder it opens, since only one
 /// Chromium can hold it: an update reaches the runtime once the one already
 /// running has quit.
-fn instance_key(user_data: &Path, owner: Option<&str>) -> String {
+fn instance_key(user_data: &Path) -> String {
     let mut hash = 0xcbf29ce484222325u64;
-    let parts = [OsStr::new(PROTOCOL), user_data.as_os_str()]
-        .into_iter()
-        .chain(owner.map(OsStr::new));
-    for part in parts {
+    for part in [OsStr::new(PROTOCOL), user_data.as_os_str()] {
         for byte in part.as_encoded_bytes().iter().chain(&[0xff]) {
             hash ^= u64::from(*byte);
             hash = hash.wrapping_mul(0x100000001b3);
