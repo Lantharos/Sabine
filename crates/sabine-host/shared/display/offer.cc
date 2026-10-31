@@ -16,7 +16,9 @@ constexpr uint32_t kBind = 0;
 constexpr uint32_t kDestroy = 0;
 constexpr uint32_t kGetKeyboard = 1;
 constexpr uint32_t kSeatCapabilities = 0;
+constexpr uint32_t kPointerCapability = 1;
 constexpr uint32_t kKeyboardCapability = 2;
+constexpr uint32_t kTouchCapability = 4;
 constexpr uint32_t kKeymapEvent = 0;
 
 struct Query {
@@ -146,16 +148,22 @@ void* Bind(Query& query,
   return proxy;
 }
 
-// The layout Chromium's keyboard starts with, as it had when it shared the
-// compositor's seat.
-void CollectKeymap(Query& query, void* display) {
+// The seat Chromium sees, as it was when it shared the compositor's: the
+// layout its keyboard starts with and the pointer and touch it hovers and taps
+// with.
+void CollectSeat(Query& query, void* display) {
   if (!query.seat_name) {
     return;
   }
   void* seat =
       Bind(query, query.seat_name, query.client->seat_interface, 1, OnSeat);
-  if (query.client->display_roundtrip(display) >= 0 &&
-      query.seat_capabilities & kKeyboardCapability) {
+  if (query.client->display_roundtrip(display) < 0) {
+    query.client->proxy_destroy(seat);
+    return;
+  }
+  query.offer.pointer_and_touch =
+      query.seat_capabilities & (kPointerCapability | kTouchCapability);
+  if (query.seat_capabilities & kKeyboardCapability) {
     void* keyboard = query.client->proxy_marshal_flags(
         seat, kGetKeyboard, query.client->keyboard_interface, 1, 0, nullptr);
     query.client->proxy_add_dispatcher(keyboard, OnKeyboard, nullptr, &query);
@@ -174,7 +182,7 @@ bool Collect(Query& query, void* display) {
       query.dmabuf_version < 3) {
     return false;
   }
-  CollectKeymap(query, display);
+  CollectSeat(query, display);
   void* dmabuf = Bind(query, query.dmabuf_name, &kLinuxDmabuf,
                       query.dmabuf_version, OnDmabuf);
   query.offer.formats.version = query.dmabuf_version;

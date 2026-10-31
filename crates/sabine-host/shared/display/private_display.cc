@@ -167,7 +167,8 @@ void BindSeat(void* client, void*, uint32_t version, uint32_t id) {
   if (void* seat =
           Create(client, g_server->seat_interface, version, id, OnSeat)) {
     g_server->resource_post_event(seat, 0,
-                                  g_offer.keymap ? kKeyboardCapability : 0u);
+                                  (g_offer.keymap ? kKeyboardCapability : 0u) |
+                                      g_offer.pointer_and_touch);
     if (version >= 2) {
       g_server->resource_post_event(seat, 1, "seat0");
     }

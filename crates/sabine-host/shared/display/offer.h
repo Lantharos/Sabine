@@ -38,10 +38,12 @@ struct Keymap {
 };
 
 // What Chromium learns from the desktop's compositor: the buffer formats it
-// imports and the keyboard layout.
+// imports, the keyboard layout, and whether the seat has a pointer or touch,
+// from which pages learn whether they can hover.
 struct Offer {
   BufferFormats formats;
   std::optional<Keymap> keymap;
+  uint32_t pointer_and_touch = 0;
 };
 
 // Asks the compositor named by WAYLAND_DISPLAY, or returns nothing when there
