@@ -302,27 +302,75 @@ pub(crate) fn paint(app: &mut Dialog, pixels: &mut [u32], surface: (u32, u32), p
     }
 }
 
+const CORNER_SAMPLES: i32 = 4;
+
+/// Fills `rect` with `tint`, its corners rounded by `radius` and blended
+/// into what's under them along the curve.
 fn rounded_rect(pixels: &mut [u32], surface: (u32, u32), rect: Rect, radius: i32, tint: u32) {
     let (x, y, w, h) = rect;
     let radius = radius.min(w / 2).min(h / 2).max(0);
-    for row in 0..h {
-        let dy = if row < radius {
-            radius - row - 1
-        } else if row >= h - radius {
-            row - (h - radius)
-        } else {
-            0
-        };
-        let inset = if dy == 0 {
-            0
-        } else {
-            radius - ((radius * radius - dy * dy) as f32).sqrt() as i32
-        };
-        fill_rect(
-            pixels,
-            surface,
-            (x + inset, y + row, w - inset * 2, 1),
-            tint,
-        );
+    fill_rect(pixels, surface, (x + radius, y, w - radius * 2, h), tint);
+    fill_rect(
+        pixels,
+        surface,
+        (x, y + radius, radius, h - radius * 2),
+        tint,
+    );
+    fill_rect(
+        pixels,
+        surface,
+        (x + w - radius, y + radius, radius, h - radius * 2),
+        tint,
+    );
+    let corners = [
+        (x, y, x + radius, y + radius),
+        (x + w - radius, y, x + w - radius, y + radius),
+        (x, y + h - radius, x + radius, y + h - radius),
+        (
+            x + w - radius,
+            y + h - radius,
+            x + w - radius,
+            y + h - radius,
+        ),
+    ];
+    for (left, top, center_x, center_y) in corners {
+        for row in 0..radius {
+            for column in 0..radius {
+                let (px, py) = (left + column, top + row);
+                let coverage = corner_coverage(px, py, center_x, center_y, radius);
+                blend(pixels, surface, (px, py), tint, coverage);
+            }
+        }
     }
+}
+
+/// How much of the pixel at `(x, y)` lies within `radius` of the corner's
+/// center, from a grid of samples across it.
+fn corner_coverage(x: i32, y: i32, center_x: i32, center_y: i32, radius: i32) -> f32 {
+    let step = 1.0 / CORNER_SAMPLES as f32;
+    let radius = radius as f32;
+    let mut inside = 0;
+    for sample_y in 0..CORNER_SAMPLES {
+        for sample_x in 0..CORNER_SAMPLES {
+            let dx = x as f32 + (sample_x as f32 + 0.5) * step - center_x as f32;
+            let dy = y as f32 + (sample_y as f32 + 0.5) * step - center_y as f32;
+            if dx * dx + dy * dy <= radius * radius {
+                inside += 1;
+            }
+        }
+    }
+    inside as f32 / (CORNER_SAMPLES * CORNER_SAMPLES) as f32
+}
+
+fn blend(pixels: &mut [u32], surface: (u32, u32), (x, y): (i32, i32), tint: u32, coverage: f32) {
+    if coverage <= 0.0 || x < 0 || y < 0 || x as u32 >= surface.0 || y as u32 >= surface.1 {
+        return;
+    }
+    let pixel = &mut pixels[(y as u32 * surface.0 + x as u32) as usize];
+    let mix = |shift: u32| {
+        let under = ((*pixel >> shift) & 0xFF) as f32;
+        let over = ((tint >> shift) & 0xFF) as f32;
+        ((under + (over - under) * coverage).round() as u32) << shift
+    };
+    *pixel = 0xFF00_0000 | mix(16) | mix(8) | mix(0);
 }
