@@ -15,6 +15,7 @@ impl OsrNativeHost {
         let Some(scale) = self.window.as_ref().map(|window| window.scale_factor()) else {
             return;
         };
+        self.note_restored_size(size, scale);
         if self.is_redundant_configure(size, scale) {
             return;
         }
@@ -82,5 +83,36 @@ impl OsrNativeHost {
         self.occluded = occluded;
         self.media.set_occluded(occluded);
         self.schedule_lifecycle_sync(if occluded { "occluded" } else { "visible" });
+    }
+
+    pub(in crate::osr::host) fn remember_size(&self) {
+        if self.config.remember_size
+            && let Some(app_id) = &self.config.app_id
+        {
+            let maximized = self
+                .window
+                .as_ref()
+                .is_some_and(|window| window.is_maximized());
+            crate::window::remembered_size::save(
+                app_id,
+                self.config.width,
+                self.config.height,
+                maximized,
+            );
+        }
+    }
+
+    /// Keeps the size the window has while it isn't maximized or full screen,
+    /// which is the size it reopens at when it remembers its size.
+    fn note_restored_size(&mut self, size: PhysicalSize<u32>, scale: f64) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        if window.is_maximized() || window.fullscreen().is_some() {
+            return;
+        }
+        let logical = size.to_logical::<f64>(scale);
+        self.config.width = logical.width.round() as u32;
+        self.config.height = logical.height.round() as u32;
     }
 }

@@ -34,6 +34,16 @@ impl AppEnvironment {
         }
     }
 
+    /// The folder an app keeps its files in: its app id below the desktop's
+    /// data folder (`%APPDATA%`, `~/Library/Application Support` or
+    /// `$XDG_DATA_HOME`), which Sabine's sandbox lets the app write. Development
+    /// runs use the `.dev` app id.
+    pub fn app_data_dir(self, app_id: &str) -> PathBuf {
+        dirs::data_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join(self.app_id(app_id))
+    }
+
     /// Keeps an existing production data location and isolates development below it.
     /// This computes the path without creating directories or moving existing data.
     pub fn data_dir(self, production: impl AsRef<Path>) -> PathBuf {

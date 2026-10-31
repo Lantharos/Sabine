@@ -4,6 +4,7 @@ use sabine_service::{
     SystemReleaseManifest, UpdatePolicy, public_key_from_private, sign_app_release,
     sign_system_release,
 };
+
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -17,7 +18,7 @@ use std::{
 #[derive(Deserialize)]
 struct ReleaseConfig {
     app: AppConfig,
-    updates: Option<sabine_service::AppUpdateConfig>,
+    updates: Option<sabine_service::AppUpdatesSection>,
 }
 
 #[derive(Deserialize)]
@@ -39,10 +40,15 @@ pub(crate) fn write_manifest(
         &std::fs::read_to_string(&config_path).map_err(|error| error.to_string())?,
     )
     .map_err(|error| format!("failed to parse {}: {error}", config_path.display()))?;
-    let repository = match config.updates.as_ref() {
-        Some(updates) if updates.policy == UpdatePolicy::Disabled => {
-            return Err("updates are disabled in Sabine.toml".to_string());
-        }
+    let updates = match config
+        .updates
+        .map(sabine_service::AppUpdatesSection::source)
+    {
+        Some(Some(updates)) if updates.policy != UpdatePolicy::Disabled => Some(updates),
+        Some(_) => return Err("updates are disabled in Sabine.toml".to_string()),
+        None => None,
+    };
+    let repository = match updates.as_ref() {
         Some(updates) => match &updates.source {
             AppUpdateSource::Github { repository } => repository.clone(),
             AppUpdateSource::Http { .. } => {
@@ -57,8 +63,7 @@ pub(crate) fn write_manifest(
     let private_key = signing_key()?;
     let signer_public_key =
         public_key_from_private(&private_key).map_err(|error| error.to_string())?;
-    if let Some(configured) = config
-        .updates
+    if let Some(configured) = updates
         .as_ref()
         .map(|updates| updates.public_key.trim())
         .filter(|key| !key.is_empty())
@@ -74,7 +79,7 @@ pub(crate) fn write_manifest(
             "release tag {ref_name} does not match Sabine.toml version {tag}"
         ));
     }
-    if let Some(updates) = &config.updates
+    if let Some(updates) = &updates
         && updates.channel != channel
     {
         return Err(format!(

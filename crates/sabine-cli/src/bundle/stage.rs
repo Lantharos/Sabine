@@ -362,6 +362,9 @@ fn stage_unix_binary(
     Ok(private_dir)
 }
 
+/// Where `[resources]` go, beside the bundle's `Sabine.toml`.
+pub(super) const RESOURCE_FOLDER: &str = "files";
+
 fn stage_resources(
     app: &BundleApp,
     resources: &Path,
@@ -385,6 +388,16 @@ fn stage_resources(
         && let Some((source, _)) = web.assets()?
     {
         copy_dir_recursive(source, &resources.join("web")).map_err(|error| error.to_string())?;
+    }
+    for (name, source) in &app.resources {
+        let destination = resources.join(RESOURCE_FOLDER).join(name);
+        let copied = if source.is_dir() {
+            copy_dir_recursive(source, &destination)
+        } else {
+            fs::create_dir_all(resources.join(RESOURCE_FOLDER))
+                .and_then(|()| fs::copy(source, &destination).map(drop))
+        };
+        copied.map_err(|error| format!("could not copy resource {name}: {error}"))?;
     }
     Ok(())
 }

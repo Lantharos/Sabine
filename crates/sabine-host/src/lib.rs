@@ -90,6 +90,12 @@ pub fn ensure_host(runtime_dir: &Path) -> Result<PathBuf, String> {
     .into_iter()
     .filter_map(|(name, ok)| (!ok).then_some(name))
     .collect::<Vec<_>>();
+    if (!missing.is_empty() || sabine_runtime::find_program("cmake").is_none())
+        && let Some(host) = installed_host()
+    {
+        validate_host_protocol(&host, runtime_dir)?;
+        return Ok(host);
+    }
     if !missing.is_empty() {
         return Err(format!(
             "CEF runtime at {} does not contain the build SDK (missing {}). \
@@ -337,6 +343,13 @@ fn prebuilt_host_path() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         return None;
     }
+    installed_host()
+}
+
+/// The host of the newest Sabine installed for this user or for every user.
+/// Debug builds compile their own from the runtime's CEF SDK and use this
+/// one only when the runtime has no SDK or cmake isn't installed.
+fn installed_host() -> Option<PathBuf> {
     let user = installed_system_host(&sabine_runtime::sabine_data_dir());
     let machine = installed_system_host(&sabine_runtime::system_dir());
     match (user, machine) {

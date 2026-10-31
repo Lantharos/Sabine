@@ -58,6 +58,15 @@ pub(super) fn runtime_manifest(
             manifest.push_str("local_files = true\n");
         }
     }
+    if !app.resources.is_empty() {
+        manifest.push_str("\n[resources]\n");
+        for (name, _) in &app.resources {
+            manifest.push_str(&format!(
+                "{name} = \"{}/{name}\"\n",
+                super::stage::RESOURCE_FOLDER
+            ));
+        }
+    }
     if let Some(sandbox) = &app.sandbox {
         manifest.push_str(&sandbox.manifest());
     }

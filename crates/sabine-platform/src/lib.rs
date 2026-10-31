@@ -7,6 +7,7 @@ mod notifications;
 #[cfg(target_os = "linux")]
 pub mod portal;
 mod regions;
+pub mod shell;
 mod shortcut_inhibit;
 mod tasks;
 #[cfg(target_os = "linux")]

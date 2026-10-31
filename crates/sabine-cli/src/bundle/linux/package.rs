@@ -58,11 +58,25 @@ pub(in crate::bundle) fn deb_control(
     let version = package_version(&app.version)?;
     let (architecture, _) = architecture(binary)?;
     Ok(format!(
-        "Package: {}\nVersion: {version}\nSection: utils\nPriority: optional\nArchitecture: {architecture}\nMaintainer: {maintainer}\nInstalled-Size: {}\nDepends: {dependencies}\nDescription: {}\n",
+        "Package: {}\nVersion: {version}\nSection: utils\nPriority: optional\nArchitecture: {architecture}\nMaintainer: {maintainer}\nInstalled-Size: {}\nDepends: {dependencies}\nDescription: {}\n{}",
         app.id,
         installed_size_kb.max(1),
-        app.name
+        app.name,
+        deb_description(app.description.as_deref()),
     ))
+}
+
+/// The extended description below a control file's first line: each line
+/// indented by a space, and blank lines as a lone dot.
+fn deb_description(description: Option<&str>) -> String {
+    description
+        .into_iter()
+        .flat_map(|text| text.trim().lines())
+        .map(|line| match line.trim() {
+            "" => " .\n".to_string(),
+            line => format!(" {line}\n"),
+        })
+        .collect()
 }
 
 pub(in crate::bundle) fn deb_dependencies(staged: &StagedBundle) -> Result<String, String> {
@@ -118,7 +132,7 @@ BuildArch: {architecture}
 {requires}
 
 %description
-{summary}
+{description}
 
 %prep
 
@@ -135,6 +149,12 @@ cp -a "%{{sabine_source}}/." "%{{buildroot}}/"
         name = app.id.replace('.', "-"),
         version = package_version(&app.version)?.replace('-', "_"),
         summary = app.name.replace('%', "%%"),
+        description = app
+            .description
+            .as_deref()
+            .unwrap_or(&app.name)
+            .trim()
+            .replace('%', "%%"),
         license = license.replace('%', "%%"),
         id = app.id,
         requires = CEF_RPM_LIBRARIES

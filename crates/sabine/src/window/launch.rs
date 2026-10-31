@@ -125,6 +125,9 @@ impl SabineWindow {
             self.config.desktop_services.native_messaging_hosts.clear();
             self.config.desktop_services.autostart.clear();
         }
+        if self.config.remember_size {
+            super::remembered_size::restore(&mut self.config);
+        }
     }
 
     fn apply_dev_env_overrides(&mut self) {

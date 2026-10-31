@@ -192,7 +192,10 @@ in `bin/held-update.json` and returned by `held_system_update()`; it installs on
 those apps update or are removed. An app whose own update needs a newer Sabine still pulls that
 release, unless it would stop a different app.
 
-App releases are separate from Sabine releases. `[updates]` in `Sabine.toml` identifies a GitHub
+App releases are separate from Sabine releases. Bundles built in GitHub Actions update from the
+repository's releases unless `[updates]` says otherwise; an app that never updates itself, such as
+one installed through its own setup program, says `policy = "disabled"` there and nothing else.
+Otherwise `[updates]` in `Sabine.toml` identifies a GitHub
 repository or HTTPS manifest endpoint. Sabine's reusable GitHub Actions workflow builds native
 artifacts and emits a signed `sabine-update.json`. The service verifies its configured app public
 key, then validates app id, channel, exact platform/package target, version, artifact URL, and
@@ -777,6 +780,25 @@ Recipes set a window up for its role, and later builder calls refine them:
   next activation opens the window again. Pair it with `.single_instance_id(...)`, for example for
   an app that syncs at login and opens its window when someone launches it
 
+`.remember_size()` opens the window at the size and maximized state it closed with, kept in
+`window.json` in the app's state folder (`$XDG_STATE_HOME/<app id>` on Linux, the local app data
+folder elsewhere); `.size()` and `.maximized()` set the first launch's. Apps keep their own files in
+`AppEnvironment::current().app_data_dir(app_id)`: the app id below `%APPDATA%`,
+`~/Library/Application Support` or `$XDG_DATA_HOME`, the folder Sabine's sandbox lets the app write,
+with the `.dev` app id in development.
+
+Files and folders an app ships beside itself, such as a helper program it starts, are listed by name
+in `Sabine.toml`, with their paths from it:
+
+```toml
+[resources]
+server = "../build/server"
+```
+
+`sabine bundle` copies them to `files/<name>` beside the bundle's `Sabine.toml`, and
+`sabine::resource_path("server")` finds them in both places: the source project during `sabine dev`
+and `cargo run`, and the bundle once the app is packaged. Pages never see them.
+
 Frameless windows get the system's rounded corners on Windows 11, as on Linux and macOS; Windows 10
 keeps them square. `AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
 and close hit targets at the right end, and with a sidebar the blur, opaque and input regions of a
@@ -784,7 +806,9 @@ glass sidebar layout. On macOS the window keeps its own traffic lights instead: 
 transparent and the page extends under it, so the page draws no controls of its own and leaves the
 top-left corner free. `appWindow.controlsOverlay()` reports the corner the system's controls cover,
 and every page gets the same values as the `--sabine-controls-left`, `--sabine-controls-right` and
-`--sabine-controls-height` CSS properties, which are zero where the page draws its own controls. Region builders (`blur_region`, `opaque_region`, `input_region`, `drag_region`,
+`--sabine-controls-height` CSS properties, which are zero where the page draws its own controls.
+Parts of the page marked `-webkit-app-region: drag` move the window, and a double click on them
+maximizes or restores it. Region builders (`blur_region`, `opaque_region`, `input_region`, `drag_region`,
 `control_region`) remain available for layouts it does not cover.
 
 Bridge commands are registered on the builder:
@@ -1343,8 +1367,10 @@ deb, rpm and AppImage packages install the app's icons into the hicolor theme an
 desktop entry as `Icon=<app id>`. Apps listed in launchers also ship AppStream metadata
 (`/usr/share/metainfo/<app id>.metainfo.xml`) with their name, generic name as summary, publisher,
 license, keywords, document types and release, so software centers can show them. AppStream needs a
-homepage: set `homepage` in `[app]`, or Sabine uses the Cargo package's `homepage` or `repository`;
-without one, no metadata is written.
+homepage: set `homepage` in `[app]`, or Sabine uses the Cargo package's `homepage` or `repository`.
+`description` in `[app]` describes the app in software centers, in paragraphs separated by blank
+lines, and becomes the long description of deb and rpm packages; without it, the generic name does.
+Without a homepage, no metadata is written.
 
 macOS bundles require a native Apple Silicon Mach-O executable, including when using `--binary`.
 Offline bundles must be assembled on the target operating system and CPU architecture so their service, CEF host and
@@ -1465,7 +1491,8 @@ first message on its window connection, and a host that does not match is discon
 page traffic reaches the app, with a repair/update error in place of the window.
 
 Packaged apps use an installed host and never invoke a compiler on the user's machine. Development
-builds and the packaging CLI can build a host from the CEF SDK. Compatible newer shared hosts are
+builds and the packaging CLI can build a host from the CEF SDK; when the runtime has no SDK or cmake
+isn't installed, development builds use the newest installed Sabine's host instead. Compatible newer shared hosts are
 selected by their native protocol rather than requiring an identical app framework version.
 
 ### Windows setup wizard
@@ -1477,6 +1504,10 @@ checks native host compatibility, and registers the final executable without lau
 app moves the wizard's progress bar itself; the details pane gets each step once, a line for every
 further tenth of the work, and any failure. Failure returns a nonzero exit code.
 `--sabine-uninstall` removes the registration before the uninstaller deletes packaged files.
+Apps listed in launchers get a Start menu folder; the finish page offers to start the app and to add
+a desktop shortcut, both unticked. Uninstalling asks whether to delete the app's data folder,
+`%APPDATA%\<app id>`, when it has one, and keeps it unless the person says yes or the uninstaller
+runs silently.
 These modes are handled by `SabineWindow::main` and its process variants.
 
 Setup programs show the app's own artwork on their welcome and finish pages when the manifest names

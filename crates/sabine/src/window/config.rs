@@ -30,6 +30,9 @@ pub(crate) struct SabineWindowConfig {
     pub height: u32,
     pub min_width: u32,
     pub min_height: u32,
+    pub maximized: bool,
+    /// The window opens at the size and maximized state it closed with.
+    pub remember_size: bool,
     pub resizable: bool,
     pub visible: bool,
     pub active: bool,
@@ -82,6 +85,8 @@ impl Default for SabineWindowConfig {
             height: 640,
             min_width: 420,
             min_height: 280,
+            maximized: false,
+            remember_size: false,
             resizable: true,
             visible: true,
             active: true,

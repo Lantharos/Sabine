@@ -4,11 +4,12 @@ mod media;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod paste_gesture;
+mod shell;
 
 use sabine_bridge::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND,
-    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, PRINT_FILES_COMMAND, REVEAL_COMMAND,
-    SET_REGIONS_COMMAND,
+    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, OPEN_LINK_COMMAND, PRINT_FILES_COMMAND,
+    REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -107,6 +108,8 @@ impl OsrNativeHost {
             }
             ACTIVATION_TOKEN_COMMAND => self.answer_activation_token(&request),
             PRINT_FILES_COMMAND => self.answer_print(&request),
+            OPEN_LINK_COMMAND => self.answer_open_link(&request),
+            SHOW_FOLDER_COMMAND => self.answer_show_folder(&request),
             CONTROLS_OVERLAY_COMMAND => self.send_bridge_response(
                 request.browser_id,
                 request.request_id,

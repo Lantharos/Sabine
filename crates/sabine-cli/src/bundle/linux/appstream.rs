@@ -7,7 +7,7 @@ pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<S
         return None;
     }
     let homepage = xml(app.homepage.as_deref()?);
-    let summary = xml(app.listing.generic_name.as_deref().unwrap_or(&app.name));
+    let summary = app.listing.generic_name.as_deref().unwrap_or(&app.name);
     let license = app
         .license
         .as_deref()
@@ -38,8 +38,7 @@ pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<S
 {license}  <name>{name}</name>
   <summary>{summary}</summary>
   <description>
-    <p>{summary}</p>
-  </description>
+{description}  </description>
   <developer id="{developer_id}">
     <name>{publisher}</name>
   </developer>
@@ -56,12 +55,23 @@ pub(in crate::bundle) fn metainfo(app: &BundleApp, executable: &str) -> Option<S
 "#,
         id = app.id,
         developer_id = developer_id(&app.id),
+        summary = xml(summary),
+        description = description(app.description.as_deref().unwrap_or(summary)),
         name = xml(&app.name),
         publisher = xml(&app.publisher),
         executable = xml(executable),
         version = xml(&app.version),
         timestamp = release_timestamp(),
     ))
+}
+
+/// One paragraph for every block of text between blank lines.
+fn description(text: &str) -> String {
+    text.split("\n\n")
+        .map(|paragraph| paragraph.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|paragraph| !paragraph.is_empty())
+        .map(|paragraph| format!("    <p>{}</p>\n", xml(&paragraph)))
+        .collect()
 }
 
 /// The reverse-DNS domain the app id is named under, such as `com.example` for

@@ -1,13 +1,13 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
 
-use sabine_service::{
-    AppInstallMode, AppUpdateConfig, AppUpdateSource, Sandbox, SandboxSection, UpdatePolicy,
-};
+use sabine_service::{Sandbox, SandboxSection};
 use serde::Deserialize;
 
+use super::updates::resolve_updates;
 use crate::desktop::{entry::Listing, types::Associations};
 
 #[derive(Debug)]
@@ -19,6 +19,7 @@ pub(super) struct BundleApp {
     pub maintainer: Option<String>,
     pub license: Option<String>,
     pub homepage: Option<String>,
+    pub description: Option<String>,
     pub icon: Option<PathBuf>,
     pub installer_image: Option<PathBuf>,
     pub associations: Associations,
@@ -31,6 +32,8 @@ pub(super) struct BundleApp {
     pub window: WindowSection,
     pub shared_runtime: bool,
     pub sandbox: Option<Sandbox>,
+    /// Files and folders shipped beside the app, by the name it finds them with.
+    pub resources: Vec<(String, PathBuf)>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -94,8 +97,10 @@ struct SabineFile {
     web: WebSection,
     #[serde(default)]
     window: WindowSection,
-    updates: Option<sabine_service::AppUpdateConfig>,
+    updates: Option<sabine_service::AppUpdatesSection>,
     sandbox: Option<SandboxSection>,
+    #[serde(default)]
+    resources: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -107,6 +112,7 @@ struct AppSection {
     maintainer: Option<String>,
     license: Option<String>,
     homepage: Option<String>,
+    description: Option<String>,
     icon: Option<String>,
     installer_image: Option<String>,
     shared_runtime: Option<bool>,
@@ -134,8 +140,9 @@ struct WebSection {
 pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<BundleApp, String> {
     let source_dir = absolute_path(source)?;
     let sabine = read_sabine_file(&source_dir)?;
-    let updates = resolve_updates(sabine.updates.clone())?;
+    let updates = resolve_updates(sabine.updates)?;
     let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
+    let resources = resolve_resources(&source_dir, &sabine.resources)?;
     let cargo_manifest = sabine
         .app
         .cargo_manifest
@@ -237,6 +244,7 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         maintainer,
         license,
         homepage,
+        description: sabine.app.description,
         icon,
         installer_image,
         associations: sabine.app.associations,
@@ -249,43 +257,35 @@ pub(super) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         window: sabine.window,
         shared_runtime: sabine.app.shared_runtime.unwrap_or(true),
         sandbox,
+        resources,
     })
 }
 
-fn github_actions_updates() -> Option<AppUpdateConfig> {
-    let repository = std::env::var("GITHUB_REPOSITORY").ok()?;
-    Some(AppUpdateConfig {
-        source: AppUpdateSource::Github { repository },
-        channel: "stable".to_string(),
-        policy: UpdatePolicy::Automatic,
-        install_mode: AppInstallMode::Managed,
-        public_key: String::new(),
-        package_kind: None,
-    })
-}
-
-fn resolve_updates(configured: Option<AppUpdateConfig>) -> Result<Option<AppUpdateConfig>, String> {
-    let mut updates = configured.or_else(github_actions_updates);
-    let Some(update) = updates.as_mut() else {
-        return Ok(None);
-    };
-    if update.policy == UpdatePolicy::Disabled {
-        return Ok(updates);
-    }
-    if let Ok(private_key) = std::env::var("SABINE_UPDATE_SIGNING_KEY")
-        && !private_key.trim().is_empty()
-    {
-        let public_key = sabine_service::public_key_from_private(&private_key)
-            .map_err(|error| error.to_string())?;
-        if !update.public_key.trim().is_empty() && update.public_key.trim() != public_key {
-            return Err("update public_key does not match SABINE_UPDATE_SIGNING_KEY".to_string());
-        }
-        update.public_key = public_key;
-    }
-    if std::env::var_os("GITHUB_ACTIONS").is_some() && update.public_key.trim().is_empty() {
-        return Err("SABINE_UPDATE_SIGNING_KEY is required for release bundles".to_string());
-    }
-    Ok(updates)
+/// `[resources]`: names the app looks files and folders up by, each with
+/// its path from `Sabine.toml`.
+fn resolve_resources(
+    source_dir: &Path,
+    resources: &BTreeMap<String, String>,
+) -> Result<Vec<(String, PathBuf)>, String> {
+    resources
+        .iter()
+        .map(|(name, path)| {
+            if name.is_empty()
+                || !name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+            {
+                return Err(format!(
+                    "resource name {name:?} may contain only lowercase letters, digits, hyphens and underscores"
+                ));
+            }
+            let path = source_dir.join(path);
+            if !path.exists() {
+                return Err(format!("resource {name} was not found at {}", path.display()));
+            }
+            Ok((name.clone(), path))
+        })
+        .collect()
 }
 
 fn resolve_web(

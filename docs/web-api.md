@@ -117,6 +117,21 @@ and `sabine bindings --check` fails without writing when it is out of date, for 
 run the app, which writes the file and exits before it opens a window, so check the file in with
 the rest of the page.
 
+## Links and folders
+
+```js
+import { shell } from "@lantharos/sabine";
+
+await shell.openLink("https://example.com/help");
+await shell.showFolder(dataFolder);
+```
+
+`openLink` opens `http:`, `https:` and `mailto:` links in the person's default browser or mail app,
+and `showFolder` opens a folder in their file manager. Both go through the desktop portal on Linux,
+so they work inside a sandbox, and through the system's shell on macOS and Windows. Other schemes
+and files are refused, since opening them could start programs. Guests can't call them; a page
+showing a guest opens the links the guest asks for in `events.guestNewWindow`.
+
 ## Window controls
 
 ```js

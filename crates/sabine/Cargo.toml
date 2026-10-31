@@ -27,6 +27,7 @@ sabine-service.workspace = true
 sabine-dialog.workspace = true
 bytemuck.workspace = true
 crossbeam-channel.workspace = true
+dirs.workspace = true
 dunce.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
@@ -49,7 +50,6 @@ serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dirs.workspace = true
 glow.workspace = true
 khronos-egl.workspace = true
 landlock.workspace = true

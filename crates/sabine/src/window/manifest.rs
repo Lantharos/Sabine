@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
 };
@@ -20,7 +21,7 @@ struct SabineFile {
     web: WebSection,
     #[serde(default)]
     window: WindowSection,
-    updates: Option<sabine_service::AppUpdateConfig>,
+    updates: Option<sabine_service::AppUpdatesSection>,
     #[cfg(target_os = "linux")]
     sandbox: Option<sabine_service::SandboxSection>,
 }
@@ -113,7 +114,9 @@ impl SabineWindow {
                 })?;
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
-        self.config.app_update = file.updates;
+        self.config.app_update = file
+            .updates
+            .and_then(sabine_service::AppUpdatesSection::source);
         #[cfg(target_os = "linux")]
         {
             self.config.sandbox = file
@@ -157,6 +160,22 @@ impl SabineWindow {
         }
         Ok(self)
     }
+}
+
+#[derive(Deserialize)]
+struct ResourcesFile {
+    #[serde(default)]
+    resources: BTreeMap<String, PathBuf>,
+}
+
+/// A file or folder that `[resources]` in `Sabine.toml` names: in the source
+/// project during `sabine dev` and `cargo run`, and in the bundle once the app
+/// is packaged.
+pub fn resource_path(name: &str) -> Option<PathBuf> {
+    let manifest = framework_manifest_path()?;
+    let file: ResourcesFile = toml::from_str(&fs::read_to_string(&manifest).ok()?).ok()?;
+    let path = manifest.parent()?.join(file.resources.get(name)?);
+    path.exists().then_some(path)
 }
 
 fn framework_manifest_path() -> Option<PathBuf> {

@@ -27,6 +27,7 @@ path = "src/bin/daemon.rs"
 flate2.workspace = true
 zip.workspace = true
 clap.workspace = true
+dirs.workspace = true
 sabine-runtime.workspace = true
 sabine-host.workspace = true
 sabine-dialog.workspace = true

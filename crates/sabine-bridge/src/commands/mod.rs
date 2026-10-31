@@ -31,8 +31,12 @@ pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
 pub const DRAG_FILES_COMMAND: &str = "sabine.drag.files";
 /// Prints PDF, image and text files through the desktop's print dialog.
 pub const PRINT_FILES_COMMAND: &str = "sabine.print.files";
+/// Opens a web or mail link in the person's default app.
+pub const OPEN_LINK_COMMAND: &str = "sabine.shell.openLink";
+/// Opens a folder in the person's file manager.
+pub const SHOW_FOLDER_COMMAND: &str = "sabine.shell.showFolder";
 
-const WINDOW_COMMANDS: [&str; 13] = [
+const WINDOW_COMMANDS: [&str; 15] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
@@ -46,6 +50,8 @@ const WINDOW_COMMANDS: [&str; 13] = [
     NOTIFICATION_CLOSE_COMMAND,
     DRAG_FILES_COMMAND,
     PRINT_FILES_COMMAND,
+    OPEN_LINK_COMMAND,
+    SHOW_FOLDER_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

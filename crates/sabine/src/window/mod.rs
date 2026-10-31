@@ -7,6 +7,8 @@ pub(crate) mod config;
 mod launch;
 mod listeners;
 mod manifest;
+pub use manifest::resource_path;
+pub(crate) mod remembered_size;
 pub(crate) mod style;
 mod visibility;
 

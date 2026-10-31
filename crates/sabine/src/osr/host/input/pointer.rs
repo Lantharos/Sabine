@@ -148,6 +148,12 @@ impl OsrNativeHost {
             return;
         }
         if left && self.is_drag_region(width, x, y) {
+            if self.next_click_count(button) == 2 {
+                if window.is_resizable() {
+                    window.set_maximized(!window.is_maximized());
+                }
+                return;
+            }
             if let Err(error) = window.drag_window() {
                 sabine_runtime::report_error("window", format!("could not begin moving: {error}"));
             }

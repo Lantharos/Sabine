@@ -158,6 +158,7 @@ impl OsrNativeHost {
                     self.set_page_cursor(event_loop, cursor);
                 }
                 OsrHostEvent::Message(_, OsrMessage::CloseRequested) => {
+                    self.remember_size();
                     if self.config.hide_on_close {
                         self.hide_window("close");
                     } else {
@@ -353,6 +354,7 @@ impl OsrNativeHost {
                 }
                 OsrHostEvent::HostControl(HostControl::Print(files)) => self.print_files(files),
                 OsrHostEvent::HostControl(HostControl::Quit) => {
+                    self.remember_size();
                     self.begin_close(event_loop);
                     return;
                 }

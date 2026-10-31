@@ -59,6 +59,14 @@ pub(super) fn nsis_script(
             format!(
                 r#"!define MUI_FINISHPAGE_RUN "$INSTDIR\{executable}"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Add a shortcut to the desktop"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION AddDesktopShortcut
+Function AddDesktopShortcut
+  SetShellVarContext current
+  CreateShortcut "$DESKTOP\{name}.lnk" "$INSTDIR\{executable}"
+FunctionEnd
 "#
             ),
             format!(
@@ -71,6 +79,7 @@ pub(super) fn nsis_script(
                 r#"  Delete "$SMPROGRAMS\{name}\{name}.lnk"
   Delete "$SMPROGRAMS\{name}\Uninstall.lnk"
   RMDir "$SMPROGRAMS\{name}"
+  Delete "$DESKTOP\{name}.lnk"
 "#
             ),
         )
@@ -186,6 +195,12 @@ unregister_done:
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{id}"
   DeleteRegKey HKCU "Software\{id}"
+  IfSilent data_kept
+  IfFileExists "$APPDATA\{id}\*.*" 0 data_kept
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete the files {name} keeps for you?$\r$\n$\r$\n$APPDATA\{id}$\r$\n$\r$\nChoose No to keep them for a later install." IDNO data_kept
+  RMDir /r "$APPDATA\{id}"
+  RMDir /r "$LOCALAPPDATA\{id}"
+data_kept:
 SectionEnd
 "##,
         output = escape(&dunce::simplified(Path::new(output)).to_string_lossy()),

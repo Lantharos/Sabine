@@ -6,6 +6,7 @@ import { Guest, guest } from "./src/guest.js";
 import { NativeVideo } from "./src/media.js";
 import { print } from "./src/print.js";
 import { region } from "./src/regions.js";
+import { shell } from "./src/shell.js";
 import { system } from "./src/system.js";
 import { tray } from "./src/tray.js";
 import { appWindow, popup } from "./src/window.js";
@@ -28,6 +29,7 @@ export {
   print,
   region,
   sabine,
+  shell,
   system,
   tray,
 };
@@ -50,6 +52,7 @@ export default {
   print,
   region,
   NativeVideo,
+  shell,
   system,
   tray,
 };

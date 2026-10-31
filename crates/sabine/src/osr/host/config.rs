@@ -23,6 +23,8 @@ pub(crate) struct OsrHostConfig {
     pub height: u32,
     pub min_width: u32,
     pub min_height: u32,
+    pub maximized: bool,
+    pub remember_size: bool,
     pub resizable: bool,
     pub visible: bool,
     pub active: bool,
@@ -110,6 +112,14 @@ impl OsrHostConfig {
                 .get("min_height")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(280) as u32,
+            maximized: value
+                .get("maximized")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            remember_size: value
+                .get("remember_size")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             resizable: value
                 .get("resizable")
                 .and_then(serde_json::Value::as_bool)

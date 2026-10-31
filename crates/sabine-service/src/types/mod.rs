@@ -1,5 +1,6 @@
 mod app;
 mod system;
+mod updates_section;
 
 use std::{
     path::PathBuf,
@@ -16,6 +17,7 @@ pub use system::{
     HeldSystemUpdate, InstalledApp, SabineVersion, SystemCompatibility, SystemReleaseArtifact,
     SystemReleaseManifest, SystemRequirement,
 };
+pub use updates_section::AppUpdatesSection;
 
 pub const REGISTRY_VERSION: u32 = 1;
 pub const SABINE_VERSION: &str = "0.64";

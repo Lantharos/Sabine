@@ -123,6 +123,18 @@ impl SabineWindow {
         self
     }
 
+    pub fn maximized(mut self, maximized: bool) -> Self {
+        self.config.maximized = maximized;
+        self
+    }
+
+    /// Opens the window at the size and maximized state it last closed with,
+    /// starting from [`Self::size`] and [`Self::maximized`] the first time.
+    pub fn remember_size(mut self) -> Self {
+        self.config.remember_size = true;
+        self
+    }
+
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.config.resizable = resizable;
         self

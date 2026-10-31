@@ -1,3 +1,22 @@
+# Unreleased
+
+- Pages open web and mail links in the person's browser or mail app with `shell.openLink`, and
+  folders in their file manager with `shell.showFolder`, through the desktop portal on Linux.
+- Windows remember their size: `.remember_size()` opens the window at the size and maximized state
+  it closed with. `.maximized()` opens it maximized.
+- `AppEnvironment::app_data_dir` names the folder an app keeps its files in, the one Sabine's
+  sandbox lets it write.
+- `[resources]` in `Sabine.toml` ships files and folders beside the app, such as a helper program,
+  and `sabine::resource_path` finds them during development and once the app is packaged.
+- A double click on a part of the page that moves the window maximizes or restores it.
+- `[updates]` with only `policy = "disabled"` keeps an app built in GitHub Actions from updating
+  itself, without naming an update source or signing key.
+- `description` in `[app]` describes the app in software centers and Linux packages.
+- The Windows setup program offers a desktop shortcut on its finish page, and uninstalling asks
+  whether to delete the app's data folder.
+- Development builds use the installed Sabine's host when the runtime has no CEF SDK or cmake isn't
+  installed, instead of failing to build one.
+
 # Sabine 0.64
 
 - Uninstalling Sabine from Windows Settings shows which apps still run on it and offers to

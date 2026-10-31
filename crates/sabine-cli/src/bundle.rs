@@ -9,6 +9,7 @@ mod package;
 mod signing;
 mod stage;
 mod system;
+mod updates;
 pub use system::install_system_bundle;
 mod windows;
 

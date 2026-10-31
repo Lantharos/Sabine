@@ -2832,6 +2832,7 @@ version = "0.64.0"
 dependencies = [
  "base64",
  "clap",
+ "dirs",
  "ed25519-dalek",
  "embed-resource",
  "flate2",

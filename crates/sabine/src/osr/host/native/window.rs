@@ -42,6 +42,7 @@ impl OsrNativeHost {
                 f64::from(self.config.min_width),
                 f64::from(self.config.min_height),
             ))
+            .with_maximized(self.config.maximized)
             .with_resizable(self.config.resizable)
             .with_decorations(self.config.chrome.uses_native_decorations())
             .with_visible(self.config.visible && !defer_visibility)
