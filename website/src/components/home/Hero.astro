@@ -38,3 +38,14 @@ import terrace from "./terrace.jpg";
     />
   </figure>
 </section>
+
+<noscript><style>.home .unveil { animation: none; }</style></noscript>
+
+<script>
+  for (const figure of document.querySelectorAll<HTMLElement>(".home .unveil")) {
+    const image = figure.querySelector("img")!;
+    const reveal = () => figure.setAttribute("data-ready", "");
+    const loaded = image.complete ? Promise.resolve() : new Promise((done) => image.addEventListener("load", done, { once: true }));
+    loaded.then(() => image.decode()).then(reveal, reveal);
+  }
+</script>
