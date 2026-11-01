@@ -85,6 +85,8 @@ pub(super) enum OsrHostEvent {
     Message(u64, OsrMessage),
     MessagesReady(u64, Arc<crate::osr::message_queue::MessageQueue>),
     HostControl(HostControl),
+    /// The app sent the page a message while the page was frozen.
+    FrozenPageMessaged,
     Disconnected(u64),
     IncompatibleHost(u64),
     FileDialogClosed(u64, u32, Option<Vec<std::path::PathBuf>>),
@@ -111,7 +113,10 @@ impl OsrHostEvent {
             | Self::FileDialogClosed(generation, ..) => Some(*generation),
             #[cfg(target_os = "linux")]
             Self::SharedRuntimeOpened(generation, _) => Some(*generation),
-            Self::HostControl(_) | Self::BrowserExited(..) | Self::RendererStarted(..) => None,
+            Self::HostControl(_)
+            | Self::FrozenPageMessaged
+            | Self::BrowserExited(..)
+            | Self::RendererStarted(..) => None,
             #[cfg(target_os = "linux")]
             Self::DirectPresentation(..) => None,
         }

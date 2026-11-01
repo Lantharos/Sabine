@@ -1,7 +1,10 @@
 use std::{
     collections::VecDeque,
     io::{self, Write},
-    sync::{Arc, Condvar, Mutex},
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
 };
 
@@ -26,20 +29,30 @@ struct ControlQueue {
 /// Carries the app's bridge messages to the current browser connection from
 /// the thread that reads them, waiting while the browser catches up.
 #[derive(Clone, Default)]
-pub(crate) struct ControlRelay(Arc<Mutex<Option<Arc<ControlWriter>>>>);
+pub(crate) struct ControlRelay {
+    writer: Arc<Mutex<Option<Arc<ControlWriter>>>>,
+    page_frozen: Arc<AtomicBool>,
+}
 
 impl ControlRelay {
     pub(crate) fn connect(&self, writer: Option<Arc<ControlWriter>>) {
-        if let Ok(mut current) = self.0.lock() {
+        if let Ok(mut current) = self.writer.lock() {
             *current = writer;
         }
     }
 
-    pub(crate) fn forward(&self, frame: Vec<u8>) {
-        let writer = self.0.lock().ok().and_then(|current| current.clone());
+    pub(crate) fn set_page_frozen(&self, frozen: bool) {
+        self.page_frozen.store(frozen, Ordering::Release);
+    }
+
+    /// Forwards a message to the page, and returns whether the page is
+    /// frozen and has to thaw to take it.
+    pub(crate) fn forward(&self, frame: Vec<u8>) -> bool {
+        let writer = self.writer.lock().ok().and_then(|current| current.clone());
         if let Some(writer) = writer {
             let _ = writer.finish_send(writer.queue.push_relayed(frame));
         }
+        self.page_frozen.swap(false, Ordering::AcqRel)
     }
 }
 

@@ -98,6 +98,10 @@ impl OsrNativeHost {
                     self.dispatch_message(event_loop, message, &mut repaint)
                 }
                 OsrHostEvent::HostControl(control) => self.apply_host_control(event_loop, control),
+                OsrHostEvent::FrozenPageMessaged => {
+                    self.thaw("message");
+                    Flow::Continue
+                }
                 OsrHostEvent::FileDialogClosed(_, id, paths) => {
                     self.finish_file_dialog(id, paths);
                     Flow::Continue

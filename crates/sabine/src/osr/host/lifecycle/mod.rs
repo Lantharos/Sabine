@@ -30,6 +30,7 @@ impl OsrNativeHost {
             }
         };
         self.last_frame_rate.set(Some(frame_rate));
+        self.relay.set_page_frozen(state == LifecycleState::Frozen);
         self.send_control(format!(
             "lifecycle\t{name}\t{frame_rate}\t{}\n",
             encode_component(reason)
@@ -149,9 +150,8 @@ impl OsrNativeHost {
         let keep_running = !self.running_activities.is_empty()
             || self.page_media_playing
             || self.media.is_playing();
-        if keep_running && self.lifecycle_state == LifecycleState::Frozen {
-            self.lifecycle_state = LifecycleState::Suspended;
-            self.send_lifecycle(LifecycleState::Suspended, "playing");
+        if keep_running {
+            self.unfreeze("playing");
         }
         let out_of_sight = !self.config.visible || self.occluded;
         let freezable = self.lifecycle_state == LifecycleState::Suspended
@@ -164,6 +164,21 @@ impl OsrNativeHost {
                     .get_or_insert_with(|| Instant::now() + delay);
             }
             _ => self.freeze_deadline = None,
+        }
+    }
+
+    /// Thaws a frozen page for something that needs it running, such as an
+    /// event from the app, and gives it the policy's `freeze_after` again
+    /// before it freezes once more.
+    pub(in crate::osr::host) fn thaw(&mut self, reason: &str) {
+        self.unfreeze(reason);
+        self.refresh_freeze();
+    }
+
+    fn unfreeze(&mut self, reason: &str) {
+        if self.lifecycle_state == LifecycleState::Frozen {
+            self.lifecycle_state = LifecycleState::Suspended;
+            self.send_lifecycle(LifecycleState::Suspended, reason);
         }
     }
 

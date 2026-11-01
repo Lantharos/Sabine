@@ -70,13 +70,30 @@ impl BridgeEventEmitter {
         )
     }
 
-    pub(crate) fn attach(&self, window: WindowId, writer: BridgeWriter) {
+    /// Starts sending a window events, beginning with the app's settings and
+    /// the activities the app runs, so it keeps running for them as the
+    /// windows opened before it do. The windows are held while the activities
+    /// are sent, so an activity that ends meanwhile ends after it began.
+    pub(crate) fn attach(
+        &self,
+        window: WindowId,
+        writer: BridgeWriter,
+        activities: &sabine_bridge::ActivityRegistry,
+    ) {
         let square_corners = lock(&self.square_corners);
         if *square_corners {
             writer.send(Frame::shared(&square_corners_control(true), None));
         }
         let mut targets = lock(&self.targets);
         targets.retain(|target| target.window != window);
+        for activity in activities
+            .list()
+            .into_iter()
+            .filter(|activity| activity.window.is_none())
+        {
+            let begin = sabine_bridge::ActivityHostUpdate::Begin(activity);
+            writer.send(Frame::shared(&activity_control(&begin), None));
+        }
         targets.push(BridgeTarget { window, writer });
     }
 
@@ -96,7 +113,7 @@ impl BridgeEventEmitter {
         self.emit_host_control("hide", "1")
     }
 
-    pub fn quit(&self) -> bool {
+    pub(crate) fn quit(&self) -> bool {
         self.emit_host_control("quit", "1")
     }
 
@@ -187,18 +204,7 @@ impl BridgeEventEmitter {
     }
 
     pub(crate) fn emit_activity_update(&self, update: &sabine_bridge::ActivityHostUpdate) -> bool {
-        let command = match update {
-            sabine_bridge::ActivityHostUpdate::Begin(_) => "activity.begin",
-            sabine_bridge::ActivityHostUpdate::End(_) => "activity.end",
-        };
-        self.deliver(
-            update.record().window,
-            format!(
-                "{HOST_CONTROL_PREFIX}\t{command}\t{}",
-                sabine_bridge::host_update_json(update)
-            ),
-            None,
-        )
+        self.deliver(update.record().window, activity_control(update), None)
     }
 
     pub(crate) fn emit_host_control(&self, command: &str, value: &str) -> bool {
@@ -234,6 +240,17 @@ impl sabine_bridge::ActivityEventEmitter for BridgeEventEmitter {
     }
 }
 
+fn activity_control(update: &sabine_bridge::ActivityHostUpdate) -> String {
+    let command = match update {
+        sabine_bridge::ActivityHostUpdate::Begin(_) => "activity.begin",
+        sabine_bridge::ActivityHostUpdate::End(_) => "activity.end",
+    };
+    format!(
+        "{HOST_CONTROL_PREFIX}\t{command}\t{}",
+        sabine_bridge::host_update_json(update)
+    )
+}
+
 fn regions_control(regions: &WindowRegions) -> String {
     format!(
         "{HOST_CONTROL_PREFIX}\tregions\t{}",
@@ -264,6 +281,8 @@ mod tests {
     use std::io::BufRead;
     use std::process::{Child, Command, Stdio};
 
+    use sabine_bridge::ActivityRegistry;
+
     use super::*;
 
     fn window() -> (Child, BridgeWriter) {
@@ -289,8 +308,8 @@ mod tests {
         let (mut first, first_writer) = window();
         let (mut second, second_writer) = window();
         let emitter = BridgeEventEmitter::default();
-        emitter.attach(first.id(), first_writer);
-        emitter.attach(second.id(), second_writer);
+        emitter.attach(first.id(), first_writer, &ActivityRegistry::default());
+        emitter.attach(second.id(), second_writer, &ActivityRegistry::default());
         assert!(emitter.emit_to(second.id(), "ping", serde_json::json!(2)));
         assert!(emitter.emit("ping", serde_json::json!(1)));
         assert_eq!(next_line(&mut first), "SABINE_BRIDGE_EVENT\t\"ping\"\t1\n");
@@ -305,10 +324,10 @@ mod tests {
     fn windows_opened_later_get_square_corners() {
         let (mut first, first_writer) = window();
         let emitter = BridgeEventEmitter::default();
-        emitter.attach(first.id(), first_writer);
+        emitter.attach(first.id(), first_writer, &ActivityRegistry::default());
         assert!(emitter.set_square_corners(true));
         let (mut second, second_writer) = window();
-        emitter.attach(second.id(), second_writer);
+        emitter.attach(second.id(), second_writer, &ActivityRegistry::default());
         let control = format!("{HOST_CONTROL_PREFIX}\tsquare-corners\t1\n");
         assert_eq!(next_line(&mut first), control);
         assert_eq!(next_line(&mut second), control);
@@ -319,10 +338,27 @@ mod tests {
     }
 
     #[test]
+    fn windows_opened_later_keep_running_for_the_apps_activities() {
+        let activities = ActivityRegistry::default();
+        let emitter = BridgeEventEmitter::default();
+        let lease = activities.lease(
+            sabine_bridge::ActivityOptions::new("sync"),
+            Some(Arc::new(emitter.clone())),
+        );
+        let (mut child, writer) = window();
+        emitter.attach(child.id(), writer, &activities);
+        let record = lease.record().expect("running activity").clone();
+        let begin = activity_control(&sabine_bridge::ActivityHostUpdate::Begin(record));
+        assert_eq!(next_line(&mut child), format!("{begin}\n"));
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
     fn detached_windows_receive_nothing() {
         let (mut child, writer) = window();
         let emitter = BridgeEventEmitter::default();
-        emitter.attach(child.id(), writer);
+        emitter.attach(child.id(), writer, &ActivityRegistry::default());
         emitter.detach(child.id());
         assert!(!emitter.emit("ping", serde_json::json!({})));
         let _ = child.kill();

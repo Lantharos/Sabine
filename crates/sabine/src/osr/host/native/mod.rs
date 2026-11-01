@@ -458,7 +458,12 @@ fn start_parent_bridge_reader(
                 proxy.wake_up();
                 continue;
             }
-            relay.forward(frame.to_bytes());
+            if relay.forward(frame.to_bytes()) {
+                if sender.send(OsrHostEvent::FrozenPageMessaged).is_err() {
+                    break;
+                }
+                proxy.wake_up();
+            }
         }
         if sender
             .send(OsrHostEvent::HostControl(HostControl::Quit))

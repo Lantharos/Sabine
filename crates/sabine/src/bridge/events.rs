@@ -87,7 +87,7 @@ pub(crate) fn spawn_bridge_dispatch(
             .expect("the window host's input is piped"),
     );
     let window = child.id();
-    emitter.attach(window, writer.clone());
+    emitter.attach(window, writer.clone(), &activity);
     let stdout = child
         .stdout
         .take()
