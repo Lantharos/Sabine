@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command};
 
-use sabine_bridge::{INSTALL_SCRIPT, clipboard, media};
+use sabine_bridge::{AUTOSCROLL_SCRIPT, INSTALL_SCRIPT, clipboard, media};
 
 pub(crate) const HOST_SOURCES: &[(&str, &str)] = &[
     ("CMakeLists.txt", include_str!("../shared/CMakeLists.txt")),
@@ -380,6 +380,12 @@ pub(crate) fn write_host_source(source_dir: &Path) -> Result<(), String> {
             "SABINE_MEDIA_STATE_JS_RAW",
             media::STATE_SCRIPT,
         ),
+        (
+            "sabine_autoscroll_js.h",
+            "autoscroll.js",
+            "SABINE_AUTOSCROLL_JS_RAW",
+            AUTOSCROLL_SCRIPT,
+        ),
     ] {
         std::fs::write(
             source_dir.join(header),
@@ -406,6 +412,7 @@ pub(crate) fn host_source_fingerprint() -> String {
     hash_bytes(&mut hash, INSTALL_SCRIPT.as_bytes());
     hash_bytes(&mut hash, clipboard::SCRIPT.as_bytes());
     hash_bytes(&mut hash, media::STATE_SCRIPT.as_bytes());
+    hash_bytes(&mut hash, AUTOSCROLL_SCRIPT.as_bytes());
     hash_bytes(&mut hash, crate::HOST_PROTOCOL_VERSION.as_bytes());
     format!("{hash:016x}")
 }

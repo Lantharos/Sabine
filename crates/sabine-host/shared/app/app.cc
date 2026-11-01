@@ -4,6 +4,7 @@
 #include "app/clipboard.h"
 #include "app/scheme.h"
 #include "sabine_media_state_js.h"
+#include "sabine_autoscroll_js.h"
 #include "common/bridge_policy.h"
 #include "common/json.h"
 
@@ -248,6 +249,9 @@ void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
   sabine_bridge::InstallTransport(frame, context, "__sabineMediaState",
                                   "sabine.media_state");
   frame->ExecuteJavaScript(SABINE_MEDIA_STATE_JS_RAW, frame->GetURL(), 0);
+#if !defined(OS_WIN) && !defined(_WIN32)
+  frame->ExecuteJavaScript(SABINE_AUTOSCROLL_JS_RAW, frame->GetURL(), 0);
+#endif
   const auto policy = BridgePolicyFor(browser);
   if (frame->IsMain())
     ReportRenderer(frame, policy);

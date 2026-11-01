@@ -36,3 +36,7 @@ pub use guest::{
 
 /// The `window.sabine` page API injected into every Sabine page by the native host.
 pub const INSTALL_SCRIPT: &str = include_str!("scripts/web_bridge.js");
+
+/// Middle-click autoscroll, evaluated in every frame by the native host on Linux and macOS, where
+/// Chromium has none.
+pub const AUTOSCROLL_SCRIPT: &str = include_str!("scripts/autoscroll.js");
