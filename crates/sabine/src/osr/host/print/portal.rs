@@ -16,10 +16,19 @@ const FORGOTTEN_SETTINGS: [&str; 3] = ["print-pages", "page-ranges", "n-copies"]
 /// next time it prints.
 static REMEMBERED: Mutex<Option<(Results, Results)>> = Mutex::new(None);
 
+/// Who asks the desktop to print: the app, and the window the print dialog
+/// sits on.
+#[derive(Clone)]
+pub(super) struct Requester {
+    pub(super) app_id: Option<String>,
+    pub(super) parent: String,
+}
+
 /// One conversation with the desktop's print portal.
 pub(super) struct Session {
     connection: Connection,
     print: Proxy<'static>,
+    parent: String,
 }
 
 /// What people chose in the print dialog, for the document to be laid out
@@ -46,9 +55,9 @@ impl Prepared {
 }
 
 impl Session {
-    pub(super) async fn open(app_id: Option<&str>) -> Result<Self, String> {
+    pub(super) async fn open(requester: &Requester) -> Result<Self, String> {
         let connection = Connection::session().await.map_err(unavailable)?;
-        if let Some(app_id) = app_id {
+        if let Some(app_id) = &requester.app_id {
             portal::register_host_app(&connection, app_id)
                 .await
                 .map_err(unavailable)?;
@@ -56,7 +65,11 @@ impl Session {
         let print = portal::proxy(&connection, PRINT)
             .await
             .map_err(unavailable)?;
-        Ok(Self { connection, print })
+        Ok(Self {
+            connection,
+            print,
+            parent: requester.parent.clone(),
+        })
     }
 
     /// Asks how to print, before the document is laid out. `None` when people
@@ -72,7 +85,7 @@ impl Session {
                 .call(
                     "PreparePrint",
                     &(
-                        "",
+                        self.parent.as_str(),
                         title,
                         settings,
                         page_setup,
@@ -111,7 +124,15 @@ impl Session {
                 options.insert("token", Variant::from(token));
             }
             self.print
-                .call("Print", &("", title, Fd::from(document.as_fd()), options))
+                .call(
+                    "Print",
+                    &(
+                        self.parent.as_str(),
+                        title,
+                        Fd::from(document.as_fd()),
+                        options,
+                    ),
+                )
                 .await
         })
         .await

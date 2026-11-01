@@ -4,6 +4,8 @@ mod files;
 mod page;
 #[cfg(not(target_os = "linux"))]
 mod paper;
+#[cfg(target_os = "linux")]
+mod parent;
 mod pdf;
 #[cfg(target_os = "linux")]
 mod portal;
@@ -20,6 +22,8 @@ use super::page::BridgeRequest;
 use crate::osr::control::ControlWriter;
 use crate::osr::protocol::PrintDocumentOutcome;
 pub(in crate::osr::host) use files::PrintFiles;
+#[cfg(target_os = "linux")]
+pub(in crate::osr::host) use parent::ExportedWindow;
 
 /// What this window prints: the documents its browser loads out of sight,
 /// and on Linux the print dialogs its pages are waiting for.
@@ -51,6 +55,8 @@ pub(super) struct Paper {
 struct DocumentBrowser {
     writer: Arc<ControlWriter>,
     printing: Printing,
+    #[cfg(target_os = "linux")]
+    requester: portal::Requester,
 }
 
 impl DocumentBrowser {
@@ -121,10 +127,12 @@ impl Printing {
 }
 
 impl OsrNativeHost {
-    fn document_browser(&self) -> Option<DocumentBrowser> {
+    fn document_browser(&mut self) -> Option<DocumentBrowser> {
         Some(DocumentBrowser {
             writer: self.control_writer.clone()?,
             printing: self.printing.clone(),
+            #[cfg(target_os = "linux")]
+            requester: self.print_requester(),
         })
     }
 
@@ -143,27 +151,22 @@ impl OsrNativeHost {
                 return;
             }
         };
-        let app_id = self.config.app_id.clone();
         let browser_id = request.browser_id.to_string();
         let request_id = request.request_id.to_string();
         sabine_platform::async_runtime().spawn(async move {
             let writer = browser.writer.clone();
-            let result = files
-                .print(app_id.as_deref(), &browser)
-                .await
-                .map(serde_json::Value::Bool);
+            let result = files.print(&browser).await.map(serde_json::Value::Bool);
             let _ = writer.send(bridge_response_line(&browser_id, &request_id, result));
         });
     }
 
-    pub(in crate::osr::host) fn print_files(&self, files: PrintFiles) {
+    pub(in crate::osr::host) fn print_files(&mut self, files: PrintFiles) {
         let Some(browser) = self.document_browser() else {
             sabine_runtime::report_error("print", "the window isn't ready to print");
             return;
         };
-        let app_id = self.config.app_id.clone();
         sabine_platform::async_runtime().spawn(async move {
-            if let Err(error) = files.print(app_id.as_deref(), &browser).await {
+            if let Err(error) = files.print(&browser).await {
                 sabine_runtime::report_error("print", error);
             }
         });

@@ -35,14 +35,10 @@ impl PrintFiles {
     /// files go as they are, with the print dialog choosing their pages;
     /// images and text are laid out on the paper chosen in it.
     #[cfg(target_os = "linux")]
-    pub(super) async fn print(
-        self,
-        app_id: Option<&str>,
-        browser: &DocumentBrowser,
-    ) -> Result<bool, String> {
+    pub(super) async fn print(self, browser: &DocumentBrowser) -> Result<bool, String> {
         let title = self.title();
         let sources = self.sources()?;
-        let session = super::portal::Session::open(app_id).await?;
+        let session = super::portal::Session::open(&browser.requester).await?;
         if let [Source::Pdf(path)] = sources.as_slice() {
             return session.print(&title, &open(path)?, None).await;
         }
@@ -64,11 +60,7 @@ impl PrintFiles {
     /// Hands the files to the system's print dialog, as one document laid out
     /// on the default printer's paper.
     #[cfg(not(target_os = "linux"))]
-    pub(super) async fn print(
-        self,
-        _app_id: Option<&str>,
-        browser: &DocumentBrowser,
-    ) -> Result<bool, String> {
+    pub(super) async fn print(self, browser: &DocumentBrowser) -> Result<bool, String> {
         let title = self.title();
         let sources = self.sources()?;
         if let [Source::Pdf(path)] = sources.as_slice() {

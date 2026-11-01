@@ -6,14 +6,14 @@ use crate::osr::protocol::{PrintDialogRequest, PrintJobRequest};
 
 impl OsrNativeHost {
     /// Asks the desktop how to print a page, for Chromium to lay it out.
-    pub(in crate::osr::host) fn show_page_print_dialog(&self, request: PrintDialogRequest) {
+    pub(in crate::osr::host) fn show_page_print_dialog(&mut self, request: PrintDialogRequest) {
         let Some(writer) = self.control_writer.clone() else {
             return;
         };
-        let app_id = self.config.app_id.clone();
+        let requester = self.print_requester();
         let tokens = self.printing.page_tokens.clone();
         sabine_platform::async_runtime().spawn(async move {
-            let prepared = match Session::open(app_id.as_deref()).await {
+            let prepared = match Session::open(&requester).await {
                 Ok(session) => session.prepare("", request.has_selection).await,
                 Err(error) => Err(error),
             };
@@ -35,7 +35,7 @@ impl OsrNativeHost {
     }
 
     /// Prints the PDF Chromium made of a page, with the choices made for it.
-    pub(in crate::osr::host) fn print_page(&self, job: PrintJobRequest) {
+    pub(in crate::osr::host) fn print_page(&mut self, job: PrintJobRequest) {
         let Some(writer) = self.control_writer.clone() else {
             return;
         };
@@ -46,10 +46,10 @@ impl OsrNativeHost {
             .lock()
             .ok()
             .and_then(|mut tokens| tokens.remove(&job.browser));
-        let app_id = self.config.app_id.clone();
+        let requester = self.print_requester();
         sabine_platform::async_runtime().spawn(async move {
             let printed = match document {
-                Ok(document) => match Session::open(app_id.as_deref()).await {
+                Ok(document) => match Session::open(&requester).await {
                     Ok(session) => session.print(&job.title, &document, token).await,
                     Err(error) => Err(error),
                 },
