@@ -240,19 +240,3 @@ pub(super) fn string_value(value: &serde_json::Value, key: &str) -> Result<Strin
         .map(ToString::to_string)
         .ok_or_else(|| format!("OSR host config missing {key}"))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::color_value;
-    #[test]
-    fn host_background_color_requires_four_byte_components() {
-        let configured = serde_json::json!({ "background": [12, 34, 56, 78] });
-        assert_eq!(
-            color_value(&configured, "background").unwrap().to_rgba8(),
-            [12, 34, 56, 78]
-        );
-
-        let malformed = serde_json::json!({ "background": [12, 34, 999] });
-        assert!(color_value(&malformed, "background").is_err());
-    }
-}

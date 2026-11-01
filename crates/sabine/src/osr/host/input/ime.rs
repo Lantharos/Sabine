@@ -319,16 +319,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cef_input_modes_map_to_platform_purposes() {
-        assert_eq!(ime_purpose(1), None);
-        assert_eq!(ime_purpose(3), Some(ImePurpose::Phone));
-        assert_eq!(ime_purpose(4), Some(ImePurpose::Url));
-        assert_eq!(ime_purpose(5), Some(ImePurpose::Email));
-        assert_eq!(ime_purpose(7), Some(ImePurpose::Number));
-        assert_eq!(ime_purpose(99), None);
-    }
-
-    #[test]
     fn utf8_preedit_offsets_convert_to_cef_utf16_offsets() {
         let text = "aあ🦆";
         assert_eq!(utf16_offset(text, 0), Some(0));

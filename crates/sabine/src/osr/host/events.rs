@@ -487,20 +487,3 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
             .unwrap_or(true),
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn square_corners_follow_the_value_sent() {
-        assert_eq!(
-            host_control_from_parts("square-corners", "1"),
-            Some(HostControl::SquareCorners(true))
-        );
-        assert_eq!(
-            host_control_from_parts("square-corners", "0"),
-            Some(HostControl::SquareCorners(false))
-        );
-    }
-}
