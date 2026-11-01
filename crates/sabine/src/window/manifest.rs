@@ -12,7 +12,6 @@ use crate::error::{SabineError, SabineResult};
 
 const MANIFEST_ENV: &str = "SABINE_MANIFEST_PATH";
 const APP_ID_ENV: &str = "SABINE_APP_ID";
-const WEB_ENTRY_ENV: &str = "SABINE_WEB_ENTRY";
 
 #[derive(Debug, Default, Deserialize)]
 struct SabineFile {
@@ -152,10 +151,6 @@ impl SabineWindow {
         }
         if let Some(app_id) = development_env(APP_ID_ENV) {
             self = self.app_id(app_id);
-        }
-        if let Some(entry) = development_env(WEB_ENTRY_ENV) {
-            self.config.entry = Some(entry);
-            self.config.url = None;
         }
         Ok(self)
     }

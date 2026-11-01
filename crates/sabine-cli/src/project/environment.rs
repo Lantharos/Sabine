@@ -46,7 +46,6 @@ impl BuildEnvironment {
             for key in [
                 "SABINE_DEV_URL",
                 "SABINE_APP_ID",
-                "SABINE_WEB_ENTRY",
                 "SABINE_MANIFEST_PATH",
             ] {
                 command.env_remove(key);

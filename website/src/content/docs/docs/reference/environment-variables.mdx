@@ -39,7 +39,6 @@ See [Troubleshooting](/docs/reference/troubleshooting/) for what these show.
 | `SABINE_DEV_URL` | App | The development server's URL. The window loads it instead of the production entry, and its loopback origins are allowed to use the bridge. `SabineWindow::for_current_app` uses it too. |
 | `SABINE_MANIFEST_PATH` | App | The path to `Sabine.toml`. Without it, Sabine looks next to the executable, in the working directory, and in the Cargo package directory. |
 | `SABINE_APP_ID` | App, CLI | Replaces the app id from `Sabine.toml`, before your builder runs. `sabine dev` sets it to the app id with `.dev` appended, and development launchers from `sabine install` set it too. |
-| `SABINE_WEB_ENTRY` | App | A local HTML file to load instead of the manifest's entry or URL. |
 | `NODE_ENV` | Builds | `development` or `production`, set by the CLI for the builds it runs, matching `SABINE_ENV`. |
 
 The CLI also loads `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` from the project, and any files passed with `--env-file`, into the environment of the Rust and web builds. Variables already set in the process take precedence. These files are build inputs and never ship with the app.

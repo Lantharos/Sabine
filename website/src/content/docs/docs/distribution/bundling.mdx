@@ -201,8 +201,8 @@ Bundle builds use the production environment. Sabine reads `.env`, `.env.local`,
 and `.env.production.local` from the project and, when it differs, from the web root, then any
 `--env-file` files, which are resolved from the project. Later files override earlier ones, and
 variables already set in your shell win over all of them. The web build and Cargo see the values
-with `NODE_ENV` and `SABINE_ENV` set to `production`, and without `SABINE_DEV_URL`, `SABINE_APP_ID`,
-`SABINE_WEB_ENTRY` and `SABINE_MANIFEST_PATH`. Cargo also gets `SABINE_BUILD_TARGET` set to
+with `NODE_ENV` and `SABINE_ENV` set to `production`, and without `SABINE_DEV_URL`, `SABINE_APP_ID`
+and `SABINE_MANIFEST_PATH`. Cargo also gets `SABINE_BUILD_TARGET` set to
 `linux`, `windows` or `macos`.
 
 Environment files are build inputs only and are never copied into the bundle. Your frontend
