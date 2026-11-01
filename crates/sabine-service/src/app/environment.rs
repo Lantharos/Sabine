@@ -19,6 +19,15 @@ impl AppEnvironment {
         }
     }
 
+    /// The environment an app id was registered from.
+    pub fn of(app_id: &str) -> Self {
+        if app_id.ends_with(".dev") {
+            Self::Development
+        } else {
+            Self::Production
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Development => "development",
@@ -29,7 +38,7 @@ impl AppEnvironment {
     /// Development apps have distinct registration, browser storage and desktop identities.
     pub fn app_id(self, id: &str) -> String {
         match self {
-            Self::Development if !id.ends_with(".dev") => format!("{id}.dev"),
+            Self::Development if Self::of(id) == Self::Production => format!("{id}.dev"),
             _ => id.to_owned(),
         }
     }

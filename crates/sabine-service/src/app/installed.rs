@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::environment::AppEnvironment;
 use crate::{InstalledApp, SabineService, SabineVersion, ServiceResult};
 
 #[cfg(not(target_os = "macos"))]
@@ -24,12 +25,13 @@ struct ManifestApp {
     sabine: Option<String>,
 }
 
-/// Every Sabine app on this machine. An app installed for every user counts
+/// Every Sabine app installed on this machine, leaving out development builds. An app installed for every user counts
 /// with the build on disk, which can be newer than the one it last registered.
 pub(crate) fn installed_apps(service: &SabineService) -> ServiceResult<Vec<InstalledApp>> {
     let mut apps = service
         .apps()?
         .into_iter()
+        .filter(|app| AppEnvironment::of(&app.manifest.id) == AppEnvironment::Production)
         .map(|app| {
             let app = InstalledApp {
                 id: app.manifest.id,

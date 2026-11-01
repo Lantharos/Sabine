@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use super::{
     data::{browser_profile_path, shared_browser_profile_paths},
+    environment::AppEnvironment,
     forget::remove_path,
     registry::RegistryLock,
 };
@@ -78,8 +79,8 @@ fn is_stale(app: &RegisteredApp, now: u64) -> bool {
     let missing = app
         .missing_since
         .is_some_and(|since| now.saturating_sub(since) >= MISSING_GRACE);
-    let idle_development =
-        app.manifest.id.ends_with(".dev") && now.saturating_sub(app.updated_at) >= DEVELOPMENT_IDLE;
+    let idle_development = AppEnvironment::of(&app.manifest.id) == AppEnvironment::Development
+        && now.saturating_sub(app.updated_at) >= DEVELOPMENT_IDLE;
     missing || idle_development
 }
 

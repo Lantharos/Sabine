@@ -1,3 +1,8 @@
+# Unreleased
+
+- Development builds of apps no longer hold back Sabine updates; only installed apps that an
+  update would stop running do.
+
 # Sabine 0.65
 
 - On Linux and macOS, a middle click on a page scrolls it as the pointer moves away from where it
