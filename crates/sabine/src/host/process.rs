@@ -1,23 +1,34 @@
-use std::{process::ExitStatus, thread::JoinHandle, time::Duration};
+use std::{
+    process::ExitStatus,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
 use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
 use crate::bridge::{BridgeEventEmitter, platform_event_payload};
+use crate::desktop::open_urls::Openable;
 use crate::desktop::{DesktopServiceState, start_desktop_event_forwarder};
 use crate::host::process_tree::ManagedChild;
 use crate::launch::metrics::{LaunchMetrics, SabineLaunchMetricsSnapshot};
 use crate::osr::launch::WindowContext;
 use crate::{SabineResult, SabineWindow};
 
+/// How long opening another window waits for the app's first window, whose
+/// browser the others join.
+const PRIMARY_READY_TIMEOUT: Duration = Duration::from_secs(20);
+
 pub(crate) enum ProcessCommand {
-    OpenWindow {
-        window: Box<SabineWindow>,
-        response: crossbeam_channel::Sender<SabineResult<WindowId>>,
-    },
-    Present {
-        activation_token: Option<String>,
-    },
+    OpenWindow(PendingWindow),
+    Present { activation_token: Option<String> },
+    PrimaryReady { window: WindowId, ready: bool },
+}
+
+/// A window to open once the app's first window is ready.
+pub(crate) struct PendingWindow {
+    window: Box<SabineWindow>,
+    response: crossbeam_channel::Sender<SabineResult<WindowId>>,
 }
 
 #[derive(Clone)]
@@ -39,6 +50,7 @@ pub struct SabineProcess {
     pub(crate) primary_status: Option<ExitStatus>,
     pub(crate) background: bool,
     pub(crate) extra_windows: Vec<ManagedChild>,
+    pub(crate) pending_windows: Vec<PendingWindow>,
     pub(crate) child_exit_sender: crossbeam_channel::Sender<u32>,
     pub(crate) child_exit_receiver: crossbeam_channel::Receiver<u32>,
     pub(crate) command_sender: crossbeam_channel::Sender<ProcessCommand>,
@@ -78,27 +90,83 @@ impl SabineProcess {
     /// Open another OSR window in this process. Shares this process's bridge
     /// handlers and `app_id`. Handlers registered on `window` are ignored.
     pub fn open_window(&mut self, window: SabineWindow) -> SabineResult<WindowId> {
-        self.wait_for_primary_window()?;
+        if let Some(primary) = &mut self.primary
+            && !primary.is_ready
+        {
+            primary
+                .ready
+                .recv_timeout(PRIMARY_READY_TIMEOUT)
+                .map_err(|_| primary_not_ready())?;
+            primary.is_ready = true;
+        }
+        self.attach_window(window)
+    }
+
+    fn attach_window(&mut self, window: SabineWindow) -> SabineResult<WindowId> {
         let (config, url) = window.into_open_window_parts()?;
         crate::osr::launch::attach_open_window(self, &config, &url)
     }
 
-    fn wait_for_primary_window(&mut self) -> SabineResult<()> {
-        let Some(primary) = &mut self.primary else {
-            return Ok(());
+    /// Opens a window asked for while the process waits, without blocking
+    /// the wait: until the first window is ready, it waits in line.
+    fn open_when_ready(&mut self, pending: PendingWindow) {
+        let waiting = !self.pending_windows.is_empty();
+        let starting = match self.primary.as_mut() {
+            Some(primary) if !primary.is_ready && !waiting => match primary.ready.try_recv() {
+                Ok(()) => {
+                    primary.is_ready = true;
+                    false
+                }
+                Err(crossbeam_channel::TryRecvError::Empty) => true,
+                Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                    let _ = pending.response.send(Err(primary_not_ready()));
+                    return;
+                }
+            },
+            Some(primary) => !primary.is_ready,
+            None => false,
         };
-        if primary.is_ready {
-            return Ok(());
+        if starting {
+            if !waiting {
+                self.watch_primary_ready();
+            }
+            self.pending_windows.push(pending);
+            return;
         }
-        primary
-            .ready
-            .recv_timeout(Duration::from_secs(20))
-            .map_err(|_| crate::SabineError::CreationFailed {
-                message: "primary Sabine window did not become ready before opening another window"
-                    .into(),
-            })?;
-        primary.is_ready = true;
-        Ok(())
+        let result = self.attach_window(*pending.window);
+        let _ = pending.response.send(result);
+    }
+
+    fn watch_primary_ready(&self) {
+        let Some(primary) = &self.primary else {
+            return;
+        };
+        let window = primary.child.id();
+        let ready = primary.ready.clone();
+        let commands = self.command_sender.clone();
+        thread::spawn(move || {
+            let ready = ready.recv_timeout(PRIMARY_READY_TIMEOUT).is_ok();
+            let _ = commands.send(ProcessCommand::PrimaryReady { window, ready });
+        });
+    }
+
+    /// Opens the windows waiting for the first window, or fails them when it
+    /// closed or never became ready.
+    fn primary_ready(&mut self, window: WindowId, ready: bool) {
+        if let Some(primary) = self
+            .primary
+            .as_mut()
+            .filter(|primary| primary.child.id() == window)
+        {
+            primary.is_ready = ready;
+        }
+        for pending in std::mem::take(&mut self.pending_windows) {
+            if ready {
+                self.open_when_ready(pending);
+            } else {
+                let _ = pending.response.send(Err(primary_not_ready()));
+            }
+        }
     }
 
     /// Close one OSR window. Returns `false` if the id is unknown. Closing the
@@ -130,20 +198,15 @@ impl SabineProcess {
     /// background app keeps waiting for its next activation instead.
     pub fn wait(mut self) -> std::io::Result<ExitStatus> {
         #[cfg(target_os = "macos")]
-        super::desktop_wait::wait(&mut self)?;
+        crate::desktop::desktop_wait::wait(&mut self)?;
         #[cfg(not(target_os = "macos"))]
         while !self.collect_exited_windows()? {
             crossbeam_channel::select! {
-                recv(self.child_exit_receiver) -> exited => {
-                    exited.map_err(|_| {
-                        std::io::Error::other("OSR host exit notification channel disconnected")
-                    })?;
-                }
+                recv(self.child_exit_receiver) -> _ => {}
                 recv(self.command_receiver) -> command => {
-                    let Ok(command) = command else {
-                        continue;
-                    };
-                    self.handle_command(command);
+                    if let Ok(command) = command {
+                        self.handle_command(command);
+                    }
                 }
             }
         }
@@ -155,7 +218,7 @@ impl SabineProcess {
         })
     }
 
-    pub(super) fn collect_exited_windows(&mut self) -> std::io::Result<bool> {
+    pub(crate) fn collect_exited_windows(&mut self) -> std::io::Result<bool> {
         if let Some(primary) = &mut self.primary
             && let Some(status) = primary.child.try_wait()?
         {
@@ -177,13 +240,11 @@ impl SabineProcess {
         Ok(!self.background && self.primary.is_none() && self.extra_windows.is_empty())
     }
 
-    pub(super) fn handle_command(&mut self, command: ProcessCommand) {
+    pub(crate) fn handle_command(&mut self, command: ProcessCommand) {
         match command {
-            ProcessCommand::OpenWindow { window, response } => {
-                let result = self.open_window(*window);
-                let _ = response.send(result);
-            }
+            ProcessCommand::OpenWindow(pending) => self.open_when_ready(pending),
             ProcessCommand::Present { activation_token } => self.present(activation_token),
+            ProcessCommand::PrimaryReady { window, ready } => self.primary_ready(window, ready),
         }
     }
 
@@ -204,10 +265,6 @@ impl SabineProcess {
         self.desktop_services
             .as_ref()
             .and_then(DesktopServiceState::tray)
-    }
-
-    pub fn emit_bridge_event(&self, name: impl Into<String>, payload: serde_json::Value) -> bool {
-        self.bridge_emitter.emit(name, payload)
     }
 
     /// Drive a guest surface from Rust via host control. See
@@ -252,18 +309,15 @@ impl SabineProcess {
         self.activity.list()
     }
 
-    pub fn bridge_event_emitter(&self) -> Option<BridgeEventEmitter> {
-        Some(self.bridge_emitter.clone())
+    pub fn bridge_event_emitter(&self) -> BridgeEventEmitter {
+        self.bridge_emitter.clone()
     }
 
     pub fn metrics(&self) -> SabineLaunchMetricsSnapshot {
         self.metrics.snapshot()
     }
 
-    pub(crate) fn start_desktop_event_forwarder(
-        &mut self,
-        registrations: Vec<sabine_platform::DeepLinkRegistration>,
-    ) {
+    pub(crate) fn start_desktop_event_forwarder(&mut self, openable: Openable) {
         let Some(services) = self.desktop_services.as_ref() else {
             return;
         };
@@ -286,7 +340,7 @@ impl SabineProcess {
                     PlatformEvent::SingleInstance(activation) => open_urls.receive_arguments(
                         activation.arguments.get(1..).unwrap_or_default(),
                         activation.working_directory.as_deref(),
-                        &registrations,
+                        &openable,
                     ),
                     _ => false,
                 };
@@ -335,14 +389,14 @@ impl SabineProcessHandle {
     pub fn open_window(&self, window: SabineWindow) -> SabineResult<WindowId> {
         let (response, result) = crossbeam_channel::bounded(1);
         self.command_sender
-            .send(ProcessCommand::OpenWindow {
+            .send(ProcessCommand::OpenWindow(PendingWindow {
                 window: Box::new(window),
                 response,
-            })
+            }))
             .map_err(|_| crate::SabineError::CreationFailed {
                 message: "Sabine process is no longer running".into(),
             })?;
-        result.recv_timeout(Duration::from_secs(20)).map_err(|_| {
+        result.recv_timeout(PRIMARY_READY_TIMEOUT).map_err(|_| {
             crate::SabineError::CreationFailed {
                 message: "Sabine process did not open the window in time".into(),
             }
@@ -355,6 +409,12 @@ impl SabineProcessHandle {
         self.command_sender
             .send(ProcessCommand::Present { activation_token })
             .is_ok()
+    }
+}
+
+fn primary_not_ready() -> crate::SabineError {
+    crate::SabineError::CreationFailed {
+        message: "primary Sabine window did not become ready before opening another window".into(),
     }
 }
 

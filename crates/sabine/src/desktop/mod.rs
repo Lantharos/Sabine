@@ -1,5 +1,6 @@
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod hotkeys;
+mod instance;
 mod native_messaging;
 pub(crate) mod open_urls;
 #[cfg(target_os = "linux")]
@@ -13,32 +14,126 @@ mod platform;
 mod platform;
 mod shortcut_key;
 mod tray;
-#[cfg(unix)]
-mod unix_instance;
 
 use std::thread::{self, JoinHandle};
 
 use sabine_platform::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, PlatformEvent, SingleInstancePolicy, TrayIcon,
+    GlobalShortcutFailure, GlobalShortcutRegistration, PlatformEvent, SingleInstancePolicy,
 };
 
+use instance::SingleInstanceGuard;
+#[cfg(target_os = "linux")]
+pub(crate) use instance::startup_activation_token;
+#[cfg(target_os = "linux")]
+use platform::ShortcutHost;
 #[cfg(not(target_os = "linux"))]
 use platform::UiThread;
+#[cfg(target_os = "macos")]
+pub(crate) use platform::desktop_wait;
 #[cfg(target_os = "windows")]
 pub(crate) use platform::with_app_icon;
 use platform::{
-    GlobalShortcuts, SingleInstanceGuard, register_deep_links, register_native_messaging_host,
-    write_autostart_entry,
+    GlobalShortcuts, register_deep_links, register_native_messaging_host, write_autostart_entry,
 };
 pub use tray::TrayHandle;
 pub(crate) use tray::UPDATE_COMMAND as TRAY_UPDATE_COMMAND;
-#[cfg(target_os = "linux")]
-pub(crate) use unix_instance::startup_activation_token;
 
-pub(crate) const INSTANCE_ALREADY_RUNNING: &str = "another instance is already running";
+use crate::osr::launch::require_app_id;
+use crate::window::config::SabineWindowConfig;
+use crate::{SabineError, SabineResult};
 
 type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
+
+/// The app's claim on its single instance, made before anything else at
+/// launch so a second launch hands off at once, and the queue its desktop
+/// events arrive on.
+pub(crate) struct DesktopClaim {
+    event_sender: EventQueue,
+    event_receiver: crossbeam_channel::Receiver<PlatformEvent>,
+    single_instance: Option<SingleInstanceGuard>,
+}
+
+impl DesktopClaim {
+    /// Fails with [`SabineError::InstanceAlreadyRunning`] once this launch
+    /// was handed to the running instance.
+    pub(crate) fn acquire(config: &SabineWindowConfig) -> SabineResult<Self> {
+        let services = &config.desktop_services;
+        let (event_sender, event_receiver) = crossbeam_channel::unbounded();
+        let single_instance = services
+            .single_instance_policy
+            .filter(|policy| *policy != SingleInstancePolicy::AllowMultiple)
+            .map(|policy| {
+                let id = match &services.single_instance_id {
+                    Some(id) => id.as_str(),
+                    None => require_app_id(config)?,
+                };
+                SingleInstanceGuard::acquire(id, policy, event_sender.clone())
+            })
+            .transpose()?;
+        Ok(Self {
+            event_sender,
+            event_receiver,
+            single_instance,
+        })
+    }
+
+    /// Registers the app with the desktop and shows its tray icon and
+    /// shortcuts.
+    pub(crate) fn start(self, config: &SabineWindowConfig) -> SabineResult<DesktopServiceState> {
+        let services = &config.desktop_services;
+        let failed = |message: String| SabineError::CreationFailed { message };
+        for entry in &services.autostart {
+            write_autostart_entry(entry).map_err(failed)?;
+        }
+        for registration in &services.deep_links {
+            register_deep_links(registration).map_err(failed)?;
+        }
+        for host in &services.native_messaging_hosts {
+            register_native_messaging_host(host).map_err(failed)?;
+        }
+        let events = self.event_sender;
+        #[cfg(target_os = "macos")]
+        let app_events = platform::AppEvents::install(events.clone());
+        #[cfg(target_os = "linux")]
+        let shortcut_host = ShortcutHost::new(require_app_id(config)?, &config.title);
+        #[cfg(target_os = "linux")]
+        let (tray, shortcuts) = (
+            services
+                .tray_icon
+                .as_ref()
+                .map(|icon| TrayHandle::spawn(icon, &events)),
+            (!services.global_shortcuts.is_empty()).then(|| {
+                GlobalShortcuts::register(&services.global_shortcuts, shortcut_host, events.clone())
+            }),
+        );
+        #[cfg(not(target_os = "linux"))]
+        let ui_thread = UiThread::start().map_err(failed)?;
+        #[cfg(not(target_os = "linux"))]
+        let (tray, shortcuts) = (
+            services
+                .tray_icon
+                .as_ref()
+                .map(|icon| TrayHandle::spawn(ui_thread.queue(), icon, &events)),
+            (!services.global_shortcuts.is_empty()).then(|| {
+                GlobalShortcuts::register(
+                    &ui_thread.queue(),
+                    &services.global_shortcuts,
+                    events.clone(),
+                )
+            }),
+        );
+        Ok(DesktopServiceState {
+            event_receiver: self.event_receiver,
+            tray,
+            _shortcuts: shortcuts,
+            _single_instance: self.single_instance,
+            #[cfg(target_os = "macos")]
+            _app_events: app_events,
+            #[cfg(not(target_os = "linux"))]
+            _ui_thread: ui_thread,
+        })
+    }
+}
 
 /// The desktop integrations an app process owns: its tray icon, global
 /// shortcuts, single-instance endpoint and the events they produce.
@@ -75,60 +170,6 @@ impl Drop for DesktopServiceState {
             tray.remove();
         }
     }
-}
-
-pub fn apply_desktop_services(
-    tray_icon: Option<&TrayIcon>,
-    autostart: &[AutostartEntry],
-    global_shortcuts: &[GlobalShortcutRegistration],
-    deep_links: &[DeepLinkRegistration],
-    native_messaging_hosts: &[NativeMessagingHost],
-    single_instance_id: Option<&str>,
-    single_instance_policy: Option<SingleInstancePolicy>,
-) -> Result<DesktopServiceState, String> {
-    let (event_sender, event_receiver) = crossbeam_channel::unbounded();
-    let single_instance = single_instance_policy
-        .filter(|policy| *policy != SingleInstancePolicy::AllowMultiple)
-        .map(|policy| {
-            SingleInstanceGuard::acquire(single_instance_id, policy, event_sender.clone())
-        })
-        .transpose()?;
-    for entry in autostart {
-        write_autostart_entry(entry)?;
-    }
-    for registration in deep_links {
-        register_deep_links(registration)?;
-    }
-    for host in native_messaging_hosts {
-        register_native_messaging_host(host)?;
-    }
-    #[cfg(target_os = "macos")]
-    let app_events = platform::AppEvents::install(event_sender.clone());
-    #[cfg(target_os = "linux")]
-    let (tray, shortcuts) = (
-        tray_icon.map(|icon| TrayHandle::spawn(icon, &event_sender)),
-        (!global_shortcuts.is_empty())
-            .then(|| GlobalShortcuts::register(global_shortcuts, event_sender.clone())),
-    );
-    #[cfg(not(target_os = "linux"))]
-    let ui_thread = UiThread::start()?;
-    #[cfg(not(target_os = "linux"))]
-    let (tray, shortcuts) = (
-        tray_icon.map(|icon| TrayHandle::spawn(ui_thread.queue(), icon, &event_sender)),
-        (!global_shortcuts.is_empty()).then(|| {
-            GlobalShortcuts::register(&ui_thread.queue(), global_shortcuts, event_sender.clone())
-        }),
-    );
-    Ok(DesktopServiceState {
-        event_receiver,
-        tray,
-        _shortcuts: shortcuts,
-        _single_instance: single_instance,
-        #[cfg(target_os = "macos")]
-        _app_events: app_events,
-        #[cfg(not(target_os = "linux"))]
-        _ui_thread: ui_thread,
-    })
 }
 
 pub fn start_desktop_event_forwarder(
@@ -172,6 +213,8 @@ fn report_shortcut_failure(
     }));
 }
 
+/// `value` as a file, socket or desktop identifier: letters, digits, dots,
+/// hyphens and underscores, with anything else turned into underscores.
 pub(crate) fn sanitize_id(value: &str) -> String {
     let sanitized = value
         .chars()
@@ -189,5 +232,17 @@ pub(crate) fn sanitize_id(value: &str) -> String {
         "app".to_string()
     } else {
         sanitized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_id;
+
+    #[test]
+    fn sanitized_ids_keep_safe_characters() {
+        assert_eq!(sanitize_id("com.sabine.notes"), "com.sabine.notes");
+        assert_eq!(sanitize_id("a/b c"), "a_b_c");
+        assert_eq!(sanitize_id("@@@"), "app");
     }
 }

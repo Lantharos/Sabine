@@ -1,26 +1,29 @@
 use sabine_bridge::{BridgeBindings, BridgeHandlers};
 
-mod app_chrome;
-mod bridge;
 mod builder;
 pub(crate) mod config;
 mod launch;
 mod listeners;
 mod manifest;
-pub use manifest::resource_path;
-pub(crate) mod remembered_size;
+pub(crate) mod origins;
+mod placement;
 pub(crate) mod style;
-mod visibility;
 
-pub use app_chrome::AppChrome;
+pub use builder::AppChrome;
 use config::SabineWindowConfig;
 pub use config::{
     SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
 };
-pub(crate) use listeners::{AppearanceListener, LaunchListener, WindowListeners, appearance_line};
+pub use listeners::WindowVisibility;
+pub(crate) use listeners::{
+    AppearanceListener, LaunchListener, VISIBILITY_LINE, VisibilityListener, WindowListeners,
+    appearance_line,
+};
+pub use manifest::resource_path;
+#[cfg(not(target_os = "windows"))]
+pub(crate) use placement::launch_scale_factor;
+pub(crate) use placement::{centered_window_position, remembered_size};
 pub use style::Color as SabineColor;
-pub use visibility::WindowVisibility;
-pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
 use crate::{error::SabineResult, host::SabineProcess};
 
@@ -114,7 +117,7 @@ impl SabineWindow {
     /// Conventional desktop app: system chrome, opaque, browser-tab lifecycle.
     pub fn app(self) -> Self {
         self.system_chrome()
-            .opaque()
+            .transparent(false)
             .lifecycle_policy(SabineLifecyclePolicy::browser_tab())
     }
 

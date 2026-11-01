@@ -5,7 +5,7 @@ use sabine_bridge::{
 };
 use specta::Type;
 
-use super::SabineWindow;
+use crate::SabineWindow;
 
 impl SabineWindow {
     /// Registers a command the window's pages can call. The handler runs on

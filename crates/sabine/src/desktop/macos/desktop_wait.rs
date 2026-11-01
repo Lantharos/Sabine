@@ -10,9 +10,9 @@ use winit::{
     window::WindowId,
 };
 
-use super::SabineProcess;
+use crate::host::SabineProcess;
 
-pub(super) fn wait(process: &mut SabineProcess) -> io::Result<()> {
+pub(crate) fn wait(process: &mut SabineProcess) -> io::Result<()> {
     let mut event_loop = EventLoop::new().map_err(io::Error::other)?;
     let proxy = event_loop.create_proxy();
     let (sender, receiver) = crossbeam_channel::unbounded();

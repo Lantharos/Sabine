@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use serde::Deserialize;
@@ -35,6 +36,8 @@ struct AppSection {
     version: Option<String>,
     #[serde(default)]
     mime_types: Vec<String>,
+    #[serde(default)]
+    extensions: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -114,6 +117,7 @@ impl SabineWindow {
                 })?;
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
+        self.config.document_extensions = file.app.extensions.into_values().flatten().collect();
         self.config.app_update = file
             .updates
             .and_then(sabine_service::AppUpdatesSection::source);
@@ -168,14 +172,48 @@ struct ResourcesFile {
     resources: BTreeMap<String, PathBuf>,
 }
 
+/// `[resources]` from the app's `Sabine.toml`, with the folder its paths
+/// start from.
+struct Resources {
+    base: PathBuf,
+    paths: BTreeMap<String, PathBuf>,
+}
+
 /// A file or folder that `[resources]` in `Sabine.toml` names: in the source
 /// project during `sabine dev` and `cargo run`, and in the bundle once the app
 /// is packaged.
 pub fn resource_path(name: &str) -> Option<PathBuf> {
-    let manifest = framework_manifest_path()?;
-    let file: ResourcesFile = toml::from_str(&fs::read_to_string(&manifest).ok()?).ok()?;
-    let path = manifest.parent()?.join(file.resources.get(name)?);
+    let resources = resources()?;
+    let path = resources.base.join(resources.paths.get(name)?);
     path.exists().then_some(path)
+}
+
+fn resources() -> Option<&'static Resources> {
+    static RESOURCES: OnceLock<Option<Resources>> = OnceLock::new();
+    RESOURCES.get_or_init(read_resources).as_ref()
+}
+
+fn read_resources() -> Option<Resources> {
+    let manifest = framework_manifest_path()?;
+    let file = fs::read_to_string(&manifest)
+        .map_err(|error| error.to_string())
+        .and_then(|text| toml::from_str::<ResourcesFile>(&text).map_err(|error| error.to_string()));
+    match file {
+        Ok(file) => Some(Resources {
+            base: manifest.parent()?.to_path_buf(),
+            paths: file.resources,
+        }),
+        Err(error) => {
+            sabine_runtime::report_error(
+                "manifest",
+                format!(
+                    "could not read [resources] from {}: {error}",
+                    manifest.display()
+                ),
+            );
+            None
+        }
+    }
 }
 
 fn framework_manifest_path() -> Option<PathBuf> {

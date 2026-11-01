@@ -22,23 +22,27 @@ const MENU_PATH: &str = "/MenuBar";
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 
+enum Request {
+    Show(Change),
+    Remove,
+}
+
 enum Change {
     Icon(Option<PathBuf>),
     Tooltip(Option<String>),
     Menu(Vec<TrayMenuItem>),
-    Remove,
 }
 
 /// Changes the app's tray icon while it runs. Changes apply in the order
 /// they are made.
 #[derive(Clone)]
 pub struct TrayHandle {
-    changes: mpsc::UnboundedSender<Change>,
+    requests: mpsc::UnboundedSender<Request>,
 }
 
 impl TrayHandle {
     pub(in crate::desktop) fn spawn(icon: &TrayIcon, events: &EventQueue) -> Self {
-        let (changes, queue) = mpsc::unbounded_channel();
+        let (requests, queue) = mpsc::unbounded_channel();
         let icon = icon.clone();
         let events = events.clone();
         sabine_platform::async_runtime().spawn(async move {
@@ -49,31 +53,31 @@ impl TrayHandle {
                 );
             }
         });
-        Self { changes }
+        Self { requests }
     }
 
     /// Shows the image at `path`, or a plain dot without one.
     pub fn set_icon(&self, path: Option<PathBuf>, _template: bool) {
-        let _ = self.changes.send(Change::Icon(path));
+        let _ = self.requests.send(Request::Show(Change::Icon(path)));
     }
 
     pub fn set_tooltip(&self, tooltip: Option<String>) {
-        let _ = self.changes.send(Change::Tooltip(tooltip));
+        let _ = self.requests.send(Request::Show(Change::Tooltip(tooltip)));
     }
 
     pub fn set_menu(&self, items: Vec<TrayMenuItem>) {
-        let _ = self.changes.send(Change::Menu(items));
+        let _ = self.requests.send(Request::Show(Change::Menu(items)));
     }
 
     pub(in crate::desktop) fn remove(&self) {
-        let _ = self.changes.send(Change::Remove);
+        let _ = self.requests.send(Request::Remove);
     }
 }
 
 async fn serve(
     icon: TrayIcon,
     events: EventQueue,
-    mut changes: mpsc::UnboundedReceiver<Change>,
+    mut requests: mpsc::UnboundedReceiver<Request>,
 ) -> zbus::Result<()> {
     let shown = Arc::new(Mutex::new(Shown {
         title: icon.title.clone(),
@@ -99,21 +103,16 @@ async fn serve(
     let emitter = SignalEmitter::new(&connection, ITEM_PATH)?;
     loop {
         tokio::select! {
-            change = changes.recv() => match change {
-                Some(Change::Icon(path)) => {
-                    lock(&shown).pixmap = pixmap(path).await;
-                    Item::new_icon(&emitter).await?;
+            request = requests.recv() => match request {
+                Some(Request::Show(change)) => {
+                    if let Err(error) = show(&connection, &emitter, &shown, change).await {
+                        sabine_runtime::report_error(
+                            "desktop",
+                            format!("could not update the tray icon: {error}"),
+                        );
+                    }
                 }
-                Some(Change::Tooltip(tooltip)) => {
-                    lock(&shown).tooltip = tooltip;
-                    Item::new_tool_tip(&emitter).await?;
-                }
-                Some(Change::Menu(items)) => {
-                    let menu = connection.object_server().interface::<_, Menu>(MENU_PATH).await?;
-                    let revision = menu.get_mut().await.show(&items);
-                    Menu::layout_updated(menu.signal_emitter(), revision, 0).await?;
-                }
-                Some(Change::Remove) | None => break,
+                Some(Request::Remove) | None => break,
             },
             Some(watcher) = watchers.next() => {
                 if watcher.args().is_ok_and(|args| args.new_owner().is_some()) {
@@ -123,6 +122,34 @@ async fn serve(
         }
     }
     connection.close().await
+}
+
+/// Applies a change to what the item shows. A change the desktop misses
+/// still shows once the watcher asks for the item again.
+async fn show(
+    connection: &Connection,
+    emitter: &SignalEmitter<'_>,
+    shown: &Mutex<Shown>,
+    change: Change,
+) -> zbus::Result<()> {
+    match change {
+        Change::Icon(path) => {
+            lock(shown).pixmap = pixmap(path).await;
+            Item::new_icon(emitter).await
+        }
+        Change::Tooltip(tooltip) => {
+            lock(shown).tooltip = tooltip;
+            Item::new_tool_tip(emitter).await
+        }
+        Change::Menu(items) => {
+            let menu = connection
+                .object_server()
+                .interface::<_, Menu>(MENU_PATH)
+                .await?;
+            let revision = menu.get_mut().await.show(&items);
+            Menu::layout_updated(menu.signal_emitter(), revision, 0).await
+        }
+    }
 }
 
 /// Asks the desktop's watcher to show the item. Without a watcher, the item

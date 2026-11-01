@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::bridge::BridgeEventEmitter;
+use crate::bridge::{prepare_bridge_command, spawn_bridge_dispatch};
 use crate::host::PrimaryWindow;
 #[cfg(target_os = "linux")]
 use crate::host::ld_library_path;
@@ -13,9 +14,7 @@ use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
 use crate::launch::metrics::LaunchMetrics;
 use crate::osr::transport::IpcEndpoint;
 use crate::window::config::SabineWindowConfig;
-use crate::{
-    SabineError, SabineProcess, SabineResult, prepare_bridge_command, spawn_bridge_dispatch,
-};
+use crate::{SabineError, SabineProcess, SabineResult};
 use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
 pub(crate) const OSR_HOST_ARG: &str = "--sabine-osr-host";
@@ -74,6 +73,7 @@ pub(crate) fn launch_process(
         primary_status: None,
         background: config.background,
         extra_windows: Vec::new(),
+        pending_windows: Vec::new(),
         child_exit_sender,
         child_exit_receiver,
         command_sender,
@@ -243,7 +243,6 @@ pub(crate) fn spawn_osr_host_child(
         "lifecycle": crate::osr::protocol::lifecycle_to_json(&config.lifecycle),
         "dev_mode": config.dev_mode(),
         "remote_devtools_port": config.effective_remote_devtools_port(),
-        "remote_devtools_disabled": config.browser.remote_devtools_disabled,
     });
     #[cfg(target_os = "linux")]
     {
@@ -426,7 +425,11 @@ fn own_browser_command(
             "--cache-path={}",
             cache_dir.join("browser").display()
         ));
-    crate::apply_browser_launch_args(&mut command, &config.browser_options(), config.dev_mode);
+    crate::launch::browser::apply_browser_launch_args(
+        &mut command,
+        &config.browser_options(),
+        config.dev_mode,
+    );
     crate::host::prepare_detachable_child_command(&mut command);
     command.current_dir(binary_dir);
     #[cfg(target_os = "linux")]

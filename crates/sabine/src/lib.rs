@@ -1,4 +1,3 @@
-pub use sabine_service::AppEnvironment;
 mod bridge;
 mod clipboard;
 mod desktop;
@@ -10,12 +9,28 @@ mod osr;
 mod render;
 mod window;
 
+pub use bridge::BridgeEventEmitter;
 pub use desktop::TrayHandle;
 pub use error::{SabineError, SabineResult};
 pub use host::{SabineProcess, SabineProcessHandle, WindowId};
+pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
+pub use sabine_bridge::{
+    ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
+    BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,
+    GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
+    SabineActivityLease,
+};
+pub use sabine_platform::{
+    Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
+    NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
+    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
+    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
+};
+pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
+pub use sabine_service::AppEnvironment;
 pub use window::{
     AppChrome, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
-    SabineWindowControlAction, WindowVisibility, resource_path,
+    SabineWindowControlAction, SabineWindowControlRegion, WindowVisibility, resource_path,
 };
 
 /// Common imports for app authors.
@@ -28,26 +43,6 @@ pub mod prelude {
     };
 }
 
-pub use bridge::BridgeEventEmitter;
-pub use window::SabineWindowControlRegion;
-
-pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
-pub use sabine_bridge::{ActivityOptions, ActivityRecord, SabineActivityLease};
-pub use sabine_bridge::{
-    BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeEvent, BridgeResponse, BridgeResult,
-    Bytes, ContentSecurity,
-};
-pub use sabine_bridge::{
-    GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
-};
-pub use sabine_platform::{
-    Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
-    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
-    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
-};
-pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
-
 /// Runs an internal Sabine child mode selected by `args`.
 ///
 /// Custom entry points should call this before argument parsers, logging,
@@ -58,6 +53,3 @@ pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 pub fn dispatch_host_mode_from_args(args: &[String]) -> bool {
     launch::dispatch_host_mode_from_args(args)
 }
-
-pub(crate) use bridge::{parse_host_control, prepare_bridge_command, spawn_bridge_dispatch};
-pub(crate) use launch::{apply_browser_launch_args, centered_window_position};

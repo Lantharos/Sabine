@@ -50,7 +50,7 @@ fn restrict(paths: Paths, ports: Option<Ports>) -> Result<RestrictionStatus, Rul
 }
 
 fn dev_port(config: &SabineWindowConfig) -> Option<u16> {
-    crate::launch::dev_url_parts(config.dev_url.as_deref()?).map(|parts| parts.port)
+    crate::launch::dev_server::port(config.dev_url.as_deref()?)
 }
 
 /// Confines the app to what its `[sandbox]` declares, unless it declares

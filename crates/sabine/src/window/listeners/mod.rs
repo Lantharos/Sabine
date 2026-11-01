@@ -1,9 +1,12 @@
+mod visibility;
+
 use std::{fmt, sync::Arc};
 
 use sabine_platform::Appearance;
 
-use super::visibility::{VISIBILITY_LINE, VisibilityListener, WindowVisibility};
 use crate::{SabineProcessHandle, WindowId};
+pub use visibility::WindowVisibility;
+pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
 pub(crate) const APPEARANCE_LINE: &str = "SABINE_SYSTEM_APPEARANCE";
 
@@ -89,6 +92,27 @@ impl fmt::Debug for AppearanceListener {
     }
 }
 
+/// The app's listener for its process launching, for app code that presents
+/// or opens windows later on.
+#[derive(Clone)]
+pub(crate) struct LaunchListener(Arc<dyn Fn(SabineProcessHandle) + Send + Sync>);
+
+impl LaunchListener {
+    pub(crate) fn new(listener: impl Fn(SabineProcessHandle) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(listener))
+    }
+
+    pub(crate) fn deliver(&self, handle: SabineProcessHandle) {
+        (self.0)(handle);
+    }
+}
+
+impl fmt::Debug for LaunchListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("LaunchListener")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,26 +133,5 @@ mod tests {
         };
         assert!(listeners.deliver(7, &appearance_line(&appearance)));
         assert_eq!(*delivered.lock().unwrap(), Some(appearance));
-    }
-}
-
-/// The app's listener for its process launching, for app code that presents
-/// or opens windows later on.
-#[derive(Clone)]
-pub(crate) struct LaunchListener(Arc<dyn Fn(SabineProcessHandle) + Send + Sync>);
-
-impl LaunchListener {
-    pub(crate) fn new(listener: impl Fn(SabineProcessHandle) + Send + Sync + 'static) -> Self {
-        Self(Arc::new(listener))
-    }
-
-    pub(crate) fn deliver(&self, handle: SabineProcessHandle) {
-        (self.0)(handle);
-    }
-}
-
-impl fmt::Debug for LaunchListener {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("LaunchListener")
     }
 }

@@ -37,7 +37,7 @@ pub(super) fn load(path: Option<&Path>) -> TrayImage {
 impl TrayImage {
     /// Whether every visible pixel is black, or every one white: an icon the
     /// macOS menu bar can tint as a template.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     pub(super) fn is_black_and_white(&self) -> bool {
         let mut visible = self
             .rgba

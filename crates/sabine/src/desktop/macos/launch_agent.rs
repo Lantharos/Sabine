@@ -2,6 +2,9 @@ use std::fs;
 
 use sabine_platform::AutostartEntry;
 
+/// Rewrites the LaunchAgent only when its contents changed, so launches don't
+/// tell the person about a new login item each time. Turning it off under
+/// Login Items leaves the file in place and stays off.
 pub(in crate::desktop) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String> {
     let plist_path =
         sabine_service::app_autostart_path(&entry.id).map_err(|error| error.to_string())?;
@@ -40,6 +43,9 @@ pub(in crate::desktop) fn write_autostart_entry(entry: &AutostartEntry) -> Resul
 </plist>
 "#
     );
+    if fs::read_to_string(&plist_path).is_ok_and(|current| current == plist) {
+        return Ok(());
+    }
     if let Some(agents) = plist_path.parent() {
         fs::create_dir_all(agents).map_err(|error| error.to_string())?;
     }

@@ -293,14 +293,21 @@ private IPC directory under `$XDG_RUNTIME_DIR/sabine/<app_id>/` (mode `0700`, so
   to another app it opens on the person's behalf. A Sabine app that receives one, at launch or
   through a single-instance activation, brings its window forward with it.
 - **Second OS launch**: optional `single_instance` still focuses an existing process when enabled.
+  The launch checks for a running instance before anything else, including registering with the
+  service and offering a pending update, so a second launch, such as a click on one of the app's
+  links, reaches the running app at once. The instance is named by the app id unless
+  `single_instance_id` names another, with the `.dev` id in development. On Windows the launch
+  lets the running app take the foreground, which Windows otherwise grants only to the process
+  the person just started.
   Without it, a second launch of the same app uses CEF handoff plus a new per-window socket.
   After exit-24 handoff the secondary host waits up to 15s for the primary CEF process to connect.
 
 OSR authentication uses a first-line token plus same-UID `SO_PEERCRED` checks on Unix. The token
 is written to a `0600` file beside the socket and referenced by `--sabine-osr-token-file=` on the
 CEF command line (path is not secret; this survives process-singleton handoff). Stale-socket cleanup uses a same-UID health-probe line that listeners
-recognize separately from authenticated CEF connections. Child OSR/CEF processes set
-`PR_SET_PDEATHSIG` on Linux so OSR hosts do not outlive a crashed parent.
+recognize separately from authenticated CEF connections. OSR hosts never outlive a crashed app:
+each closes its window once the app's end of its input closes, on every platform, and on Linux
+child OSR/CEF processes also set `PR_SET_PDEATHSIG`.
 On Linux every Chromium process stays in the systemd unit the app was started in. Chromium would
 otherwise move its browser process into a scope named after Chromium itself, where the desktop's
 portals, memory accounting and out-of-memory handling would treat it as a separate app shared with
@@ -627,7 +634,9 @@ Time updates arrive four times a second while playing; nothing runs while a vide
 can open `http(s)` URLs, their own `sabine://app/` files, and, with local file access,
 `sabine://file/` URLs. Audio plays through the system's default output. Audio tracks follow the
 file's default until the page picks one. Subtitle tracks stay off until the page picks one and are
-delivered as text cues for the page to render.
+delivered as text cues for the page to render. A surface that cannot show its video is recorded in
+the app's diagnostics and reported to the page as an `error` event, once until it shows video
+again.
 
 ### Linux
 
@@ -803,9 +812,9 @@ server = "../build/server"
 and `cargo run`, and the bundle once the app is packaged. Pages never see them.
 
 Frameless windows get the system's rounded corners on Windows 11, as on Linux and macOS; Windows 10
-keeps them square. `AppChrome` lays out an app-drawn titlebar for frameless windows: a drag strip, minimize, maximize
-and close hit targets at the right end, and with a sidebar the blur, opaque and input regions of a
-glass sidebar layout. On macOS the window keeps its own traffic lights instead: its titlebar turns
+keeps them square. `app_chrome(AppChrome)` makes the window frameless and lays out an app-drawn
+titlebar: a drag strip, minimize, maximize and close hit targets at the right end, and with a
+sidebar the blur, opaque and input regions of a glass sidebar layout. On macOS the window keeps its own traffic lights instead: its titlebar turns
 transparent and the page extends under it, so the page draws no controls of its own and leaves the
 top-left corner free. `appWindow.controlsOverlay()` reports the corner the system's controls cover,
 and every page gets the same values as the `--sabine-controls-left`, `--sabine-controls-right` and
@@ -1120,7 +1129,8 @@ The tray icon behaves the same on every desktop: a left click activates the app 
 with no `itemId`) and a right click opens its menu, which can hold separators, checkbox items and
 submenus. Linux publishes it as a StatusNotifierItem with a dbusmenu, carrying the image itself
 rather than an icon theme name, and registers it again whenever the desktop's
-StatusNotifierWatcher restarts.
+StatusNotifierWatcher restarts. A change that fails to reach the desktop is recorded in the app's
+diagnostics, and the icon keeps taking changes.
 macOS shows only the image in the menu bar, not the title, and draws black-and-white icons, or any
 icon marked `template`, as template images that follow the menu bar's appearance. Without an image,
 or when it cannot be read, every desktop shows a plain dot. `SabineProcess::tray()` returns a
@@ -1134,7 +1144,8 @@ the desktop asks about them together, and also accepts XKB key names. A shortcut
 refuses, for example because another app holds it, is recorded in the app's diagnostics and
 reported as `globalShortcut.failed`; the app and its other shortcuts keep working. The portal names
 an app through the desktop entry named after its id. An installed entry is left alone; until the app
-is installed, Sabine writes a hidden stand-in entry and removes it again once a real one exists.
+is installed, Sabine writes a hidden stand-in entry that starts the running executable, named
+after the window's title, and removes it again once a real one exists.
 
 Pages read the desktop's light or dark preference and accent color with the package's
 `system.appearance()`, hear about changes through `events.appearanceChanged`, and get the accent as
@@ -1153,7 +1164,10 @@ An app has one autostart entry, and its id must be the app id: an XDG autostart 
 the app id under the per-user `Run` key on Windows. Autostart commands use the target platform's
 command-line syntax. macOS parses POSIX quoting into LaunchAgent arguments without invoking a shell;
 quoted empty arguments and escaped characters are preserved, and malformed quoting is rejected.
-Disabling autostart removes the registered entry and reports filesystem or registry errors.
+Disabling autostart removes the registered entry and reports filesystem or registry errors. Each
+launch rewrites the entry only when its contents changed, and leaves an entry the person turned off
+alone: a Linux entry marked `Hidden=true` or `X-GNOME-Autostart-enabled=false` stays as it is, and
+turning the app off under Login Items on macOS or Startup apps on Windows keeps it off.
 
 Declare document MIME types and URL schemes in the app manifest, along with the file extensions of
 each document type:
@@ -1247,7 +1261,9 @@ missing scheme instead of writing an unused registration file. Run the bundled a
 macOS URL handlers.
 
 Initial URL arguments and subsequent single-instance activations enter the same pending queue as
-macOS URL/document events. `SabineProcess::take_open_urls()` and the package's `app.takeOpenUrls()`
+macOS URL/document events. Of the arguments, those starting with `-` are left to the app; the others
+are queued when they are URLs with one of the app's schemes, or name a file, by path or `file:` URL,
+whose extension is listed under `[app.extensions]`. `SabineProcess::take_open_urls()` and the package's `app.takeOpenUrls()`
 consume that queue. Subscribe to `events.openUrlsAvailable()` before the initial drain, so URLs
 received during page startup are retained. The queue holds up to 128 URLs, each at most 32 KiB;
 excess requests produce a desktop diagnostic. Applications decide how to handle each URL.

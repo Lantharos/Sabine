@@ -2,6 +2,31 @@
 
 - Development builds of apps no longer hold back Sabine updates; only installed apps that an
   update would stop running do.
+- A second launch of a single-instance app reaches the running app before anything else, so a
+  click on one of its links opens there at once, even while the first launch is still setting up
+  or asking about an update. The instance is named by the app id unless `single_instance_id`
+  names another, and on Windows the running app may take the foreground.
+- Window hosts close when their app crashes on macOS and Windows too.
+- Opening another window while the first is still starting no longer stalls the macOS tray,
+  shortcuts and link handling, and the Windows tray menu no longer holds up the app's tray and
+  shortcut changes while it is open.
+- Command-line arguments open as documents only when they name a file with an extension listed
+  under `[app.extensions]`; options and other files are left to the app.
+- A native video that cannot be shown is recorded in the app's diagnostics and reported to the
+  page as an `error` event, once until it shows again.
+- The Linux tray icon keeps working after a change fails to reach the desktop, and tray images
+  load without holding up the tray on macOS and Windows.
+- Autostart entries are rewritten only when they change, and an entry the person turned off stays
+  off.
+- `app_chrome` makes the window frameless, so it no longer needs `.frameless()` beside it.
+- Global shortcuts take the app's id, name and launch command from the window, so
+  `GlobalShortcutRegistration` no longer has `app_id`, `app_name` or `desktop_command`.
+- `SabineProcess::bridge_event_emitter` returns the emitter itself. Removed duplicates:
+  `SabineProcess::emit_bridge_event` (use the emitter), `SabineWindow::opaque` (use
+  `transparent(false)`), `SabineWindow::sabine_chrome` (use `chrome`),
+  `SabineLifecyclePolicy::with_freeze_after` and `without_freezing` (use the window's
+  `freeze_after` and `disable_freezing`), `AppChrome::titlebar_only`, and the unused
+  `SabineWindow::app_updates` and `without_debug`.
 
 # Sabine 0.65
 

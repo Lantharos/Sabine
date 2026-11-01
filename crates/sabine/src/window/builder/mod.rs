@@ -1,3 +1,6 @@
+mod app_chrome;
+mod bridge;
+
 use std::time::Duration;
 
 use sabine_bridge::ContentSecurity;
@@ -13,7 +16,8 @@ use super::{
     SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
     SabineWindowControlAction, SabineWindowControlRegion,
 };
-use crate::launch::{allow_dev_origins, allow_origin, allow_url_origin};
+use crate::window::origins::{allow_dev_origins, allow_origin, allow_url_origin};
+pub use app_chrome::AppChrome;
 
 impl SabineWindow {
     pub fn entry(mut self, path: impl Into<String>) -> Self {
@@ -55,13 +59,6 @@ impl SabineWindow {
     /// open `http://127.0.0.1:9222`.
     pub fn debug(mut self, port: u16) -> Self {
         self.config.browser.remote_devtools_port = Some(port);
-        self.config.browser.remote_devtools_disabled = false;
-        self
-    }
-
-    /// Disables remote DevTools even when `dev_url` is configured.
-    pub fn without_debug(mut self) -> Self {
-        self.config.browser.remote_devtools_disabled = true;
         self
     }
 
@@ -94,11 +91,6 @@ impl SabineWindow {
 
     pub fn app_version(mut self, version: impl Into<String>) -> Self {
         self.config.app_version = Some(version.into());
-        self
-    }
-
-    pub fn app_updates(mut self, updates: sabine_service::AppUpdateConfig) -> Self {
-        self.config.app_update = Some(updates);
         self
     }
 
@@ -194,13 +186,6 @@ impl SabineWindow {
         self
     }
 
-    pub fn opaque(mut self) -> Self {
-        self.config.transparent = false;
-        self.config.background_effect = WindowBackgroundEffect::None;
-        self.config.regions.blur = None;
-        self
-    }
-
     /// Sets the app's natural background used before its first web frame and
     /// by Sabine's native startup and resume surfaces.
     pub fn background_color(mut self, color: SabineColor) -> Self {
@@ -225,11 +210,6 @@ impl SabineWindow {
 
     pub fn frameless(mut self) -> Self {
         self.config.chrome = SabineWindowChrome::Frameless;
-        self
-    }
-
-    pub fn sabine_chrome(mut self) -> Self {
-        self.config.chrome = SabineWindowChrome::Sabine;
         self
     }
 

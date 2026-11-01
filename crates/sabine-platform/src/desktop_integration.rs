@@ -149,10 +149,7 @@ pub struct GlobalShortcutRegistration {
     pub id: String,
     pub shortcut: Shortcut,
     pub action: String,
-    pub app_id: Option<String>,
-    pub app_name: Option<String>,
     pub description: Option<String>,
-    pub desktop_command: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

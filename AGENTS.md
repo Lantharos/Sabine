@@ -5,7 +5,7 @@
 - Shared app registration, runtime maintenance, and update policy live in `crates/sabine-service`.
 - CEF host sources and cmake build for the shared embedder binary live in `crates/sabine-host`.
 - CEF process launch, browser profiles, OSR transport, GPU composition, guests, and the public window API live in `crates/sabine`.
-- Inside `crates/sabine/src`, domain folders are: `window/` (builder/config/glass), `desktop/` (tray/shortcuts/autostart), `launch/` (host args/bootstrap), `host/` (process handles + profile paths), `bridge/` (host-side IPC wiring), `osr/` (protocol and desktop host), and `render/`.
+- Inside `crates/sabine/src`, domain folders are: `window/` (builder/config/origins/placement/listeners), `desktop/` (tray/shortcuts/autostart/single instance and the macOS desktop loop), `launch/` (host args/bootstrap/dev server), `host/` (process handles + profile paths), `bridge/` (host-side IPC wiring), `clipboard/` (native clipboard and drag-and-drop), `media/` (native video playback), `osr/` (protocol and desktop host), and `render/`.
 - Sabine uses OSR on every desktop. Do not add windowed CEF, WebView2, or another renderer fallback.
 - Sabine targets Linux on Wayland, Windows, and Apple Silicon macOS desktops. Do not add X11, mobile, or unsupported-platform no-op implementations.
 - `sabine-platform` owns lightweight window/platform types, compositor regions, and native platform primitives.

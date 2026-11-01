@@ -14,6 +14,21 @@ type BoundShortcut = (String, HashMap<String, OwnedVariant>);
 
 const GLOBAL_SHORTCUTS: &str = "org.freedesktop.portal.GlobalShortcuts";
 
+/// The app the portal binds shortcuts for, named by its desktop entry.
+pub(in crate::desktop) struct ShortcutHost {
+    app_id: String,
+    name: String,
+}
+
+impl ShortcutHost {
+    pub(in crate::desktop) fn new(app_id: &str, name: &str) -> Self {
+        Self {
+            app_id: app_id.to_string(),
+            name: name.to_string(),
+        }
+    }
+}
+
 /// Every shortcut bound in one GlobalShortcuts portal session, so the
 /// desktop asks about them together.
 pub(in crate::desktop) struct GlobalShortcuts {
@@ -23,11 +38,12 @@ pub(in crate::desktop) struct GlobalShortcuts {
 impl GlobalShortcuts {
     pub(in crate::desktop) fn register(
         registrations: &[GlobalShortcutRegistration],
+        host: ShortcutHost,
         events: EventQueue,
     ) -> Self {
         let registrations = registrations.to_vec();
         let session = sabine_platform::async_runtime().spawn(async move {
-            if let Err(error) = run_session(&registrations, &events).await {
+            if let Err(error) = run_session(&registrations, &host, &events).await {
                 for registration in &registrations {
                     report_shortcut_failure(&events, registration, error.to_string());
                 }
@@ -45,15 +61,12 @@ impl Drop for GlobalShortcuts {
 
 async fn run_session(
     registrations: &[GlobalShortcutRegistration],
+    host: &ShortcutHost,
     events: &EventQueue,
 ) -> PortalResult<()> {
     let connection = Connection::session().await?;
-    if let Some(registration) = registrations
-        .iter()
-        .find(|registration| registration.app_id.is_some())
-    {
-        register_host_app(&connection, registration).await?;
-    }
+    ensure_shortcut_host_entry(&host.app_id, &host.name)?;
+    portal::register_host_app(&connection, &host.app_id).await?;
     let shortcuts = portal::proxy(&connection, GLOBAL_SHORTCUTS).await?;
     let session = create_session(&connection, &shortcuts).await?;
     let mut activations = shortcuts.receive_signal("Activated").await?;
@@ -238,25 +251,6 @@ fn activation_token(options: &Results) -> Option<String> {
         .filter(|token| !token.trim().is_empty())
 }
 
-/// Tells the portal which desktop entry this unsandboxed process belongs to.
-async fn register_host_app(
-    connection: &Connection,
-    registration: &GlobalShortcutRegistration,
-) -> PortalResult<()> {
-    let Some(app_id) = registration.app_id.as_deref() else {
-        return Ok(());
-    };
-    if let Some(command) = registration.desktop_command.as_deref() {
-        let name = registration
-            .app_name
-            .as_deref()
-            .or(registration.description.as_deref())
-            .unwrap_or(app_id);
-        ensure_shortcut_host_entry(app_id, name, command)?;
-    }
-    Ok(portal::register_host_app(connection, app_id).await?)
-}
-
 #[cfg(test)]
 mod tests {
     use sabine_platform::{GlobalShortcutRegistration, Shortcut, ShortcutModifiers};
@@ -275,10 +269,7 @@ mod tests {
                 key: key.into(),
             },
             action: "toggle".into(),
-            app_id: None,
-            app_name: None,
             description: None,
-            desktop_command: None,
         }
     }
 

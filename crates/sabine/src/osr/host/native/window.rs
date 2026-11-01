@@ -75,9 +75,11 @@ impl OsrNativeHost {
                     .with_skip_taskbar(self.config.skip_taskbar),
             );
         }
-        if let Some(position) =
-            crate::centered_window_position(event_loop, self.config.width, self.config.height)
-        {
+        if let Some(position) = crate::window::centered_window_position(
+            event_loop,
+            self.config.width,
+            self.config.height,
+        ) {
             attributes = attributes.with_position(position);
         }
         let window = match event_loop.create_window(attributes) {

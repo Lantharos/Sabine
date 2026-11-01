@@ -2,9 +2,9 @@ use sabine_platform::WindowRegion;
 #[cfg(not(target_os = "macos"))]
 use sabine_platform::WindowRegionRect;
 
-use super::SabineWindow;
+use crate::window::SabineWindow;
 #[cfg(not(target_os = "macos"))]
-use super::config::SabineWindowControlAction;
+use crate::window::SabineWindowControlAction;
 
 /// App-drawn chrome layout: titlebar drag strip, optional sidebar glass regions,
 /// and the window controls. On macOS the system's own traffic lights sit over
@@ -37,21 +37,14 @@ impl AppChrome {
             ..Self::default()
         }
     }
-
-    pub fn titlebar_only(titlebar: i32) -> Self {
-        Self {
-            titlebar,
-            sidebar: 0,
-            radius: 0,
-            ..Self::default()
-        }
-    }
 }
 
 impl SabineWindow {
-    /// Sets drag/control regions and optional blur/opaque/input regions for an
-    /// app-drawn titlebar (and optional sidebar glass layout). Pages find the
-    /// corner the system's controls cover through `appWindow.controlsOverlay`.
+    /// Draws the window's titlebar in the page: the window turns frameless, or
+    /// on macOS keeps its traffic lights over the page, and gets drag and
+    /// control regions plus the blur, opaque and input regions of an optional
+    /// glass sidebar. Pages find the corner the system's controls cover
+    /// through `appWindow.controlsOverlay`.
     pub fn app_chrome(self, chrome: AppChrome) -> Self {
         let titlebar = chrome.titlebar.max(0);
         let sidebar = chrome.sidebar.max(0);
@@ -72,7 +65,7 @@ impl SabineWindow {
 
     #[cfg(target_os = "macos")]
     fn window_controls(mut self, _chrome: AppChrome) -> Self {
-        self.config.chrome = super::SabineWindowChrome::System;
+        self.config.chrome = crate::window::SabineWindowChrome::System;
         self.config.titlebar_overlay = true;
         self
     }
@@ -88,7 +81,7 @@ impl SabineWindow {
         ]
         .into_iter()
         .zip([3, 2, 1])
-        .fold(self, |window, (action, slot)| {
+        .fold(self.frameless(), |window, (action, slot)| {
             window.control_region(
                 action,
                 WindowRegionRect::new(-(control * slot), 0, control, titlebar),

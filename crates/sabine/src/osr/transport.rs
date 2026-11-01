@@ -226,7 +226,7 @@ fn runtime_ipc_dir(_app_id: &str) -> io::Result<PathBuf> {
 
 #[cfg(unix)]
 fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
-    let sanitized = sanitize_app_id(app_id);
+    let sanitized = crate::desktop::sanitize_id(app_id);
     if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         let path = PathBuf::from(runtime_dir);
         if path.is_absolute() {
@@ -247,34 +247,9 @@ fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
 }
 
 #[cfg(unix)]
-pub(crate) fn sanitize_app_id(app_id: &str) -> String {
-    let sanitized = app_id
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    if sanitized.is_empty() {
-        "app".to_string()
-    } else {
-        sanitized
-    }
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-
-    #[test]
-    fn sanitize_app_id_keeps_safe_chars() {
-        assert_eq!(sanitize_app_id("com.sabine.notes"), "com.sabine.notes");
-        assert_eq!(sanitize_app_id("a/b c"), "a_b_c");
-        assert_eq!(sanitize_app_id("@@@"), "___");
-    }
 
     #[test]
     fn authenticate_rejects_wrong_token() {

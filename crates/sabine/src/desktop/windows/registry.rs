@@ -1,21 +1,19 @@
 use sabine_platform::{AutostartEntry, DeepLinkRegistration, NativeMessagingHost};
-use windows::Win32::{
-    Foundation::ERROR_SUCCESS,
-    System::Registry::{
-        HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-        RegCreateKeyExW, RegSetValueExW,
-    },
+use sabine_service::windows_registry::{
+    current_user_value, delete_current_user_value, set_current_user_value,
 };
-use windows::core::PCWSTR;
 
+/// Turning the app off under Startup apps keeps its `Run` value and marks it
+/// in `StartupApproved`, so rewriting a changed command leaves that choice.
 pub(in crate::desktop) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String> {
     let key = sabine_service::APP_AUTOSTART_KEY;
-    if entry.enabled {
-        sabine_service::windows_registry::set_current_user_value(key, &entry.id, &entry.command)
-    } else {
-        sabine_service::windows_registry::delete_current_user_value(key, &entry.id)
+    if !entry.enabled {
+        return delete_current_user_value(key, &entry.id).map_err(|error| error.to_string());
     }
-    .map_err(|error| error.to_string())
+    if current_user_value(key, &entry.id).as_deref() == Some(entry.command.as_str()) {
+        return Ok(());
+    }
+    set_current_user_value(key, &entry.id, &entry.command).map_err(|error| error.to_string())
 }
 
 pub(in crate::desktop) fn register_deep_links(
@@ -27,14 +25,9 @@ pub(in crate::desktop) fn register_deep_links(
     for scheme in &registration.schemes {
         let scheme = scheme.to_ascii_lowercase();
         let base = format!("Software\\Classes\\{scheme}");
-        set_registry_string(HKEY_CURRENT_USER, &base, "", &format!("URL:{scheme}"))?;
-        set_registry_string(HKEY_CURRENT_USER, &base, "URL Protocol", "")?;
-        set_registry_string(
-            HKEY_CURRENT_USER,
-            &format!("{base}\\shell\\open\\command"),
-            "",
-            &command,
-        )?;
+        set_string(&base, "", &format!("URL:{scheme}"))?;
+        set_string(&base, "URL Protocol", "")?;
+        set_string(&format!("{base}\\shell\\open\\command"), "", &command)?;
     }
     Ok(())
 }
@@ -46,8 +39,7 @@ pub(in crate::desktop) fn register_native_messaging_host(
         .map_err(|error| error.to_string())?;
     for (browser, manifest) in manifests {
         for key in sabine_service::native_messaging_registry_keys(browser) {
-            set_registry_string(
-                HKEY_CURRENT_USER,
+            set_string(
                 &format!(r"{key}\{}", host.id),
                 "",
                 &manifest.display().to_string(),
@@ -57,52 +49,6 @@ pub(in crate::desktop) fn register_native_messaging_host(
     Ok(())
 }
 
-pub(super) fn set_registry_string(
-    root: HKEY,
-    subkey: &str,
-    value_name: &str,
-    data: &str,
-) -> Result<(), String> {
-    let subkey_wide = wide_null(subkey);
-    let mut key = HKEY::default();
-    let status = unsafe {
-        RegCreateKeyExW(
-            root,
-            PCWSTR(subkey_wide.as_ptr()),
-            Some(0),
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
-            &mut key,
-            None,
-        )
-    };
-    if status != ERROR_SUCCESS {
-        return Err(format!("RegCreateKeyExW failed: {status:?}"));
-    }
-    let value_wide = wide_null(value_name);
-    let data_wide = wide_null(data);
-    let bytes =
-        unsafe { std::slice::from_raw_parts(data_wide.as_ptr() as *const u8, data_wide.len() * 2) };
-    let result = unsafe {
-        RegSetValueExW(
-            key,
-            PCWSTR(value_wide.as_ptr()),
-            Some(0),
-            REG_SZ,
-            Some(bytes),
-        )
-    };
-    unsafe {
-        let _ = RegCloseKey(key);
-    }
-    if result != ERROR_SUCCESS {
-        return Err(format!("RegSetValueExW failed: {result:?}"));
-    }
-    Ok(())
-}
-
-pub(super) fn wide_null(value: &str) -> Vec<u16> {
-    value.encode_utf16().chain(std::iter::once(0)).collect()
+fn set_string(key: &str, name: &str, value: &str) -> Result<(), String> {
+    set_current_user_value(key, name, value).map_err(|error| error.to_string())
 }

@@ -384,8 +384,9 @@ activities and how many of them keep the page running. Rust code starts the same
 
 ## Opening URLs and documents
 
-Declare URL schemes with `app.mime_types = ["x-scheme-handler/my-app"]` in `Sabine.toml`.
-For Linux and Windows, use `.single_instance(SingleInstancePolicy::FocusExisting)` in Rust to
+Declare URL schemes with `app.mime_types = ["x-scheme-handler/my-app"]` in `Sabine.toml`, and the
+file extensions of document types under `[app.extensions]`; a file named on the command line opens
+only when its extension is listed there. For Linux and Windows, use `.single_instance(SingleInstancePolicy::FocusExisting)` in Rust to
 route later launches to the running app. macOS delivers URLs and documents through its application
 delegate; test with the bundled application.
 

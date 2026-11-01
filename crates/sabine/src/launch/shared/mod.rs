@@ -60,7 +60,7 @@ impl SharedLaunch {
         };
         let mut global = Command::new(host);
         sabine_host::apply_runtime_resource_args(&mut global, runtime_dir);
-        crate::apply_browser_launch_args(&mut global, options, false);
+        crate::launch::browser::apply_browser_launch_args(&mut global, options, false);
         global
             .arg("--sabine-runtime")
             .arg(format!("--root-cache-path={}", user_data.display()))

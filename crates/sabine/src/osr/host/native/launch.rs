@@ -284,7 +284,7 @@ impl OsrNativeHost {
         &mut self,
         event_loop: &dyn ActiveEventLoop,
     ) {
-        self.scale_factor = crate::launch::launch_scale_factor(event_loop);
+        self.scale_factor = crate::window::launch_scale_factor(event_loop);
         self.surface_size = winit::dpi::PhysicalSize::new(
             (f64::from(self.config.width) * self.scale_factor).round() as u32,
             (f64::from(self.config.height) * self.scale_factor).round() as u32,

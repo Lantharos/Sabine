@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::config::SabineWindowConfig;
+use crate::window::config::SabineWindowConfig;
+
+const FILE: &str = "window.json";
 
 #[derive(Deserialize, Serialize)]
 struct RememberedSize {
@@ -14,14 +16,13 @@ struct RememberedSize {
     maximized: bool,
 }
 
-/// `window.json` in `$XDG_STATE_HOME/<app id>` on Linux and in the local app
+/// `$XDG_STATE_HOME/<app id>` on Linux and the app's folder in the local app
 /// data folder elsewhere.
-fn path(app_id: &str) -> Option<PathBuf> {
+fn folder(app_id: &str) -> Option<PathBuf> {
     Some(
         dirs::state_dir()
             .or_else(dirs::data_local_dir)?
-            .join(app_id)
-            .join("window.json"),
+            .join(app_id),
     )
 }
 
@@ -30,8 +31,8 @@ pub(crate) fn restore(config: &mut SabineWindowConfig) {
     let Some(remembered) = config
         .app_id
         .as_deref()
-        .and_then(path)
-        .and_then(|path| std::fs::read(path).ok())
+        .and_then(folder)
+        .and_then(|folder| std::fs::read(folder.join(FILE)).ok())
         .and_then(|bytes| serde_json::from_slice::<RememberedSize>(&bytes).ok())
     else {
         return;
@@ -42,7 +43,7 @@ pub(crate) fn restore(config: &mut SabineWindowConfig) {
 }
 
 pub(crate) fn save(app_id: &str, width: u32, height: u32, maximized: bool) {
-    let Some(path) = path(app_id) else {
+    let Some(folder) = folder(app_id) else {
         return;
     };
     let remembered = RememberedSize {
@@ -50,10 +51,9 @@ pub(crate) fn save(app_id: &str, width: u32, height: u32, maximized: bool) {
         height,
         maximized,
     };
-    if let Some(folder) = path.parent()
-        && std::fs::create_dir_all(folder).is_ok()
-        && let Ok(json) = serde_json::to_vec(&remembered)
-        && let Err(error) = std::fs::write(&path, json)
+    let json = serde_json::to_vec(&remembered).expect("the window size serializes");
+    if let Err(error) =
+        std::fs::create_dir_all(&folder).and_then(|()| std::fs::write(folder.join(FILE), json))
     {
         sabine_runtime::report_error(
             "window",

@@ -1,7 +1,8 @@
 mod app_delegate;
+pub(crate) mod desktop_wait;
 mod launch_agent;
 
-use std::{collections::BTreeSet, env, path::PathBuf};
+use std::collections::BTreeSet;
 
 use dispatch2::DispatchQueue;
 use objc2::runtime::AnyObject;
@@ -9,7 +10,6 @@ use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, ns_string};
 use sabine_platform::{DeepLinkRegistration, NativeMessagingHost};
 
 pub(super) use super::hotkeys::GlobalShortcuts;
-pub(super) use super::unix_instance::SingleInstanceGuard;
 pub(super) use app_delegate::AppEvents;
 pub(super) use launch_agent::write_autostart_entry;
 
@@ -81,10 +81,4 @@ fn declared_url_schemes() -> BTreeSet<String> {
         .filter_map(|scheme| scheme.downcast::<NSString>().ok())
         .map(|scheme| scheme.to_string().to_ascii_lowercase())
         .collect()
-}
-
-pub(super) fn home_dir() -> Result<PathBuf, String> {
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| "HOME is required for macOS desktop integration".to_string())
 }

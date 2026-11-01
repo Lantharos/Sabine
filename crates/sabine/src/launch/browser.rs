@@ -43,7 +43,6 @@ const CHROMIUM_LOG_ENV: &str = "SABINE_CHROMIUM_LOG";
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct BrowserOptions {
     pub remote_devtools_port: Option<u16>,
-    pub remote_devtools_disabled: bool,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
     /// Runs the app's pages in a Chromium of its own instead of the runtime
@@ -67,9 +66,6 @@ impl BrowserOptions {
     /// Development runs take their port from `SABINE_DEVTOOLS_PORT` first, so
     /// several apps can be debugged at once; `0` lets Chromium pick a free one.
     pub fn effective_remote_devtools_port(&self, dev_mode: bool) -> Option<u16> {
-        if self.remote_devtools_disabled {
-            return None;
-        }
         let from_environment = dev_mode
             .then(|| std::env::var(DEVTOOLS_PORT_ENV).ok()?.trim().parse().ok())
             .flatten();

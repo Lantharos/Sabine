@@ -1,20 +1,13 @@
-use std::{
-    net::{TcpStream, ToSocketAddrs},
-    thread,
-    time::{Duration, Instant},
-};
-
 use sabine_runtime::{RuntimeInfo, resolve_runtime};
 
+use super::origins::{allow_dev_origins, allow_url_origin};
 use super::{SabineWindow, SabineWindowConfig};
-use crate::desktop::{DesktopServiceState, TRAY_UPDATE_COMMAND, apply_desktop_services};
+use crate::desktop::open_urls::Openable;
+use crate::desktop::{DesktopClaim, TRAY_UPDATE_COMMAND};
 use crate::error::{SabineError, SabineResult};
 use crate::host::SabineProcess;
 use crate::launch::metrics::LaunchMetrics;
-use crate::launch::{
-    allow_dev_origins, allow_url_origin, bootstrap, dev_server_candidates, local_entry,
-    metrics_label,
-};
+use crate::launch::{bootstrap, dev_server, local_entry, metrics_label};
 use crate::osr;
 
 impl SabineWindow {
@@ -25,11 +18,13 @@ impl SabineWindow {
         metrics.mark("launch.start");
         self.config.validate()?;
         metrics.mark("config.ready");
+        let claim = DesktopClaim::acquire(&self.config)?;
+        metrics.mark("single_instance.ready");
         bootstrap::prepare(&self.config)?;
         metrics.mark("bootstrap.ready");
         let runtime = resolve_runtime(&self.config.runtime)?;
         metrics.mark("runtime.ready");
-        self.launch_with_runtime(runtime, metrics)
+        self.launch_with_runtime(runtime, claim, metrics)
     }
 
     /// Resolve entry URL and config for [`SabineProcess::open_window`].
@@ -42,45 +37,30 @@ impl SabineWindow {
         Ok((self.config, url))
     }
 
-    pub(crate) fn launch_with_runtime(
+    fn launch_with_runtime(
         mut self,
         runtime: RuntimeInfo,
+        claim: DesktopClaim,
         metrics: LaunchMetrics,
     ) -> SabineResult<SabineProcess> {
-        let desktop_services = Some(
-            apply_desktop_services(
-                self.config.desktop_services.tray_icon.as_ref(),
-                &self.config.desktop_services.autostart,
-                &self.config.desktop_services.global_shortcuts,
-                &self.config.desktop_services.deep_links,
-                &self.config.desktop_services.native_messaging_hosts,
-                self.config.desktop_services.single_instance_id.as_deref(),
-                self.config.desktop_services.single_instance_policy,
-            )
-            .map_err(|message| {
-                if message == crate::desktop::INSTANCE_ALREADY_RUNNING {
-                    SabineError::InstanceAlreadyRunning
-                } else {
-                    SabineError::CreationFailed { message }
-                }
-            })?,
-        );
+        let desktop_services = claim.start(&self.config)?;
         metrics.mark("desktop_services.ready");
-        if let Some(tray) = desktop_services
-            .as_ref()
-            .and_then(DesktopServiceState::tray)
-        {
+        if let Some(tray) = desktop_services.tray() {
             self = self.bridge_handler(TRAY_UPDATE_COMMAND, move |command| {
                 tray.update_from_page(command.params)
                     .map(|()| sabine_bridge::BridgeResponse::json(serde_json::Value::Null))
                     .map_err(sabine_bridge::BridgeError::new)
             });
         }
+        let openable = Openable::new(
+            &self.config.desktop_services.deep_links,
+            &self.config.document_extensions,
+        );
         let open_urls = self.config.open_urls.clone();
         open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),
             std::env::current_dir().ok().as_deref(),
-            &self.config.desktop_services.deep_links,
+            &openable,
         );
         self = self.bridge_handler("app.takeOpenUrls", move |_| {
             Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(
@@ -90,7 +70,7 @@ impl SabineWindow {
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
         if self.config.dev_url.is_some() {
-            url = self.wait_for_dev_server(&url)?;
+            url = dev_server::wait(&url)?;
             allow_dev_origins(&mut self.config.security, &url);
             metrics.mark("dev_server.ready");
         }
@@ -101,11 +81,11 @@ impl SabineWindow {
             &url,
             metrics.clone(),
         )?;
-        process.desktop_services = desktop_services;
+        process.desktop_services = Some(desktop_services);
         if let Some(listener) = &self.config.launched {
             listener.deliver(process.handle());
         }
-        process.start_desktop_event_forwarder(self.config.desktop_services.deep_links.clone());
+        process.start_desktop_event_forwarder(openable);
         metrics.mark("launch.ready");
         Ok(process)
     }
@@ -138,40 +118,6 @@ impl SabineWindow {
                 self.config.dev_url = Some(url.to_string());
             }
         }
-    }
-
-    fn wait_for_dev_server(&self, url: &str) -> SabineResult<String> {
-        let candidates = dev_server_candidates(url);
-        if candidates.is_empty() {
-            return Ok(url.to_string());
-        }
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let mut last_error = None;
-        while Instant::now() < deadline {
-            for candidate in &candidates {
-                match (candidate.host.as_str(), candidate.port).to_socket_addrs() {
-                    Ok(addresses) => {
-                        for socket in addresses {
-                            match TcpStream::connect_timeout(&socket, Duration::from_millis(150)) {
-                                Ok(_) => return Ok(candidate.url.clone()),
-                                Err(error) => last_error = Some(error),
-                            }
-                        }
-                    }
-                    Err(error) => last_error = Some(error),
-                }
-            }
-            thread::sleep(Duration::from_millis(50));
-        }
-
-        Err(SabineError::CreationFailed {
-            message: format!(
-                "timed out waiting for dev server `{url}`{}",
-                last_error
-                    .map(|error| format!(": {error}"))
-                    .unwrap_or_default()
-            ),
-        })
     }
 
     pub(crate) fn entry_url(&self) -> SabineResult<String> {

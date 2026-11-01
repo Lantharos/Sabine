@@ -59,6 +59,8 @@ pub(crate) struct SabineWindowConfig {
     pub control_regions: Vec<SabineWindowControlRegion>,
     pub desktop_services: DesktopServiceConfig,
     pub open_urls: crate::desktop::open_urls::OpenUrls,
+    /// File extensions of the app's document types, from `[app.extensions]`.
+    pub document_extensions: Vec<String>,
     pub lifecycle: SabineLifecyclePolicy,
     pub runtime: RuntimeConfig,
     pub bridge: BridgeRegistry,
@@ -107,6 +109,7 @@ impl Default for SabineWindowConfig {
             control_regions: Vec::new(),
             desktop_services: DesktopServiceConfig::default(),
             open_urls: crate::desktop::open_urls::OpenUrls::default(),
+            document_extensions: Vec::new(),
             lifecycle: SabineLifecyclePolicy::default(),
             runtime: RuntimeConfig::default(),
             bridge: BridgeRegistry::default(),
@@ -244,16 +247,6 @@ impl SabineLifecyclePolicy {
             retain_hidden_frame: true,
             ..Self::default()
         }
-    }
-
-    pub fn with_freeze_after(mut self, duration: Duration) -> Self {
-        self.freeze_after = Some(duration);
-        self
-    }
-
-    pub fn without_freezing(mut self) -> Self {
-        self.freeze_after = None;
-        self
     }
 }
 

@@ -18,7 +18,6 @@ fn main() {
     SabineWindow::main(|window| {
         Ok(window
             .app()
-            .frameless()
             .glass()
             .app_chrome(AppChrome::default())
             .content_suffix("?chrome=app")
