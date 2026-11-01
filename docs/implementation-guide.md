@@ -16,7 +16,8 @@ and recreates its renderer through a new graphics instance, since the old one ke
 adapters from before the reset. The old instance is released before the new one is created:
 NVIDIA's Vulkan driver crashes when an older instance is destroyed while a newer one has a window
 surface. While the driver is still restarting and no adapter is available, the window keeps looking
-for one for up to 20 seconds. Sabine then asks Chromium to repaint its main
+for one every 250 ms for up to 20 seconds, each attempt on a thread of its own so the window keeps
+handling input and the browser's messages meanwhile. Sabine then asks Chromium to repaint its main
 page, popups and guests; page state and bridge connections remain active. On Windows, the browser's
 copy device follows the same reset: when it finds its device removed, or Chromium's frames on another
 adapter, it opens a new one and replaces every shared texture. If the window comes back on a
@@ -323,8 +324,13 @@ Closing a window stops browser recovery immediately. Transport disconnect forces
 that window's browser, while other windows sharing the CEF process remain alive. A browser
 that cannot connect to its native window closes instead of remaining invisible.
 Each native connection owns its socket reader and bounded paint queue. Closing a window cancels
-blocked reads and queue writes, then removes its endpoint. Native timers
-return to an idle wait after firing; hidden windows remain suspended across focus changes.
+blocked reads and queue writes, then removes its endpoint. The window sleeps until the soonest of
+its timers, such as a loading animation, a tooltip or a pending suspend, and wakes for nothing else.
+A thread waits on the browser's own process and tells the window when it exits, so neither a
+restart nor a profile handoff is found by polling. Hidden windows remain suspended across focus
+changes. Pointer motion, wheel turns and finger moves the browser has yet to read are merged with
+newer ones of the same kind, so fast input never piles up behind a busy browser; clicks, keys and
+the pointer leaving the page are always delivered in order.
 A failed browser connection gets at most three recovery attempts in 60 seconds, with increasing
 delays. Initial connection is limited to 30 seconds; profile handoff remains limited to 15 seconds.
 Terminal failures produce persistent diagnostics, a native error notice, and a nonzero exit.
@@ -409,10 +415,15 @@ initializes OpenGL when no Vulkan adapter can present to the window.
 
 On Linux and macOS, Chromium is launched before the native window and graphics device are created,
 sized for the monitor the window opens on, so browser startup overlaps GPU initialization. Windows
-waits for the compositor device because Chromium must render on the same adapter.
+waits for the compositor device because Chromium must render on the same adapter; a window that
+starts hidden, such as a tray app or palette, opens its window out of sight and starts the device
+right away, so its browser shares GPU frames from the start. Should the window's device later land
+on another adapter, Sabine restarts the browser there.
 
-On Linux the window's graphics device starts on a thread of its own, so the browser's connection,
-bridge calls and page events keep flowing while the drivers start. A window without Sabine's own
+The window's graphics device starts on a thread of its own, so the browser's connection, bridge
+calls and page events keep flowing while the drivers start. Only what the platform ties to the
+window's thread happens there: on macOS, AppKit lets only the main thread make the window's Metal
+surface, while the adapter, device and pipelines are made on the other thread. A window without Sabine's own
 titlebar or a loading screen does not wait for that device at all: the page's first frame goes to
 the desktop compositor as it is, a dma-buf shown in a subsurface of the window over a buffer with
 the window's background color (for transparent windows, that color under the opaque region only),
@@ -991,9 +1002,16 @@ Ordinary page focus does not keep the input method enabled.
 
 Touch and tablet input is forwarded as CEF touch input instead of being collapsed into mouse events,
 preserving pointer identity, pressure, and touch, pen, or eraser type. A pen hovering above the
-screen moves the pointer like a mouse, so pages get hover. Every touch the page saw ends with a
-release or cancellation, even when it is lifted over the titlebar. CEF's touch event API does not
-carry tablet tilt.
+screen moves the pointer like a mouse, so pages get hover, and its barrel buttons click like the
+secondary and middle mouse buttons, so the barrel button opens context menus. Every touch the page
+saw ends with a release or cancellation, even when it is lifted over the titlebar. CEF's touch event
+API carries neither tilt, twist nor barrel pressure, and no button state while the pen touches the
+screen.
+
+On Windows, tapping a field with a finger or pen brings up the touch keyboard, as it does in the
+desktop's own apps, and it goes away when the field loses focus. Windows and macOS input methods
+get no surrounding text and cannot delete around the caret, since winit offers neither there; on
+Linux both reach the page.
 
 Trackpad scrolling keeps the fractions of a pixel each event carries, so slow scrolls add up instead
 of being rounded away. Touchpad pinches reach pages as Ctrl+wheel events, as Chromium reports them.
@@ -1007,7 +1025,8 @@ keyboard navigation, but it does not make Sabine windows accessible to desktop s
 Drag and drop behaves as it does in a browser. A drag the page starts stays inside the window,
 so HTML drag events, draggable lists, and dragging text into inputs work as usual. When the pointer
 leaves the window, the drag continues as a desktop drag carrying the dragged files, links, text,
-and HTML, and the page learns how it ended. Files, links, text, and HTML dragged in from other
+and HTML, and the page learns how it ended. The desktop shows Chromium's picture of what is dragged under
+the pointer, held where the pointer picked it up. Files, links, text, and HTML dragged in from other
 applications arrive as ordinary drops, with the files in `dataTransfer.files`; while they pass over
 the window, the desktop shows whether the element under the pointer accepts them, and pages hear
 `dragover` every 350 ms while the pointer rests, as in browsers. On Wayland, a drag leaves the
@@ -1028,7 +1047,9 @@ menus keep only Chromium's editing commands: undo, redo, cut, copy, paste, delet
 spelling suggestions, so editable fields and selections get the menu users expect while pages get no
 browser navigation or printing entries. Development launches add `Inspect element`. The window
 draws the menu itself, following the desktop's light or dark theme, with the platform's shortcut
-notation; it is keyboard navigable and closes on Escape, a click outside it, focus loss, or resize.
+notation. Submenus open beside their entry, toward the side with room, and entries that turn on
+and off show a check mark or a radio dot. The menu is keyboard navigable, with the arrow keys
+opening and closing submenus, and closes on Escape, a click outside it, focus loss, or resize.
 Pages that cancel the `contextmenu` event get no menu. HTML title tooltips are presented by the
 native compositor after a short delay.
 
@@ -1344,7 +1365,8 @@ window asks the XDG print portal with `PreparePrint`, and Chromium lays the page
 orientation, pages and selection people chose. The PDF Chromium makes goes back to the portal with
 `Print` and the token `PreparePrint` returned, so the desktop applies copies, two-sided printing
 and color without asking again. The printer and paper people chose are offered first the next time
-the app prints.
+the app prints. The window exports itself through `xdg-foreign` and names itself as the dialog's
+parent, so the desktop keeps the print dialog over the window that printed.
 
 `print.files()` and `BridgeEventEmitter::print_files` print PDF, image and text files as one
 document. A job of only PDF files goes to the portal's `Print` as it is, so the desktop's dialog
