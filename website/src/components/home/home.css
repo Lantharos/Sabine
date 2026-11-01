@@ -54,7 +54,8 @@
 
 @keyframes home-unveil {
   from {
-    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+    transform: translateY(1.25rem) scale(0.985);
   }
 }
 
@@ -64,7 +65,7 @@
 }
 
 .home .unveil {
-  animation: home-unveil 1.4s cubic-bezier(0.65, 0, 0.35, 1) both paused;
+  animation: home-unveil 1.2s cubic-bezier(0.22, 0.61, 0.36, 1) both paused;
   animation-delay: var(--delay, 0s);
 }
 
