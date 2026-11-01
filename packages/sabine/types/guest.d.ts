@@ -7,11 +7,11 @@ export interface GuestBounds {
 
 /**
  * What a guest does with `window.open` and `target="_blank"` links: emit
- * `guest.newWindow` for the app (`deny`), let Chromium open a popup (`allow`),
- * navigate in place (`navigateSame`), or open another guest in the same
- * partition (`openGuest`).
+ * `guest.newWindow` for the app (`deny`), navigate in place (`navigateSame`),
+ * or open another guest in the same partition, at the same bounds
+ * (`openGuest`).
  */
-export type GuestPopupPolicy = "deny" | "allow" | "navigateSame" | "openGuest";
+export type GuestPopupPolicy = "deny" | "navigateSame" | "openGuest";
 
 export interface GuestCreateOptions {
   id?: string;
@@ -91,8 +91,12 @@ export interface GuestDownloadEvent {
   totalBytes: number;
   receivedBytes: number;
   state: "requested" | "progress" | "completed" | "cancelled" | "interrupted";
-  savePath?: string | null;
-  error?: string | null;
+  savePath: string;
+  /**
+   * Why an `interrupted` download stopped, such as `networkFailed`,
+   * `fileNoSpace` or `serverForbidden`.
+   */
+  error?: string;
 }
 
 export type GuestDownloadAction = "accept" | "cancel" | "pause" | "resume";

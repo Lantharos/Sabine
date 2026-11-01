@@ -7,6 +7,7 @@
 #include <cstdlib>
 
 #include "include/cef_parser.h"
+#include "osr/guest/registry.h"
 
 const char kGuestBridgePrefix[] = "sabine.guest.";
 const char kGuestHostControlPrefix[] = "guest.";
@@ -37,27 +38,21 @@ std::string SanitizePartition(const std::string& partition) {
 
 }  // namespace
 
-GuestPopupPolicy ParseGuestPopupPolicy(const std::string& value,
-                                       GuestPopupPolicy fallback) {
-  if (value == "deny") {
-    return GuestPopupPolicy::kDeny;
+bool ParseGuestPopupPolicy(const std::string& value, GuestPopupPolicy* policy) {
+  if (value.empty() || value == "deny") {
+    *policy = GuestPopupPolicy::kDeny;
+  } else if (value == "navigateSame") {
+    *policy = GuestPopupPolicy::kNavigateSame;
+  } else if (value == "openGuest") {
+    *policy = GuestPopupPolicy::kOpenGuest;
+  } else {
+    return false;
   }
-  if (value == "allow") {
-    return GuestPopupPolicy::kAllow;
-  }
-  if (value == "navigateSame") {
-    return GuestPopupPolicy::kNavigateSame;
-  }
-  if (value == "openGuest") {
-    return GuestPopupPolicy::kOpenGuest;
-  }
-  return fallback;
+  return true;
 }
 
 const char* GuestPopupPolicyName(GuestPopupPolicy policy) {
   switch (policy) {
-    case GuestPopupPolicy::kAllow:
-      return "allow";
     case GuestPopupPolicy::kNavigateSame:
       return "navigateSame";
     case GuestPopupPolicy::kOpenGuest:
@@ -145,9 +140,12 @@ cef_color_t ParseGuestBackgroundColor(const std::string& value,
   return static_cast<cef_color_t>(parsed);
 }
 
+double ClampGuestZoom(double factor) {
+  return std::min(5.0, std::max(0.25, factor));
+}
+
 double GuestZoomLevel(double factor) {
-  const double clamped = std::min(5.0, std::max(0.25, factor));
-  return std::log(clamped) / std::log(1.2);
+  return std::log(factor) / std::log(1.2);
 }
 
 CefRect ParseGuestBounds(const JsonObject& payload, const CefRect& fallback) {
@@ -167,12 +165,21 @@ bool ParseGuestCreateRequest(const JsonObject& payload,
           "guest id may only contain ASCII alphanumerics, '-', '_', and '.'";
       return false;
     }
+    if (IsInternalGuestId(id)) {
+      *error = "guest id " + id + " is reserved";
+      return false;
+    }
     request->id = id;
   }
   const std::string url = payload.String("url");
   const std::string html = payload.String("html");
   if (url.empty() && html.empty()) {
     *error = "guest.create requires a non-empty `url` or `html`";
+    return false;
+  }
+  if (!ParseGuestPopupPolicy(payload.String("popupPolicy"),
+                             &request->popup_policy)) {
+    *error = "guest popupPolicy must be deny, navigateSame, or openGuest";
     return false;
   }
   request->url = url.empty() ? HtmlDataUri(html) : url;
@@ -185,8 +192,6 @@ bool ParseGuestCreateRequest(const JsonObject& payload,
   request->intercept_horizontal_wheel =
       payload.Bool("interceptHorizontalWheel", false);
   request->visible = payload.Bool("visible", true);
-  request->popup_policy = ParseGuestPopupPolicy(payload.String("popupPolicy"),
-                                                GuestPopupPolicy::kDeny);
   request->background_color = payload.String("backgroundColor");
   return true;
 }

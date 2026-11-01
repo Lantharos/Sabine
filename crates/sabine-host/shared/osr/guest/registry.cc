@@ -5,6 +5,10 @@
 const char kSabinePopupGuestId[] = "__sabine_popup";
 const char kSabineDevToolsGuestId[] = "__sabine_devtools";
 
+bool IsInternalGuestId(const std::string& id) {
+  return id == kSabinePopupGuestId || id == kSabineDevToolsGuestId;
+}
+
 GuestView* GuestRegistry::Find(const std::string& id) {
   if (id.empty()) {
     return nullptr;

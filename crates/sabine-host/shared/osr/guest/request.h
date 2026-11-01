@@ -14,14 +14,12 @@ extern const char kGuestBridgePrefix[];
 extern const char kGuestHostControlPrefix[];
 
 enum class GuestPopupPolicy {
-  kDeny = 0,
-  kAllow = 1,
-  kNavigateSame = 2,
-  kOpenGuest = 3,
+  kDeny,
+  kNavigateSame,
+  kOpenGuest,
 };
 
-GuestPopupPolicy ParseGuestPopupPolicy(const std::string& value,
-                                       GuestPopupPolicy fallback);
+bool ParseGuestPopupPolicy(const std::string& value, GuestPopupPolicy* policy);
 const char* GuestPopupPolicyName(GuestPopupPolicy policy);
 const char* WindowOpenDispositionName(int disposition);
 
@@ -76,6 +74,8 @@ std::string GuestFolder(const std::string& partition);
 std::string HtmlDataUri(const std::string& body);
 cef_color_t ParseGuestBackgroundColor(const std::string& value,
                                       cef_color_t fallback);
+// The zoom factor Chromium applies for a requested one, from 0.25 to 5.
+double ClampGuestZoom(double factor);
 double GuestZoomLevel(double factor);
 
 #endif

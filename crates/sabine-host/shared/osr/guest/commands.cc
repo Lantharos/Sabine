@@ -141,9 +141,8 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "setZoom") {
-    const double factor = payload.Number("factor", 1.0);
-    guest->zoom = factor;
-    browser->GetHost()->SetZoomLevel(GuestZoomLevel(factor));
+    guest->zoom = ClampGuestZoom(payload.Number("factor", 1.0));
+    browser->GetHost()->SetZoomLevel(GuestZoomLevel(guest->zoom));
     *response = GuestInfoJson(*guest);
     return true;
   }

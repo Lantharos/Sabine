@@ -15,6 +15,10 @@ extern const char kSabinePopupGuestId[];
 // see nor manage.
 extern const char kSabineDevToolsGuestId[];
 
+// Whether |id| names one of Sabine's own surfaces, which pages neither see
+// nor manage through `sabine.guest`.
+bool IsInternalGuestId(const std::string& id);
+
 struct GuestView {
   std::string id;
   CefRefPtr<CefBrowser> browser;
@@ -34,7 +38,7 @@ struct GuestView {
   GuestPopupPolicy popup_policy = GuestPopupPolicy::kDeny;
   double zoom = 1.0;
 
-  bool ShownToPage() const { return id != kSabineDevToolsGuestId; }
+  bool ShownToPage() const { return !IsInternalGuestId(id); }
 };
 
 /// Guest views keyed by id, with a separate bottom-to-top z-order used for

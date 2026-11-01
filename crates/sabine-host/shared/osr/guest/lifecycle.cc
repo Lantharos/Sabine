@@ -270,14 +270,14 @@ void SabineOsrHandler::DestroyGuest(const std::string& id) {
   const bool canceled = CancelPendingGuest(id);
   GuestView* guest = guests_.Find(id);
   if (!guest) {
-    if (canceled) {
+    if (canceled && !IsInternalGuestId(id)) {
       EmitPrimaryEvent("guest.destroyed", GuestIdJson(id));
     }
     return;
   }
   const GuestView removed = *guest;
   guests_.Erase(id);
-  if (!removed.ShownToPage()) {
+  if (id == kSabineDevToolsGuestId) {
     devtools_inspected_ = nullptr;
     devtools_registration_ = nullptr;
   }
@@ -446,9 +446,6 @@ bool SabineOsrHandler::OnBeforePopup(
         browser->GetMainFrame()->LoadURL(url);
       }
       return true;
-    // A CEF-owned popup browser has no surface in the compositor, so an allowed
-    // popup becomes another guest view instead.
-    case GuestPopupPolicy::kAllow:
     case GuestPopupPolicy::kOpenGuest: {
       if (url.empty()) {
         return true;

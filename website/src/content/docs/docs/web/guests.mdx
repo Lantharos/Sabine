@@ -134,7 +134,8 @@ zoomIn.onclick = async () => {
 ```
 
 `get()` resolves with the guest's `GuestInfo`, and `guest.list()` with every guest's, in stacking
-order from the bottom:
+order from the bottom. Sabine's own surfaces, such as the [popup](/docs/reference/javascript-api/#popup),
+aren't guests the page manages: they aren't listed and send no guest events.
 
 | Field | Meaning |
 | --- | --- |
@@ -147,7 +148,7 @@ order from the bottom:
 | `partition` | Its storage partition. |
 | `allowBridge` | Whether its pages get the bridge. |
 | `popupPolicy` | What it does with new windows. |
-| `zoomFactor` | The zoom last set with `setZoom`. |
+| `zoomFactor` | The zoom the guest shows, as last set with `setZoom` and kept between 0.25 and 5. |
 
 ## Storage partitions
 
@@ -168,7 +169,6 @@ opens a new window:
 | `"deny"` | Nothing opens, and the page receives `guestNewWindow` with the URL and how the page asked to open it, for example to open the link in a new tab of its own or with `shell.openLink`. |
 | `"navigateSame"` | The guest loads the URL itself. |
 | `"openGuest"` | Sabine opens the URL in a new guest with the same partition, bounds, popup policy and download setting. The page learns about it from `guestCreated`. |
-| `"allow"` | The same as `"openGuest"`: a popup opens as another guest. |
 
 ```ts
 import { events, shell } from "@lantharos/sabine";
@@ -204,7 +204,12 @@ events.guestDownload(async (download) => {
 | `"pause"`, `"resume"` | Pauses or resumes it. |
 
 Later events report `progress`, then `completed`, `cancelled` or `interrupted`, with
-`receivedBytes`, `totalBytes`, the `filename` the site suggested and the `savePath`. A guest
+`receivedBytes`, `totalBytes`, the `filename` the site suggested and the `savePath`. An
+`interrupted` download carries an `error` saying why it stopped: `fileFailed`,
+`fileAccessDenied`, `fileNoSpace`, `fileNameTooLong`, `fileTooLarge`, `fileVirusInfected`,
+`fileBlocked`, `fileSecurityCheckFailed`, `networkFailed`, `networkTimeout`,
+`networkDisconnected`, `networkServerDown`, `serverFailed`, `serverUnauthorized`,
+`serverCertProblem`, `serverForbidden`, `serverUnreachable`, `canceled`, `shutdown` or `crash`. A guest
 created with `allowDownloads: false` can't download at all. A window keeps up to 256 pending or
 running downloads and cancels further ones.
 
@@ -296,9 +301,10 @@ fn main() {
 
 `GuestHostControl` has a variant for each operation: `Create`, `Destroy`, `Navigate`, `SetBounds`,
 `SetVisible`, `SetCovered`, `Focus`, `Reload`, `GoBack`, `GoForward`, `SetZoom`,
-`ExecuteJavaScript` and `DownloadAction`. Controls go to every window and take effect without an
-answer; the page sees the results through the guest events above, and `guest.list()` lists guests
-the app created alongside its own.
+`ExecuteJavaScript` and `DownloadAction`. `SabineProcess::guest_control` drives the guests of the
+app's first window, and `BridgeEventEmitter::guest_control(window, control)` those of the window
+you name. Controls take effect without an answer; the page sees the results through the guest
+events above, and `guest.list()` lists guests the app created alongside its own.
 
 <Aside>
 Guest pages are other people's code. Keep `allowBridge` off for anything you don't serve

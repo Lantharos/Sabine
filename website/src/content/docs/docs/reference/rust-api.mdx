@@ -174,8 +174,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `title(impl Into<String>)` | The window title; must not be empty |
 | `entry(impl Into<String>)` | A local HTML file, served from its folder at `sabine://app/` |
 | `url(impl Into<String>)` | A production URL; its exact origin may use the bridge. Exclusive with `entry` |
-| `dev_url(impl Into<String>)` | A development server URL, used instead of the entry while set |
-| `content_suffix(impl AsRef<str>)` | Appends a query string or fragment to the entry, URL or development URL |
+| `content_suffix(impl AsRef<str>)` | Appends a query string or fragment to the page the window opens: the entry, the URL, or the development server's page in a development run |
 | `allowed_origin(impl Into<String>)` | Lets another origin's pages use the bridge |
 | `security(ContentSecurity)` | Replaces the allowed origins wholesale |
 | `local_files(bool)` | Lets pages load any readable file through `sabine://file/<absolute path>` |
@@ -448,7 +447,7 @@ impl BridgeEventEmitter {
 
     pub fn notify(&self, window: WindowId, notification: &Notification) -> bool;
     pub fn print_files(&self, window: WindowId, paths: &[PathBuf], title: Option<&str>) -> bool;
-    pub fn guest_control(&self, control: &GuestHostControl) -> bool;
+    pub fn guest_control(&self, window: WindowId, control: &GuestHostControl) -> bool;
 
     pub fn show(&self) -> bool;
     pub fn hide(&self) -> bool;
@@ -554,7 +553,7 @@ const TERMINAL_OUTPUT: BridgeEvent<Bytes> = BridgeEvent::new("terminal.output");
 
 ### Guests
 
-`GuestHostControl` drives guests from Rust, through `SabineProcess::guest_control` or the emitter. Controls take effect without an answer; pages observe the results through guest events.
+`GuestHostControl` drives guests from Rust: `SabineProcess::guest_control` drives the first window's guests, and the emitter's `guest_control` those of the window it names. Controls take effect without an answer; pages observe the results through guest events.
 
 ```rust
 pub enum GuestHostControl {
@@ -579,7 +578,7 @@ pub enum GuestHostControl {
 }
 
 pub enum GuestDownloadAction { Accept, Cancel, Pause, Resume }
-pub enum GuestPopupPolicy { Deny, Allow, NavigateSame, OpenGuest }
+pub enum GuestPopupPolicy { Deny, NavigateSame, OpenGuest }
 ```
 
 `GuestCreateOptions` holds `id`, `url`, `html`, `bounds`, `partition`, `allow_bridge` (`false`), `intercepted_shortcuts`, `intercept_horizontal_wheel`, `visible` (`true`), `popup_policy` (`Deny`), `allow_downloads` (`true`) and `background_color`, and implements `Default`. `GuestBounds::new(x, y, width, height)` takes CSS pixels relative to the window. See [Guests](/docs/web/guests/).
@@ -601,6 +600,7 @@ pub enum AppEnvironment { Development, Production }
 
 impl AppEnvironment {
     pub fn current() -> Self;
+    pub fn production_build() -> bool;
     pub fn of(app_id: &str) -> Self;
     pub fn as_str(self) -> &'static str;
     pub fn app_id(self, id: &str) -> String;
@@ -609,7 +609,8 @@ impl AppEnvironment {
 }
 ```
 
-- `current` reads `SABINE_ENV`, and treats a set `SABINE_DEV_URL` as development.
+- `current` reads `SABINE_ENV`, and treats a set `SABINE_DEV_URL` as development. A build made for production, with `SABINE_ENV=production` while it compiles as `sabine bundle` does, is always `Production`.
+- `production_build` says whether this binary was built for production. Such builds ignore the variables that point a development run at its project.
 - `app_id` appends `.dev` in development.
 - `app_data_dir` is the folder an app keeps its files in: the app id below `%APPDATA%`, `~/Library/Application Support` or `$XDG_DATA_HOME`, with the `.dev` id in development. It is the folder Sabine's app sandbox lets the app write.
 - `data_dir` keeps an existing production location and puts development data in a `development` folder below it. Neither creates folders.

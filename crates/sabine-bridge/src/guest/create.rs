@@ -7,11 +7,9 @@ pub enum GuestPopupPolicy {
     /// Cancel the popup and emit `guest.newWindow` for the app to handle.
     #[default]
     Deny,
-    /// Allow Chromium to open a native popup window.
-    Allow,
     /// Open the URL inside the same guest (navigate in place).
     NavigateSame,
-    /// Open the URL in a new guest surface with the same partition.
+    /// Open the URL in a new guest with the same partition and bounds.
     OpenGuest,
 }
 

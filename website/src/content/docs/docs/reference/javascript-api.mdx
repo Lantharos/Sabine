@@ -73,9 +73,12 @@ everything on it; use them instead.
 ```ts
 function invoke<T = unknown>(name: string, params?: object, options?: InvokeOptions): Promise<T>;
 
-interface InvokeOptions {
+interface CallOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
+}
+
+interface InvokeOptions extends CallOptions {
   body?: ArrayBuffer | ArrayBufferView | Blob;
 }
 ```
@@ -89,8 +92,11 @@ Calls a command and resolves with its answer: the JSON value the handler returne
 | `timeoutMs` | `60000` | Rejects with a `TimeoutError` when no answer arrives in time. From 1 to 2147483647; other values throw a `RangeError`. |
 | `body` | | Bytes sent with the call, up to 32 MiB. The handler reads them as `command.body`. |
 
-The promise rejects with the handler's error message, or when the command isn't registered, the
-page already waits on 128 calls, or the page goes away. The full list is in
+[Typed bindings](/docs/bridge/typed-bindings/) take `CallOptions`, since typed commands don't
+take bytes.
+
+The promise rejects with the handler's error message, or when the command isn't registered or not
+available to the page, the page already waits on 128 calls, or the page goes away. The full list is in
 [Commands](/docs/bridge/commands/#errors).
 
 ```ts
@@ -127,9 +133,9 @@ const bridge: {
 
 | Member | Meaning |
 | --- | --- |
-| `commands()` | Every command the page may call: the app's own and Sabine's. |
+| `commands()` | Every command the page may call: the app's own and Sabine's, or only the ones its origin was allowed. |
 | `invoke`, `listen` | The functions above. |
-| `send(name, params)` | Calls a command without waiting for its answer, for frequent updates such as a position while dragging. It throws when the command isn't registered, holds no slot among the page's pending calls, and drops the answer. |
+| `send(name, params)` | Calls a command without waiting for its answer, for frequent updates such as a position while dragging. It throws when the command isn't available, holds no slot among the page's pending calls, and gets no answer back. When the window's queue is full, updates are dropped and the page hears `sabine.bridge.dropped` with `{ command }`. |
 
 ## `fileUrl`
 
@@ -431,7 +437,7 @@ const guest: {
 | Method | Effect |
 | --- | --- |
 | `create(options)` | Opens a guest and resolves with its handle. |
-| `list()` | Every guest, bottom to top. |
+| `list()` | Every guest, bottom to top. Sabine's own surfaces, such as the popup, aren't listed. |
 | `get(id)` | One guest's state. |
 | `destroy(id)` | Closes a guest. |
 | `navigate(id, target)` | Loads a URL, `{ url }` or `{ html }`. |
@@ -491,7 +497,7 @@ interface GuestBounds {
   height: number;
 }
 
-type GuestPopupPolicy = "deny" | "allow" | "navigateSame" | "openGuest";
+type GuestPopupPolicy = "deny" | "navigateSame" | "openGuest";
 
 interface GuestCreateOptions {
   id?: string;
@@ -566,8 +572,8 @@ interface GuestDownloadEvent {
   totalBytes: number;
   receivedBytes: number;
   state: "requested" | "progress" | "completed" | "cancelled" | "interrupted";
-  savePath?: string | null;
-  error?: string | null;
+  savePath: string;
+  error?: string; // why an interrupted download stopped, such as "networkFailed" or "fileNoSpace"
 }
 
 type GuestDownloadAction = "accept" | "cancel" | "pause" | "resume";
