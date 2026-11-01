@@ -26,14 +26,21 @@ struct ByteRange {
   bool partial = false;
 };
 
+bool Seek(FILE* file, uint64_t offset, int origin) {
+#if defined(OS_WIN)
+  return _fseeki64(file, static_cast<int64_t>(offset), origin) == 0;
+#else
+  return fseeko(file, static_cast<off_t>(offset), origin) == 0;
+#endif
+}
+
 FILE* OpenFile(const fs::path& path, uint64_t offset) {
 #if defined(OS_WIN)
   FILE* file = _wfopen(path.c_str(), L"rb");
-  if (file && _fseeki64(file, static_cast<int64_t>(offset), SEEK_SET) != 0) {
 #else
   FILE* file = std::fopen(path.c_str(), "rb");
-  if (file && fseeko(file, static_cast<off_t>(offset), SEEK_SET) != 0) {
 #endif
+  if (file && !Seek(file, offset, SEEK_SET)) {
     std::fclose(file);
     return nullptr;
   }
@@ -207,7 +214,14 @@ class FileHandler : public CefResourceHandler {
   bool Skip(int64_t bytes_to_skip,
             int64_t& bytes_skipped,
             CefRefPtr<CefResourceSkipCallback> callback) override {
-    bytes_skipped = bytes_to_skip;
+    const uint64_t skipped =
+        std::min(static_cast<uint64_t>(bytes_to_skip), remaining_);
+    if (!file_ || skipped == 0 || !Seek(file_, skipped, SEEK_CUR)) {
+      bytes_skipped = ERR_FAILED;
+      return false;
+    }
+    remaining_ -= skipped;
+    bytes_skipped = static_cast<int64_t>(skipped);
     return true;
   }
 

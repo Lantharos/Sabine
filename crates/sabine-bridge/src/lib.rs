@@ -51,3 +51,15 @@ pub const INSTALL_SCRIPT: &str = concat!(
 /// Middle-click autoscroll, evaluated in every frame by the native host on Linux and macOS, where
 /// Chromium has none.
 pub const AUTOSCROLL_SCRIPT: &str = include_str!("scripts/autoscroll.js");
+
+/// Reports the text around the caret of the focused editable to the input method, evaluated in
+/// every frame by the native host with the reporting function it alone holds.
+pub const IME_STATE_SCRIPT: &str = include_str!("scripts/ime_state.js");
+
+/// Turns the back and forward mouse buttons into history navigation unless the page handles
+/// them, called by the native host with the pointer position, button, and modifiers.
+pub const MOUSE_NAVIGATION_SCRIPT: &str = include_str!("scripts/mouse_navigation.js");
+
+/// Clears the page background of transparent windows, evaluated by the native host as the main
+/// document starts and finishes loading.
+pub const TRANSPARENT_BACKGROUND_SCRIPT: &str = include_str!("scripts/transparent_background.js");

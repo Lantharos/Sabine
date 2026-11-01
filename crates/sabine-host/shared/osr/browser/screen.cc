@@ -9,7 +9,7 @@ namespace sabine_osr {
 
 bool TryHandleScreenOriginControl(SabineOsrHandler* handler,
                                   const std::vector<std::string>& parts) {
-  if (!handler || parts.empty() || parts[0] != "screen_origin") {
+  if (parts[0] != "screen_origin") {
     return false;
   }
   CEF_REQUIRE_UI_THREAD();

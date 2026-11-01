@@ -1,26 +1,15 @@
 #include "osr/handler.h"
 
-#include <algorithm>
-#include <cstdint>
 #include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "guest/input.h"
-#include "guest/manager.h"
-#include "include/cef_app.h"
-#include "include/cef_browser.h"
-#include "include/cef_command_line.h"
-#include "include/cef_parser.h"
-#include "include/cef_request_context_handler.h"
-#include "include/cef_task.h"
-#include "include/internal/cef_types.h"
-#include "include/wrapper/cef_helpers.h"
-#include "common/json.h"
 #include "common/bridge_policy.h"
-#include "sabine_bridge_js.h"
+#include "include/cef_request_context_handler.h"
+#include "include/wrapper/cef_helpers.h"
 #include "osr/accelerated/paint.h"
+#include "osr/guest/events.h"
 
 using namespace sabine_osr;
 
@@ -49,23 +38,24 @@ class SabineGuestRequestContextHandler : public CefRequestContextHandler {
 
 GuestView* SabineOsrHandler::GuestForBrowser(
     const CefRefPtr<CefBrowser>& browser) {
-  if (!browser) {
-    return nullptr;
-  }
   if (GuestView* guest = guests_.FindByBrowser(browser)) {
     return guest;
   }
-  if (pending_guest_id_.empty() || (browser_ && browser_->IsSame(browser))) {
+  if (browser_ && browser_->IsSame(browser)) {
     return nullptr;
   }
-  GuestView* pending = guests_.Find(pending_guest_id_);
-  return pending && !pending->browser ? pending : nullptr;
+  return GuestAwaitingBrowser();
+}
+
+GuestView* SabineOsrHandler::GuestAwaitingBrowser() {
+  GuestView* guest = guests_.Find(guest_creations_.creating_id);
+  return guest && !guest->browser ? guest : nullptr;
 }
 
 std::string SabineOsrHandler::NextGuestId() {
   std::string id;
   do {
-    id = "guest-" + std::to_string(++guest_serial_);
+    id = "guest-" + std::to_string(++guest_creations_.serial);
   } while (guests_.Find(id));
   return id;
 }
@@ -76,8 +66,8 @@ CefRefPtr<CefRequestContext> SabineOsrHandler::CreateGuestRequestContext(
   if (partition.empty()) {
     return nullptr;
   }
-  const auto cached = guest_contexts_.find(partition);
-  if (cached != guest_contexts_.end()) {
+  const auto cached = guest_creations_.contexts.find(partition);
+  if (cached != guest_creations_.contexts.end()) {
     return cached->second;
   }
   CefRequestContextSettings settings;
@@ -92,7 +82,7 @@ CefRefPtr<CefRequestContext> SabineOsrHandler::CreateGuestRequestContext(
   CefRefPtr<CefRequestContext> context = CefRequestContext::CreateContext(
       settings, new SabineGuestRequestContextHandler(self, partition));
   if (context) {
-    guest_contexts_[partition] = context;
+    guest_creations_.contexts[partition] = context;
   }
   return context;
 }
@@ -118,18 +108,18 @@ void SabineOsrHandler::CreateGuest(GuestCreateRequest request,
     return;
   }
 
-  const auto cached = guest_contexts_.find(request.partition);
-  if (cached != guest_contexts_.end() &&
-      initialized_guest_contexts_.find(request.partition) !=
-          initialized_guest_contexts_.end()) {
+  const auto cached = guest_creations_.contexts.find(request.partition);
+  if (cached != guest_creations_.contexts.end() &&
+      guest_creations_.initialized_contexts.find(request.partition) !=
+          guest_creations_.initialized_contexts.end()) {
     ContinueCreateGuest(request, cached->second, std::move(callback));
     return;
   }
 
   const std::string partition = request.partition;
-  pending_guest_creates_[partition].push_back(
-      PendingGuestCreate{std::move(request), std::move(callback)});
-  if (cached != guest_contexts_.end()) {
+  guest_creations_.pending[partition].push_back(
+      GuestCreations::Pending{std::move(request), std::move(callback)});
+  if (cached != guest_creations_.contexts.end()) {
     return;
   }
   if (!CreateGuestRequestContext(partition)) {
@@ -141,28 +131,28 @@ void SabineOsrHandler::GuestRequestContextInitialized(
     const std::string& partition,
     CefRefPtr<CefRequestContext> context) {
   CEF_REQUIRE_UI_THREAD();
-  auto pending = pending_guest_creates_.find(partition);
-  if (pending == pending_guest_creates_.end()) {
+  auto pending = guest_creations_.pending.find(partition);
+  if (pending == guest_creations_.pending.end()) {
     if (context) {
-      guest_contexts_[partition] = context;
-      initialized_guest_contexts_.insert(partition);
+      guest_creations_.contexts[partition] = context;
+      guest_creations_.initialized_contexts.insert(partition);
     }
     return;
   }
 
-  std::vector<PendingGuestCreate> creates = std::move(pending->second);
-  pending_guest_creates_.erase(pending);
+  std::vector<GuestCreations::Pending> creates = std::move(pending->second);
+  guest_creations_.pending.erase(pending);
   if (!context) {
-    guest_contexts_.erase(partition);
-    for (PendingGuestCreate& create : creates) {
+    guest_creations_.contexts.erase(partition);
+    for (GuestCreations::Pending& create : creates) {
       create.callback(false, "failed to initialize the guest request context");
     }
     return;
   }
 
-  guest_contexts_[partition] = context;
-  initialized_guest_contexts_.insert(partition);
-  for (PendingGuestCreate& create : creates) {
+  guest_creations_.contexts[partition] = context;
+  guest_creations_.initialized_contexts.insert(partition);
+  for (GuestCreations::Pending& create : creates) {
     ContinueCreateGuest(create.request, context, std::move(create.callback));
   }
 }
@@ -186,11 +176,10 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   guest.pending = true;
   guests_.Insert(std::move(guest));
   guests_.Raise(request.id);
-  pending_guest_id_ = request.id;
+  guest_creations_.creating_id = request.id;
 
   CefBrowserSettings settings;
-  settings.windowless_frame_rate =
-      std::max(1, suspended_ ? background_frame_rate_ : active_frame_rate_);
+  settings.windowless_frame_rate = FrameRate();
   settings.background_color = ParseGuestBackgroundColor(
       request.background_color, CefColorSetARGB(0, 0, 0, 0));
 
@@ -214,7 +203,7 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   CefRefPtr<CefBrowser> browser = CefBrowserHost::CreateBrowserSync(
       window_info, this, initial_url, settings, extra_info,
       context ? context : profile_.context);
-  pending_guest_id_.clear();
+  guest_creations_.creating_id.clear();
 
   GuestView* created = guests_.Find(request.id);
   if (!browser) {
@@ -234,15 +223,15 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   ApplyGuestBounds(*created);
   ApplyGuestVisibility(*created);
   const std::string result = GuestInfoJson(*created);
-  EmitPrimaryEvent("guest.created", result);
+  EmitGuestEvent(*created, "guest.created", result);
   callback(true, result);
 }
 
 bool SabineOsrHandler::CancelPendingGuest(const std::string& id) {
   CEF_REQUIRE_UI_THREAD();
   std::vector<GuestCreateCallback> callbacks;
-  for (auto partition = pending_guest_creates_.begin();
-       partition != pending_guest_creates_.end();) {
+  for (auto partition = guest_creations_.pending.begin();
+       partition != guest_creations_.pending.end();) {
     auto& creates = partition->second;
     for (auto create = creates.begin(); create != creates.end();) {
       if (create->request.id == id) {
@@ -253,7 +242,7 @@ bool SabineOsrHandler::CancelPendingGuest(const std::string& id) {
       }
     }
     if (creates.empty()) {
-      partition = pending_guest_creates_.erase(partition);
+      partition = guest_creations_.pending.erase(partition);
     } else {
       ++partition;
     }
@@ -265,8 +254,8 @@ bool SabineOsrHandler::CancelPendingGuest(const std::string& id) {
 }
 
 bool SabineOsrHandler::HasPendingGuest(const std::string& id) const {
-  for (const auto& entry : pending_guest_creates_) {
-    for (const PendingGuestCreate& create : entry.second) {
+  for (const auto& entry : guest_creations_.pending) {
+    for (const GuestCreations::Pending& create : entry.second) {
       if (create.request.id == id) {
         return true;
       }
@@ -287,20 +276,15 @@ void SabineOsrHandler::DestroyGuest(const std::string& id) {
   }
   const GuestView removed = *guest;
   guests_.Erase(id);
+  if (!removed.ShownToPage()) {
+    devtools_inspected_ = nullptr;
+    devtools_registration_ = nullptr;
+  }
   const bool restore_primary_focus = focused_guest_id_ == id;
   if (focused_guest_id_ == id) {
     focused_guest_id_.clear();
   }
-  for (auto entry = downloads_.begin(); entry != downloads_.end();) {
-    if (entry->second.guest_id == id) {
-      if (entry->second.item_callback) {
-        entry->second.item_callback->Cancel();
-      }
-      entry = downloads_.erase(entry);
-    } else {
-      ++entry;
-    }
-  }
+  downloads_->CancelGuest(id);
   SendGuestHidden(removed);
   if (removed.browser) {
     removed.browser->GetHost()->CloseBrowser(true);
@@ -309,7 +293,7 @@ void SabineOsrHandler::DestroyGuest(const std::string& id) {
     browser_->GetHost()->SetFocus(true);
     SendFocusedImeState();
   }
-  EmitPrimaryEvent("guest.destroyed", GuestIdJson(id));
+  EmitGuestEvent(removed, "guest.destroyed", GuestIdJson(id));
   if (id == kSabinePopupGuestId) {
     EmitBridgeEvent("\"popup.close\"", "{}");
   }
@@ -387,8 +371,7 @@ void SabineOsrHandler::ApplyGuestVisibility(GuestView& guest) {
 
 void SabineOsrHandler::ApplyGuestLifecycle() {
   CEF_REQUIRE_UI_THREAD();
-  const int frame_rate =
-      std::max(1, suspended_ ? background_frame_rate_ : active_frame_rate_);
+  const int frame_rate = FrameRate();
   for (GuestView* guest : guests_.InZOrder()) {
     if (!guest->browser) {
       continue;
@@ -400,8 +383,19 @@ void SabineOsrHandler::ApplyGuestLifecycle() {
 
 void SabineOsrHandler::NotifyGuestScreenInfo() {
   CEF_REQUIRE_UI_THREAD();
+  if (GuestView* devtools = guests_.Find(kSabineDevToolsGuestId)) {
+    devtools->bounds = DevToolsBounds();
+  }
   for (GuestView* guest : guests_.InZOrder()) {
     ApplyGuestBounds(*guest);
+  }
+}
+
+void SabineOsrHandler::EmitGuestEvent(const GuestView& guest,
+                                      const std::string& name,
+                                      const std::string& payload) {
+  if (guest.ShownToPage()) {
+    EmitPrimaryEvent(name, payload);
   }
 }
 
@@ -474,8 +468,8 @@ bool SabineOsrHandler::OnBeforePopup(
     }
     case GuestPopupPolicy::kDeny:
     default:
-      EmitPrimaryEvent("guest.newWindow",
-                       GuestNewWindowJson(guest->id, url, disposition));
+      EmitGuestEvent(*guest, "guest.newWindow",
+                     GuestNewWindowJson(guest->id, url, disposition));
       return true;
   }
 }

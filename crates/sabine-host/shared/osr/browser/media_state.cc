@@ -1,4 +1,4 @@
-#include "osr/handler.h"
+#include "osr/browser/media_state.h"
 
 #include <iterator>
 #include <string>
@@ -6,6 +6,7 @@
 
 #include "include/cef_values.h"
 #include "include/wrapper/cef_helpers.h"
+#include "osr/handler.h"
 
 using namespace sabine_osr;
 
@@ -51,9 +52,9 @@ void SabineOsrHandler::UpdateFrameMediaState(CefRefPtr<CefBrowser> browser,
   auto key = std::make_pair(browser->GetIdentifier(),
                             frame->GetIdentifier().ToString());
   if (playing) {
-    playing_frames_.insert(std::move(key));
+    media_.playing_frames.insert(std::move(key));
   } else {
-    playing_frames_.erase(key);
+    media_.playing_frames.erase(key);
   }
   ReportMediaPlaying();
 }
@@ -63,28 +64,26 @@ void SabineOsrHandler::OnMediaAccessChange(CefRefPtr<CefBrowser> browser,
                                            bool has_audio_access) {
   CEF_REQUIRE_UI_THREAD();
   if (has_video_access || has_audio_access) {
-    capturing_browsers_.insert(browser->GetIdentifier());
+    media_.capturing_browsers.insert(browser->GetIdentifier());
   } else {
-    capturing_browsers_.erase(browser->GetIdentifier());
+    media_.capturing_browsers.erase(browser->GetIdentifier());
   }
   ReportMediaPlaying();
 }
 
-void SabineOsrHandler::ForgetMediaState(CefRefPtr<CefBrowser> browser) {
-  const int id = browser->GetIdentifier();
-  capturing_browsers_.erase(id);
-  for (auto it = playing_frames_.begin(); it != playing_frames_.end();) {
-    it = it->first == id ? playing_frames_.erase(it) : std::next(it);
+void MediaState::Forget(int browser_id) {
+  capturing_browsers.erase(browser_id);
+  for (auto it = playing_frames.begin(); it != playing_frames.end();) {
+    it = it->first == browser_id ? playing_frames.erase(it) : std::next(it);
   }
-  ReportMediaPlaying();
 }
 
 void SabineOsrHandler::ReportMediaPlaying() {
-  const bool playing = !playing_frames_.empty() || !capturing_browsers_.empty();
-  if (playing == media_playing_reported_) {
+  const bool playing = media_.Playing();
+  if (playing == media_.reported) {
     return;
   }
   if (SendMessage(kMediaPlaying, playing ? 1 : 0, 0, 0, 0, nullptr, 0)) {
-    media_playing_reported_ = playing;
+    media_.reported = playing;
   }
 }

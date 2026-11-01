@@ -1,6 +1,8 @@
-#include "osr/handler.h"
+#include "osr/browser/clipboard.h"
 
 #include <string>
+
+#include "osr/handler.h"
 
 #include "common/bridge_policy.h"
 #include "include/cef_parser.h"
@@ -22,6 +24,15 @@ void ReplyToPage(CefRefPtr<CefFrame> frame,
 }
 }  // namespace
 
+void ClipboardRequests::Forget(CefRefPtr<CefBrowser> browser) {
+  for (auto it = pending.begin(); it != pending.end();) {
+    if (it->second.browser->IsSame(browser))
+      it = pending.erase(it);
+    else
+      ++it;
+  }
+}
+
 void SabineOsrHandler::ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
                                                CefRefPtr<CefFrame> frame,
                                                const std::string& request) {
@@ -33,16 +44,16 @@ void SabineOsrHandler::ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
   const std::string operation = body->GetString("op");
   if (operation != "read" && operation != "write")
     return;
-  if (clipboard_requests_.size() >= kMaxPendingClipboardRequests) {
+  if (clipboard_.pending.size() >= kMaxPendingClipboardRequests) {
     ReplyToPage(frame, body->GetInt("id"), false,
                 "{\"message\":\"Too many clipboard requests are waiting\"}");
     return;
   }
   const std::string url = frame->GetURL();
   const std::string request_id =
-      "clipboard-" + std::to_string(++clipboard_request_serial_);
-  clipboard_requests_[request_id] = {browser, frame->GetIdentifier(),
-                                     body->GetInt("id")};
+      "clipboard-" + std::to_string(++clipboard_.serial);
+  clipboard_.pending[request_id] = {browser, frame->GetIdentifier(),
+                                    body->GetInt("id")};
   body->Remove("id");
   body->Remove("op");
   body->SetBool("trusted",
@@ -54,18 +65,17 @@ void SabineOsrHandler::ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
       "\t" + request_id + "\t" + sabine_bridge::Origin(url) + "\t" +
       kClipboardCommandPrefix + operation + "\t" +
       CefWriteJSON(payload, JSON_WRITER_DEFAULT).ToString();
-  SendMessage(kBridgeRequest, 0, 0, 0, 0, line.data(),
-              static_cast<uint32_t>(line.size()));
+  SendMessage(kBridgeRequest, {line});
 }
 
 bool SabineOsrHandler::ResolveClipboardResponse(const std::string& request_id,
                                                 bool ok,
                                                 const std::string& payload) {
-  auto found = clipboard_requests_.find(request_id);
-  if (found == clipboard_requests_.end())
+  auto found = clipboard_.pending.find(request_id);
+  if (found == clipboard_.pending.end())
     return false;
-  const ClipboardRequest request = found->second;
-  clipboard_requests_.erase(found);
+  const ClipboardRequests::Request request = found->second;
+  clipboard_.pending.erase(found);
   auto frame = request.browser->GetFrameByIdentifier(request.frame);
   if (frame && frame->IsValid())
     ReplyToPage(frame, request.page_request, ok, payload);

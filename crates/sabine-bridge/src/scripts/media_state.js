@@ -1,7 +1,4 @@
-(() => {
-  if (window.__sabineMediaStateInstalled) return;
-  window.__sabineMediaStateInstalled = true;
-  const report = window.__sabineMediaState;
+(report) => {
   const elements = new Set();
   const contexts = new Set();
   let reported = false;
@@ -73,4 +70,4 @@
       report("0");
     }
   });
-})();
+}

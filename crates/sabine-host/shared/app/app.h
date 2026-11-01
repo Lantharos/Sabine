@@ -1,15 +1,10 @@
 #ifndef SABINE_CEF_HOST_APP_H_
 #define SABINE_CEF_HOST_APP_H_
 
-#include <vector>
-
 #include "include/cef_app.h"
-#include "include/cef_render_process_handler.h"
-#include "include/cef_v8.h"
+#include "renderer/renderer.h"
 
-class SabineApp : public CefApp,
-                  public CefBrowserProcessHandler,
-                  public CefRenderProcessHandler {
+class SabineApp : public CefApp, public CefBrowserProcessHandler {
  public:
   explicit SabineApp(bool runtime_smoke_test = false);
 
@@ -17,7 +12,7 @@ class SabineApp : public CefApp,
     return this;
   }
   CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
-    return this;
+    return renderer_;
   }
 
   void OnRegisterCustomSchemes(
@@ -27,34 +22,13 @@ class SabineApp : public CefApp,
   void OnBeforeChildProcessLaunch(
       CefRefPtr<CefCommandLine> command_line) override;
 #endif
-  void OnBrowserCreated(CefRefPtr<CefBrowser> browser,
-                        CefRefPtr<CefDictionaryValue> extra_info) override;
-  void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;
-  void OnContextCreated(CefRefPtr<CefBrowser> browser,
-                        CefRefPtr<CefFrame> frame,
-                        CefRefPtr<CefV8Context> context) override;
-  void OnContextReleased(CefRefPtr<CefBrowser> browser,
-                         CefRefPtr<CefFrame> frame,
-                         CefRefPtr<CefV8Context> context) override;
-  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                CefRefPtr<CefFrame> frame,
-                                CefProcessId source_process,
-                                CefRefPtr<CefProcessMessage> message) override;
   bool OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine> command_line,
                                    const CefString& current_directory) override;
   CefRefPtr<CefClient> GetDefaultClient() override;
 
  private:
-  struct BrowserPolicy {
-    CefRefPtr<CefBrowser> browser;
-    CefRefPtr<CefDictionaryValue> policy;
-  };
-  std::vector<BrowserPolicy> bridge_policies_;
-  CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
-  void ReportRenderer(CefRefPtr<CefFrame> frame,
-                      CefRefPtr<CefDictionaryValue> policy);
+  CefRefPtr<SabineRenderer> renderer_;
   const bool runtime_smoke_test_;
-  bool renderer_reported_ = false;
 
   IMPLEMENT_REFCOUNTING(SabineApp);
 };

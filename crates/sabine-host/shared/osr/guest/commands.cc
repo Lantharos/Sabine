@@ -1,38 +1,36 @@
 #include "osr/handler.h"
 
-#include <cstdint>
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include "guest/input.h"
-#include "guest/manager.h"
-#include "include/cef_app.h"
-#include "include/cef_browser.h"
-#include "include/cef_parser.h"
-#include "include/cef_request_context_handler.h"
-#include "include/cef_task.h"
-#include "include/internal/cef_types.h"
-#include "include/wrapper/cef_helpers.h"
-#include "common/json.h"
 #include "common/bridge_policy.h"
-#include "sabine_bridge_js.h"
+#include "common/json.h"
+#include "include/wrapper/cef_helpers.h"
+#include "osr/guest/events.h"
 
 using namespace sabine_osr;
 
 bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
-                                         const std::string& payload,
+                                         const JsonObject& payload,
                                          std::string* response,
                                          std::string* error) {
   CEF_REQUIRE_UI_THREAD();
   *response = "{}";
   if (operation == "list") {
     const GuestRegistry& registry = guests_;
-    *response = GuestListJson(registry.InZOrder());
+    std::vector<const GuestView*> listed;
+    for (const GuestView* guest : registry.InZOrder()) {
+      if (guest->ShownToPage()) {
+        listed.push_back(guest);
+      }
+    }
+    *response = GuestListJson(listed);
     return true;
   }
   if (operation == "setCovered") {
-    const bool covered = JsonBoolValue(payload, "covered", false);
+    const bool covered = payload.Bool("covered", false);
     if (guests_.Covered() == covered) {
       return true;
     }
@@ -50,16 +48,21 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "downloadAction") {
-    return RunGuestDownloadAction(payload, error);
+    return downloads_->RunGuestAction(payload, error);
   }
 
-  const std::string id = JsonStringValue(payload, "id");
+  const std::string id = payload.String("id");
   if (id.empty()) {
     *error = "guest." + operation + " requires an `id`";
     return false;
   }
+  GuestView* guest = guests_.Find(id);
+  if (guest && !guest->ShownToPage()) {
+    *error = "unknown guest id";
+    return false;
+  }
   if (operation == "destroy") {
-    if (!guests_.Find(id) && !HasPendingGuest(id)) {
+    if (!guest && !HasPendingGuest(id)) {
       *error = "unknown guest id";
       return false;
     }
@@ -68,7 +71,6 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
 
-  GuestView* guest = guests_.Find(id);
   if (!guest) {
     *error = "unknown guest id";
     return false;
@@ -85,7 +87,7 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "setVisible") {
-    const bool visible = JsonBoolValue(payload, "visible", true);
+    const bool visible = payload.Bool("visible", true);
     if (guest->visible != visible) {
       guest->visible = visible;
       ApplyGuestVisibility(*guest);
@@ -102,8 +104,8 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return false;
   }
   if (operation == "navigate") {
-    const std::string url = JsonStringValue(payload, "url");
-    const std::string html = JsonStringValue(payload, "html");
+    const std::string url = payload.String("url");
+    const std::string html = payload.String("html");
     if (url.empty() && html.empty()) {
       *error = "guest.navigate requires a `url` or `html`";
       return false;
@@ -115,7 +117,7 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "reload") {
-    if (JsonBoolValue(payload, "ignoreCache", false)) {
+    if (payload.Bool("ignoreCache", false)) {
       browser->ReloadIgnoreCache();
     } else {
       browser->Reload();
@@ -139,14 +141,14 @@ bool SabineOsrHandler::RunGuestOperation(const std::string& operation,
     return true;
   }
   if (operation == "setZoom") {
-    const double factor = JsonDoubleValue(payload, "factor", 1.0);
+    const double factor = payload.Number("factor", 1.0);
     guest->zoom = factor;
     browser->GetHost()->SetZoomLevel(GuestZoomLevel(factor));
     *response = GuestInfoJson(*guest);
     return true;
   }
   if (operation == "executeJavaScript") {
-    const std::string code = JsonStringValue(payload, "code");
+    const std::string code = payload.String("code");
     if (code.empty()) {
       *error = "guest.executeJavaScript requires `code`";
       return false;
@@ -163,10 +165,11 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
                                                 const std::string& payload,
                                                 const std::string& browser_id,
                                                 const std::string& request_id) {
+  const JsonObject fields = JsonObject::Parse(payload);
   if (command == "sabine.popup.open") {
     GuestCreateRequest request;
     std::string parse_error;
-    if (!ParseGuestCreateRequest(payload, &request, &parse_error)) {
+    if (!ParseGuestCreateRequest(fields, &request, &parse_error)) {
       ResolveBridgeResponse(browser_id, request_id, false,
                             JsonMessage(parse_error));
       return true;
@@ -198,7 +201,7 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
   if (operation == "create") {
     GuestCreateRequest request;
     std::string error;
-    if (!ParseGuestCreateRequest(payload, &request, &error)) {
+    if (!ParseGuestCreateRequest(fields, &request, &error)) {
       ResolveBridgeResponse(browser_id, request_id, false, JsonMessage(error));
       return true;
     }
@@ -215,9 +218,9 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
     return true;
   }
   if (operation == "capturePreview") {
-    const std::string id = JsonStringValue(payload, "id");
+    const std::string id = fields.String("id");
     GuestView* guest = guests_.Find(id);
-    if (!guest || !guest->browser) {
+    if (!guest || !guest->browser || !guest->ShownToPage()) {
       ResolveBridgeResponse(browser_id, request_id, false,
                             JsonMessage("unknown guest id"));
       return true;
@@ -241,7 +244,7 @@ bool SabineOsrHandler::HandleGuestBridgeCommand(const std::string& command,
   }
   std::string response;
   std::string error;
-  if (!RunGuestOperation(operation, payload, &response, &error)) {
+  if (!RunGuestOperation(operation, fields, &response, &error)) {
     ResolveBridgeResponse(browser_id, request_id, false, JsonMessage(error));
     return true;
   }
@@ -257,10 +260,11 @@ void SabineOsrHandler::ApplyHostControl(const std::string& command,
   if (operation.empty()) {
     return;
   }
+  const JsonObject fields = JsonObject::Parse(value);
   if (operation == "create") {
     GuestCreateRequest request;
     std::string error;
-    if (!ParseGuestCreateRequest(value, &request, &error)) {
+    if (!ParseGuestCreateRequest(fields, &request, &error)) {
       std::cerr << "guest.create failed: " << error << std::endl;
       return;
     }
@@ -277,7 +281,7 @@ void SabineOsrHandler::ApplyHostControl(const std::string& command,
   }
   std::string response;
   std::string error;
-  if (!RunGuestOperation(operation, value, &response, &error)) {
+  if (!RunGuestOperation(operation, fields, &response, &error)) {
     std::cerr << "guest." << operation << " failed: " << error << std::endl;
   }
 }

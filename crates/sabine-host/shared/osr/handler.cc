@@ -1,118 +1,93 @@
 #include "osr/handler.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cerrno>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <set>
-#include <sstream>
 #include <string>
-#include <thread>
 #include <utility>
-#include <vector>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
-#include <unistd.h>
-#endif
-
-#include "guest/input.h"
-#include "guest/manager.h"
-#include "include/cef_app.h"
+#include "common/bridge_policy.h"
+#include "common/switches.h"
 #include "include/cef_browser.h"
 #include "include/cef_parser.h"
-#include "include/cef_request_context_handler.h"
-#include "include/cef_task.h"
-#include "include/internal/cef_types.h"
-#include "include/wrapper/cef_helpers.h"
-#include "common/json.h"
-#include "common/bridge_policy.h"
-#include "sabine_bridge_js.h"
 #include "osr/accelerated/paint.h"
 #include "osr/common/registry.h"
 
 using namespace sabine_osr;
 
+namespace {
+
+std::string ReadAuthenticationToken(const std::string& token_file) {
+  std::string token;
+  if (token_file.empty()) {
+    return token;
+  }
+  std::ifstream input(token_file.c_str(), std::ios::in | std::ios::binary);
+  if (input) {
+    std::getline(input, token);
+    while (!token.empty() && (token.back() == '\r' || token.back() == '\n')) {
+      token.pop_back();
+    }
+  }
+  // The secret must not linger; a relaunch hands over a fresh file.
+  std::remove(token_file.c_str());
+  return token;
+}
+
+#if defined(OS_WIN)
+bool ParseParentWindow(const std::string& value, CefWindowHandle* parent) {
+  if (value.empty()) {
+    return true;
+  }
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long long handle = std::strtoull(value.c_str(), &end, 10);
+  if (errno || value.front() == '-' || *end ||
+      handle > std::numeric_limits<uintptr_t>::max()) {
+    return false;
+  }
+  *parent = reinterpret_cast<CefWindowHandle>(static_cast<uintptr_t>(handle));
+  return true;
+}
+#endif
+
+}  // namespace
+
 SabineOsrHandler::SabineOsrHandler(std::string endpoint,
                                    std::string authentication_token,
-                                   int width,
-                                   int height,
-                                   float scale,
+                                   const BrowserViewport& viewport,
                                    CefRefPtr<CefDictionaryValue> bridge_policy,
                                    bool dev_mode,
                                    bool transparent_background,
-                                   bool retain_hidden_frame,
-                                   int active_frame_rate,
-                                   int background_frame_rate)
+                                   bool retain_hidden_frame)
     : endpoint_(std::move(endpoint)),
       authentication_token_(std::move(authentication_token)),
-      width_(std::max(1, width)),
-      height_(std::max(1, height)),
-      scale_(std::max(0.25f, scale)),
+      width_(viewport.width),
+      height_(viewport.height),
+      scale_(viewport.scale),
+      active_frame_rate_(viewport.active_frame_rate),
+      background_frame_rate_(viewport.background_frame_rate),
       bridge_policy_(bridge_policy),
+      dialogs_(new PageDialogs(this)),
+      downloads_(new Downloads(this)),
+#if defined(OS_LINUX)
+      print_dialogs_(new PrintDialogs(this)),
+#endif
       transparent_background_(transparent_background),
       retain_hidden_frame_(retain_hidden_frame),
-      active_frame_rate_(std::max(1, active_frame_rate)),
-      background_frame_rate_(std::max(1, background_frame_rate)) {
-  dev_mode_ = dev_mode;
+      dev_mode_(dev_mode) {
   const auto commands = sabine_bridge::Commands(bridge_policy);
   bridge_commands_.insert(commands.begin(), commands.end());
-  if (!g_instance) {
-    g_instance = this;
-  }
   RegisterHandler(this);
 }
 
 SabineOsrHandler::~SabineOsrHandler() {
-  if (socket_fd_ >= 0) {
-#ifdef _WIN32
-    closesocket(static_cast<SOCKET>(socket_fd_));
-    WSACleanup();
-#else
-    close(socket_fd_);
-#endif
-  }
   UnregisterHandler(this);
-  if (g_instance == this) {
-    g_instance = nullptr;
-    const auto remaining = SnapshotHandlers();
-    if (!remaining.empty()) {
-      g_instance = remaining.front();
-    }
-  }
-}
-
-SabineOsrHandler* SabineOsrHandler::GetInstance() {
-  return g_instance;
-}
-
-cef_color_t SwitchColor(CefRefPtr<CefCommandLine> command_line,
-                        const std::string& name,
-                        cef_color_t fallback) {
-  const std::string value = command_line->GetSwitchValue(name);
-  if (value.empty()) {
-    return fallback;
-  }
-  char* end = nullptr;
-  errno = 0;
-  const unsigned long parsed = std::strtoul(value.c_str(), &end, 0);
-  if (errno != 0 || end == value.c_str() || *end != '\0' ||
-      parsed > std::numeric_limits<uint32_t>::max()) {
-    return fallback;
-  }
-  return static_cast<cef_color_t>(parsed);
 }
 
 void SabineOsrHandler::UseProfile(BrowserProfile profile, bool shared_texture) {
@@ -125,31 +100,15 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
   const std::string url_value = command_line->GetSwitchValue("url");
   const std::string url =
       url_value.empty() ? "about:blank" : std::string(url_value);
-  const int width = std::max(1, SwitchInt(command_line, "sabine-width", 800));
-  const int height = std::max(1, SwitchInt(command_line, "sabine-height", 600));
-  const float scale = SwitchFloat(command_line, "sabine-scale", 1.0f);
-  const int active_frame_rate =
-      std::max(1, SwitchInt(command_line, "sabine-active-frame-rate", 60));
-  const int background_frame_rate =
-      std::max(1, SwitchInt(command_line, "sabine-background-frame-rate", 5));
-  const std::string endpoint =
-      command_line->GetSwitchValue("sabine-osr-endpoint");
-  std::string authentication_token;
-  const std::string token_file =
-      command_line->GetSwitchValue("sabine-osr-token-file");
-  if (!token_file.empty()) {
-    std::ifstream input(token_file.c_str(), std::ios::in | std::ios::binary);
-    if (input) {
-      std::getline(input, authentication_token);
-      while (!authentication_token.empty() &&
-             (authentication_token.back() == '\r' ||
-              authentication_token.back() == '\n')) {
-        authentication_token.pop_back();
-      }
-    }
-    // The secret must not linger; a relaunch hands over a fresh file.
-    std::remove(token_file.c_str());
-  }
+  const BrowserViewport viewport{
+      std::max(1, SwitchInt(command_line, "sabine-width", 800)),
+      std::max(1, SwitchInt(command_line, "sabine-height", 600)),
+      std::max(0.25f, SwitchFloat(command_line, "sabine-scale", 1.0f)),
+      std::max(1, SwitchInt(command_line, "sabine-active-frame-rate", 60)),
+      std::max(1, SwitchInt(command_line, "sabine-background-frame-rate", 5)),
+  };
+  const std::string authentication_token = ReadAuthenticationToken(
+      command_line->GetSwitchValue("sabine-osr-token-file"));
   if (authentication_token.empty()) {
     std::cerr << "Sabine OSR: missing authentication token file" << std::endl;
     return false;
@@ -165,43 +124,30 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
   if (!profile.renderer_cgroup.empty()) {
     policy->SetBool(sabine_bridge::kReportRendererKey, true);
   }
+  const bool transparent = command_line->HasSwitch("sabine-transparent");
   CefBrowserSettings browser_settings;
-  browser_settings.windowless_frame_rate = active_frame_rate;
-  if (command_line->HasSwitch("sabine-transparent")) {
-    browser_settings.background_color = CefColorSetARGB(0, 0, 0, 0);
-  } else {
-    browser_settings.background_color =
-        SwitchColor(command_line, "sabine-background-color",
-                    CefColorSetARGB(255, 17, 17, 19));
-  }
+  browser_settings.windowless_frame_rate = viewport.active_frame_rate;
+  browser_settings.background_color =
+      transparent ? CefColorSetARGB(0, 0, 0, 0)
+                  : SwitchColor(command_line, "sabine-background-color",
+                                CefColorSetARGB(255, 17, 17, 19));
 
   CefWindowInfo window_info;
   CefWindowHandle parent_window = kNullWindowHandle;
 #if defined(OS_WIN)
-  const std::string parent =
-      command_line->GetSwitchValue("sabine-parent-window");
-  if (!parent.empty()) {
-    char* end = nullptr;
-    errno = 0;
-    const unsigned long long value = std::strtoull(parent.c_str(), &end, 10);
-    if (errno || parent.front() == '-' || *end ||
-        value > std::numeric_limits<uintptr_t>::max()) {
-      std::cerr << "Sabine OSR: invalid native parent window" << std::endl;
-      return false;
-    }
-    parent_window =
-        reinterpret_cast<CefWindowHandle>(static_cast<uintptr_t>(value));
+  if (!ParseParentWindow(command_line->GetSwitchValue("sabine-parent-window"),
+                         &parent_window)) {
+    std::cerr << "Sabine OSR: invalid native parent window" << std::endl;
+    return false;
   }
 #endif
   window_info.SetAsWindowless(parent_window);
   const bool shared_texture = sabine_osr::PreferSharedTexture(command_line);
   sabine_osr::ApplySharedTexture(&window_info, shared_texture);
   CefRefPtr<SabineOsrHandler> handler(new SabineOsrHandler(
-      endpoint, authentication_token, width, height, scale, policy,
-      command_line->HasSwitch("sabine-dev-mode"),
-      command_line->HasSwitch("sabine-transparent"),
-      command_line->HasSwitch("sabine-retain-hidden-frame"), active_frame_rate,
-      background_frame_rate));
+      command_line->GetSwitchValue("sabine-osr-endpoint"), authentication_token,
+      viewport, policy, command_line->HasSwitch("sabine-dev-mode"), transparent,
+      command_line->HasSwitch("sabine-retain-hidden-frame")));
   handler->UseProfile(profile, shared_texture);
 #if defined(OS_MAC)
   handler->UseSurfaceService(

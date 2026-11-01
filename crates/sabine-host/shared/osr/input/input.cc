@@ -1,26 +1,18 @@
 #include "osr/handler.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
 
-#include "guest/input.h"
-#include "guest/manager.h"
-#include "include/cef_app.h"
-#include "include/cef_browser.h"
-#include "include/cef_parser.h"
-#include "include/cef_request_context_handler.h"
-#include "include/cef_task.h"
-#include "include/internal/cef_types.h"
 #include "include/wrapper/cef_helpers.h"
-#include "common/json.h"
-#include "sabine_bridge_js.h"
-#include "osr/input/ime.h"
 #include "osr/browser/screen.h"
 #include "osr/common/strings.h"
+#include "osr/guest/events.h"
+#include "osr/guest/input.h"
+#include "osr/input/ime.h"
 #include "osr/input/key_codes.h"
+#include "sabine_mouse_navigation_js.h"
 
 using namespace sabine_osr;
 
@@ -53,7 +45,7 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
   if (parts.size() >= 2 && parts[0] == "file_dialog") {
-    FinishFileDialog(parts);
+    dialogs_->FinishFileDialog(parts);
     return;
   }
   if (parts.size() == 7 && parts[0] == "print_document") {
@@ -62,19 +54,19 @@ void SabineOsrHandler::HandleControlLine(
   }
 #if defined(OS_LINUX)
   if (parts.size() >= 2 && parts[0] == "print_dialog") {
-    FinishPrintDialog(parts);
+    print_dialogs_->FinishDialog(parts);
     return;
   }
   if (parts.size() == 2 && parts[0] == "print_job") {
-    FinishPrintJob(parts);
+    print_dialogs_->FinishJob(parts);
     return;
   }
 #endif
   if (parts.size() == 2 && parts[0] == "context_menu") {
-    ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
+    dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;
   }
-#ifndef _WIN32
+#if !defined(OS_WIN)
   if (parts.size() == 3 && parts[0] == "paint_release") {
     ReleaseSharedPaint(
         static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
@@ -128,8 +120,8 @@ void SabineOsrHandler::HandleControlLine(
   if (parts[0] == "ime_delete" && parts.size() >= 3) {
     const int target_browser_id = target_browser->GetIdentifier();
     CefRefPtr<CefFrame> frame = target_browser->GetMainFrame();
-    const auto ime_frame = ime_frames_.find(target_browser_id);
-    if (ime_frame != ime_frames_.end() && ime_frame->second) {
+    const auto ime_frame = ime_.frames.find(target_browser_id);
+    if (ime_frame != ime_.frames.end()) {
       frame = ime_frame->second;
     }
     const uint32_t start =
@@ -179,31 +171,13 @@ void SabineOsrHandler::HandleControlLine(
     const int click_count = std::max(1, std::atoi(parts[6].c_str()));
     host->SendMouseClickEvent(event, button, up, click_count);
   } else if (parts[0] == "mouse_navigation" && parts.size() >= 5) {
-    const int x = pointer_x;
-    const int y = pointer_y;
-    const int button = std::atoi(parts[3].c_str());
-    const uint32_t modifiers = std::strtoul(parts[4].c_str(), nullptr, 10);
     const std::string script =
-        std::string("(function(){const target=document.elementFromPoint(") +
-        std::to_string(x) + "," + std::to_string(y) +
-        ")||window;const init={bubbles:true,cancelable:true,button:" +
-        std::to_string(button) + ",buttons:0,clientX:" + std::to_string(x) +
-        ",clientY:" + std::to_string(y) + ",screenX:" + std::to_string(x) +
-        ",screenY:" + std::to_string(y) +
-        ",ctrlKey:" + ((modifiers & (1 << 2)) ? "true" : "false") +
-        ",shiftKey:" + ((modifiers & (1 << 1)) ? "true" : "false") +
-        ",altKey:" + ((modifiers & (1 << 3)) ? "true" : "false") +
-        ",metaKey:" + ((modifiers & (1 << 7)) ? "true" : "false") +
-        "};const up=new MouseEvent('mouseup',init);const aux=new "
-        "MouseEvent('auxclick',init);"
-        "const "
-        "canceled=(target.dispatchEvent(up)===false)||up.defaultPrevented||"
-        "(target.dispatchEvent(aux)===false)||aux.defaultPrevented;"
-        "if(!canceled){if(" +
-        std::to_string(button) + "===3)history.back();else if(" +
-        std::to_string(button) + "===4)history.forward();}})();";
-    target_browser->GetMainFrame()->ExecuteJavaScript(
-        script, target_browser->GetMainFrame()->GetURL(), 0);
+        std::string("(") + SABINE_MOUSE_NAVIGATION_JS_RAW + ")(" +
+        std::to_string(pointer_x) + "," + std::to_string(pointer_y) + "," +
+        std::to_string(std::atoi(parts[3].c_str())) + "," +
+        std::to_string(std::strtoul(parts[4].c_str(), nullptr, 10)) + ");";
+    CefRefPtr<CefFrame> frame = target_browser->GetMainFrame();
+    frame->ExecuteJavaScript(script, frame->GetURL(), 0);
   } else if (parts[0] == "mouse_wheel" && parts.size() >= 6) {
     const double dx = std::atof(parts[3].c_str());
     const double dy = std::atof(parts[4].c_str());

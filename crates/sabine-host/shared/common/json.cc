@@ -1,45 +1,9 @@
 #include "common/json.h"
 
-#include <cctype>
 #include <cstdio>
-#include <cstdlib>
+#include <utility>
 
-namespace {
-
-size_t FindValueStart(const std::string& payload, const std::string& name) {
-  const std::string needle = "\"" + name + "\"";
-  size_t cursor = payload.find(needle);
-  if (cursor == std::string::npos) {
-    return std::string::npos;
-  }
-  cursor = payload.find(':', cursor + needle.size());
-  if (cursor == std::string::npos) {
-    return std::string::npos;
-  }
-  ++cursor;
-  while (cursor < payload.size() &&
-         std::isspace(static_cast<unsigned char>(payload[cursor]))) {
-    ++cursor;
-  }
-  return cursor < payload.size() ? cursor : std::string::npos;
-}
-
-std::string NumberLiteral(const std::string& payload, size_t cursor) {
-  size_t end = cursor;
-  if (end < payload.size() && (payload[end] == '-' || payload[end] == '+')) {
-    ++end;
-  }
-  while (end < payload.size() &&
-         (std::isdigit(static_cast<unsigned char>(payload[end])) ||
-          payload[end] == '.' || payload[end] == 'e' || payload[end] == 'E' ||
-          ((payload[end] == '-' || payload[end] == '+') && end > cursor &&
-           (payload[end - 1] == 'e' || payload[end - 1] == 'E')))) {
-    ++end;
-  }
-  return payload.substr(cursor, end - cursor);
-}
-
-}  // namespace
+#include "include/cef_parser.h"
 
 std::string JsonEscape(const std::string& value) {
   std::string output;
@@ -80,158 +44,68 @@ std::string JsString(const std::string& value) {
   return "\"" + JsonEscape(value) + "\"";
 }
 
-std::string JsonStringValue(const std::string& payload,
-                            const std::string& name) {
-  size_t cursor = FindValueStart(payload, name);
-  if (cursor == std::string::npos || payload[cursor] != '"') {
-    return "";
-  }
-  std::string output;
-  for (++cursor; cursor < payload.size(); ++cursor) {
-    const char c = payload[cursor];
-    if (c == '"') {
-      break;
-    }
-    if (c != '\\' || cursor + 1 >= payload.size()) {
-      output += c;
-      continue;
-    }
-    const char escaped = payload[++cursor];
-    switch (escaped) {
-      case 'n':
-        output += '\n';
-        break;
-      case 'r':
-        output += '\r';
-        break;
-      case 't':
-        output += '\t';
-        break;
-      default:
-        output += escaped;
-        break;
-    }
-  }
-  return output;
+std::string JsonMessage(const std::string& message) {
+  return "{\"message\":" + JsString(message) + "}";
 }
 
-std::string JsonObjectValue(const std::string& payload,
-                            const std::string& name) {
-  const size_t start = FindValueStart(payload, name);
-  if (start == std::string::npos || payload[start] != '{') {
-    return "";
-  }
-  int depth = 0;
-  bool in_string = false;
-  for (size_t cursor = start; cursor < payload.size(); ++cursor) {
-    const char c = payload[cursor];
-    if (in_string) {
-      if (c == '\\') {
-        ++cursor;
-      } else if (c == '"') {
-        in_string = false;
-      }
-      continue;
-    }
-    if (c == '"') {
-      in_string = true;
-    } else if (c == '{') {
-      ++depth;
-    } else if (c == '}') {
-      if (--depth == 0) {
-        return payload.substr(start, cursor - start + 1);
-      }
-    }
-  }
-  return "";
+JsonObject::JsonObject(CefRefPtr<CefDictionaryValue> fields)
+    : fields_(std::move(fields)) {}
+
+JsonObject JsonObject::Parse(const std::string& json) {
+  CefRefPtr<CefValue> value = CefParseJSON(json, JSON_PARSER_RFC);
+  return JsonObject(value && value->GetType() == VTYPE_DICTIONARY
+                        ? value->GetDictionary()
+                        : nullptr);
 }
 
-std::vector<std::string> JsonStringArrayValue(const std::string& payload,
-                                              const std::string& name) {
-  const size_t start = FindValueStart(payload, name);
+std::string JsonObject::String(const char* key) const {
+  return fields_ && fields_->GetType(key) == VTYPE_STRING
+             ? fields_->GetString(key).ToString()
+             : std::string();
+}
+
+bool JsonObject::Bool(const char* key, bool fallback) const {
+  return fields_ && fields_->GetType(key) == VTYPE_BOOL ? fields_->GetBool(key)
+                                                        : fallback;
+}
+
+int JsonObject::Int(const char* key, int fallback) const {
+  return static_cast<int>(Number(key, fallback));
+}
+
+double JsonObject::Number(const char* key, double fallback) const {
+  if (!fields_) {
+    return fallback;
+  }
+  switch (fields_->GetType(key)) {
+    case VTYPE_INT:
+      return fields_->GetInt(key);
+    case VTYPE_DOUBLE:
+      return fields_->GetDouble(key);
+    default:
+      return fallback;
+  }
+}
+
+std::vector<std::string> JsonObject::Strings(const char* key) const {
   std::vector<std::string> values;
-  if (start == std::string::npos || payload[start] != '[') {
+  CefRefPtr<CefListValue> list = fields_ && fields_->GetType(key) == VTYPE_LIST
+                                     ? fields_->GetList(key)
+                                     : nullptr;
+  if (!list) {
     return values;
   }
-  size_t cursor = start + 1;
-  while (cursor < payload.size()) {
-    while (cursor < payload.size() &&
-           (std::isspace(static_cast<unsigned char>(payload[cursor])) ||
-            payload[cursor] == ',')) {
-      ++cursor;
+  values.reserve(list->GetSize());
+  for (size_t index = 0; index < list->GetSize(); ++index) {
+    if (list->GetType(index) == VTYPE_STRING) {
+      values.push_back(list->GetString(index));
     }
-    if (cursor >= payload.size() || payload[cursor] == ']') {
-      return values;
-    }
-    if (payload[cursor] != '"') {
-      return {};
-    }
-    std::string value;
-    for (++cursor; cursor < payload.size(); ++cursor) {
-      const char c = payload[cursor];
-      if (c == '"') {
-        ++cursor;
-        break;
-      }
-      if (c != '\\' || cursor + 1 >= payload.size()) {
-        value += c;
-        continue;
-      }
-      const char escaped = payload[++cursor];
-      value += escaped == 'n'   ? '\n'
-               : escaped == 'r' ? '\r'
-               : escaped == 't' ? '\t'
-                                : escaped;
-    }
-    values.push_back(value);
   }
-  return {};
+  return values;
 }
 
-int JsonIntValue(const std::string& payload,
-                 const std::string& name,
-                 int fallback) {
-  const size_t cursor = FindValueStart(payload, name);
-  if (cursor == std::string::npos) {
-    return fallback;
-  }
-  const std::string literal = NumberLiteral(payload, cursor);
-  if (literal.empty()) {
-    return fallback;
-  }
-  return static_cast<int>(std::strtod(literal.c_str(), nullptr));
-}
-
-double JsonDoubleValue(const std::string& payload,
-                       const std::string& name,
-                       double fallback) {
-  const size_t cursor = FindValueStart(payload, name);
-  if (cursor == std::string::npos) {
-    return fallback;
-  }
-  const std::string literal = NumberLiteral(payload, cursor);
-  if (literal.empty()) {
-    return fallback;
-  }
-  return std::strtod(literal.c_str(), nullptr);
-}
-
-bool JsonBoolValue(const std::string& payload,
-                   const std::string& name,
-                   bool fallback) {
-  const size_t cursor = FindValueStart(payload, name);
-  if (cursor == std::string::npos) {
-    return fallback;
-  }
-  if (payload.compare(cursor, 4, "true") == 0) {
-    return true;
-  }
-  if (payload.compare(cursor, 5, "false") == 0) {
-    return false;
-  }
-  return fallback;
-}
-
-std::string JsonMessage(const std::string& message) {
-  return "{\"message\":\"" + JsonEscape(message) + "\"}";
+JsonObject JsonObject::Object(const char* key) const {
+  return JsonObject(fields_ && fields_->GetType(key) == VTYPE_DICTIONARY
+                        ? fields_->GetDictionary(key)
+                        : nullptr);
 }

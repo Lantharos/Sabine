@@ -1,137 +1,19 @@
 #include "app/app.h"
-#include "runtime/probe.h"
-#include "app/bridge.h"
-#include "app/clipboard.h"
-#include "app/scheme.h"
-#include "sabine_media_state_js.h"
-#include "sabine_autoscroll_js.h"
-#include "common/bridge_policy.h"
-#include "common/json.h"
 
-#include <sstream>
-#include <algorithm>
+#include <cstdio>
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "sabine_bridge_js.h"
-#include "include/cef_browser.h"
+#include "app/probe.h"
+#include "app/scheme.h"
 #include "include/cef_command_line.h"
-#include "include/cef_process_message.h"
 #include "include/wrapper/cef_helpers.h"
-#include "osr/handler.h"
 #include "osr/common/registry.h"
+#include "osr/handler.h"
 #if defined(OS_LINUX)
-#include "runtime/server.h"
+#include "linux/runtime/server.h"
 #endif
 
 namespace {
-const char kImeStateScript[] = R"JS(
-(() => {
-  if (window.__sabineImeInstalled) return;
-  window.__sabineImeInstalled = true;
-  let queued = false;
-  const editable = () => {
-    const element = document.activeElement;
-    if (!element) return null;
-    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-      if (element instanceof HTMLInputElement && element.type === 'password') return null;
-      if (typeof element.selectionStart !== 'number') return null;
-      return { element, text: element.value, anchor: element.selectionStart,
-               cursor: element.selectionEnd, control: true };
-    }
-    if (!element.isContentEditable) return null;
-    const selection = getSelection();
-    if (!selection || selection.rangeCount === 0 || !element.contains(selection.anchorNode) ||
-        !element.contains(selection.focusNode)) return null;
-    const offset = (node, position) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      range.setEnd(node, position);
-      return range.toString().length;
-    };
-    return { element, text: element.textContent || '',
-             anchor: offset(selection.anchorNode, selection.anchorOffset),
-             cursor: offset(selection.focusNode, selection.focusOffset), control: false };
-  };
-  const snapshot = () => {
-    queued = false;
-    const state = editable();
-    if (!state) {
-      __sabineImeState(JSON.stringify({ text: '', cursor: 0, anchor: 0, base: 0 }));
-      return;
-    }
-    const low = Math.min(state.anchor, state.cursor);
-    const high = Math.max(state.anchor, state.cursor);
-    let start = Math.max(0, low - 1500);
-    let end = Math.min(state.text.length, Math.max(high + 1500, start + 3000));
-    if (start > 0 && /[\uDC00-\uDFFF]/.test(state.text[start])) start--;
-    if (end < state.text.length && /[\uDC00-\uDFFF]/.test(state.text[end])) end--;
-    __sabineImeState(JSON.stringify({ text: state.text.slice(start, end),
-      cursor: state.cursor - start, anchor: state.anchor - start, base: start }));
-  };
-  const queue = () => {
-    if (!queued) {
-      queued = true;
-      queueMicrotask(snapshot);
-    }
-  };
-  const textPosition = (root, offset) => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let total = 0;
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const length = node.nodeValue.length;
-      if (offset <= total + length) return [node, offset - total];
-      total += length;
-    }
-    return [root, root.childNodes.length];
-  };
-  window.__sabineImeDelete = (start, end) => {
-    const state = editable();
-    if (!state || start < 0 || end < start || end > state.text.length) return;
-    if (state.control) {
-      state.element.setSelectionRange(start, end);
-    } else {
-      const range = document.createRange();
-      const from = textPosition(state.element, start);
-      const to = textPosition(state.element, end);
-      range.setStart(from[0], from[1]);
-      range.setEnd(to[0], to[1]);
-      const selection = getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-    if (!document.execCommand('delete')) {
-      if (state.control) {
-        state.element.setRangeText('', start, end, 'end');
-        state.element.dispatchEvent(new InputEvent('input', { bubbles: true,
-          inputType: 'deleteContentBackward' }));
-      } else {
-        getSelection().getRangeAt(0).deleteContents();
-        state.element.dispatchEvent(new InputEvent('input', { bubbles: true,
-          inputType: 'deleteContentBackward' }));
-      }
-    }
-    queue();
-  };
-  document.addEventListener('focusin', queue, true);
-  document.addEventListener('focusout', queue, true);
-  document.addEventListener('input', queue, true);
-  document.addEventListener('selectionchange', queue, true);
-  queue();
-})();
-)JS";
-
-std::string BridgeInstallScript(const std::vector<std::string>& commands) {
-  std::string list = "[";
-  for (size_t index = 0; index < commands.size(); ++index) {
-    if (index > 0) {
-      list += ",";
-    }
-    list += JsString(commands[index]);
-  }
-  return "window.__sabineBridgeCommands=" + list + "];" + SABINE_BRIDGE_JS_RAW;
-}
 
 void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
   const BrowserProfile profile{
@@ -147,7 +29,8 @@ void CreateBrowser(CefRefPtr<CefCommandLine> command_line) {
 }  // namespace
 
 SabineApp::SabineApp(bool runtime_smoke_test)
-    : runtime_smoke_test_(runtime_smoke_test) {}
+    : renderer_(new SabineRenderer()),
+      runtime_smoke_test_(runtime_smoke_test) {}
 
 void SabineApp::OnRegisterCustomSchemes(
     CefRawPtr<CefSchemeRegistrar> registrar) {
@@ -189,108 +72,6 @@ void SabineApp::OnBeforeChildProcessLaunch(
 }
 #endif
 
-void SabineApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser,
-                                 CefRefPtr<CefDictionaryValue> extra_info) {
-  CEF_REQUIRE_RENDERER_THREAD();
-  if (!browser)
-    return;
-  bridge_policies_.push_back({browser, extra_info});
-  ReportRenderer(browser->GetMainFrame(), extra_info);
-}
-
-void SabineApp::ReportRenderer(CefRefPtr<CefFrame> frame,
-                               CefRefPtr<CefDictionaryValue> policy) {
-  if (renderer_reported_ || !frame || !frame->IsValid() || !policy ||
-      !policy->GetBool(sabine_bridge::kReportRendererKey)) {
-    return;
-  }
-  const CefString client_id =
-      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue(
-          "renderer-client-id");
-  if (client_id.empty()) {
-    return;
-  }
-  CefRefPtr<CefProcessMessage> message =
-      CefProcessMessage::Create(sabine_bridge::kRendererMessage);
-  message->GetArgumentList()->SetString(0, client_id);
-  frame->SendProcessMessage(PID_BROWSER, message);
-  renderer_reported_ = true;
-}
-
-void SabineApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) {
-  CEF_REQUIRE_RENDERER_THREAD();
-  if (browser) {
-    bridge_policies_.erase(
-        std::remove_if(bridge_policies_.begin(), bridge_policies_.end(),
-                       [&](const BrowserPolicy& entry) {
-                         return entry.browser->IsSame(browser);
-                       }),
-        bridge_policies_.end());
-    sabine_bridge::ReleaseBrowser(browser);
-  }
-}
-
-CefRefPtr<CefDictionaryValue> SabineApp::BridgePolicyFor(
-    CefRefPtr<CefBrowser> browser) {
-  for (const auto& entry : bridge_policies_) {
-    if (entry.browser->IsSame(browser))
-      return entry.policy;
-  }
-  return nullptr;
-}
-
-void SabineApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
-                                 CefRefPtr<CefFrame> frame,
-                                 CefRefPtr<CefV8Context> context) {
-  CEF_REQUIRE_RENDERER_THREAD();
-  sabine_bridge::InstallTransport(frame, context, "__sabineImeState",
-                                  "sabine.ime_state");
-  frame->ExecuteJavaScript(kImeStateScript, frame->GetURL(), 0);
-  sabine_bridge::InstallTransport(frame, context, "__sabineMediaState",
-                                  "sabine.media_state");
-  frame->ExecuteJavaScript(SABINE_MEDIA_STATE_JS_RAW, frame->GetURL(), 0);
-#if !defined(OS_WIN) && !defined(_WIN32)
-  frame->ExecuteJavaScript(SABINE_AUTOSCROLL_JS_RAW, frame->GetURL(), 0);
-#endif
-  const auto policy = BridgePolicyFor(browser);
-  if (frame->IsMain())
-    ReportRenderer(frame, policy);
-  const std::string url = frame->GetURL();
-  const std::string security_origin = sabine_bridge::RememberContext(context);
-  const bool bridged =
-      frame->IsMain() && sabine_bridge::ExposesBridge(policy, url) &&
-      sabine_bridge::MatchesSecurityOrigin(policy, url, security_origin);
-  if (bridged) {
-    sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage",
-                                    "sabine.native");
-    frame->ExecuteJavaScript(
-        BridgeInstallScript(sabine_bridge::Commands(policy)), url, 0);
-  }
-  if (policy && policy->GetBool("clipboard"))
-    sabine_clipboard::Install(frame, context,
-                              sabine_bridge::AllowsDocument(policy, url));
-}
-
-void SabineApp::OnContextReleased(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefFrame> frame,
-                                  CefRefPtr<CefV8Context> context) {
-  CEF_REQUIRE_RENDERER_THREAD();
-  sabine_bridge::ReleaseContext(context);
-  sabine_clipboard::Release(context);
-}
-
-bool SabineApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                         CefRefPtr<CefFrame> frame,
-                                         CefProcessId source_process,
-                                         CefRefPtr<CefProcessMessage> message) {
-  CEF_REQUIRE_RENDERER_THREAD();
-  if (source_process != PID_BROWSER || !browser || !frame || !message)
-    return false;
-  return sabine_clipboard::Receive(frame, message) ||
-         sabine_bridge::Receive(browser, frame, message,
-                                BridgePolicyFor(browser));
-}
-
 bool SabineApp::OnAlreadyRunningAppRelaunch(
     CefRefPtr<CefCommandLine> command_line,
     const CefString& current_directory) {
@@ -305,5 +86,5 @@ bool SabineApp::OnAlreadyRunningAppRelaunch(
 }
 
 CefRefPtr<CefClient> SabineApp::GetDefaultClient() {
-  return SabineOsrHandler::GetInstance();
+  return sabine_osr::PrimaryHandler();
 }

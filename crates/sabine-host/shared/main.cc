@@ -7,30 +7,41 @@
 // and sandboxed children cannot find it through PATH, so every process loads
 // it by path before its first CEF call.
 
-#include "app/app.h"
-#include "runtime/probe.h"
-#if defined(OS_LINUX)
-#include "app/profile.h"
-#include "display/private_display.h"
-#include "runtime/server.h"
-#endif
-
-#if defined(OS_WIN) || defined(_WIN32)
-#include <windows.h>
-#include <shellapi.h>
-#include "include/cef_sandbox_win.h"
-#include "include/cef_version_info.h"
-#endif
+#include "entry.h"
 
 #include <cstdlib>
 #include <iostream>
-#include "sabine_host_protocol.h"
 #include <string>
 
+#include "app/app.h"
+#include "app/probe.h"
+#include "include/base/cef_build.h"
 #include "include/base/cef_compiler_specific.h"
 #include "include/cef_app.h"
 #include "include/cef_command_line.h"
-#include "entry.h"
+#include "sabine_host_protocol.h"
+#if defined(OS_WIN)
+#include <windows.h>
+#include <shellapi.h>
+
+#include "include/cef_sandbox_win.h"
+#include "include/cef_version_info.h"
+#endif
+#if defined(OS_LINUX)
+#include "app/profile.h"
+#include "linux/display/private_display.h"
+#include "linux/runtime/server.h"
+#endif
+
+bool PrintsHostProtocol(int argc, char* argv[]) {
+  for (int index = 1; index < argc; ++index) {
+    if (std::string(argv[index]) == "--sabine-host-protocol") {
+      std::cout << SABINE_HOST_PROTOCOL_VERSION << std::endl;
+      return true;
+    }
+  }
+  return false;
+}
 
 #if defined(OS_LINUX)
 NO_STACK_PROTECTOR
@@ -40,15 +51,11 @@ int RunSabineHost(CefMainArgs main_args,
                   char* argv[],
                   void* sandbox_info) {
   CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
-#if defined(OS_WIN) || defined(_WIN32)
+#if defined(OS_WIN)
   command_line->InitFromString(::GetCommandLineW());
 #else
   command_line->InitFromArgv(argc, argv);
 #endif
-  if (command_line->HasSwitch("sabine-host-protocol")) {
-    std::cout << SABINE_HOST_PROTOCOL_VERSION << std::endl;
-    return 0;
-  }
   const bool runtime_smoke_test =
       command_line->HasSwitch("sabine-runtime-smoke-test");
   CefRefPtr<SabineApp> app(new SabineApp(runtime_smoke_test));
@@ -119,25 +126,32 @@ int RunSabineHost(CefMainArgs main_args,
   return result;
 }
 
-#if defined(OS_WIN) || defined(_WIN32)
+#if defined(OS_WIN)
 namespace {
-void LoadRuntimeCefLibrary() {
+bool LoadRuntimeCefLibrary() {
   int count = 0;
   LPWSTR* arguments = ::CommandLineToArgvW(::GetCommandLineW(), &count);
   if (!arguments) {
-    return;
+    return true;
   }
   const std::wstring prefix = L"--sabine-cef-dir=";
+  bool loaded = true;
   for (int index = 1; index < count; ++index) {
     const std::wstring argument = arguments[index];
     if (argument.rfind(prefix, 0) == 0) {
       const std::wstring library =
           argument.substr(prefix.size()) + L"\\libcef.dll";
-      ::LoadLibraryExW(library.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+      loaded = ::LoadLibraryExW(library.c_str(), nullptr,
+                                LOAD_WITH_ALTERED_SEARCH_PATH) != nullptr;
+      if (!loaded) {
+        std::wcerr << L"Could not load " << library << L" (error "
+                   << ::GetLastError() << L")" << std::endl;
+      }
       break;
     }
   }
   ::LocalFree(arguments);
+  return loaded;
 }
 }  // namespace
 
@@ -153,11 +167,16 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance,
     std::cerr << "Sabine requires the Chromium sandbox bootstrap" << std::endl;
     return 1;
   }
-  LoadRuntimeCefLibrary();
+  if (PrintsHostProtocol(__argc, __argv)) {
+    return 0;
+  }
+  if (!LoadRuntimeCefLibrary()) {
+    return 1;
+  }
   CefMainArgs main_args(instance);
   return RunSabineHost(main_args, __argc, __argv, sandbox_info);
 }
-#elif !defined(OS_MAC)
+#elif defined(OS_LINUX)
 namespace {
 // Outside a Flatpak, Chromium moves its browser process into a systemd scope
 // of its own named after Chromium, which separates it from the app that
@@ -171,6 +190,9 @@ void StayInLaunchingScope() {
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
+  if (PrintsHostProtocol(argc, argv)) {
+    return 0;
+  }
   StayInLaunchingScope();
   CefMainArgs main_args(argc, argv);
   return RunSabineHost(main_args, argc, argv);

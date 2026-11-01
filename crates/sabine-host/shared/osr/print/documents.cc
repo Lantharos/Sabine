@@ -46,8 +46,7 @@ void SabineOsrHandler::OpenPrintDocument(
 void SabineOsrHandler::ReportPrintDocument(uint32_t id, bool ok) {
   const std::string payload = "{\"id\":" + std::to_string(id) +
                               ",\"ok\":" + (ok ? "true" : "false") + "}";
-  SendMessage(kPrintDocument, 0, 0, 0, 0, payload.data(),
-              static_cast<uint32_t>(payload.size()));
+  SendMessage(kPrintDocument, {payload});
 }
 
 void SabineOsrHandler::PrintDocumentClosed(uint32_t id) {

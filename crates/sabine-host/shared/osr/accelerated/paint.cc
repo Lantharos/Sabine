@@ -9,7 +9,8 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "osr/handler.h"
 #include "osr/accelerated/protocol.h"
-#include "osr/common/registry.h"
+#include "common/switches.h"
+#include "common/trace.h"
 
 #if defined(OS_WIN)
 #include "osr/accelerated/windows/d3d11_copy.h"

@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 project(sabine_cef_host)
 
 set(CMAKE_CONFIGURATION_TYPES Debug Release)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SABINE_CEF_API_VERSION "15400" CACHE STRING "Stable CEF API used by Sabine")
 add_compile_definitions(CEF_API_VERSION=${SABINE_CEF_API_VERSION})
 
-if(NOT CEF_ROOT)
-  message(FATAL_ERROR "CEF_ROOT is required")
+if(NOT CEF_ROOT OR NOT SABINE_HOST_OUTPUT_DIR)
+  message(FATAL_ERROR "CEF_ROOT and SABINE_HOST_OUTPUT_DIR are required")
 endif()
 
 # CEF macros interpolate CEF_LIB_* into CMake strings; backslashes become escapes.
@@ -31,153 +31,32 @@ endif()
 
 add_subdirectory(${CEF_LIBCEF_DLL_WRAPPER_PATH} libcef_dll_wrapper)
 
-set(SABINE_HOST_SOURCES
-  main.cc
-  entry.h
-  runtime/probe.cc
-  runtime/probe.h
-  runtime/identity.cc
-  runtime/identity.h
-  runtime/renderers.cc
-  runtime/renderers.h
-  runtime/server.cc
-  runtime/server.h
-  display/offer.cc
-  display/offer.h
-  display/private_display.cc
-  display/private_display.h
-  display/protocols.cc
-  display/protocols.h
-  display/wayland.cc
-  display/wayland.h
-  app/app.cc
-  app/app.h
-  app/profile.cc
-  app/profile.h
-  app/bridge.cc
-  app/bridge.h
-  app/clipboard.cc
-  app/clipboard.h
-  app/scheme.cc
-  app/scheme.h
-  common/bytes_message.cc
-  common/bytes_message.h
-  common/json.cc
-  common/json.h
-  common/bridge_policy.h
-  guest/input.cc
-  guest/input.h
-  guest/manager.cc
-  guest/manager.h
-  osr/handler.cc
-  osr/handler.h
-  osr/bridge.cc
-  osr/browser/callbacks.cc
-  osr/browser/context_menu.cc
-  osr/browser/file_dialog.cc
-  osr/browser/media_state.cc
-  osr/browser/clipboard.cc
-  osr/browser/recovery.cc
-  osr/browser/downloads.cc
-  osr/browser/permissions.cc
-  osr/print/document.cc
-  osr/print/document.h
-  osr/print/documents.cc
-  osr/print/page.cc
-  osr/input/drag.cc
-  osr/guest/commands.cc
-  osr/guest/lifecycle.cc
-  osr/input/ime.cc
-  osr/input/ime.h
-  osr/input/input.cc
-  osr/browser/screen.cc
-  osr/browser/screen.h
-  osr/window_state.cc
-  osr/common/registry.cc
-  osr/common/registry.h
-  osr/common/strings.cc
-  osr/common/strings.h
-  osr/input/key_codes.cc
-  osr/input/key_codes.h
-  osr/transport/control.cc
-  osr/transport/message_kinds.h
-  osr/transport/paint_batch.cc
-  osr/transport/socket.cc
-  osr/transport/tasks.cc
-  osr/transport/tasks.h
-  osr/transport/wire.cc
-  osr/transport/wire.h
-  osr/accelerated/damage.h
-  osr/accelerated/paint.cc
-  osr/accelerated/paint.h
-  osr/accelerated/protocol.cc
-  osr/accelerated/protocol.h
-  osr/accelerated/windows/d3d11_copy.cc
-  osr/accelerated/windows/d3d11_copy.h
-  osr/accelerated/linux/device_loss.cc
-  osr/accelerated/linux/dmabuf_copy.cc
-  osr/accelerated/linux/dmabuf_copy.h
-  osr/accelerated/linux/dmabuf_image.cc
-  osr/accelerated/linux/dmabuf_image.h
-  osr/accelerated/linux/settle.cc
-  osr/accelerated/linux/vulkan_context.cc
-  osr/accelerated/linux/vulkan_context.h
-  osr/paint/shared_pool.cc
-  osr/paint/shared_pool.h
+file(GLOB_RECURSE SABINE_HOST_SOURCES
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  CONFIGURE_DEPENDS
+  "*.cc" "*.h" "*.mm"
 )
 
-if(OS_MAC)
-  list(APPEND SABINE_HOST_SOURCES
-    osr/accelerated/macos/iosurface_copy.h
-    osr/accelerated/macos/iosurface_copy.mm
-    osr/accelerated/macos/surface_broker.cc
-    osr/accelerated/macos/surface_broker.h
-    osr/input/edit_commands_mac.cc
-  )
-endif()
+# Sources in a folder named after a platform build only on that platform.
+foreach(_platform linux:OS_LINUX macos:OS_MAC windows:OS_WINDOWS)
+  string(REPLACE ":" ";" _platform "${_platform}")
+  list(GET _platform 0 _folder)
+  list(GET _platform 1 _flag)
+  if(NOT ${_flag})
+    list(FILTER SABINE_HOST_SOURCES EXCLUDE REGEX "(^|/)${_folder}/")
+  endif()
+endforeach()
 
-if(OS_MAC)
-  list(APPEND SABINE_HOST_SOURCES main_mac.mm mac/sabine.icns)
-  set_source_files_properties(mac/sabine.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-endif()
-
-if(NOT OS_LINUX)
-  list(REMOVE_ITEM SABINE_HOST_SOURCES
-    runtime/identity.cc
-    runtime/identity.h
-    runtime/renderers.cc
-    runtime/renderers.h
-    runtime/server.cc
-    runtime/server.h
-    display/offer.cc
-    display/offer.h
-    display/private_display.cc
-    display/private_display.h
-    display/protocols.cc
-    display/protocols.h
-    display/wayland.cc
-    display/wayland.h
-    osr/accelerated/linux/device_loss.cc
-    osr/accelerated/linux/dmabuf_copy.cc
-    osr/accelerated/linux/dmabuf_copy.h
-    osr/accelerated/linux/dmabuf_image.cc
-    osr/accelerated/linux/dmabuf_image.h
-    osr/accelerated/linux/settle.cc
-    osr/accelerated/linux/vulkan_context.cc
-    osr/accelerated/linux/vulkan_context.h
-  )
-endif()
-
-if(NOT OS_WINDOWS)
-  list(REMOVE_ITEM SABINE_HOST_SOURCES
-    osr/accelerated/windows/d3d11_copy.cc
-    osr/accelerated/windows/d3d11_copy.h
-  )
-else()
+if(OS_WINDOWS)
   list(REMOVE_ITEM SABINE_HOST_SOURCES
     osr/paint/shared_pool.cc
     osr/paint/shared_pool.h
   )
+endif()
+
+if(OS_MAC)
+  list(APPEND SABINE_HOST_SOURCES macos/sabine.icns)
+  set_source_files_properties(macos/sabine.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 endif()
 
 if(OS_WINDOWS)
@@ -220,11 +99,8 @@ if(OS_MAC)
   set(PRODUCT_NAME "sabine-host")
   set(PRODUCT_BUNDLE_IDENTIFIER "dev.sabine.host")
   set_target_properties(sabine-host PROPERTIES
-    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/mac/Info.plist.in"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
   )
-endif()
-if(NOT SABINE_HOST_OUTPUT_DIR)
-  set(SABINE_HOST_OUTPUT_DIR "${CEF_ROOT}/Release")
 endif()
 set_target_properties(sabine-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${SABINE_HOST_OUTPUT_DIR}")
 set_target_properties(sabine-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${SABINE_HOST_OUTPUT_DIR}")
@@ -265,13 +141,4 @@ if(OS_MAC)
       COMMAND ${CMAKE_COMMAND} -E copy "${_helper_plist}" "${_helper_app}/Contents/Info.plist"
       VERBATIM)
   endforeach()
-else()
-  COPY_FILES("sabine-host" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR}" "${CEF_ROOT}/Release")
-  COPY_FILES("sabine-host" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_ROOT}/Release")
-endif()
-
-if(OS_LINUX)
-  if(EXISTS "${CEF_BINARY_DIR}/libminigbm.so")
-    COPY_FILES("sabine-host" "libminigbm.so" "${CEF_BINARY_DIR}" "${CEF_ROOT}/Release")
-  endif()
 endif()

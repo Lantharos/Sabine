@@ -1,4 +1,4 @@
-#include "osr/handler.h"
+#include "osr/input/drag.h"
 
 #include <cstdlib>
 #include <string>
@@ -11,6 +11,7 @@
 #include "include/base/cef_callback.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "osr/handler.h"
 
 using namespace sabine_osr;
 
@@ -78,11 +79,11 @@ std::string DragPayload(CefRefPtr<CefDragData> data,
          ",\"imageScale\":" + std::to_string(image_scale) + "}";
 }
 
-CefRefPtr<CefDragData> DragDataFromJson(const std::string& json) {
+CefRefPtr<CefDragData> DragDataFromJson(const JsonObject& content) {
   CefRefPtr<CefDragData> data = CefDragData::Create();
-  const std::string text = JsonStringValue(json, "text");
-  const std::string html = JsonStringValue(json, "html");
-  const std::string url = JsonStringValue(json, "url");
+  const std::string text = content.String("text");
+  const std::string html = content.String("html");
+  const std::string url = content.String("url");
   if (!text.empty()) {
     data->SetFragmentText(text);
   }
@@ -92,7 +93,7 @@ CefRefPtr<CefDragData> DragDataFromJson(const std::string& json) {
   if (!url.empty()) {
     data->SetLinkURL(url);
   }
-  for (const std::string& path : JsonStringArrayValue(json, "files")) {
+  for (const std::string& path : content.Strings("files")) {
     data->AddFile(path, CefString());
   }
   return data;
@@ -131,19 +132,19 @@ bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
                    static_cast<uint32_t>(payload.size()))) {
     return false;
   }
-  drag_source_browser_ = browser;
-  drag_source_data_ = drag_data->Clone();
-  drag_source_operations_ = allowed_ops;
+  drag_.source_browser = browser;
+  drag_.source_data = drag_data->Clone();
+  drag_.source_operations = allowed_ops;
   return true;
 }
 
 void SabineOsrHandler::UpdateDragCursor(CefRefPtr<CefBrowser> browser,
                                         DragOperation operation) {
   CEF_REQUIRE_UI_THREAD();
-  if (operation == drag_operation_) {
+  if (operation == drag_.operation) {
     return;
   }
-  drag_operation_ = operation;
+  drag_.operation = operation;
   SendMessage(kDragOperation, static_cast<uint32_t>(operation), 0, 0, 0,
               nullptr, 0);
 }
@@ -156,11 +157,11 @@ bool SabineOsrHandler::TryHandleDragControl(
     return false;
   }
   if (command == "drag_enter" && parts.size() >= 6) {
-    held_drag_controls_.clear();
-    awaiting_dropped_paths_ = SendDroppedPaths(parts[5]);
+    drag_.held_controls.clear();
+    drag_.awaiting_dropped_paths = SendDroppedPaths(parts[5]);
   }
-  if (awaiting_dropped_paths_) {
-    held_drag_controls_.push_back(parts);
+  if (drag_.awaiting_dropped_paths) {
+    drag_.held_controls.push_back(parts);
   } else {
     RunDragControl(parts);
   }
@@ -171,23 +172,23 @@ void SabineOsrHandler::RunDragControl(const std::vector<std::string>& parts) {
   const std::string& command = parts[0];
   CefRefPtr<CefBrowserHost> host = browser_->GetHost();
   if (command == "drag_enter" && parts.size() >= 6) {
-    drag_operation_ = DRAG_OPERATION_NONE;
-    drag_target_operations_ = Operations(parts[4]);
-    host->DragTargetDragEnter(DragDataFromJson(parts[5]), DragEvent(parts),
-                              drag_target_operations_);
+    drag_.operation = DRAG_OPERATION_NONE;
+    drag_.target_operations = Operations(parts[4]);
+    host->DragTargetDragEnter(DragDataFromJson(JsonObject::Parse(parts[5])),
+                              DragEvent(parts), drag_.target_operations);
     KeepDraggingOver(DragEvent(parts));
   } else if (command == "drag_enter_source" && parts.size() >= 4) {
-    if (!drag_source_data_) {
+    if (!drag_.source_data) {
       return;
     }
-    drag_operation_ = DRAG_OPERATION_NONE;
-    drag_target_operations_ = drag_source_operations_;
-    host->DragTargetDragEnter(drag_source_data_->Clone(), DragEvent(parts),
-                              drag_target_operations_);
+    drag_.operation = DRAG_OPERATION_NONE;
+    drag_.target_operations = drag_.source_operations;
+    host->DragTargetDragEnter(drag_.source_data->Clone(), DragEvent(parts),
+                              drag_.target_operations);
     KeepDraggingOver(DragEvent(parts));
   } else if (command == "drag_over" && parts.size() >= 5) {
-    drag_target_operations_ = Operations(parts[4]);
-    host->DragTargetDragOver(DragEvent(parts), drag_target_operations_);
+    drag_.target_operations = Operations(parts[4]);
+    host->DragTargetDragOver(DragEvent(parts), drag_.target_operations);
     KeepDraggingOver(DragEvent(parts));
   } else if (command == "drag_leave") {
     StopDraggingOver();
@@ -196,8 +197,8 @@ void SabineOsrHandler::RunDragControl(const std::vector<std::string>& parts) {
     const CefMouseEvent event = DragEvent(parts);
     StopDraggingOver();
     host->DragTargetDrop(event);
-    if (drag_source_browser_ && drag_source_data_) {
-      EndDragSource(event.x, event.y, drag_operation_);
+    if (drag_.source_browser && drag_.source_data) {
+      EndDragSource(event.x, event.y, drag_.operation);
     }
   } else if (command == "drag_source_ended" && parts.size() >= 4) {
     EndDragSource(std::atoi(parts[1].c_str()), std::atoi(parts[2].c_str()),
@@ -208,33 +209,34 @@ void SabineOsrHandler::RunDragControl(const std::vector<std::string>& parts) {
 // Browsers repeat dragover while the pointer rests over a page, which is how
 // the element under it gets to accept a drop it reached with its last move.
 void SabineOsrHandler::KeepDraggingOver(const CefMouseEvent& event) {
-  drag_target_event_ = event;
+  drag_.target_event = event;
   CefPostDelayedTask(
       TID_UI,
       base::BindOnce(&SabineOsrHandler::RepeatDragOver,
-                     CefRefPtr<SabineOsrHandler>(this), ++drag_over_serial_),
+                     CefRefPtr<SabineOsrHandler>(this), ++drag_.over_serial),
       kDragOverRepeatMs);
 }
 
 void SabineOsrHandler::StopDraggingOver() {
-  ++drag_over_serial_;
+  ++drag_.over_serial;
 }
 
 void SabineOsrHandler::RepeatDragOver(uint64_t serial) {
   CEF_REQUIRE_UI_THREAD();
-  if (serial != drag_over_serial_ || !browser_) {
+  if (serial != drag_.over_serial || !browser_) {
     return;
   }
-  browser_->GetHost()->DragTargetDragOver(drag_target_event_,
-                                          drag_target_operations_);
-  KeepDraggingOver(drag_target_event_);
+  browser_->GetHost()->DragTargetDragOver(drag_.target_event,
+                                          drag_.target_operations);
+  KeepDraggingOver(drag_.target_event);
 }
 
 // The app's own page learns the paths of files dropped on it before it hears
 // about the drag, so it can read them from its drag events. Drag events wait
 // until the page has them.
 bool SabineOsrHandler::SendDroppedPaths(const std::string& content) {
-  const std::vector<std::string> paths = JsonStringArrayValue(content, "files");
+  const std::vector<std::string> paths =
+      JsonObject::Parse(content).Strings("files");
   CefRefPtr<CefFrame> frame = browser_->GetMainFrame();
   if (paths.empty() || !frame ||
       !sabine_bridge::AllowsDocument(BridgePolicyFor(browser_),
@@ -244,7 +246,7 @@ bool SabineOsrHandler::SendDroppedPaths(const std::string& content) {
   CefRefPtr<CefProcessMessage> message =
       CefProcessMessage::Create("sabine.drop.paths");
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
-  arguments->SetString(0, std::to_string(++dropped_paths_serial_));
+  arguments->SetString(0, std::to_string(++drag_.dropped_paths_serial));
   for (size_t index = 0; index < paths.size(); ++index) {
     arguments->SetString(index + 1, paths[index]);
   }
@@ -254,14 +256,14 @@ bool SabineOsrHandler::SendDroppedPaths(const std::string& content) {
 
 void SabineOsrHandler::DroppedPathsDelivered(const std::string& serial) {
   CEF_REQUIRE_UI_THREAD();
-  if (!awaiting_dropped_paths_ ||
-      serial != std::to_string(dropped_paths_serial_)) {
+  if (!drag_.awaiting_dropped_paths ||
+      serial != std::to_string(drag_.dropped_paths_serial)) {
     return;
   }
-  awaiting_dropped_paths_ = false;
+  drag_.awaiting_dropped_paths = false;
   const std::vector<std::vector<std::string>> held =
-      std::move(held_drag_controls_);
-  held_drag_controls_.clear();
+      std::move(drag_.held_controls);
+  drag_.held_controls.clear();
   for (const std::vector<std::string>& parts : held) {
     RunDragControl(parts);
   }
@@ -270,9 +272,9 @@ void SabineOsrHandler::DroppedPathsDelivered(const std::string& serial) {
 void SabineOsrHandler::EndDragSource(int x,
                                      int y,
                                      cef_drag_operations_mask_t operation) {
-  CefRefPtr<CefBrowser> browser = drag_source_browser_;
-  drag_source_browser_ = nullptr;
-  drag_source_data_ = nullptr;
+  CefRefPtr<CefBrowser> browser = drag_.source_browser;
+  drag_.source_browser = nullptr;
+  drag_.source_data = nullptr;
   if (!browser) {
     return;
   }

@@ -1,45 +1,49 @@
 #ifndef SABINE_CEF_HOST_OSR_HANDLER_H_
 #define SABINE_CEF_HOST_OSR_HANDLER_H_
 
-#include <cstdint>
 #include <chrono>
-#include <condition_variable>
+#include <cstdint>
 #include <deque>
-#include <functional>
 #include <list>
 #include <map>
-#include <mutex>
-#include <set>
 #include <optional>
+#include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "app/profile.h"
-#include "guest/manager.h"
-#include "osr/print/document.h"
-#include "osr/transport/message_kinds.h"
-#ifndef _WIN32
-#include "osr/paint/shared_pool.h"
-#endif
+#include "include/base/cef_build.h"
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
-#include "include/cef_context_menu_handler.h"
-#include "include/cef_dialog_handler.h"
 #include "include/cef_display_handler.h"
-#include "include/cef_download_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_permission_handler.h"
-#if defined(OS_LINUX)
-#include "include/cef_print_handler.h"
-#endif
 #include "include/cef_render_handler.h"
-#include "include/cef_request_handler.h"
 #include "include/cef_request_context.h"
+#include "include/cef_request_handler.h"
 #include "include/cef_values.h"
 #include "osr/accelerated/damage.h"
+#include "osr/browser/clipboard.h"
+#include "osr/browser/media_state.h"
+#include "osr/dialogs/dialogs.h"
+#include "osr/dialogs/downloads.h"
+#include "osr/guest/registry.h"
+#include "osr/input/drag.h"
+#include "osr/input/ime.h"
+#include "osr/print/document.h"
+#include "osr/transport/control_queue.h"
+#include "osr/transport/message_kinds.h"
+#include "osr/transport/socket.h"
+#include "osr/transport/wire.h"
+#include "osr/window_state.h"
+#if !defined(OS_WIN)
+#include "osr/paint/shared_pool.h"
+#endif
 #if defined(OS_LINUX)
 #include "osr/accelerated/linux/dmabuf_copy.h"
+#include "osr/print/linux/dialogs.h"
 #endif
 #if defined(OS_MAC)
 #include <memory>
@@ -47,25 +51,17 @@
 #include "osr/accelerated/macos/surface_broker.h"
 #endif
 
-constexpr char kClipboardCommandPrefix[] = "sabine.clipboard.";
-
-constexpr int kInspectElementCommand = MENU_ID_USER_FIRST;
-
-enum class PaintSurface { kMain, kPopup, kGuest };
-
-#if defined(OS_LINUX)
-struct PrintPaper {
-  double width_mm = 210;
-  double height_mm = 297;
-  bool landscape = false;
+// The page sizes and frame rates a window's browser starts with.
+struct BrowserViewport {
+  int width = 1;
+  int height = 1;
+  float scale = 1.0f;
+  int active_frame_rate = 60;
+  int background_frame_rate = 5;
 };
-#endif
 
 class SabineOsrHandler : public CefClient,
-                         public CefContextMenuHandler,
-                         public CefDialogHandler,
                          public CefDisplayHandler,
-                         public CefDownloadHandler,
                          public CefDragHandler,
 #if defined(OS_MAC)
                          public CefKeyboardHandler,
@@ -73,33 +69,26 @@ class SabineOsrHandler : public CefClient,
                          public CefLifeSpanHandler,
                          public CefLoadHandler,
                          public CefPermissionHandler,
-#if defined(OS_LINUX)
-                         public CefPrintHandler,
-#endif
                          public CefRenderHandler,
                          public CefRequestHandler {
  public:
   SabineOsrHandler(std::string endpoint,
                    std::string authentication_token,
-                   int width,
-                   int height,
-                   float scale,
+                   const BrowserViewport& viewport,
                    CefRefPtr<CefDictionaryValue> bridge_policy,
                    bool dev_mode,
                    bool transparent_background,
-                   bool retain_hidden_frame,
-                   int active_frame_rate,
-                   int background_frame_rate);
+                   bool retain_hidden_frame);
   ~SabineOsrHandler() override;
 
-  static SabineOsrHandler* GetInstance();
-
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
-    return this;
+    return dialogs_;
   }
-  CefRefPtr<CefDialogHandler> GetDialogHandler() override { return this; }
+  CefRefPtr<CefDialogHandler> GetDialogHandler() override { return dialogs_; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
-  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override {
+    return downloads_;
+  }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
 #if defined(OS_MAC)
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
@@ -115,19 +104,9 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
 #if defined(OS_LINUX)
-  CefRefPtr<CefPrintHandler> GetPrintHandler() override { return this; }
-  void OnPrintStart(CefRefPtr<CefBrowser> browser) override {}
-  void OnPrintSettings(CefRefPtr<CefBrowser> browser,
-                       CefRefPtr<CefPrintSettings> settings,
-                       bool get_defaults) override;
-  bool OnPrintDialog(CefRefPtr<CefBrowser> browser,
-                     bool has_selection,
-                     CefRefPtr<CefPrintDialogCallback> callback) override;
-  bool OnPrintJob(CefRefPtr<CefBrowser> browser,
-                  const CefString& document_name,
-                  const CefString& pdf_file_path,
-                  CefRefPtr<CefPrintJobCallback> callback) override;
-  void OnPrintReset(CefRefPtr<CefBrowser> browser) override {}
+  CefRefPtr<CefPrintHandler> GetPrintHandler() override {
+    return print_dialogs_;
+  }
 #endif
   bool OnShowPermissionPrompt(
       CefRefPtr<CefBrowser> browser,
@@ -144,30 +123,6 @@ class SabineOsrHandler : public CefClient,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override;
 
-  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
-                           CefRefPtr<CefFrame> frame,
-                           CefRefPtr<CefContextMenuParams> params,
-                           CefRefPtr<CefMenuModel> model) override;
-  bool RunContextMenu(CefRefPtr<CefBrowser> browser,
-                      CefRefPtr<CefFrame> frame,
-                      CefRefPtr<CefContextMenuParams> params,
-                      CefRefPtr<CefMenuModel> model,
-                      CefRefPtr<CefRunContextMenuCallback> callback) override;
-  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
-                            CefRefPtr<CefFrame> frame,
-                            CefRefPtr<CefContextMenuParams> params,
-                            int command_id,
-                            EventFlags event_flags) override;
-  void OnContextMenuDismissed(CefRefPtr<CefBrowser> browser,
-                              CefRefPtr<CefFrame> frame) override;
-  bool OnFileDialog(CefRefPtr<CefBrowser> browser,
-                    FileDialogMode mode,
-                    const CefString& title,
-                    const CefString& default_file_path,
-                    const std::vector<CefString>& accept_filters,
-                    const std::vector<CefString>& accept_extensions,
-                    const std::vector<CefString>& accept_descriptions,
-                    CefRefPtr<CefFileDialogCallback> callback) override;
   bool OnCursorChange(CefRefPtr<CefBrowser> browser,
                       CefCursorHandle cursor,
                       cef_cursor_type_t type,
@@ -214,13 +169,6 @@ class SabineOsrHandler : public CefClient,
                             bool isLoading,
                             bool canGoBack,
                             bool canGoForward) override;
-  bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
-                        CefRefPtr<CefDownloadItem> download_item,
-                        const CefString& suggested_name,
-                        CefRefPtr<CefBeforeDownloadCallback> callback) override;
-  void OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
-                         CefRefPtr<CefDownloadItem> download_item,
-                         CefRefPtr<CefDownloadItemCallback> callback) override;
   void OnDraggableRegionsChanged(
       CefRefPtr<CefBrowser> browser,
       CefRefPtr<CefFrame> frame,
@@ -262,15 +210,15 @@ class SabineOsrHandler : public CefClient,
 
   void HandleControlLine(const std::string& line,
                          const std::optional<std::string>& body = std::nullopt);
-  void QueueResizeControlLine(std::string line);
+  void HandleQueuedControl(const std::string& line,
+                           const std::optional<std::string>& body);
+  void CompleteQueuedControl(size_t bytes);
+  void HandleLatestControl(CefRefPtr<sabine_osr::LatestControl> control);
   void HandlePendingResize();
   bool FitsView(int pixel_width, int pixel_height) const;
   bool QualifyResizeFrame(int pixel_width, int pixel_height);
   void CompleteResizeFrame(int pixel_width, int pixel_height);
   void CloseFromNativeDisconnect();
-  void HandleQueuedControl(const std::string& line,
-                           const std::optional<std::string>& body);
-  void CompleteQueuedControl(size_t bytes);
   void ApplyHostControl(const std::string& command, const std::string& value);
   void ResolveBridgeResponse(
       const std::string& browser_id,
@@ -281,13 +229,14 @@ class SabineOsrHandler : public CefClient,
   void EmitBridgeEvent(const std::string& name_json,
                        const std::string& payload,
                        const std::optional<std::string>& body = std::nullopt);
-#ifndef _WIN32
+#if !defined(OS_WIN)
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
 #endif
   void UseProfile(BrowserProfile profile, bool shared_texture);
   void ReleaseAcceleratedFrame(uint64_t slot_token);
   void RetireAcceleratedBrowser(int browser_id);
   void RepaintAll();
+  void OpenDevToolsFrontend(const std::string& port, const std::string& target);
 #if defined(OS_MAC)
   void UseSurfaceService(const std::string& service_name);
 #endif
@@ -298,16 +247,16 @@ class SabineOsrHandler : public CefClient,
 
  private:
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
-  using GuestCreateCallback =
-      std::function<void(bool success, const std::string& result)>;
 
-  struct PendingGuestCreate {
-    GuestCreateRequest request;
-    GuestCreateCallback callback;
-  };
-
+  friend class Downloads;
+  friend class PageDialogs;
+#if defined(OS_LINUX)
+  friend class PrintDialogs;
+#endif
   friend class SabineGuestRequestContextHandler;
 
+  // Accelerated paint: Chromium's shared textures, copied into frames the
+  // window composites.
   struct CopiedAccelFrame {
     uint32_t width = 0;
     uint32_t height = 0;
@@ -375,27 +324,33 @@ class SabineOsrHandler : public CefClient,
                    const UnsettledFrame& frame);
 #endif
 
-  bool TryHandleDragControl(const std::vector<std::string>& parts);
-  void RunDragControl(const std::vector<std::string>& parts);
-  void KeepDraggingOver(const CefMouseEvent& event);
-  void StopDraggingOver();
-  void RepeatDragOver(uint64_t serial);
-  bool SendDroppedPaths(const std::string& content);
-  void DroppedPathsDelivered(const std::string& serial);
-  void ChooseContextMenuCommand(int command_id);
-  void FinishFileDialog(const std::vector<std::string>& parts);
-#if defined(OS_LINUX)
-  void FinishPrintDialog(const std::vector<std::string>& parts);
-  void FinishPrintJob(const std::vector<std::string>& parts);
+  std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
+      dropped_accelerated_paints_;
+  std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
+#if defined(OS_WIN) || defined(OS_LINUX)
+  std::set<uint64_t> announced_accelerated_resources_;
 #endif
-  void OpenPrintDocument(const std::vector<std::string>& parts);
-  void ReportPrintDocument(uint32_t id, bool ok);
-  void PrintDocumentClosed(uint32_t id);
-  void ClosePrintDocuments();
-  void QuitWhenClosed();
-  void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
-  bool ConnectSocket();
-  bool QueueControl(std::string line, std::optional<std::string> body);
+#if defined(OS_MAC)
+  std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
+#endif
+#if defined(OS_LINUX)
+  bool accelerated_paint_ = false;
+  bool accelerated_paint_seen_ = false;
+  bool accelerated_paint_failed_ = false;
+  std::map<sabine_osr::AcceleratedSurfaceKey, UnsettledFrame> unsettled_frames_;
+  bool settle_pending_ = false;
+  bool repaint_all_pending_ = false;
+#endif
+  std::string accelerated_drop_reason_;
+  // End of accelerated paint.
+
+  void StartCommandReader();
+  void ReadControls();
+  bool DispatchControl(std::string line,
+                       std::optional<std::string> body,
+                       CefRefPtr<sabine_osr::LatestControl>* move);
+  void QueueResizeControlLine(std::string line);
+  void PostPendingResize();
   void CloseTransport();
   bool SendMessage(uint32_t kind,
                    uint32_t width,
@@ -404,6 +359,9 @@ class SabineOsrHandler : public CefClient,
                    int32_t y,
                    const void* payload,
                    uint32_t payload_len);
+  bool SendMessage(uint32_t kind,
+                   std::initializer_list<std::string_view> parts);
+#if !defined(OS_WIN)
   bool SendMessageWithFd(uint32_t kind,
                          uint32_t width,
                          uint32_t height,
@@ -412,6 +370,7 @@ class SabineOsrHandler : public CefClient,
                          const void* payload,
                          uint32_t payload_len,
                          int fd);
+#endif
   bool SendPaintBatch(PaintSurface surface,
                       const std::string& guest_id,
                       int32_t origin_x,
@@ -420,16 +379,35 @@ class SabineOsrHandler : public CefClient,
                       int buffer_width,
                       int buffer_height,
                       const RectList& dirty_rects);
+
+  bool TryHandleDragControl(const std::vector<std::string>& parts);
+  void RunDragControl(const std::vector<std::string>& parts);
+  void KeepDraggingOver(const CefMouseEvent& event);
+  void StopDraggingOver();
+  void RepeatDragOver(uint64_t serial);
+  bool SendDroppedPaths(const std::string& content);
+  void DroppedPathsDelivered(const std::string& serial);
+  void EndDragSource(int x, int y, cef_drag_operations_mask_t operation);
+
+  void ShowDevTools(CefRefPtr<CefBrowser> inspected);
+  void CloseDevTools();
+  CefRect DevToolsBounds() const;
+  void OpenPrintDocument(const std::vector<std::string>& parts);
+  void ReportPrintDocument(uint32_t id, bool ok);
+  void PrintDocumentClosed(uint32_t id);
+  void ClosePrintDocuments();
+  void QuitWhenClosed();
+
   void HandleBridgeCommand(CefRefPtr<CefBrowser> browser,
                            CefRefPtr<CefFrame> frame,
                            const std::string& request_id,
                            const std::string& command,
                            const std::string& payload,
-                           const std::optional<std::string>& body);
+                           std::optional<std::string_view> body);
   void ReceiveNativeMessage(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             const std::vector<std::string>& values,
-                            const std::optional<std::string>& body);
+                            std::optional<std::string_view> body);
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
   void ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
@@ -438,8 +416,14 @@ class SabineOsrHandler : public CefClient,
   bool ResolveClipboardResponse(const std::string& request_id,
                                 bool ok,
                                 const std::string& payload);
+  void UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            const std::string& state);
+  void SendFocusedImeState();
   void RequestNativeClose();
   void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
+  CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
+
   void ApplyLifecycle(const std::string& state,
                       int frame_rate,
                       const std::string& reason);
@@ -448,24 +432,23 @@ class SabineOsrHandler : public CefClient,
   void UpdateFrameMediaState(CefRefPtr<CefBrowser> browser,
                              CefRefPtr<CefFrame> frame,
                              bool playing);
-  void ForgetMediaState(CefRefPtr<CefBrowser> browser);
   void ReportMediaPlaying();
   bool UpdateViewHidden();
   void DispatchWindowState();
   void ApplyToplevelState(bool maximized, bool fullscreen, bool tiled);
   void DispatchToplevelState();
-  bool WindowFloating() const {
-    return !(window_maximized_ || window_fullscreen_ || window_tiled_);
+  int FrameRate() const {
+    return suspended_ ? background_frame_rate_ : active_frame_rate_;
   }
-  void StartCommandReader();
 
   GuestView* GuestForBrowser(const CefRefPtr<CefBrowser>& browser);
+  GuestView* GuestAwaitingBrowser();
   bool HandleGuestBridgeCommand(const std::string& command,
                                 const std::string& payload,
                                 const std::string& browser_id,
                                 const std::string& request_id);
   bool RunGuestOperation(const std::string& operation,
-                         const std::string& payload,
+                         const JsonObject& payload,
                          std::string* response,
                          std::string* error);
   void CreateGuest(GuestCreateRequest request, GuestCreateCallback callback);
@@ -490,125 +473,70 @@ class SabineOsrHandler : public CefClient,
                       const RectList& dirty_rects);
   void SendGuestHidden(const GuestView& guest);
   void EmitPrimaryEvent(const std::string& name, const std::string& payload);
-  void SendFocusedImeState();
-  bool RunGuestDownloadAction(const std::string& payload, std::string* error);
+  void EmitGuestEvent(const GuestView& guest,
+                      const std::string& name,
+                      const std::string& payload);
   CefRefPtr<CefRequestContext> CreateGuestRequestContext(
       const std::string& partition);
   std::string NextGuestId();
 
-  std::map<int, std::deque<std::chrono::steady_clock::time_point>>
-      renderer_crashes_;
+  const std::string endpoint_;
+  const std::string authentication_token_;
+  sabine_osr::Socket socket_;
+  sabine_osr::ControlQueue controls_;
+  sabine_osr::PendingResize resize_;
+
   BrowserList browsers_;
   CefRefPtr<CefBrowser> browser_;
-  std::string endpoint_;
-  std::string authentication_token_;
-  intptr_t socket_fd_ = -1;
-  std::mutex socket_mutex_;
-  std::mutex control_mutex_;
-  std::condition_variable control_space_;
-  size_t control_count_ = 0;
-  size_t control_bytes_ = 0;
-  bool controls_closed_ = false;
-  std::mutex resize_mutex_;
-  std::string pending_resize_line_;
-  bool resize_task_pending_ = false;
-  bool resize_in_flight_ = false;
-  int width_ = 1;
-  int height_ = 1;
-#ifndef _WIN32
+  int width_;
+  int height_;
+  float scale_;
+  const int active_frame_rate_;
+  const int background_frame_rate_;
+#if !defined(OS_WIN)
   sabine_osr::SharedPaintPool shared_paint_;
 #endif
-  std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
-      dropped_accelerated_paints_;
-  std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
-#if defined(OS_WIN) || defined(OS_LINUX)
-  std::set<uint64_t> announced_accelerated_resources_;
-#endif
-#if defined(OS_MAC)
-  std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
-#endif
-#if defined(OS_LINUX)
-  bool accelerated_paint_ = false;
-  bool accelerated_paint_seen_ = false;
-  bool accelerated_paint_failed_ = false;
-  std::map<sabine_osr::AcceleratedSurfaceKey, UnsettledFrame> unsettled_frames_;
-  bool settle_pending_ = false;
-  bool repaint_all_pending_ = false;
-#endif
-  std::string accelerated_drop_reason_;
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
-  float scale_ = 1.0f;
   CefRect popup_rect_;
   CefRect guest_popup_rect_;
   int screen_origin_x_ = 0;
   int screen_origin_y_ = 0;
+
   GuestRegistry guests_;
+  GuestCreations guest_creations_;
   std::string focused_guest_id_;
-  std::map<int, cef_text_input_mode_t> text_input_modes_;
-  std::map<int, CefRect> ime_cursor_rects_;
-  std::map<int, std::string> ime_surrounding_state_;
-  std::map<int, CefRefPtr<CefFrame>> ime_frames_;
-  struct ClipboardRequest {
-    CefRefPtr<CefBrowser> browser;
-    CefString frame;
-    int page_request;
-  };
-  std::map<std::string, ClipboardRequest> clipboard_requests_;
-  uint64_t clipboard_request_serial_ = 0;
-  std::string pending_guest_id_;
-  std::map<std::string, CefRefPtr<CefRequestContext>> guest_contexts_;
-  std::set<std::string> initialized_guest_contexts_;
-  std::map<std::string, std::vector<PendingGuestCreate>> pending_guest_creates_;
-  std::map<std::string, GuestDownload> downloads_;
-  int guest_serial_ = 0;
+  bool pending_guest_cover_ = false;
+  CefRefPtr<CefBrowser> devtools_inspected_;
+  CefRefPtr<CefRegistration> devtools_registration_;
+
   std::set<std::string> bridge_commands_;
   CefRefPtr<CefDictionaryValue> bridge_policy_;
-  CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
-  bool transparent_background_ = false;
-  bool retain_hidden_frame_ = false;
-  bool suspended_ = false;
-  bool frozen_ = false;
-  std::set<std::pair<int, std::string>> playing_frames_;
-  std::set<int> capturing_browsers_;
-  bool media_playing_reported_ = false;
-  bool window_shown_ = true;
-  bool window_visible_ = true;
-  bool window_occluded_ = false;
-  bool window_suspended_ = false;
-  bool window_maximized_ = false;
-  bool window_fullscreen_ = false;
-  bool window_tiled_ = false;
+  ImeState ime_;
+  ClipboardRequests clipboard_;
+  MediaState media_;
+  DragSession drag_;
+  CefRefPtr<PageDialogs> dialogs_;
+  CefRefPtr<Downloads> downloads_;
+#if defined(OS_LINUX)
+  CefRefPtr<PrintDialogs> print_dialogs_;
+#endif
+  std::map<uint32_t, CefRefPtr<sabine_osr::PrintDocument>> print_documents_;
+  std::map<int, std::deque<std::chrono::steady_clock::time_point>>
+      renderer_crashes_;
+
+  WindowState window_;
   // Blur only lowers the frame rate: WasHidden blanks the view until the next
   // paint, which flickers after an interactive move.
   bool view_hidden_ = false;
   bool resume_needs_paint_ = false;
-  bool pending_guest_cover_ = false;
-  int active_frame_rate_ = 60;
-  int background_frame_rate_ = 5;
+  bool suspended_ = false;
+  bool frozen_ = false;
   bool closing_ = false;
   bool close_requested_ = false;
-  CefRefPtr<CefRunContextMenuCallback> context_menu_callback_;
-  uint32_t file_dialog_serial_ = 0;
-  std::map<uint32_t, CefRefPtr<CefFileDialogCallback>> file_dialogs_;
-#if defined(OS_LINUX)
-  PrintPaper print_paper_;
-  uint32_t print_serial_ = 0;
-  std::map<uint32_t, CefRefPtr<CefPrintDialogCallback>> print_dialogs_;
-  std::map<uint32_t, CefRefPtr<CefPrintJobCallback>> print_jobs_;
-#endif
-  std::map<uint32_t, CefRefPtr<sabine_osr::PrintDocument>> print_documents_;
-  CefRefPtr<CefBrowser> drag_source_browser_;
-  CefRefPtr<CefDragData> drag_source_data_;
-  cef_drag_operations_mask_t drag_source_operations_ = DRAG_OPERATION_NONE;
-  cef_drag_operations_mask_t drag_operation_ = DRAG_OPERATION_NONE;
-  cef_drag_operations_mask_t drag_target_operations_ = DRAG_OPERATION_NONE;
-  CefMouseEvent drag_target_event_;
-  uint64_t drag_over_serial_ = 0;
-  uint64_t dropped_paths_serial_ = 0;
-  bool awaiting_dropped_paths_ = false;
-  std::vector<std::vector<std::string>> held_drag_controls_;
-  bool dev_mode_ = false;
+  const bool transparent_background_;
+  const bool retain_hidden_frame_;
+  const bool dev_mode_;
   BrowserProfile profile_;
   bool shared_texture_ = false;
 

@@ -12,16 +12,8 @@ namespace sabine_osr {
 
 bool TryHandleImeControl(CefRefPtr<CefBrowserHost> host,
                          const std::vector<std::string>& parts) {
-  if (!host || parts.empty()) {
-    return false;
-  }
   if (parts[0] == "ime_cancel") {
     host->ImeCancelComposition();
-    return true;
-  }
-  if (parts[0] == "ime_finish") {
-    const bool keep_selection = parts.size() >= 2 && parts[1] == "1";
-    host->ImeFinishComposingText(keep_selection);
     return true;
   }
   if (parts[0] == "ime_commit" && parts.size() >= 2) {
@@ -58,12 +50,19 @@ bool TryHandleImeControl(CefRefPtr<CefBrowserHost> host,
 
 }  // namespace sabine_osr
 
+void ImeState::Forget(int browser_id) {
+  modes.erase(browser_id);
+  cursor_rects.erase(browser_id);
+  surrounding.erase(browser_id);
+  frames.erase(browser_id);
+}
+
 void SabineOsrHandler::OnImeCompositionRangeChanged(
     CefRefPtr<CefBrowser> browser,
     const CefRange& selected_range,
     const RectList& character_bounds) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser || character_bounds.empty()) {
+  if (character_bounds.empty()) {
     return;
   }
   const size_t caret =
@@ -78,17 +77,24 @@ void SabineOsrHandler::OnImeCompositionRangeChanged(
     rect.width = std::max(1, rect.width);
   }
   rect.height = std::max(1, rect.height);
-  ime_cursor_rects_[browser->GetIdentifier()] = rect;
+  ime_.cursor_rects[browser->GetIdentifier()] = rect;
   SendFocusedImeState();
 }
 
 void SabineOsrHandler::OnVirtualKeyboardRequested(CefRefPtr<CefBrowser> browser,
                                                   TextInputMode input_mode) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser) {
-    return;
-  }
-  text_input_modes_[browser->GetIdentifier()] = input_mode;
+  ime_.modes[browser->GetIdentifier()] = input_mode;
+  SendFocusedImeState();
+}
+
+void SabineOsrHandler::UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
+                                            CefRefPtr<CefFrame> frame,
+                                            const std::string& state) {
+  CEF_REQUIRE_UI_THREAD();
+  const int browser_id = browser->GetIdentifier();
+  ime_.surrounding[browser_id] = state;
+  ime_.frames[browser_id] = frame;
   SendFocusedImeState();
 }
 
@@ -114,22 +120,20 @@ void SabineOsrHandler::SendFocusedImeState() {
     return;
   }
   const int browser_id = target->GetIdentifier();
-  const auto mode = text_input_modes_.find(browser_id);
+  const auto mode = ime_.modes.find(browser_id);
   const cef_text_input_mode_t input_mode =
-      mode == text_input_modes_.end() ? CEF_TEXT_INPUT_MODE_NONE : mode->second;
+      mode == ime_.modes.end() ? CEF_TEXT_INPUT_MODE_NONE : mode->second;
   SendMessage(kImeStateChanged, static_cast<uint32_t>(input_mode), 0, 0, 0,
               nullptr, 0);
   if (input_mode == CEF_TEXT_INPUT_MODE_NONE) {
     return;
   }
-  const auto surrounding = ime_surrounding_state_.find(browser_id);
-  if (surrounding != ime_surrounding_state_.end()) {
-    const std::string& payload = surrounding->second;
-    SendMessage(kImeSurroundingChanged, 0, 0, 0, 0, payload.data(),
-                static_cast<uint32_t>(payload.size()));
+  const auto surrounding = ime_.surrounding.find(browser_id);
+  if (surrounding != ime_.surrounding.end()) {
+    SendMessage(kImeSurroundingChanged, {surrounding->second});
   }
-  const auto cursor = ime_cursor_rects_.find(browser_id);
-  if (cursor == ime_cursor_rects_.end()) {
+  const auto cursor = ime_.cursor_rects.find(browser_id);
+  if (cursor == ime_.cursor_rects.end()) {
     return;
   }
   const CefRect& rect = cursor->second;

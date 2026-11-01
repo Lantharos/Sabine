@@ -1,24 +1,17 @@
 #include "osr/handler.h"
-#if defined(OS_LINUX)
-#include "runtime/renderers.h"
-#endif
 
-#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <vector>
 
-#include "guest/input.h"
-#include "guest/manager.h"
-#include "include/cef_app.h"
-#include "include/cef_browser.h"
-#include "include/cef_request_context_handler.h"
-#include "include/cef_task.h"
-#include "include/internal/cef_types.h"
-#include "include/wrapper/cef_helpers.h"
+#include "common/bridge_policy.h"
 #include "common/bytes_message.h"
 #include "common/json.h"
-#include "common/bridge_policy.h"
+#include "include/wrapper/cef_helpers.h"
+#include "sabine_transparent_background_js.h"
+#if defined(OS_LINUX)
+#include "linux/runtime/renderers.h"
+#endif
 
 using namespace sabine_osr;
 
@@ -28,15 +21,15 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     CefProcessId source_process,
     CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
-  if (source_process != PID_RENDERER || !message || !browser || !frame ||
-      !frame->IsValid() || !BridgePolicyFor(browser)) {
+  if (source_process != PID_RENDERER || !frame->IsValid() ||
+      !BridgePolicyFor(browser)) {
     return false;
   }
   if (message->GetName() == "sabine.native.bytes") {
     sabine_bytes::Message bytes;
     if (sabine_bytes::Read(message, &bytes))
       ReceiveNativeMessage(browser, frame, bytes.fields,
-                           std::string(bytes.body, bytes.body_size));
+                           std::string_view(bytes.body, bytes.body_size));
     return true;
   }
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
@@ -71,10 +64,7 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     return true;
   }
   if (message->GetName() == "sabine.ime_state") {
-    const int browser_id = browser->GetIdentifier();
-    ime_surrounding_state_[browser_id] = arguments->GetString(0);
-    ime_frames_[browser_id] = frame;
-    SendFocusedImeState();
+    UpdateImeSurrounding(browser, frame, arguments->GetString(0));
     return true;
   }
   if (message->GetName() != "sabine.native") {
@@ -91,7 +81,7 @@ void SabineOsrHandler::ReceiveNativeMessage(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
     const std::vector<std::string>& values,
-    const std::optional<std::string>& body) {
+    std::optional<std::string_view> body) {
   if (!frame->IsMain() || values.size() < 3)
     return;
   const auto policy = BridgePolicyFor(browser);
@@ -146,7 +136,7 @@ void SabineOsrHandler::HandleBridgeCommand(
     const std::string& request_id,
     const std::string& command,
     const std::string& payload,
-    const std::optional<std::string>& body) {
+    std::optional<std::string_view> body) {
   const std::string browser_id = std::to_string(browser->GetIdentifier());
   std::string origin = sabine_bridge::Origin(frame->GetURL());
   if (origin.empty())
@@ -184,22 +174,23 @@ void SabineOsrHandler::HandleBridgeCommand(
         "{\"message\":\"Sabine bridge command is not allowlisted\"}");
     return;
   }
-  std::string request = "SABINE_BRIDGE_REQUEST\t" + browser_id + "\t" +
-                        request_id + "\t" + origin + "\t" + command + "\t" +
-                        (payload.empty() ? "{}" : payload);
-  if (body) {
-    if (!bridge_policy_->GetBool("bytes")) {
-      ResolveBridgeResponse(
-          browser_id, request_id, false,
-          "{\"message\":\"This app was built with a Sabine that cannot take "
-          "bytes from pages\"}");
-      return;
-    }
-    request = sabine_bytes::kPrefix + std::to_string(body->size()) + "\t" +
-              request + "\n" + *body;
+  const std::string request = "SABINE_BRIDGE_REQUEST\t" + browser_id + "\t" +
+                              request_id + "\t" + origin + "\t" + command +
+                              "\t" + (payload.empty() ? "{}" : payload);
+  if (!body) {
+    SendMessage(kBridgeRequest, {request});
+    return;
   }
-  SendMessage(kBridgeRequest, 0, 0, 0, 0, request.data(),
-              static_cast<uint32_t>(request.size()));
+  if (!bridge_policy_->GetBool("bytes")) {
+    ResolveBridgeResponse(
+        browser_id, request_id, false,
+        JsonMessage("This app was built with a Sabine that cannot take bytes "
+                    "from pages"));
+    return;
+  }
+  const std::string header =
+      sabine_bytes::kPrefix + std::to_string(body->size()) + "\t";
+  SendMessage(kBridgeRequest, {header, request, "\n", *body});
 }
 
 void SabineOsrHandler::RequestNativeClose() {
@@ -216,8 +207,6 @@ void SabineOsrHandler::CloseFromNativeDisconnect() {
 
 CefRefPtr<CefDictionaryValue> SabineOsrHandler::BridgePolicyFor(
     CefRefPtr<CefBrowser> browser) {
-  if (!browser)
-    return nullptr;
   if (browser_ && browser_->IsSame(browser))
     return bridge_policy_;
   const GuestView* guest = GuestForBrowser(browser);
@@ -228,20 +217,8 @@ void SabineOsrHandler::InstallTransparentBackground(CefRefPtr<CefFrame> frame) {
   if (!transparent_background_) {
     return;
   }
-  frame->ExecuteJavaScript(
-      "(function(){"
-      "if(document.documentElement){document.documentElement.style.background='"
-      "transparent';}"
-      "if(document.body){document.body.style.background='transparent';}"
-      "if(!document.querySelector('style[data-sabine-transparent-background]'))"
-      "{"
-      "const style=document.createElement('style');"
-      "style.setAttribute('data-sabine-transparent-background','');"
-      "style.textContent='html,body{background:transparent!important;}';"
-      "document.head&&document.head.appendChild(style);"
-      "}"
-      "})();",
-      frame->GetURL(), 0);
+  frame->ExecuteJavaScript(SABINE_TRANSPARENT_BACKGROUND_JS_RAW,
+                           frame->GetURL(), 0);
 }
 
 void SabineOsrHandler::ResolveBridgeResponse(

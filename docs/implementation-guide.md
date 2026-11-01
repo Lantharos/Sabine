@@ -785,7 +785,8 @@ time. Chromium never encrypts web storage such as localStorage; apps that need s
 from other software running as the same user should keep them in native storage. Remote DevTools remains opt-in and uses Chromium's origin restrictions.
 Development runs listen on port 9222 unless the app sets another; `SABINE_DEVTOOLS_PORT` overrides
 both, so several apps can be debugged at once, and `0` lets Chromium choose a free port, which it
-prints as `DevTools listening on ws://…`.
+prints as `DevTools listening on ws://…`. The DevTools a development window docks connect through
+the same port, so an app that turns remote DevTools off goes without them.
 
 ## Public API
 
@@ -1057,7 +1058,10 @@ portal on Linux, the common item dialog on Windows, and a sheet on macOS. The in
 become the dialog's filters. Color inputs keep Chromium's picker. Context
 menus keep only Chromium's editing commands: undo, redo, cut, copy, paste, delete, select all, and
 spelling suggestions, so editable fields and selections get the menu users expect while pages get no
-browser navigation or printing entries. Development launches add `Inspect element`. The window
+browser navigation or printing entries. Development launches add `Open DevTools`, which docks
+DevTools along the bottom of the window as a guest view the page never sees, rendered offscreen like
+the page itself and connected to the page through the window's remote debugging port, and
+`Close DevTools` while they are open. The window
 draws the menu itself, following the desktop's light or dark theme, with the platform's shortcut
 notation. Submenus open beside their entry, toward the side with room, and entries that turn on
 and off show a check mark or a radio dot. The menu is keyboard navigable, with the arrow keys
@@ -1099,8 +1103,9 @@ Pages hear the standard `freeze` and `resume` document events. A page is never f
 its frames plays audio or video, runs an `AudioContext`, or holds a camera or microphone, while
 native video plays, or while an activity started with `keepRunning` (the default) runs; it thaws
 as soon as one of these starts. A script evaluated in every frame, including cross-origin frames,
-reports media playback to the browser host, which combines it with Chromium's camera and
-microphone state and tells the native window when anything is playing.
+reports media playback to the browser host through a function only that script holds, so a page
+can keep itself awake only by actually playing something. The browser host combines these reports
+with Chromium's camera and microphone state and tells the native window when anything is playing.
 
 Pages read the window's state from `window.sabine.window.visible` and `.suspended`, and hear about
 changes through the `window.visibility` bridge event. `visible` is false while the window is hidden
@@ -1559,9 +1564,18 @@ first message on its window connection, and a host that does not match is discon
 page traffic reaches the app, with a repair/update error in place of the window.
 
 Packaged apps use an installed host and never invoke a compiler on the user's machine. Development
-builds and the packaging CLI can build a host from the CEF SDK; when the runtime has no SDK or cmake
-isn't installed, development builds use the newest installed Sabine's host instead. Compatible newer shared hosts are
-selected by their native protocol rather than requiring an identical app framework version.
+builds and the packaging CLI can build a host from the CEF SDK; when the runtime has no SDK, cmake
+isn't installed, or the build fails, development builds use the newest installed Sabine's host
+instead, provided its protocol matches. When neither works, the error names what the build lacked
+and why the installed host can't stand in. Compatible newer shared hosts are selected by their
+native protocol rather than requiring an identical app framework version.
+
+The host's C++ sources live in `crates/sabine-host/shared`, and the crate embeds every file there,
+so a new source file needs no list to be kept in step. Sources in a folder named `linux`, `macos`
+or `windows` build only on that platform. `app/` holds the browser process's application,
+`renderer/` what renderer processes install in pages, `osr/` the window's browser with its
+transport, input, guests, dialogs and paint, and `linux/` the private display and the shared
+runtime. The page scripts the host evaluates come from `crates/sabine-bridge/src/scripts`.
 
 ### Windows setup wizard
 

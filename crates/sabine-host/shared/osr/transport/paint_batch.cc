@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <limits>
 
-#include "guest/manager.h"
+#include "osr/guest/registry.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/transport/wire.h"
 

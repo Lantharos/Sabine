@@ -2,13 +2,7 @@
 
 #include <cstring>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#else
-#include <sys/socket.h>
-#endif
-
-#include "osr/handler.h"
+#include "osr/transport/message_kinds.h"
 
 namespace sabine_osr {
 
@@ -58,30 +52,6 @@ void PutU64(std::vector<char>* buffer, size_t offset, uint64_t value) {
   for (size_t i = 0; i < 8; ++i) {
     (*buffer)[offset + i] = static_cast<char>((value >> (i * 8)) & 0xff);
   }
-}
-
-bool SendAll(intptr_t fd, const char* bytes, size_t len) {
-  size_t sent = 0;
-  while (sent < len) {
-    const int result = send(
-#ifdef _WIN32
-        static_cast<SOCKET>(fd),
-#else
-        static_cast<int>(fd),
-#endif
-        bytes + sent, static_cast<int>(len - sent),
-#ifdef _WIN32
-        0
-#else
-        MSG_NOSIGNAL
-#endif
-    );
-    if (result <= 0) {
-      return false;
-    }
-    sent += static_cast<size_t>(result);
-  }
-  return true;
 }
 
 std::vector<char> PaintMetadata(const std::string& prefix,

@@ -1,4 +1,5 @@
-#include <algorithm>
+#include "osr/window_state.h"
+
 #include <string>
 
 #include "include/wrapper/cef_helpers.h"
@@ -19,7 +20,7 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
     const bool needs_paint = resume_needs_paint_;
     suspended_ = false;
     resume_needs_paint_ = false;
-    host->SetWindowlessFrameRate(std::max(1, frame_rate));
+    host->SetWindowlessFrameRate(frame_rate);
     if (!UpdateViewHidden() && needs_paint) {
       host->Invalidate(PET_VIEW);
     }
@@ -28,7 +29,7 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
   }
   suspended_ = true;
   resume_needs_paint_ = resume_needs_paint_ || reason == "hidden";
-  host->SetWindowlessFrameRate(std::max(1, frame_rate));
+  host->SetWindowlessFrameRate(frame_rate);
   ApplyGuestLifecycle();
 }
 
@@ -50,10 +51,10 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
                                         bool occluded,
                                         bool suspended) {
   CEF_REQUIRE_UI_THREAD();
-  window_shown_ = shown;
-  window_visible_ = shown && !occluded;
-  window_occluded_ = shown && occluded;
-  window_suspended_ = suspended;
+  window_.shown = shown;
+  window_.visible = shown && !occluded;
+  window_.occluded = shown && occluded;
+  window_.suspended = suspended;
   if (browser_ && UpdateViewHidden()) {
     ApplyGuestLifecycle();
   }
@@ -62,7 +63,7 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
 
 bool SabineOsrHandler::UpdateViewHidden() {
   const bool hidden =
-      window_occluded_ || (!window_shown_ && !retain_hidden_frame_);
+      window_.occluded || (!window_.shown && !retain_hidden_frame_);
   if (!browser_ || hidden == view_hidden_) {
     return false;
   }
@@ -81,8 +82,8 @@ void SabineOsrHandler::DispatchWindowState() {
   const std::string script =
       std::string(
           "window.__sabineWindowStateSet&&window.__sabineWindowStateSet(") +
-      (window_visible_ ? "true" : "false") + "," +
-      (window_suspended_ ? "true" : "false") + ");";
+      (window_.visible ? "true" : "false") + "," +
+      (window_.suspended ? "true" : "false") + ");";
   for (auto& browser : browsers_) {
     if (!GuestForBrowser(browser)) {
       browser->GetMainFrame()->ExecuteJavaScript(
@@ -95,9 +96,9 @@ void SabineOsrHandler::ApplyToplevelState(bool maximized,
                                           bool fullscreen,
                                           bool tiled) {
   CEF_REQUIRE_UI_THREAD();
-  window_maximized_ = maximized;
-  window_fullscreen_ = fullscreen;
-  window_tiled_ = tiled;
+  window_.maximized = maximized;
+  window_.fullscreen = fullscreen;
+  window_.tiled = tiled;
   DispatchToplevelState();
 }
 
@@ -106,8 +107,8 @@ void SabineOsrHandler::DispatchToplevelState() {
   const auto flag = [](bool value) { return value ? "true" : "false"; };
   const std::string script =
       std::string("window.__sabineToplevelSet&&window.__sabineToplevelSet(") +
-      flag(window_maximized_) + "," + flag(window_fullscreen_) + "," +
-      flag(window_tiled_) + ");";
+      flag(window_.maximized) + "," + flag(window_.fullscreen) + "," +
+      flag(window_.tiled) + ");";
   for (auto& browser : browsers_) {
     if (!GuestForBrowser(browser)) {
       browser->GetMainFrame()->ExecuteJavaScript(

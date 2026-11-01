@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-enum class PaintSurface;
+enum class PaintSurface { kMain, kPopup, kGuest };
 
 namespace sabine_osr {
 
@@ -24,7 +24,6 @@ struct PaintRectBytes {
 void PutU32(std::vector<char>* buffer, size_t offset, uint32_t value);
 void PutI32(std::vector<char>* buffer, size_t offset, int32_t value);
 void PutU64(std::vector<char>* buffer, size_t offset, uint64_t value);
-bool SendAll(intptr_t fd, const char* bytes, size_t len);
 std::vector<char> PaintMetadata(const std::string& prefix,
                                 const std::vector<PaintRectBytes>& rects);
 std::vector<char> PaintMetadata(const std::string& prefix,
