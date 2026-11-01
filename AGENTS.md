@@ -12,7 +12,7 @@
 - Apps should use `SabineWindow` from `sabine` directly.
 - Prefer `SabineWindow::main`, recipes (`.app()` / `.palette()` / `.tray_app()`), `AppChrome`, and `with_manifest` for new apps; keep advanced region APIs available but secondary.
 - Run `cargo fmt`, `cargo build --workspace`, and `cargo test --workspace` after code changes. Format C++ and Objective-C++ with `clang-format -i` using the repository `.clang-format`. For Windows-only changes, also run `cargo check --target x86_64-pc-windows-gnu --workspace` since the host development environment is typically Linux.
-- Keep the README focused on getting started. Architecture and platform details belong in `docs/implementation-guide.md`; release procedures belong in `docs/publishing.md`.
+- Keep the README focused on getting started. Documentation is the Astro/Starlight site in `website/` (pages in `website/src/content/docs/docs/`, published at sabine.rs); update the pages a change affects. Releasing Sabine is described in `contributing/releasing-sabine.mdx`. Check the site with `bun run build` in `website/`, which also validates every internal link.
 - Preserve the warning banners around Windows-specific Chromium, GPU, and process behavior when editing those files.
 - `.github/workflows/promote-release.yml` only promotes the newest release, and only once it is 24 hours old. Releases published less than a day apart keep postponing `latest` on purpose: it is a cooldown so users get one update after a busy stretch, not one per release. Don't "fix" it to promote older eligible releases.
 - When publishing, use `scripts/publish.sh`. Crate metadata lives in each crate's `Cargo.toml`; the workspace owns version, license, repository, homepage, authors, keywords, categories.

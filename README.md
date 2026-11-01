@@ -12,7 +12,7 @@ An app combines a Rust executable, a web UI, and a `Sabine.toml` manifest. The U
 
 When the app starts, Sabine checks the shared service and Chromium runtime. If they are missing, a native setup window prepares them before the app opens. The app then starts a native host process: Chromium renders the page offscreen, while Sabine handles the window, input, and GPU composition. The page calls registered Rust handlers through Sabine's bridge, which restricts commands to allowed origins. Embedded guest pages have no bridge access by default.
 
-The shared service registers installed apps and manages runtime and app updates. It validates new runtimes before using them and keeps a previous working version for recovery. App releases and Sabine releases are separate, so an app can update without bundling Chromium again. See the [implementation guide](docs/implementation-guide.md) for the process model, security boundaries, and platform details.
+The shared service registers installed apps and manages runtime and app updates. It validates new runtimes before using them and keeps a previous working version for recovery. App releases and Sabine releases are separate, so an app can update without bundling Chromium again. [How Sabine works](https://sabine.rs/docs/concepts/architecture/) covers the process model, security boundaries, and platform details.
 
 ## Get started
 
@@ -93,9 +93,12 @@ Development runs use a `.dev` app identity and development environment files, ke
 
 ## Documentation
 
-- [Implementation guide](docs/implementation-guide.md) — runtime, bridge, windows, packaging, and platform behavior
-- [Publishing guide](docs/publishing.md) — app releases and Sabine releases
-- [Web API](docs/web-api.md) — the page bridge and the `@lantharos/sabine` helpers
+The documentation lives at [sabine.rs/docs](https://sabine.rs/docs/), and its source is in [`website/`](website/):
+
+- [Quick start](https://sabine.rs/docs/start/quick-start/)
+- [Windows](https://sabine.rs/docs/windows/creating-windows/), [the bridge](https://sabine.rs/docs/bridge/commands/) and [desktop integration](https://sabine.rs/docs/desktop/tray/)
+- [Shipping your app](https://sabine.rs/docs/distribution/bundling/)
+- [JavaScript API](https://sabine.rs/docs/reference/javascript-api/) and [`Sabine.toml` reference](https://sabine.rs/docs/reference/manifest/)
 
 ## License
 
