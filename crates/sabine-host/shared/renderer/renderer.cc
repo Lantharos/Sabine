@@ -100,7 +100,7 @@ void SabineRenderer::OnContextCreated(CefRefPtr<CefBrowser> browser,
     sabine_bridge::InstallTransport(frame, context, "__sabineNativePostMessage",
                                     "sabine.native");
     frame->ExecuteJavaScript(
-        BridgeInstallScript(sabine_bridge::Commands(policy)), url, 0);
+        BridgeInstallScript(sabine_bridge::CommandsFor(policy, url)), url, 0);
   }
   if (policy && policy->GetBool("clipboard"))
     sabine_clipboard::Install(frame, context,

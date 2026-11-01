@@ -40,7 +40,7 @@ const postNative = function (...message) {
 
 const requireCommand = function (name) {
   if (!commands.has(name)) {
-    throw new Error("Sabine bridge command not registered: " + name);
+    throw new Error("Sabine bridge command is not available to this page: " + name);
   }
 };
 
@@ -101,9 +101,13 @@ window.sabine.bridge = {
   },
   send(name, params = {}) {
     requireCommand(name);
-    postNative("bridge", String(nextId++), name, JSON.stringify(params));
+    postNative("send", name, JSON.stringify(params));
   },
 };
+
+window.sabine.bridge.listen("sabine.bridge.dropped", ({ command }) => {
+  console.warn("Sabine dropped updates sent to " + command + " while the app's handlers were busy");
+});
 
 window.addEventListener("pagehide", () => {
   for (const entry of pending.values()) {

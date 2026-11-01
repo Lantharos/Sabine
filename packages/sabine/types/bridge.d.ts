@@ -13,10 +13,14 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export interface InvokeOptions {
+/** How long to wait for a command's answer. Typed bindings take these. */
+export interface CallOptions {
   signal?: AbortSignal;
   /** Deadline in milliseconds; defaults to 60000. */
   timeoutMs?: number;
+}
+
+export interface InvokeOptions extends CallOptions {
   /** Bytes sent with the call, up to 32 MiB, which the handler reads as `command.body`. */
   body?: ArrayBuffer | ArrayBufferView | Blob;
 }

@@ -239,7 +239,7 @@ The page sees these rejections:
 | A typed command's params did not deserialize | `Error`: `invalid bridge params: …` |
 | A typed command's result did not serialize | `Error`: `failed to encode bridge result: …` |
 | The handler panicked | `Error`: `Bridge handler panicked` |
-| No command of that name is registered | `Error`: `Sabine bridge command not registered: <name>` |
+| No command of that name is registered, or the page may not call it | `Error`: `Sabine bridge command is not available to this page: <name>` |
 | No answer arrived within `timeoutMs` | `DOMException` named `TimeoutError` |
 | The call's `signal` was aborted | The signal's `reason` |
 | The page reloaded or navigated away | `DOMException` named `AbortError` |
@@ -281,7 +281,8 @@ that arrives later. They do not stop a Rust handler that is already running, so 
 run long bound their own work.
 
 `bridge.commands()` lists every command the page may call: the app's own and Sabine's built-in
-ones.
+ones. A page from an origin allowed [only some commands](/docs/bridge/security/#commands-for-one-more-origin)
+sees just those.
 
 ### Updates that need no answer
 
@@ -296,9 +297,20 @@ canvas.addEventListener("pointermove", (event) => {
 });
 ```
 
-`send` returns nothing and holds no slot among the page's 128 pending calls. The handler runs as
-for any other call, and its answer or error is dropped. It throws right away when the command is
-not registered. When the window's queue is full, the update is dropped.
+`send` returns nothing, holds no slot among the page's 128 pending calls, and no answer travels
+back. The handler runs as for any other call, and its answer or error is dropped. It throws right
+away when the command is not registered.
+
+When the app's handlers fall behind and the window's queue of 128 calls is full, updates are
+dropped. The page then hears `sabine.bridge.dropped` with the command's name, once until the
+queue takes calls again, and Sabine logs a warning to the page's console. Listen for it to slow
+down or send a full state afterwards:
+
+```ts
+bridge.listen<{ command: string }>("sabine.bridge.dropped", ({ command }) => {
+  if (command === "canvas.cursor") resendCursor = true;
+});
+```
 
 ## Limits
 

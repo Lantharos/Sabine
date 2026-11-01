@@ -267,10 +267,11 @@ impl SabineProcess {
             .and_then(DesktopServiceState::tray)
     }
 
-    /// Drive a guest surface from Rust via host control. See
+    /// Drives the guests of the app's first window from Rust. See
     /// [`BridgeEventEmitter::guest_control`].
     pub fn guest_control(&self, control: &sabine_bridge::GuestHostControl) -> bool {
-        self.bridge_emitter.guest_control(control)
+        self.id()
+            .is_some_and(|window| self.bridge_emitter.guest_control(window, control))
     }
 
     pub fn set_visible(&self, visible: bool) -> bool {

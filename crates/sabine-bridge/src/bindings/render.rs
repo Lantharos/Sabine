@@ -153,7 +153,7 @@ fn runtime(
     let imports = [
         (!commands.is_empty()).then_some("invoke"),
         (!events.is_empty()).then_some("listen"),
-        (!commands.is_empty()).then_some("type InvokeOptions"),
+        (!commands.is_empty()).then_some("type CallOptions"),
     ];
     let imports = imports.into_iter().flatten().collect::<Vec<_>>();
     if imports.is_empty() {
@@ -178,7 +178,7 @@ fn runtime(
                 Params::Named(dt) => (format!("params: {}, ", exporter.reference(dt)?), "params"),
             };
             out.push_str(&format!(
-                "\t{}: ({params}options?: InvokeOptions) => invoke<{result}>({name}, {value}, options),\n",
+                "\t{}: ({params}options?: CallOptions) => invoke<{result}>({name}, {value}, options),\n",
                 camel_case(&command.name)
             ));
         }

@@ -2,6 +2,7 @@
 #define SABINE_BRIDGE_POLICY_H_
 
 #include <string>
+#include <utility>
 #include <random>
 #include <sstream>
 #include <iomanip>
@@ -119,6 +120,17 @@ inline std::vector<std::string> Commands(CefRefPtr<CefDictionaryValue> policy) {
     for (size_t index = 0; index < values->GetSize(); ++index) {
       commands.push_back(values->GetString(index));
     }
+  }
+  return commands;
+}
+
+inline std::vector<std::string> CommandsFor(
+    CefRefPtr<CefDictionaryValue> policy,
+    const std::string& url) {
+  std::vector<std::string> commands;
+  for (auto& command : Commands(policy)) {
+    if (AllowsCommand(policy, url, command))
+      commands.push_back(std::move(command));
   }
   return commands;
 }

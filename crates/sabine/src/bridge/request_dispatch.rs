@@ -1,10 +1,20 @@
-use std::{panic::AssertUnwindSafe, sync::Arc, thread};
+use std::{
+    panic::AssertUnwindSafe,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+};
 
 use futures_util::FutureExt;
 use sabine_bridge::{BridgeCommand, BridgeError, BridgeFuture, BridgeOutcome, BridgeResult};
 
 use super::frame::Frame;
 
+/// Sent to a window's pages when updates from `bridge.send` were dropped
+/// because the window's queue was full.
+const DROPPED_EVENT: &str = "sabine.bridge.dropped";
 const MAX_PENDING_REQUESTS: usize = 128;
 const MAX_PENDING_RESPONSES: usize = MAX_PENDING_REQUESTS + REQUEST_WORKERS;
 const REQUEST_WORKERS: usize = 4;
@@ -43,23 +53,17 @@ impl BridgeIpcRequest {
 }
 
 impl ReplyTo {
-    fn complete(self, result: BridgeResult) -> BridgeIpcResponse {
-        BridgeIpcResponse {
-            reply: self,
-            result,
-        }
+    /// Updates the page sent with `bridge.send` carry no id and want no answer.
+    fn wants_answer(&self) -> bool {
+        !self.id.is_empty()
     }
-}
 
-struct BridgeIpcResponse {
-    reply: ReplyTo,
-    result: BridgeResult,
-}
-
-impl BridgeIpcResponse {
-    fn into_frame(self) -> Arc<[u8]> {
-        let ReplyTo { browser_id, id } = self.reply;
-        let (status, payload, body) = match self.result {
+    fn answer(self, result: BridgeResult) -> Option<Arc<[u8]>> {
+        if !self.wants_answer() {
+            return None;
+        }
+        let Self { browser_id, id } = self;
+        let (status, payload, body) = match result {
             Ok(response) => ("ok", response.result, response.body),
             Err(error) => (
                 "error",
@@ -68,8 +72,15 @@ impl BridgeIpcResponse {
             ),
         };
         let line = format!("SABINE_BRIDGE_RESPONSE\t{browser_id}\t{id}\t{status}\t{payload}");
-        Frame::shared(&line, body.as_deref())
+        Some(Frame::shared(&line, body.as_deref()))
     }
+}
+
+/// Tells the window's pages that updates sent to `command` were dropped.
+fn dropped_notice(command: &str) -> Arc<[u8]> {
+    let line =
+        super::emitter::event_line(DROPPED_EVENT, &serde_json::json!({ "command": command }));
+    Frame::shared(&line, None)
 }
 
 /// Runs bridge handlers off the window's reader thread. Synchronous handlers
@@ -77,7 +88,9 @@ impl BridgeIpcResponse {
 /// async runtime, so a handler that waits does not hold a worker.
 pub(super) struct BridgeRequestDispatcher {
     requests: crossbeam_channel::Sender<BridgeIpcRequest>,
-    responses: crossbeam_channel::Sender<BridgeIpcResponse>,
+    responses: crossbeam_channel::Sender<Arc<[u8]>>,
+    /// Set while updates are being dropped, so pages hear once per burst.
+    dropping: AtomicBool,
 }
 
 impl BridgeRequestDispatcher {
@@ -90,7 +103,7 @@ impl BridgeRequestDispatcher {
         let (request_sender, request_receiver) =
             crossbeam_channel::bounded::<BridgeIpcRequest>(MAX_PENDING_REQUESTS);
         let (response_sender, response_receiver) =
-            crossbeam_channel::bounded::<BridgeIpcResponse>(MAX_PENDING_RESPONSES);
+            crossbeam_channel::bounded::<Arc<[u8]>>(MAX_PENDING_RESPONSES);
 
         for _ in 0..REQUEST_WORKERS {
             let requests = request_receiver.clone();
@@ -114,7 +127,9 @@ impl BridgeRequestDispatcher {
                     .unwrap_or_else(|_| BridgeOutcome::Ready(Err(handler_panicked())));
                     match outcome {
                         BridgeOutcome::Ready(result) => {
-                            if responses.send(reply.complete(result)).is_err() {
+                            if let Some(answer) = reply.answer(result)
+                                && responses.send(answer).is_err()
+                            {
                                 break;
                             }
                         }
@@ -131,8 +146,8 @@ impl BridgeRequestDispatcher {
         }
 
         thread::spawn(move || {
-            while let Ok(response) = response_receiver.recv() {
-                if !writer.send(response.into_frame()) {
+            while let Ok(frame) = response_receiver.recv() {
+                if !writer.send(frame) {
                     break;
                 }
             }
@@ -141,12 +156,16 @@ impl BridgeRequestDispatcher {
         Self {
             requests: request_sender,
             responses: response_sender,
+            dropping: AtomicBool::new(false),
         }
     }
 
     pub(super) fn submit(&self, request: BridgeIpcRequest) {
         let (request, message) = match self.requests.try_send(request) {
-            Ok(()) => return,
+            Ok(()) => {
+                self.dropping.store(false, Ordering::Relaxed);
+                return;
+            }
             Err(crossbeam_channel::TrySendError::Full(request)) => {
                 (request, "Bridge request capacity is exhausted; retry later")
             }
@@ -154,22 +173,31 @@ impl BridgeRequestDispatcher {
                 (request, "Bridge request executor is unavailable")
             }
         };
-        let _ = self
-            .responses
-            .try_send(request.reply.complete(Err(BridgeError::new(message))));
+        let notice = if request.reply.wants_answer() {
+            request.reply.answer(Err(BridgeError::new(message)))
+        } else if !self.dropping.swap(true, Ordering::Relaxed) {
+            Some(dropped_notice(&request.command.name))
+        } else {
+            None
+        };
+        if let Some(notice) = notice {
+            let _ = self.responses.try_send(notice);
+        }
     }
 }
 
 async fn answer(
     reply: ReplyTo,
     future: BridgeFuture,
-    responses: crossbeam_channel::Sender<BridgeIpcResponse>,
+    responses: crossbeam_channel::Sender<Arc<[u8]>>,
 ) {
     let result = AssertUnwindSafe(future)
         .catch_unwind()
         .await
         .unwrap_or_else(|_| Err(handler_panicked()));
-    let _ = responses.send(reply.complete(result));
+    if let Some(answer) = reply.answer(result) {
+        let _ = responses.send(answer);
+    }
 }
 
 fn handler_panicked() -> BridgeError {

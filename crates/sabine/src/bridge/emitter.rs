@@ -167,12 +167,23 @@ impl BridgeEventEmitter {
         )
     }
 
-    /// Drive a guest surface from Rust. The payload is forwarded to the CEF
-    /// host as `SABINE_HOST_CONTROL\tguest.<op>\t{json}`. Prefer the page
-    /// `sabine.guest.*` bridge for UI-driven work; use this for host-owned
-    /// guests (for example restoring a session before the page loads).
-    pub fn guest_control(&self, control: &sabine_bridge::GuestHostControl) -> bool {
-        self.emit_host_control(control.command_name(), &control.to_host_value().to_string())
+    /// Drives the guests of one window from Rust, for example to restore a
+    /// session's tabs before its page loads. Pages see the results through
+    /// guest events; prefer `sabine.guest` for work the page drives.
+    pub fn guest_control(
+        &self,
+        window: WindowId,
+        control: &sabine_bridge::GuestHostControl,
+    ) -> bool {
+        self.deliver(
+            Some(window),
+            format!(
+                "{HOST_CONTROL_PREFIX}\t{}\t{}",
+                control.command_name(),
+                control.to_host_value()
+            ),
+            None,
+        )
     }
 
     pub(crate) fn emit_activity_update(&self, update: &sabine_bridge::ActivityHostUpdate) -> bool {
@@ -237,7 +248,7 @@ fn square_corners_control(square: bool) -> String {
     )
 }
 
-fn event_line(name: &str, payload: &serde_json::Value) -> String {
+pub(super) fn event_line(name: &str, payload: &serde_json::Value) -> String {
     format!(
         "SABINE_BRIDGE_EVENT\t{}\t{payload}",
         serde_json::Value::from(name)

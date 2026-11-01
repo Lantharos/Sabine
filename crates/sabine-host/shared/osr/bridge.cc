@@ -94,11 +94,22 @@ void SabineOsrHandler::ReceiveNativeMessage(
       HandleWindowCommand(values[2], values[3]);
     return;
   }
-  if (kind != "bridge" || values.size() != 5)
+  if (kind == "send" && values.size() == 4 && !body) {
+    if (sabine_bridge::AllowsCommand(policy, url, values[2]))
+      HandleBridgeCommand(browser, frame, std::string(), values[2], values[3],
+                          std::nullopt);
+    return;
+  }
+  if (kind != "bridge" || values.size() != 5 || values[2].empty())
     return;
   const std::string& command = values[3];
-  if (!sabine_bridge::AllowsCommand(policy, url, command))
+  if (!sabine_bridge::AllowsCommand(policy, url, command)) {
+    ResolveBridgeResponse(std::to_string(browser->GetIdentifier()), values[2],
+                          false,
+                          JsonMessage("Sabine bridge command " + command +
+                                      " is not available to this page"));
     return;
+  }
   HandleBridgeCommand(browser, frame, values[2], command, values[4], body);
 }
 
@@ -143,7 +154,7 @@ void SabineOsrHandler::HandleBridgeCommand(
     origin = frame->GetURL();
   else if (origin.back() == '/')
     origin.pop_back();
-  if (request_id.empty() || command.empty()) {
+  if (command.empty()) {
     ResolveBridgeResponse(browser_id, request_id, false,
                           "{\"message\":\"Malformed Sabine bridge request\"}");
     return;
