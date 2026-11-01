@@ -144,6 +144,8 @@ impl OsrNativeHost {
         if ime_purpose(mode).is_some() {
             self.show_input_panel();
         }
+        #[cfg(windows)]
+        self.sync_touch_keyboard(ime_purpose(mode).is_some());
     }
 
     pub(in crate::osr::host) fn update_ime_cursor_area(

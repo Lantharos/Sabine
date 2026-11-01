@@ -11,7 +11,6 @@ pub(super) use direct::DirectOutcome;
 use std::{
     cell::Cell,
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
-    process::Child,
     sync::{Arc, mpsc},
     time::Instant,
 };
@@ -48,15 +47,12 @@ pub(super) struct OsrNativeHost {
     pub(super) renderer: Option<GpuRenderer>,
     /// Counts the windows this host created, so work started for a window
     /// that is gone is ignored.
-    #[cfg(target_os = "linux")]
     pub(super) window_generation: u64,
-    #[cfg(target_os = "linux")]
     pub(super) renderer_starting: bool,
     /// The compositor went away and the window waits for the one that
     /// takes over its display.
     #[cfg(target_os = "linux")]
     pub(super) display_lost: bool,
-    #[cfg(target_os = "linux")]
     pub(super) gpu_starts: Vec<std::thread::JoinHandle<()>>,
     #[cfg(target_os = "linux")]
     pub(super) direct: Option<direct::DirectPresenter>,
@@ -76,7 +72,8 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) browser_shared: bool,
     pub(super) effect: Option<WindowEffect>,
-    pub(super) children: Vec<(u64, Child)>,
+    /// The connections whose own Chromium still runs.
+    pub(super) running_browsers: Vec<u64>,
     pub(super) socket: Option<IpcStream>,
     pub(super) socket_reader: Option<SocketReader>,
     pub(super) control_writer: Option<Arc<ControlWriter>>,
@@ -120,6 +117,10 @@ pub(super) struct OsrNativeHost {
     pub(super) ime_preedit: Option<super::types::ImePreedit>,
     #[cfg(target_os = "linux")]
     pub(super) input_panel: super::input::InputPanelState,
+    #[cfg(target_os = "linux")]
+    pub(super) exported_window: Option<super::print::ExportedWindow>,
+    #[cfg(windows)]
+    pub(super) touch_keyboard: super::input::TouchKeyboard,
     pub(super) occluded: bool,
     pub(super) published_window_state: Option<super::types::WindowState>,
     pub(super) toplevel: super::lifecycle::toplevel::ToplevelState,
@@ -150,6 +151,9 @@ pub(super) struct OsrNativeHost {
     pub(super) cef_handed_off: bool,
     /// Deadline for the primary CEF process to connect after exit-24 handoff.
     pub(super) handoff_deadline: Option<Instant>,
+    /// When a browser of another Sabine version connected, while the
+    /// window waits to hear whether its own Chromium handed the window off.
+    pub(super) incompatible_since: Option<Instant>,
     #[cfg(target_os = "macos")]
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
     pub(super) media: crate::media::MediaHost,
@@ -203,13 +207,10 @@ impl OsrNativeHost {
             proxy,
             window: None,
             renderer: None,
-            #[cfg(target_os = "linux")]
             window_generation: 0,
-            #[cfg(target_os = "linux")]
             renderer_starting: false,
             #[cfg(target_os = "linux")]
             display_lost: false,
-            #[cfg(target_os = "linux")]
             gpu_starts: Vec::new(),
             #[cfg(target_os = "linux")]
             direct: None,
@@ -224,7 +225,7 @@ impl OsrNativeHost {
             #[cfg(target_os = "linux")]
             browser_shared: false,
             effect: None,
-            children: Vec::new(),
+            running_browsers: Vec::new(),
             socket: None,
             socket_reader: None,
             control_writer: None,
@@ -267,6 +268,10 @@ impl OsrNativeHost {
             ime_preedit: None,
             #[cfg(target_os = "linux")]
             input_panel: Default::default(),
+            #[cfg(target_os = "linux")]
+            exported_window: None,
+            #[cfg(windows)]
+            touch_keyboard: Default::default(),
             occluded: false,
             published_window_state: None,
             toplevel: Default::default(),
@@ -293,6 +298,7 @@ impl OsrNativeHost {
             shortcuts: Default::default(),
             cef_handed_off: false,
             handoff_deadline: None,
+            incompatible_since: None,
             #[cfg(target_os = "macos")]
             surface_broker: None,
             media: Default::default(),
@@ -368,6 +374,24 @@ impl OsrNativeHost {
         }
     }
 
+    pub(super) fn send_wheel(&self, wheel: crate::osr::control::Wheel) {
+        let Some(writer) = &self.control_writer else {
+            return;
+        };
+        if let Err(error) = writer.send_wheel(wheel) {
+            sabine_runtime::report_error("window", format!("wheel send failed: {error}"));
+        }
+    }
+
+    pub(super) fn send_touch_move(&self, id: i32, line: String) {
+        let Some(writer) = &self.control_writer else {
+            return;
+        };
+        if let Err(error) = writer.send_touch_move(id, line) {
+            sabine_runtime::report_error("window", format!("touch send failed: {error}"));
+        }
+    }
+
     pub(super) fn begin_close(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.closing_deadline.is_some() {
             return;
@@ -377,15 +401,12 @@ impl OsrNativeHost {
         }
         self.send_control("close\n");
         self.closing_deadline = Some(Instant::now() + super::types::CLOSE_GRACE);
-        if self.children.is_empty() && self.socket.is_none() && !self.awaiting_connection {
+        if self.browser_gone() {
             self.force_close(event_loop);
         }
     }
 
     pub(super) fn force_close(&mut self, event_loop: &dyn ActiveEventLoop) {
-        for (_, child) in &mut self.children {
-            let _ = child.try_wait();
-        }
         self.drop_connection();
         event_loop.exit();
     }

@@ -1,7 +1,15 @@
+mod mouse;
+mod touch;
+
+pub(in crate::osr::host) use mouse::WheelRemainder;
+pub(in crate::osr::host) use touch::TouchState;
+
 use winit::{
     cursor::CursorIcon,
     dpi::PhysicalPosition,
-    event::{ButtonSource, ElementState, MouseButton, PointerKind, PointerSource},
+    event::{
+        ButtonSource, ElementState, MouseButton, PointerKind, PointerSource, TabletToolButton,
+    },
     event_loop::ActiveEventLoop,
 };
 
@@ -68,6 +76,13 @@ impl OsrNativeHost {
         if pressed && self.menu_pointer_pressed(x, y) {
             return;
         }
+        #[cfg(windows)]
+        if pressed {
+            self.touch_keyboard.note_press(matches!(
+                button,
+                ButtonSource::Touch { .. } | ButtonSource::TabletTool { .. }
+            ));
+        }
         if !pressed && self.menu_pointer_released(x, y) && !matches!(button, ButtonSource::Mouse(_))
         {
             return;
@@ -76,20 +91,37 @@ impl OsrNativeHost {
             ButtonSource::Touch { finger_id, force } => {
                 self.touch_button(finger_id, force, pressed, x, y);
             }
-            ButtonSource::TabletTool { kind, button, data } => {
-                self.pen_button(kind, button, data, pressed, x, y);
+            ButtonSource::TabletTool {
+                kind,
+                button: TabletToolButton::Contact,
+                data,
+            } => self.pen_button(kind, data, pressed, x, y),
+            ButtonSource::TabletTool { button, .. } if !self.touch.pen_in_contact() => {
+                self.mouse_button(event_loop, button.into(), pressed, x, y);
             }
             ButtonSource::Mouse(_) | ButtonSource::Unknown(_) if primary => {
-                self.cursor_x = x;
-                self.cursor_y = y;
-                let button = button.mouse_button();
-                if pressed {
-                    self.mouse_pressed(button);
-                } else {
-                    self.mouse_released(event_loop, button);
-                }
+                self.mouse_button(event_loop, button.mouse_button(), pressed, x, y);
             }
             _ => {}
+        }
+    }
+
+    /// A press or release of a mouse button, or of a pen button that acts as
+    /// one while the pen hovers, such as the barrel button's secondary click.
+    fn mouse_button(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+        button: Option<MouseButton>,
+        pressed: bool,
+        x: f32,
+        y: f32,
+    ) {
+        self.cursor_x = x;
+        self.cursor_y = y;
+        if pressed {
+            self.mouse_pressed(button);
+        } else {
+            self.mouse_released(event_loop, button);
         }
     }
 
@@ -101,10 +133,10 @@ impl OsrNativeHost {
             self.set_native_cursor(CursorIcon::from(direction));
         } else if self.hovered_control.is_some() {
             self.set_native_cursor(CursorIcon::Pointer);
-            self.forward_mouse_move(false);
+            self.forward_mouse_move();
         } else if self.content_position(x, y).is_some() {
             self.clear_native_cursor();
-            self.forward_mouse_move(false);
+            self.forward_mouse_move();
         } else {
             self.set_native_cursor(CursorIcon::Default);
         }
@@ -117,7 +149,7 @@ impl OsrNativeHost {
         self.cursor_x = x;
         self.cursor_y = y;
         let titlebar_changed = self.hovered_control.take().is_some();
-        self.forward_mouse_move(true);
+        self.forward_mouse_leave();
         self.set_native_cursor(CursorIcon::Default);
         if titlebar_changed && let Some(window) = &self.window {
             window.request_redraw();

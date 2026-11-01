@@ -1,20 +1,15 @@
 use std::time::{Duration, Instant};
 
-use winit::{
-    event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta},
-    keyboard::{Key, NamedKey},
-    platform::scancode::PhysicalKeyExtScancode,
-};
+use winit::event::{MouseButton, MouseScrollDelta};
 
+use crate::osr::control::Wheel;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     ClickMemory, EVENTFLAG_ALT_DOWN, EVENTFLAG_COMMAND_DOWN, EVENTFLAG_CONTROL_DOWN,
-    EVENTFLAG_IS_REPEAT, EVENTFLAG_LEFT_MOUSE_BUTTON, EVENTFLAG_MIDDLE_MOUSE_BUTTON,
+    EVENTFLAG_LEFT_MOUSE_BUTTON, EVENTFLAG_MIDDLE_MOUSE_BUTTON,
     EVENTFLAG_PRECISION_SCROLLING_DELTA, EVENTFLAG_RIGHT_MOUSE_BUTTON, EVENTFLAG_SHIFT_DOWN,
 };
-use crate::osr::protocol::encode_component;
 
-const XKB_KEYCODE_OFFSET: u32 = 8;
 const WHEEL_DELTA_PER_LINE: f64 = 120.0;
 const PINCH_WHEEL_DELTA: f64 = 100.0;
 
@@ -52,16 +47,23 @@ fn whole_steps(remainder: &mut f64, delta: f64) -> i32 {
 }
 
 impl OsrNativeHost {
-    pub(in crate::osr::host) fn forward_mouse_move(&self, leave: bool) {
+    pub(in crate::osr::host) fn forward_mouse_move(&self) {
         if let Some((x, y)) = self.content_position(self.cursor_x, self.cursor_y) {
             self.send_mouse_motion(format!(
-                "mouse_move\t{:.2}\t{:.2}\t{}\t{}\n",
-                x,
-                y,
-                self.input_modifiers(),
-                i32::from(leave)
+                "mouse_move\t{x:.2}\t{y:.2}\t{}\t0\n",
+                self.input_modifiers()
             ));
         }
+    }
+
+    /// Tells the page the pointer left it, which no later motion may replace,
+    /// or the page would keep showing what was under the pointer as hovered.
+    pub(in crate::osr::host) fn forward_mouse_leave(&self) {
+        let (x, y) = self.clamped_content_position(self.cursor_x, self.cursor_y);
+        self.send_control(format!(
+            "mouse_move\t{x:.2}\t{y:.2}\t{}\t1\n",
+            self.input_modifiers()
+        ));
     }
 
     pub(in crate::osr::host) fn forward_mouse_click(
@@ -120,7 +122,7 @@ impl OsrNativeHost {
         };
         let modifiers = self.input_modifiers() | precision;
         let (dx, dy) = self.wheel_remainder.scroll.take(dx, dy);
-        self.send_wheel(dx, dy, modifiers);
+        self.wheel_at_pointer(dx, dy, modifiers);
     }
 
     /// Pinches reach pages as Ctrl+wheel, as Chromium reports touchpad pinch.
@@ -135,90 +137,23 @@ impl OsrNativeHost {
             .wheel_remainder
             .pinch
             .take(0.0, PINCH_WHEEL_DELTA * scale.ln());
-        self.send_wheel(0, dy, modifiers);
+        self.wheel_at_pointer(0, dy, modifiers);
     }
 
-    fn send_wheel(&self, dx: i32, dy: i32, modifiers: u32) {
+    fn wheel_at_pointer(&self, dx: i32, dy: i32, modifiers: u32) {
         if dx == 0 && dy == 0 {
             return;
         }
         let Some((x, y)) = self.content_position(self.cursor_x, self.cursor_y) else {
             return;
         };
-        self.send_control(format!(
-            "mouse_wheel\t{x:.2}\t{y:.2}\t{dx}\t{dy}\t{modifiers}\n"
-        ));
-    }
-
-    pub(in crate::osr::host) fn send_key_event(&self, event: &KeyEvent) {
-        let pressed = event.state == ElementState::Pressed;
-        let text = if pressed {
-            event
-                .text
-                .as_deref()
-                .filter(|text| should_send_char_text(text))
-                .unwrap_or("")
-        } else {
-            ""
-        };
-        let modifier = modifier_flag(&event.logical_key);
-        let modifiers = if pressed {
-            self.input_modifiers() | modifier
-        } else {
-            self.input_modifiers() & !modifier
-        };
-        self.send_key(
-            pressed,
-            &key_name(event),
-            text,
+        self.send_wheel(Wheel {
+            x,
+            y,
+            dx,
+            dy,
             modifiers,
-            event.repeat,
-            native_key_code(event),
-        );
-    }
-
-    #[cfg(windows)]
-    pub(in crate::osr::host) fn send_system_key(&self, key: sabine_platform::SystemKey) {
-        let held = [
-            (key.modifiers.shift, EVENTFLAG_SHIFT_DOWN),
-            (key.modifiers.ctrl, EVENTFLAG_CONTROL_DOWN),
-            (key.modifiers.alt, EVENTFLAG_ALT_DOWN),
-            (key.modifiers.meta, EVENTFLAG_COMMAND_DOWN),
-        ];
-        let modifiers = held
-            .into_iter()
-            .filter(|(down, _)| *down)
-            .fold(self.mouse_modifiers(), |modifiers, (_, flag)| {
-                modifiers | flag
-            });
-        self.send_key(
-            key.pressed,
-            key.key,
-            "",
-            modifiers,
-            key.repeat,
-            key.scan_code,
-        );
-    }
-
-    fn send_key(
-        &self,
-        pressed: bool,
-        name: &str,
-        text: &str,
-        modifiers: u32,
-        repeat: bool,
-        native_key_code: u32,
-    ) {
-        self.send_control(format!(
-            "key\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            i32::from(pressed),
-            encode_component(name),
-            encode_component(text),
-            modifiers | if repeat { EVENTFLAG_IS_REPEAT } else { 0 },
-            i32::from(repeat),
-            native_key_code
-        ));
+        });
     }
 
     pub(in crate::osr::host) fn input_modifiers(&self) -> u32 {
@@ -238,7 +173,7 @@ impl OsrNativeHost {
         modifiers | self.mouse_modifiers()
     }
 
-    fn mouse_modifiers(&self) -> u32 {
+    pub(in crate::osr::host) fn mouse_modifiers(&self) -> u32 {
         let mut modifiers = 0;
         if self.mouse.left {
             modifiers |= EVENTFLAG_LEFT_MOUSE_BUTTON;
@@ -306,41 +241,5 @@ fn cef_mouse_button(button: Option<MouseButton>) -> Option<&'static str> {
         Some(MouseButton::Middle) => Some("middle"),
         Some(MouseButton::Right) => Some("right"),
         _ => None,
-    }
-}
-
-fn key_name(event: &KeyEvent) -> String {
-    match event.logical_key.as_ref() {
-        Key::Character(value) if !value.is_empty() => value.to_string(),
-        Key::Named(named) => named.to_string(),
-        _ => match &event.physical_key {
-            winit::keyboard::PhysicalKey::Code(code) => format!("{code:?}"),
-            _ => "Unidentified".to_string(),
-        },
-    }
-}
-
-fn should_send_char_text(text: &str) -> bool {
-    text == "\r" || !text.chars().any(char::is_control)
-}
-
-fn modifier_flag(key: &Key) -> u32 {
-    match key {
-        Key::Named(NamedKey::Shift) => EVENTFLAG_SHIFT_DOWN,
-        Key::Named(NamedKey::Control) => EVENTFLAG_CONTROL_DOWN,
-        Key::Named(NamedKey::Alt) => EVENTFLAG_ALT_DOWN,
-        Key::Named(NamedKey::Meta) => EVENTFLAG_COMMAND_DOWN,
-        _ => 0,
-    }
-}
-
-fn native_key_code(event: &KeyEvent) -> u32 {
-    let Some(scancode) = event.physical_key.to_scancode() else {
-        return 0;
-    };
-    if cfg!(target_os = "linux") {
-        scancode + XKB_KEYCODE_OFFSET
-    } else {
-        scancode
     }
 }

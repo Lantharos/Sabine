@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use winit::event::{FingerId, Force, TabletToolButton, TabletToolData, TabletToolKind};
+use winit::event::{FingerId, Force, TabletToolData, TabletToolKind};
 
 use crate::osr::host::native::OsrNativeHost;
 
@@ -10,6 +10,12 @@ use crate::osr::host::native::OsrNativeHost;
 pub(in crate::osr::host) struct TouchState {
     fingers: BTreeSet<i32>,
     pen_contact: bool,
+}
+
+impl TouchState {
+    pub(super) fn pen_in_contact(&self) -> bool {
+        self.pen_contact
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -85,15 +91,11 @@ impl OsrNativeHost {
     pub(super) fn pen_button(
         &mut self,
         kind: TabletToolKind,
-        button: TabletToolButton,
         data: TabletToolData,
         pressed: bool,
         x: f32,
         y: f32,
     ) {
-        if button != TabletToolButton::Contact {
-            return;
-        }
         self.track_touch_point(x, y);
         let pointer = pointer_type(kind);
         if pressed {
@@ -143,11 +145,17 @@ impl OsrNativeHost {
             return false;
         };
         let pressure = force.map_or(0.0, |force| force.normalized(None).clamp(0.0, 1.0));
-        self.send_control(format!(
+        let line = format!(
             "touch\t{x:.2}\t{y:.2}\t{id}\t{}\t{pressure:.4}\t{pointer_type}\t{}\n",
             phase.as_str(),
             self.input_modifiers()
-        ));
+        );
+        match phase {
+            TouchPhase::Moved => self.send_touch_move(id, line),
+            TouchPhase::Pressed | TouchPhase::Released | TouchPhase::Cancelled => {
+                self.send_control(line)
+            }
+        }
         true
     }
 }

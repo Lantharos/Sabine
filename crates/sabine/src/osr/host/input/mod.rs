@@ -1,20 +1,15 @@
 mod drag;
-mod drop;
-mod forward;
-mod ime;
-#[cfg(target_os = "linux")]
-mod panel;
+mod keyboard;
 mod pointer;
-mod shortcuts;
 mod surface;
-mod touch;
 
 pub(super) use drag::DragState;
-pub(super) use forward::WheelRemainder;
 #[cfg(target_os = "linux")]
-pub(super) use panel::InputPanelState;
-pub(super) use shortcuts::ShortcutInhibition;
-pub(super) use touch::TouchState;
+pub(super) use keyboard::InputPanelState;
+pub(super) use keyboard::ShortcutInhibition;
+#[cfg(windows)]
+pub(super) use keyboard::TouchKeyboard;
+pub(super) use pointer::{TouchState, WheelRemainder};
 
 use winit::{
     application::ApplicationHandler,
@@ -40,13 +35,15 @@ impl ApplicationHandler for OsrNativeHost {
         self.connect_clipboard(event_loop);
         #[cfg(not(target_os = "linux"))]
         self.connect_clipboard();
-        if !self.config.visible {
-            self.launch_child();
-            return;
-        }
-        #[cfg(not(windows))]
-        self.launch_child_before_window(event_loop);
+        #[cfg(windows)]
         self.create_window(event_loop);
+        #[cfg(not(windows))]
+        if self.config.visible {
+            self.launch_child_before_window(event_loop);
+            self.create_window(event_loop);
+        } else {
+            self.launch_child();
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -55,7 +52,7 @@ impl ApplicationHandler for OsrNativeHost {
     }
 
     fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
-        self.recover_gpu();
+        self.recover_gpu(event_loop);
         #[cfg(windows)]
         self.forward_system_keys();
         #[cfg(target_os = "linux")]
@@ -66,7 +63,7 @@ impl ApplicationHandler for OsrNativeHost {
     }
 
     fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        self.recover_gpu();
+        self.recover_gpu(event_loop);
         let Some(window) = self.window.clone() else {
             return;
         };
@@ -175,7 +172,7 @@ impl ApplicationHandler for OsrNativeHost {
     }
 
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
-        self.recover_gpu();
+        self.recover_gpu(event_loop);
         self.drive_deadlines(event_loop);
         self.sync_window_state();
     }
