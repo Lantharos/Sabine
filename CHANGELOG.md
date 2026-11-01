@@ -1,5 +1,17 @@
 # Unreleased
 
+- `Open DevTools` in development windows docks DevTools along the bottom of the window, on Linux
+  too, instead of opening a separate Chromium window.
+- When a development build cannot compile its Sabine host, it uses the installed Sabine's host if
+  that one fits, and the error names what the build lacked when neither works.
+- A page keeps a window from freezing only while it actually plays media; frames can no longer
+  claim to be playing.
+- Text around the caret reaches the input method without walking the whole editable on every
+  keystroke, so long documents type as quickly as short ones.
+- Releasing a mouse button outside a window that lost focus no longer leaves the page thinking the
+  button is still held.
+- Pages served from the app's files resume range requests from the right place.
+- Guest and download payloads with escaped characters are read correctly.
 - Development builds of apps no longer hold back Sabine updates; only installed apps that an
   update would stop running do.
 - A second launch of a single-instance app reaches the running app before anything else, so a
