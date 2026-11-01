@@ -46,8 +46,10 @@ filesystems = ["xdg-documents"]
 ```
 
 Every table is optional, and a project without a `Sabine.toml` uses the defaults. Paths are relative
-to the folder that holds `Sabine.toml`. Keys Sabine doesn't know are ignored, except in `[sandbox]`,
-where they're an error, so check the spelling of keys that seem to have no effect.
+to the folder that holds `Sabine.toml`. A key Sabine doesn't know is an error for the `sabine`
+command, which names it, so a misspelled key never silently does nothing. The app itself only warns
+about one, in its output and the `manifest` log, so a bundle made by a newer `sabine` still starts;
+in `[sandbox]` an unknown key is an error there too.
 
 ## How the app reads it
 
@@ -139,9 +141,9 @@ extensions.
 | `dist` | string | `<root>/dist` | The folder of built assets that bundles ship |
 | `entry` | string | Detected | The page the app opens, inside `dist` once built |
 | `build` | string | `<package manager> run build` | The command that builds the web assets for a bundle |
-| `url` | string | | A production URL the app opens instead of packaged assets. Its origin may use the bridge |
+| `url` | string | | A production URL the app opens instead of packaged assets. Its origin may use the bridge. Can't be combined with `entry`, `dist` or `build` |
 | `dev_url` | string | `http://localhost:<dev_port>` | The development server's URL in `sabine dev` |
-| `dev_port` | integer | Detected, then `5173` | The development server's port |
+| `dev_port` | integer | The port in `dev_url`, or detected, then `5173` | The development server's port |
 | `dev_command` | string | `<package manager> run dev -- --port <port> --strictPort` | The command that starts the development server |
 | `allowed_origins` | array of strings | `[]` | More origins whose pages may use the bridge, such as `"https://api.example.com"` |
 | `local_files` | boolean | `false` | Lets pages load any file the user can read through `sabine://file/<absolute path>` |
@@ -154,22 +156,30 @@ has a `package.json`. When `entry` is unset, it uses the first of `ui/index.html
 `dist` defaults to `<root>/dist` when that exists or the root has a `package.json`, and to the
 entry's folder otherwise, for plain HTML apps without a build.
 
-An app with `url`, `dev_url` or `allowed_origins` and none of `root`, `entry` and `dist` is a
-remote app: Sabine looks for no local assets and runs no build. Set `root`, `dist` and `entry` too
-to ship local assets beside a site; a bundle then opens the packaged entry.
+An app with `url` opens that site and ships no local pages: Sabine looks for no local assets and
+runs no build, and `entry`, `dist` and `build` beside it are an error. `root` may still name the
+web project its development server runs from. An app with `dev_url` or `allowed_origins` but none
+of `root`, `entry` and `dist` looks for no assets either.
 
 The package manager is Bun when the web root has `bun.lock` or `bun.lockb`, pnpm with
 `pnpm-lock.yaml`, Yarn with `yarn.lock`, Bun when `package.json` names `bun@` as its
 `packageManager`, then Bun if it's installed and npm otherwise. `build` defaults to running the
-`build` script when `package.json` has one. The development server defaults to the `dev` script, or
-`start` without one, and `sabine dev` only starts a server when there is such a script or a
-`dev_command`.
+`build` script when `package.json` has one.
 
-`dev_port` defaults to the port in a localhost `dev_url`, then to a `port:` setting in
-`vite.config.ts`, `vite.config.js`, `vite.config.mjs` or `vite.config.cjs` in the web root or its
-parent, then to 5173. `sabine dev` reuses a server already listening on that port, waits up to 30
-seconds for a new one to start, and stops only servers it started. `dev_url`, `dev_port` and
-`dev_command` never reach a bundle.
+### Development server
+
+`sabine dev` starts the server with `dev_command` when you set one, in `root`, or in the project
+folder without a `root`. A web project with a `package.json` needs neither: the server defaults to
+its `dev` script, or `start` without one, and its dependencies are installed first when there's no
+`node_modules`. A `dev_url` with no command to start it names a server you run yourself, such as
+one in another language or on another machine; `sabine dev` waits for it when it's on this machine.
+Without a command, a script or a `dev_url`, the app opens its local entry.
+
+`dev_port` defaults to the port in a localhost `dev_url`. Without a `dev_url`, it defaults to a
+`port:` setting in `vite.config.ts`, `vite.config.js`, `vite.config.mjs` or `vite.config.cjs` in
+the web root or its parent, then to 5173. `sabine dev` reuses a server already listening on that
+port, waits up to 30 seconds for one to start, and stops only servers it started. `dev_url`,
+`dev_port` and `dev_command` never reach a bundle.
 
 ## `[window]`
 
@@ -219,15 +229,15 @@ explains each setting.
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `provider` | string | required | `"github"` or `"http"` |
-| `repository` | string | | `owner/name` of the GitHub repository; required with `provider = "github"` |
-| `url` | string | | The HTTPS URL of the release manifest; required with `provider = "http"` |
-| `channel` | string | `"stable"` | The channel releases must name; GitHub sources support only `stable` |
-| `policy` | string | `"automatic"` | `"automatic"`, `"notify"` or `"disabled"` |
+| `repository` | string | | `owner/name` of the GitHub repository; required with `provider = "github"`, and only with it |
+| `url` | string | | The HTTPS URL of the release manifest; required with `provider = "http"`, and only with it |
+| `channel` | string | `"stable"` | The channel releases must name; GitHub sources have only `stable`, and any other is an error |
+| `policy` | string | `"automatic"` | `"automatic"` installs releases in the background, `"notify"` asks before each one, `"disabled"` never updates |
 | `public_key` | string | Derived from `SABINE_UPDATE_SIGNING_KEY` at bundle time | The base64 Ed25519 public key releases are signed with |
 
-A table with only `policy = "disabled"` needs no provider and turns updates off; any other table
-without `provider` is an error. Without `[updates]`, bundles built in GitHub Actions update from
-their repository's releases, and others don't update.
+`policy = "disabled"` turns updates off whatever else the table holds, and needs no provider; any
+other table without `provider` is an error. Without `[updates]`, bundles built in GitHub Actions
+update from their repository's releases, and others don't update.
 
 ## `[sandbox]`
 

@@ -1,8 +1,8 @@
 # Unreleased
 
 - Builds made by `sabine bundle` always run in production: they ignore `SABINE_DEV_URL`,
-  `SABINE_ENV`, `SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID`, `SABINE_MANIFEST_PATH` and
-  `SABINE_WEB_ENTRY`, and read their manifest only from the bundle, so setting a variable can no
+  `SABINE_ENV`, `SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID` and `SABINE_MANIFEST_PATH`,
+  and read their manifest only from the bundle, so setting a variable can no
   longer point an installed app at another page with the bridge and DevTools.
 - The builder's `.dev_url()` is gone. Development runs take the development server's page from
   `SABINE_DEV_URL`, which `sabine dev` sets, and a staging page is a plain `.url()` that no longer
@@ -24,6 +24,32 @@
   `SabineProcess::guest_control` drives the first window's, instead of every window's.
 - During `sabine dev`, the development server's page can show and fetch `sabine://file/` URLs in
   apps with `local_files`, as the bundled page does.
+- `sabine release-init` writes the release workflow, or moves an existing one onto the CLI's Sabine
+  release, and stops when the app already has an update signing key instead of replacing it;
+  `--rotate-key` replaces it on purpose.
+- The release workflow from `sabine new` and `sabine release-init` accepts the WiX license MSI
+  builds need, so a new project's first release no longer stops on Windows.
+- `sabine release-manifest` writes manifests for HTTP update sources; `--base-url` names the HTTPS
+  folder the packages are uploaded to.
+- `policy = "notify"` downloads releases in the background and asks before installing each one the
+  next time the app opens, archive installations included. `policy = "disabled"` turns updates off
+  even when `[updates]` names a source, and `sabine update <app id>` respects it.
+- A GitHub update source with a channel other than `stable` is refused when `Sabine.toml` is read,
+  instead of stopping the installed app from registering.
+- `sabine` refuses `Sabine.toml` keys it doesn't know and names them, so a misspelled key no longer
+  does nothing. The app warns about them in its output and the `manifest` log.
+- `[web] url` can't be combined with `entry`, `dist` or `build`. Bundles used to drop the `url`
+  while the app run from source refused to start.
+- `sabine dev` runs `dev_command`, and waits for a `dev_url` it doesn't start, in projects without
+  a `package.json`, so development servers of any kind work.
+- `sabine new` names the project folder, where the template's `package.json` is, as the web root.
+- `sabine bundle` builds a release bundle, `portable` for the machine it runs on, unless told
+  otherwise. `--debug` packages a debug build; `--release` is gone.
+- Windows Start menu shortcuts from `sabine install` and installs for every user show the app's
+  name instead of its id.
+- Apps that call `SabineWindow::launch()` from their own `main` work in `exe` and `msi` installers.
+- A diagnostic log that reaches 4 MiB keeps its newest 2 MiB instead of starting over.
+- The app no longer reads `SABINE_WEB_ENTRY`.
 
 # Sabine 0.67
 

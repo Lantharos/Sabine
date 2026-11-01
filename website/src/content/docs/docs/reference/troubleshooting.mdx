@@ -47,6 +47,7 @@ Each component has a file of its own, `<component>.jsonl`, with one JSON object 
 | `osr.jsonl` | Each window host's output, including Chromium's, which is recorded once here |
 | `window.jsonl` | Window problems, such as a page that never painted, or a window option the desktop doesn't support |
 | `gpu.jsonl` | Lost graphics devices and the switch to software painting |
+| `manifest.jsonl` | Keys in the app's `Sabine.toml` it doesn't know, and a `[resources]` table it couldn't read |
 | `maintenance.jsonl`, `daemon.jsonl` | The Sabine daemon |
 
 Other parts, such as `desktop`, `input`, `clipboard`, `media` and `print`, write files named after themselves when something goes wrong. Every message also goes to standard error, and a window host's output is forwarded to the terminal that launched the app, so running the app from a terminal shows everything as it happens.

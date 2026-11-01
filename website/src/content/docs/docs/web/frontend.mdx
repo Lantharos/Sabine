@@ -19,7 +19,7 @@ A project made with `sabine new` starts with:
 
 ```toml
 [web]
-root = "ui"
+root = "."
 dist = "ui/dist"
 entry = "ui/dist/index.html"
 dev_port = 5173
@@ -30,7 +30,7 @@ Paths are relative to `Sabine.toml`.
 
 | Key | Meaning | When it's left out |
 | --- | --- | --- |
-| `root` | The web project's folder. `sabine bundle` runs the build command in it, and `sabine dev` runs the dev server in it when it holds a `package.json`. | The first of `ui`, `frontend`, `web` and the project folder that holds a `package.json`. |
+| `root` | The web project's folder. `sabine bundle` runs the build command in it, and `sabine dev` runs the dev server in it. | The first of `ui`, `frontend`, `web` and the project folder that holds a `package.json`. |
 | `dist` | The folder the build writes. `sabine bundle` copies all of it into the app. | `root/dist` when it exists or `root` holds a `package.json`, otherwise the entry's folder. |
 | `entry` | The HTML file the window opens in production. | The first of `ui/index.html`, `web/index.html`, `frontend/index.html` and `index.html` that exists, otherwise `root/index.html`. |
 | `build` | The command that builds the page for production. | `<package manager> run build` when `root/package.json` has a `build` script. |
@@ -163,7 +163,7 @@ the command:
 
 ```toml title="Sabine.toml"
 [web]
-root = "ui"
+root = "."
 dist = "ui/dist"
 entry = "ui/dist/index.html"
 dev_port = 5173
@@ -186,21 +186,20 @@ build = "bun run build"
 <TabItem label="Other tools">
 
 Set `dev_command` to whatever starts your dev server, and `dev_port` or `dev_url` to where it
-listens:
+listens. The project doesn't need a `package.json`:
 
 ```toml title="Sabine.toml"
 [web]
 root = "frontend"
 dist = "frontend/build"
 entry = "frontend/build/index.html"
-dev_command = "npm run serve"
+dev_command = "python -m http.server 4000"
 dev_url = "http://localhost:4000"
-build = "npm run build"
 ```
 
-`sabine dev` starts a dev server only for a web project whose `package.json` has a `dev` or
-`start` script, even when `dev_command` names another command. Projects without one open `entry`
-during development too.
+A `dev_url` without a `dev_command` names a server you start yourself; `sabine dev` waits for it
+and opens it. Projects with neither, and no `dev` or `start` script, open `entry` during
+development too.
 
 </TabItem>
 </Tabs>
@@ -219,8 +218,9 @@ url = "https://app.example.com"
 ```
 
 The window opens `url` in production, and `url`'s origin gets the bridge. Allow any other origin
-the page navigates to and still needs the bridge on with `allowed_origins`. Set either `entry` or
-`url`, not both; the app refuses to start with both.
+the page navigates to and still needs the bridge on with `allowed_origins`. An app with `url`
+ships no pages of its own, so `entry`, `dist` and `build` can't be set beside it: `sabine` refuses
+such a manifest, and an app started with both `entry` and `url` refuses to open.
 
 The page then updates whenever you deploy it, independently of app releases, and needs a network
 connection to load. Keep the commands it calls compatible with the app versions people still run.

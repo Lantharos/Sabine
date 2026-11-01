@@ -70,8 +70,9 @@ Runs the app from its project:
 1. prepares the CEF runtime and host if this machine has none
 2. loads the development environment files
 3. rewrites the TypeScript bindings when `Sabine.toml` has `[bindings]`
-4. installs the web project's dependencies when it has no `node_modules`
-5. starts the web development server, or reuses one already listening on its port
+4. installs the web project's dependencies when it has a `package.json` and no `node_modules`
+5. starts the web development server, reuses one already listening on its port, or waits for the
+   one at `dev_url` when nothing tells it how to start one
 6. runs `cargo run`, with the app id suffixed `.dev`, `SABINE_DEV_URL` pointing at the server and
    `SABINE_MANIFEST_PATH` at the project's `Sabine.toml`
 
@@ -244,13 +245,15 @@ sabine release-init --repository example/tern
 ```
 
 Creates a new update signing key, stores it as the repository's `SABINE_UPDATE_SIGNING_KEY` Actions
-secret, turns on immutable releases, and writes the `[updates]` table of the `Sabine.toml` in the
-current folder. Needs the GitHub CLI, signed in. See
+secret, turns on immutable releases, writes the `[updates]` table of the `Sabine.toml` in the
+current folder, and writes the release workflow. It stops when the app already has a signing key.
+Needs the GitHub CLI, signed in. See
 [Publishing from GitHub](/docs/distribution/releases-and-updates/#sabine-release-init).
 
 | Flag | Meaning |
 | --- | --- |
 | `--repository <owner/name>` | The repository; otherwise `GITHUB_REPOSITORY`, then the repository `gh` sees in the current folder |
+| `--rotate-key` | Replaces an existing signing key. Copies built with the old key reject every later release |
 
 ## sabine release-manifest
 
@@ -260,7 +263,7 @@ sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.ter
 ```
 
 Writes the signed update manifest for one release, signed with `SABINE_UPDATE_SIGNING_KEY`. The app
-needs a GitHub update source with an enabled policy. See
+needs an update source in `[updates]`. See
 [Release manifests](/docs/distribution/releases-and-updates/#release-manifests).
 
 | Argument or flag | Default | Meaning |
@@ -268,6 +271,7 @@ needs a GitHub update source with an enabled policy. See
 | `[source]` | `.` | The project folder |
 | `--artifact <target>=<path>` | required | A package for an update target, such as `linux-x86_64-deb=dist/artifacts/app.deb`; repeat it for each |
 | `--executable <target>=<path>` | | The program's path inside an archive artifact |
+| `--base-url <url>` | The release's downloads on GitHub | The HTTPS folder you upload the packages to; required with an `http` source |
 | `--channel <channel>` | `stable` | The release channel; must match `[updates]` |
 | `--output <path>` | `dist/sabine-update.json` | Where the manifest goes |
 

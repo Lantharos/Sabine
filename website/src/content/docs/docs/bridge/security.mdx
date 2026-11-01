@@ -149,7 +149,7 @@ you ship: anything on the machine that can reach the port can drive the page.
 A run is a development run when `SABINE_ENV` is `development` or `SABINE_DEV_URL` is set, which
 `sabine dev` does. A build made for production, with `SABINE_ENV=production` while it compiles as
 `sabine bundle` does, always runs in production: it ignores `SABINE_ENV`, `SABINE_DEV_URL`,
-`SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID`, `SABINE_MANIFEST_PATH` and `SABINE_WEB_ENTRY`, and reads
+`SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID` and `SABINE_MANIFEST_PATH`, and reads
 its manifest only from its bundle.
 
 The [security model](/docs/concepts/security-model/) covers the rest of Sabine's sandboxing:
