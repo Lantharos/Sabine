@@ -346,12 +346,21 @@ void ResetContext(std::vector<uint64_t>* retired) {
   g_d3d11.reset();
 }
 
+// CompareObjectHandles lives in kernelbase.dll, whose import library the
+// Windows SDK doesn't put on the default linker path.
+bool SameObject(HANDLE first, HANDLE second) {
+  using Compare = BOOL(WINAPI*)(HANDLE, HANDLE);
+  static const auto compare = reinterpret_cast<Compare>(GetProcAddress(
+      GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
+  return compare(first, second);
+}
+
 ID3D11Texture2D* CachedTexture(HANDLE cef_shared_handle) {
   const auto cached = g_sources.find(cef_shared_handle);
   if (cached == g_sources.end()) {
     return nullptr;
   }
-  if (CompareObjectHandles(cached->second->handle, cef_shared_handle)) {
+  if (SameObject(cached->second->handle, cef_shared_handle)) {
     return cached->second->texture.Get();
   }
   g_sources.erase(cached);
