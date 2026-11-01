@@ -16,7 +16,7 @@ use super::{
     SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
     SabineWindowControlAction, SabineWindowControlRegion,
 };
-use crate::window::origins::{allow_dev_origins, allow_origin, allow_url_origin};
+use crate::window::origins::{allow_origin, allow_url_origin};
 pub use app_chrome::AppChrome;
 
 impl SabineWindow {
@@ -32,30 +32,16 @@ impl SabineWindow {
         self
     }
 
-    pub fn dev_url(mut self, url: impl Into<String>) -> Self {
-        let url = url.into();
-        allow_dev_origins(&mut self.config.security, &url);
-        self.config.dev_url = Some(url);
-        self
-    }
-
-    /// Appends a query string or fragment to the configured web entry.
+    /// Appends a query string or fragment to the page the window opens.
     pub fn content_suffix(mut self, suffix: impl AsRef<str>) -> Self {
-        let suffix = suffix.as_ref();
-        if let Some(value) = self.config.dev_url.as_mut() {
-            value.push_str(suffix);
-        } else if let Some(value) = self.config.url.as_mut() {
-            value.push_str(suffix);
-        } else if let Some(value) = self.config.entry.as_mut() {
-            value.push_str(suffix);
-        }
+        self.config.content_suffix.push_str(suffix.as_ref());
         self
     }
 
     /// Enables Chrome remote debugging on the given port.
     ///
-    /// When `dev_url` is configured, remote DevTools are enabled automatically on port 9222,
-    /// or on `SABINE_DEVTOOLS_PORT` when it is set. Attach from Chrome at `chrome://inspect` or
+    /// Development runs enable remote DevTools automatically on port 9222, or on
+    /// `SABINE_DEVTOOLS_PORT` when it is set. Attach from Chrome at `chrome://inspect` or
     /// open `http://127.0.0.1:9222`.
     pub fn debug(mut self, port: u16) -> Self {
         self.config.browser.remote_devtools_port = Some(port);

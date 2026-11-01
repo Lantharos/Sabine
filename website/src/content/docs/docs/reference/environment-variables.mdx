@@ -35,7 +35,7 @@ See [Troubleshooting](/docs/reference/troubleshooting/) for what these show.
 
 | Variable | Applies to | What it does |
 | --- | --- | --- |
-| `SABINE_ENV` | App, CLI | `development` or `production`. Selects the environment: the `.dev` app identity, development environment files, and which desktop registrations happen. When it is unset, a non-empty `SABINE_DEV_URL` means development, and anything else production. The CLI sets it for app builds, web builds and `sabine dev`, including `sabine dev --release`. |
+| `SABINE_ENV` | App, CLI | `development` or `production`. Selects the environment: the `.dev` app identity, development environment files, and which desktop registrations happen. When it is unset, a non-empty `SABINE_DEV_URL` means development, and anything else production. The CLI sets it for app builds, web builds and `sabine dev`, including `sabine dev --release`. An app compiled with it set to `production`, as `sabine bundle` does, always runs in production and ignores the variables in this table. |
 | `SABINE_DEV_URL` | App | The development server's URL. The window loads it instead of the production entry, and its loopback origins are allowed to use the bridge. `SabineWindow::for_current_app` uses it too. |
 | `SABINE_MANIFEST_PATH` | App | The path to `Sabine.toml`. Without it, Sabine looks next to the executable, in the working directory, and in the Cargo package directory. |
 | `SABINE_APP_ID` | App, CLI | Replaces the app id from `Sabine.toml`, before your builder runs. `sabine dev` sets it to the app id with `.dev` appended, and development launchers from `sabine install` set it too. |

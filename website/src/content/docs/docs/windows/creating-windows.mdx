@@ -305,8 +305,7 @@ never set these in Rust. They are there for apps that build their configuration 
 | `.app_version(version)` | The app version reported to the Sabine service |
 | `.entry(path)` | A local HTML file to show; its folder is served at `sabine://app/` |
 | `.url(url)` | A remote page to show in production; its origin may use the bridge |
-| `.dev_url(url)` | The development server's page, used instead of `entry` or `url` when set |
-| `.content_suffix(suffix)` | Appends a query string or fragment to the page's address, such as `#settings` |
+| `.content_suffix(suffix)` | Appends a query string or fragment to the page's address, such as `#settings`, in development too |
 | `.allowed_origin(origin)` | Lets one more origin use the bridge |
 | `.local_files(true)` | Lets the app's pages load any file the user can read through `sabine://file/` |
 | `.security(ContentSecurity)` | Replaces the bridge's origin policy |

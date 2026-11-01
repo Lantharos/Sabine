@@ -8,7 +8,13 @@ pub enum AppEnvironment {
 }
 
 impl AppEnvironment {
+    /// The environment this run uses. Builds made for production, such as
+    /// `sabine bundle`'s, always run in production; other builds follow
+    /// `SABINE_ENV` and `SABINE_DEV_URL` at run time.
     pub fn current() -> Self {
+        if Self::production_build() {
+            return Self::Production;
+        }
         match std::env::var("SABINE_ENV").as_deref() {
             Ok("development") => Self::Development,
             Ok("production") => Self::Production,
@@ -17,6 +23,13 @@ impl AppEnvironment {
             }
             _ => Self::Production,
         }
+    }
+
+    /// Whether this binary was built for production, with `SABINE_ENV` set to
+    /// `production` while it compiled. Production builds ignore the
+    /// variables that point a development run at its project.
+    pub fn production_build() -> bool {
+        cfg!(sabine_production_build)
     }
 
     /// The environment an app id was registered from.

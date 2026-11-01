@@ -58,9 +58,11 @@ An origin is a scheme, host and optional port, with no path, query or fragment:
 `https` origins can be allowed. An allowed origin gets the whole bridge, the same as the app's own
 pages.
 
-`.url(..)` allows its own URL's origin, and `.dev_url(..)` allows the development server's origin
-on every loopback name, so neither needs an `allowed_origins` entry. `sabine dev` hands the
-development server's URL to the app as it starts it; builds you ship carry none.
+`.url(..)` allows its own URL's origin, and a development run allows the development server's
+origin on every loopback name, so neither needs an `allowed_origins` entry. `sabine dev` hands the
+development server's URL to the app in `SABINE_DEV_URL` as it starts it. Builds made by
+`sabine bundle` ignore that variable, so nobody can point an installed app at another page by
+setting it.
 
 <Aside type="caution">
 An entry of `"*"` allows every `http` and `https` origin. Any site the window ends up on, through a
@@ -96,9 +98,9 @@ fn record_payment(_receipt: &serde_json::Value) {}
 ```
 
 A page from that origin gets `window.sabine` and can call `checkout.complete`, and nothing else:
-no other command, no window controls, no guests and no events. The app's own pages and allowed
-origins can call the command as usual. Calls from that page to other commands get no answer and
-time out.
+no other command, no window controls, no guests and no events. Its `bridge.commands()` lists only
+`checkout.complete`, and calls to other commands reject right away. The app's own pages and
+allowed origins can call the command as usual.
 
 ## Guests
 
@@ -139,10 +141,16 @@ decides what a call may do.
 
 ## Development builds
 
-Development builds open Chromium's remote debugging port on `127.0.0.1`, 9222 unless
+Development runs open Chromium's remote debugging port on `127.0.0.1`, 9222 unless
 `SABINE_DEVTOOLS_PORT` names another, and add `Open DevTools` to the page's context menu.
-Production builds open neither unless the app calls `.debug(port)`. Leave `.debug` out of builds
+Production runs open neither unless the app calls `.debug(port)`. Leave `.debug` out of builds
 you ship: anything on the machine that can reach the port can drive the page.
+
+A run is a development run when `SABINE_ENV` is `development` or `SABINE_DEV_URL` is set, which
+`sabine dev` does. A build made for production, with `SABINE_ENV=production` while it compiles as
+`sabine bundle` does, always runs in production: it ignores `SABINE_ENV`, `SABINE_DEV_URL`,
+`SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID`, `SABINE_MANIFEST_PATH` and `SABINE_WEB_ENTRY`, and reads
+its manifest only from its bundle.
 
 The [security model](/docs/concepts/security-model/) covers the rest of Sabine's sandboxing:
 browser permission prompts, the Chromium sandbox and the app sandbox.

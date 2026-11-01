@@ -236,11 +236,15 @@ manifest:
 | --- | --- |
 | `.entry(path)` | Opens this HTML file from the app's files. |
 | `.url(url)` | Opens this hosted page, and lets its origin use the bridge. |
-| `.dev_url(url)` | Opens this address instead of `entry` or `url`, and lets it use the bridge on every loopback name. `sabine dev` sets it from `dev_url`; a window with a development URL runs as a development build, with the `.dev` app id and DevTools. |
-| `.content_suffix(suffix)` | Appends a query string or fragment to whichever of these the window opens, such as `"#/settings"`. |
+| `.content_suffix(suffix)` | Appends a query string or fragment to whichever of these the window opens, or to the development server's page during `sabine dev`, such as `"#/settings"`. |
 
 `content_suffix` is how a [second window](/docs/windows/multiple-windows/) opens the same page at
 another view.
+
+In a development run, the window opens the development server's page from `SABINE_DEV_URL`
+instead, which `sabine dev` sets from `dev_url`, and lets it use the bridge on every loopback name.
+A staging server or any other hosted page is a `.url(..)`, so pointing the window at one changes
+nothing else about the run.
 
 ## Splash and reveal
 

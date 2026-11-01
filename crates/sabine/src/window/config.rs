@@ -20,6 +20,7 @@ pub(crate) struct SabineWindowConfig {
     pub entry: Option<String>,
     pub url: Option<String>,
     pub dev_url: Option<String>,
+    pub content_suffix: String,
     pub app_id: Option<String>,
     pub app_version: Option<String>,
     pub app_update: Option<AppUpdateConfig>,
@@ -77,6 +78,7 @@ impl Default for SabineWindowConfig {
             entry: None,
             url: None,
             dev_url: None,
+            content_suffix: String::new(),
             app_id: None,
             app_version: None,
             app_update: None,
@@ -189,8 +191,7 @@ impl SabineWindowConfig {
     }
 
     pub fn dev_mode(&self) -> bool {
-        self.dev_url.is_some()
-            || crate::AppEnvironment::current() == crate::AppEnvironment::Development
+        crate::AppEnvironment::current() == crate::AppEnvironment::Development
     }
 
     pub fn effective_remote_devtools_port(&self) -> Option<u16> {

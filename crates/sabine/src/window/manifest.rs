@@ -61,11 +61,7 @@ impl SabineWindow {
     /// Creates another window using the current app's resolved identity and
     /// web entry. The launched process supplies the primary window's bridge.
     pub fn for_current_app() -> SabineResult<Self> {
-        let mut window = Self::new().with_framework_config()?;
-        if let Some(url) = nonempty_env("SABINE_DEV_URL") {
-            window = window.dev_url(url);
-        }
-        Ok(window)
+        Self::new().with_framework_config()
     }
 
     /// Applies `[app]`, production `[web]` and `[window]` fields from a
@@ -154,13 +150,12 @@ impl SabineWindow {
         if let Some(path) = framework_manifest_path() {
             self = self.with_manifest(path)?;
         }
-        if let Some(app_id) = nonempty_env(APP_ID_ENV) {
+        if let Some(app_id) = development_env(APP_ID_ENV) {
             self = self.app_id(app_id);
         }
-        if let Some(entry) = nonempty_env(WEB_ENTRY_ENV) {
+        if let Some(entry) = development_env(WEB_ENTRY_ENV) {
             self.config.entry = Some(entry);
             self.config.url = None;
-            self.config.dev_url = None;
         }
         Ok(self)
     }
@@ -217,7 +212,7 @@ fn read_resources() -> Option<Resources> {
 }
 
 fn framework_manifest_path() -> Option<PathBuf> {
-    if let Some(path) = nonempty_env(MANIFEST_ENV) {
+    if let Some(path) = development_env(MANIFEST_ENV) {
         return Some(PathBuf::from(path));
     }
 
@@ -233,6 +228,9 @@ fn framework_manifest_path() -> Option<PathBuf> {
         }
     }
 
+    if crate::AppEnvironment::production_build() {
+        return None;
+    }
     let cargo_package = env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from);
     [env::current_dir().ok(), cargo_package]
         .into_iter()
@@ -241,7 +239,12 @@ fn framework_manifest_path() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn nonempty_env(name: &str) -> Option<String> {
+/// A variable that points a development run at its project. Production
+/// builds read their identity and pages only from their bundle.
+pub(super) fn development_env(name: &str) -> Option<String> {
+    if crate::AppEnvironment::production_build() {
+        return None;
+    }
     env::var(name)
         .ok()
         .map(|value| value.trim().to_string())

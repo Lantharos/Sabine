@@ -1,5 +1,6 @@
 use sabine_runtime::RuntimeInfo;
 
+use super::manifest::development_env;
 use super::origins::{allow_dev_origins, allow_url_origin};
 use super::{SabineWindow, SabineWindowConfig};
 use crate::desktop::open_urls::Openable;
@@ -89,8 +90,8 @@ impl SabineWindow {
     }
 
     fn apply_launch_environment(&mut self) {
-        self.apply_dev_env_overrides();
         if self.config.dev_mode() {
+            self.config.dev_url = development_env("SABINE_DEV_URL");
             let environment = crate::AppEnvironment::Development;
             if let Some(id) = &mut self.config.app_id {
                 *id = environment.app_id(id);
@@ -108,29 +109,17 @@ impl SabineWindow {
         }
     }
 
-    fn apply_dev_env_overrides(&mut self) {
-        if let Ok(url) = std::env::var("SABINE_DEV_URL") {
-            let url = url.trim();
-            if !url.is_empty() {
-                allow_dev_origins(&mut self.config.security, url);
-                self.config.dev_url = Some(url.to_string());
-            }
-        }
-    }
-
     pub(crate) fn entry_url(&self) -> SabineResult<String> {
-        if let Some(url) = &self.config.dev_url {
-            return Ok(url.clone());
-        }
-        if let Some(url) = &self.config.url {
-            return Ok(url.clone());
-        }
-        let Some(entry) = &self.config.entry else {
+        let page = if let Some(url) = self.config.dev_url.as_ref().or(self.config.url.as_ref()) {
+            url.clone()
+        } else if let Some(entry) = &self.config.entry {
+            local_entry(entry)?.url
+        } else {
             return Err(SabineError::CreationFailed {
-                message: "CEF window has no entry, URL, or dev URL".to_string(),
+                message: "CEF window has no entry or URL".to_string(),
             });
         };
-        Ok(local_entry(entry)?.url)
+        Ok(page + &self.config.content_suffix)
     }
 
     fn allow_configured_url_origins(&mut self) {
@@ -170,11 +159,16 @@ mod tests {
 
     #[test]
     fn dev_url_takes_precedence_over_production_url() {
-        let window = SabineWindow::new()
+        let mut window = SabineWindow::new()
             .url("https://raday.lantharos.com")
-            .dev_url("http://localhost:5173");
+            .content_suffix("#inspector");
+        window.config.dev_url = Some("http://localhost:5173".into());
+        window.allow_configured_url_origins();
 
-        assert_eq!(window.entry_url().unwrap(), "http://localhost:5173");
+        assert_eq!(
+            window.entry_url().unwrap(),
+            "http://localhost:5173#inspector"
+        );
         assert!(allows(&window, "https://raday.lantharos.com"));
         assert!(allows(&window, "http://localhost:5173"));
     }
