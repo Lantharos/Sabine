@@ -138,7 +138,8 @@ paths and names with spaces or `#` work. The URLs support byte ranges, so media 
 [native video](/docs/web/native-video/) plays them too.
 
 Only the app's own pages, served from `sabine://app/`, can use these URLs. Hosted pages and other
-origins can't, even with local file access on.
+origins can't, even with local file access on. During `sabine dev`, the development server's page
+stands in for them: it shows and fetches these URLs as the bundled page will.
 
 <Aside>
 Local file access lets any script in the page read any file the user can. Turn it on only for an

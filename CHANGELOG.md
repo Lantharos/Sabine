@@ -1,3 +1,30 @@
+# Unreleased
+
+- Builds made by `sabine bundle` always run in production: they ignore `SABINE_DEV_URL`,
+  `SABINE_ENV`, `SABINE_DEVTOOLS_PORT`, `SABINE_APP_ID`, `SABINE_MANIFEST_PATH` and
+  `SABINE_WEB_ENTRY`, and read their manifest only from the bundle, so setting a variable can no
+  longer point an installed app at another page with the bridge and DevTools.
+- The builder's `.dev_url()` is gone. Development runs take the development server's page from
+  `SABINE_DEV_URL`, which `sabine dev` sets, and a staging page is a plain `.url()` that no longer
+  turns the run into a development run. `.content_suffix()` now also applies to the development
+  server's page.
+- A page from an origin allowed only some commands lists just those in `bridge.commands`, and
+  calls to any other command reject right away instead of timing out.
+- `bridge.send` gets no answer back and holds no pending slot. When a window's queue is full the
+  page hears `sabine.bridge.dropped` and a warning is logged to its console.
+- The `allow` popup policy is gone; `openGuest` does what it did. An unknown policy fails
+  `guest.create`.
+- The popup surface no longer appears in `guest.list()` or sends guest events, and guests can't
+  take Sabine's reserved ids.
+- `GuestInfo.zoomFactor` reports the zoom the guest shows, kept between 0.25 and 5.
+- Interrupted guest downloads carry an `error` naming why they stopped.
+- Typed bindings take `CallOptions` (`signal` and `timeoutMs`), since typed commands don't take
+  bytes. Run `sabine bindings` to update them.
+- `BridgeEventEmitter::guest_control` takes the window whose guests it drives, and
+  `SabineProcess::guest_control` drives the first window's, instead of every window's.
+- During `sabine dev`, the development server's page can show and fetch `sabine://file/` URLs in
+  apps with `local_files`, as the bundled page does.
+
 # Sabine 0.67
 
 - On Linux with Mesa drivers the browser no longer waits for the GPU on every frame: its copy of

@@ -152,7 +152,8 @@ std::string MimeType(const fs::path& file) {
 
 class FileHandler : public CefResourceHandler {
  public:
-  explicit FileHandler(const std::optional<fs::path>& root) : root_(root) {}
+  FileHandler(const std::optional<fs::path>& root, const std::string& reader)
+      : root_(root), reader_(reader) {}
   ~FileHandler() override {
     if (file_) {
       std::fclose(file_);
@@ -203,8 +204,8 @@ class FileHandler : public CefResourceHandler {
     } else if (status_ == 416) {
       headers.emplace("Content-Range", "bytes */" + std::to_string(size_));
     }
-    if (!root_) {
-      headers.emplace("Access-Control-Allow-Origin", kAppOrigin);
+    if (!reader_.empty()) {
+      headers.emplace("Access-Control-Allow-Origin", reader_);
     }
     response->SetHeaderMap(headers);
     response->SetMimeType(file_ ? mime_type_ : "text/plain");
@@ -242,6 +243,7 @@ class FileHandler : public CefResourceHandler {
 
  private:
   const std::optional<fs::path> root_;
+  const std::string reader_;
   FILE* file_ = nullptr;
   int status_ = 404;
   uint64_t size_ = 0;
@@ -253,29 +255,49 @@ class FileHandler : public CefResourceHandler {
 
 class FileSchemeHandlerFactory : public CefSchemeHandlerFactory {
  public:
-  explicit FileSchemeHandlerFactory(std::optional<fs::path> root)
-      : root_(std::move(root)) {}
+  FileSchemeHandlerFactory(std::optional<fs::path> root, std::string reader)
+      : root_(std::move(root)), reader_(std::move(reader)) {}
 
   CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
                                        CefRefPtr<CefFrame> frame,
                                        const CefString& scheme_name,
                                        CefRefPtr<CefRequest> request) override {
-    return new FileHandler(root_);
+    return new FileHandler(root_, reader_);
   }
 
  private:
   const std::optional<fs::path> root_;
+  const std::string reader_;
   IMPLEMENT_REFCOUNTING(FileSchemeHandlerFactory);
 };
 
+std::string PageOrigin(const std::string& page_url) {
+  CefURLParts parts;
+  if (!CefParseURL(page_url, parts)) {
+    return kAppOrigin;
+  }
+  const std::string scheme = CefString(&parts.scheme);
+  std::string origin = CefString(&parts.origin);
+  if ((scheme != "http" && scheme != "https") || origin.empty()) {
+    return kAppOrigin;
+  }
+  if (origin.back() == '/') {
+    origin.pop_back();
+  }
+  return origin;
+}
+
 }  // namespace
 
-void RegisterAppScheme(CefRawPtr<CefSchemeRegistrar> registrar) {
-  registrar->AddCustomScheme(kScheme, CEF_SCHEME_OPTION_STANDARD |
-                                          CEF_SCHEME_OPTION_SECURE |
-                                          CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
-                                          CEF_SCHEME_OPTION_CORS_ENABLED |
-                                          CEF_SCHEME_OPTION_FETCH_ENABLED);
+void RegisterAppScheme(CefRawPtr<CefSchemeRegistrar> registrar,
+                       bool development) {
+  int options = CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE |
+                CEF_SCHEME_OPTION_CORS_ENABLED |
+                CEF_SCHEME_OPTION_FETCH_ENABLED;
+  if (!development) {
+    options |= CEF_SCHEME_OPTION_DISPLAY_ISOLATED;
+  }
+  registrar->AddCustomScheme(kScheme, options);
 }
 
 namespace {
@@ -302,11 +324,14 @@ void ServeAppFiles(const std::string& root,
                  root.c_str());
     return;
   }
-  Register(context, kAppHost, new FileSchemeHandlerFactory(canonical));
+  Register(context, kAppHost,
+           new FileSchemeHandlerFactory(canonical, std::string()));
 }
 
-void ServeLocalFiles(CefRefPtr<CefRequestContext> context) {
-  Register(context, kFileHost, new FileSchemeHandlerFactory(std::nullopt));
+void ServeLocalFiles(const std::string& page_url,
+                     CefRefPtr<CefRequestContext> context) {
+  Register(context, kFileHost,
+           new FileSchemeHandlerFactory(std::nullopt, PageOrigin(page_url)));
 }
 
 }  // namespace sabine_app

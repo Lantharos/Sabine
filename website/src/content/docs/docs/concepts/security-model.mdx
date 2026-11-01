@@ -74,7 +74,7 @@ Browser permission prompts are denied, except clipboard access for your app's ow
 
 ### Local files
 
-A local entry is served from its folder at `sabine://app/`, a secure origin that can load only that folder's files, so a page can't read other files on disk and remote pages can't embed your app's files. Apps that enable `local_files` can also load any file the user can read at `sabine://file/<absolute path>`, and only `sabine://app/` pages can use those URLs.
+A local entry is served from its folder at `sabine://app/`, a secure origin that can load only that folder's files, so a page can't read other files on disk and remote pages can't embed your app's files. Apps that enable `local_files` can also load any file the user can read at `sabine://file/<absolute path>`, and only `sabine://app/` pages can use those URLs. In a development run the development server's page can use them too, and other pages can show them, so keep development runs to your own machine.
 
 Browsers hide the paths of dropped files from pages. Sabine gives them to your app's own pages only, and only your own pages can drag files out of the window. Other origins and guests get neither.
 

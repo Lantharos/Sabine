@@ -18,10 +18,8 @@ class SabineApp : public CefApp, public CefBrowserProcessHandler {
   void OnRegisterCustomSchemes(
       CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
-#if defined(OS_WIN)
   void OnBeforeChildProcessLaunch(
       CefRefPtr<CefCommandLine> command_line) override;
-#endif
   bool OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine> command_line,
                                    const CefString& current_directory) override;
   CefRefPtr<CefClient> GetDefaultClient() override;

@@ -146,8 +146,8 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
   sabine_osr::ApplySharedTexture(&window_info, shared_texture);
   CefRefPtr<SabineOsrHandler> handler(new SabineOsrHandler(
       command_line->GetSwitchValue("sabine-osr-endpoint"), authentication_token,
-      viewport, policy, command_line->HasSwitch("sabine-dev-mode"), transparent,
-      command_line->HasSwitch("sabine-retain-hidden-frame")));
+      viewport, policy, command_line->HasSwitch(kDevelopmentSwitch),
+      transparent, command_line->HasSwitch("sabine-retain-hidden-frame")));
   handler->UseProfile(profile, shared_texture);
   handler->UseAcceleratedPaint(shared_texture);
 #if defined(OS_MAC)

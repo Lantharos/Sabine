@@ -94,7 +94,8 @@ std::string CreateBrowser(CefRefPtr<CefCommandLine> request, const Peer& peer) {
     sabine_app::ServeAppFiles(app_root, profile.context);
   }
   if (request->HasSwitch("sabine-local-files")) {
-    sabine_app::ServeLocalFiles(profile.context);
+    sabine_app::ServeLocalFiles(request->GetSwitchValue("url"),
+                                profile.context);
   }
   return CreateSabineOsrBrowser(request, profile)
              ? std::string()
