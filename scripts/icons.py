@@ -13,7 +13,7 @@ MASTERS = ROOT / "assets/icon"
 NAME = "com.lantharos.sabine"
 HICOLOR = ROOT / "crates/sabine-service/icons/hicolor"
 ICO = ROOT / "crates/sabine-service/icons/sabine.ico"
-ICNS = ROOT / "crates/sabine-host/shared/mac/sabine.icns"
+ICNS = ROOT / "crates/sabine-host/shared/macos/sabine.icns"
 
 HICOLOR_SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
