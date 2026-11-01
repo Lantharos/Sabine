@@ -32,6 +32,17 @@ impl OsrNativeHost {
         self.suspend(reason);
     }
 
+    /// A minimized window is out of sight, so with `suspend_on_occluded` its
+    /// page suspends right away instead of once the desktop reports it.
+    pub(in crate::osr::host) fn minimize_window(&mut self) {
+        if self.config.lifecycle.suspend_on_occluded {
+            self.suspend("minimize");
+        }
+        if let Some(window) = &self.window {
+            window.set_minimized(true);
+        }
+    }
+
     pub(in crate::osr::host) fn focus_window(&mut self, reason: &str) {
         self.config.visible = true;
         self.focused = true;

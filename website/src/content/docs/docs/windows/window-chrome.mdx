@@ -16,11 +16,9 @@ leave the whole window to the page, which then draws a titlebar of its own.
 | `.system_chrome()` | The system's titlebar, frame and controls. The default, and what `.app()` uses |
 | `.app_chrome(AppChrome)` | The page draws the titlebar; Sabine provides the drag strip and the window controls' behavior. On macOS the system's traffic lights stay |
 | `.frameless()` | No titlebar or frame. The page draws and handles everything |
-| `.no_chrome()` | The same as `.frameless()` |
 | `.chrome(SabineWindowChrome::Sabine)` | A plain 38-pixel titlebar Sabine draws above the page, with the window title and round minimize, maximize and close buttons |
 
-`.chrome(SabineWindowChrome)` takes any of them as a value: `System`, `Sabine`, `Frameless` or
-`None`.
+`.chrome(SabineWindowChrome)` takes any of them as a value: `System`, `Sabine` or `Frameless`.
 
 On Windows 11, windows without system chrome keep the system's rounded corners; Windows 10 keeps
 them square.

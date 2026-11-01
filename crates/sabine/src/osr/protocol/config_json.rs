@@ -101,7 +101,6 @@ pub(crate) fn lifecycle_to_json(lifecycle: &SabineLifecyclePolicy) -> Value {
     serde_json::json!({
         "active_frame_rate": lifecycle.active_frame_rate,
         "background_frame_rate": lifecycle.background_frame_rate.max(1),
-        "suspend_on_minimize": lifecycle.suspend_on_minimize,
         "suspend_on_occluded": lifecycle.suspend_on_occluded,
         "suspend_on_blur": lifecycle.suspend_on_blur,
         "freeze_after_ms": lifecycle.freeze_after.map(duration_millis),
@@ -124,10 +123,6 @@ pub(crate) fn lifecycle_from_json(value: Option<&Value>) -> SabineLifecyclePolic
         .and_then(Value::as_u64)
         .map(|value| value.max(1) as u32)
         .unwrap_or(lifecycle.background_frame_rate);
-    lifecycle.suspend_on_minimize = value
-        .get("suspend_on_minimize")
-        .and_then(Value::as_bool)
-        .unwrap_or(lifecycle.suspend_on_minimize);
     lifecycle.suspend_on_occluded = value
         .get("suspend_on_occluded")
         .and_then(Value::as_bool)

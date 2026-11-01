@@ -328,12 +328,7 @@ pub(in crate::osr::host) fn activate_control(
     control: TitlebarControl,
 ) {
     match control {
-        TitlebarControl::Minimize => {
-            if host.config.lifecycle.suspend_on_minimize {
-                host.suspend("minimize");
-            }
-            window.set_minimized(true);
-        }
+        TitlebarControl::Minimize => host.minimize_window(),
         TitlebarControl::Maximize => window.set_maximized(!window.is_maximized()),
         TitlebarControl::Close => host.begin_close(event_loop),
     }

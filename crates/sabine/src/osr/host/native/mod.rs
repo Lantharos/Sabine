@@ -427,7 +427,7 @@ pub(super) fn platform_chrome(chrome: SabineWindowChrome) -> PlatformWindowChrom
     match chrome {
         SabineWindowChrome::System => PlatformWindowChrome::System,
         SabineWindowChrome::Sabine => PlatformWindowChrome::Sabine,
-        SabineWindowChrome::Frameless | SabineWindowChrome::None => PlatformWindowChrome::None,
+        SabineWindowChrome::Frameless => PlatformWindowChrome::Frameless,
     }
 }
 

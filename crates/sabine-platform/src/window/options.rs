@@ -6,7 +6,6 @@ pub enum WindowChrome {
     System,
     Sabine,
     Frameless,
-    None,
 }
 
 impl WindowChrome {

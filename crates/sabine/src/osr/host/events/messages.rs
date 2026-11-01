@@ -95,14 +95,7 @@ impl OsrNativeHost {
             OsrMessage::DragOperation(operation) => {
                 self.update_drag_operation(event_loop, operation);
             }
-            OsrMessage::MinimizeRequested => {
-                if self.config.lifecycle.suspend_on_minimize {
-                    self.suspend("minimize");
-                }
-                if let Some(window) = &self.window {
-                    window.set_minimized(true);
-                }
-            }
+            OsrMessage::MinimizeRequested => self.minimize_window(),
             OsrMessage::MaximizeRequested => {
                 if let Some(window) = &self.window {
                     window.set_maximized(true);

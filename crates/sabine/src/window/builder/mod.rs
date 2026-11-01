@@ -204,11 +204,6 @@ impl SabineWindow {
         self
     }
 
-    pub fn no_chrome(mut self) -> Self {
-        self.config.chrome = SabineWindowChrome::None;
-        self
-    }
-
     pub fn chrome(mut self, chrome: SabineWindowChrome) -> Self {
         self.config.chrome = chrome;
         self
@@ -357,11 +352,6 @@ impl SabineWindow {
 
     pub fn background_frame_rate(mut self, frame_rate: u32) -> Self {
         self.config.lifecycle.background_frame_rate = frame_rate.max(1);
-        self
-    }
-
-    pub fn suspend_on_minimize(mut self, enabled: bool) -> Self {
-        self.config.lifecycle.suspend_on_minimize = enabled;
         self
     }
 

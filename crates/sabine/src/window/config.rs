@@ -206,7 +206,8 @@ impl SabineWindowConfig {
 pub struct SabineLifecyclePolicy {
     pub active_frame_rate: u32,
     pub background_frame_rate: u32,
-    pub suspend_on_minimize: bool,
+    /// The page suspends while the window is out of sight: minimized, or
+    /// covered where the desktop reports it.
     pub suspend_on_occluded: bool,
     pub suspend_on_blur: bool,
     /// How long a window stays out of sight before its page is frozen and its
@@ -221,7 +222,6 @@ impl Default for SabineLifecyclePolicy {
         Self {
             active_frame_rate: 0,
             background_frame_rate: 5,
-            suspend_on_minimize: true,
             suspend_on_occluded: true,
             suspend_on_blur: false,
             freeze_after: None,
@@ -265,8 +265,8 @@ pub enum SabineWindowChrome {
     #[default]
     System,
     Sabine,
+    /// No titlebar or frame; the page draws and handles everything.
     Frameless,
-    None,
 }
 
 impl SabineWindowChrome {
@@ -275,7 +275,6 @@ impl SabineWindowChrome {
             "system" => Some(Self::System),
             "sabine" => Some(Self::Sabine),
             "frameless" => Some(Self::Frameless),
-            "none" => Some(Self::None),
             _ => None,
         }
     }
@@ -285,7 +284,6 @@ impl SabineWindowChrome {
             Self::System => "system",
             Self::Sabine => "sabine",
             Self::Frameless => "frameless",
-            Self::None => "none",
         }
     }
 
