@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use super::{
-    AppArtifactKind, AppInstallMode, AppUpdateConfig, AppUpdateSource, UpdatePolicy,
+    AppArtifactKind, AppInstallMode, AppUpdateConfig, AppUpdateSource, ServiceError, UpdatePolicy,
     app::stable_channel,
 };
 
@@ -71,7 +71,10 @@ impl AppUpdatesSection {
         config
             .source
             .manifest_url(&config.channel)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| match error {
+                ServiceError::InvalidManifest(message) => format!("[updates]: {message}"),
+                error => error.to_string(),
+            })?;
         Ok(Some(config))
     }
 }
