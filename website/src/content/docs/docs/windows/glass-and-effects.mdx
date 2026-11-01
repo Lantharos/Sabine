@@ -123,9 +123,9 @@ window
     .glass()
     .regions(
         WindowRegions::new()
-            .blur(WindowRegion::adaptive_rounded_left(280, 14))
-            .opaque(WindowRegion::adaptive_content_after_sidebar(280, 0))
-            .input(WindowRegion::adaptive_rounded_rect(14)),
+            .blur(WindowRegion::rounded_left(280, 14))
+            .opaque(WindowRegion::content_after_sidebar(280, 0))
+            .input(WindowRegion::rounded_rect(14)),
     )
 ```
 
@@ -133,22 +133,19 @@ window
 
 ### Region shapes
 
-Regions are in logical pixels. Adaptive regions are computed from the window's size every time it
-changes; fixed regions keep their size.
+Regions are in logical pixels. Every shape except a rectangle is computed from the window's size
+every time it changes, and has the same name in Rust and JavaScript.
 
 | Rust | JavaScript | Shape |
 | --- | --- | --- |
 | `WindowRegion::empty()` | `region.empty()` | Nothing |
 | `WindowRegion::rect(x, y, w, h)` | `region.rect(x, y, w, h)` | A fixed rectangle. Add more with `.add_rect(x, y, w, h)` in Rust |
-| `WindowRegion::adaptive_full()` | `region.full()` | The whole window |
-| `WindowRegion::adaptive_rounded_rect(radius)` | `region.roundedRect(radius)` | The whole window with rounded corners |
-| `WindowRegion::adaptive_rounded_left(width, radius)` | `region.roundedLeft(width, radius)` | A full-height column along the left edge, rounded on its left corners |
-| `WindowRegion::adaptive_titlebar_sidebar(sidebar, titlebar, radius)` | `region.titlebarAndSidebar(sidebar, titlebar, radius)` | A titlebar strip across the top and a sidebar column below it |
-| `WindowRegion::adaptive_content_after_sidebar(sidebar, titlebar)` | `region.contentAfterSidebar(sidebar, titlebar)` | Everything right of the sidebar and below the titlebar |
-| `WindowRegion::adaptive_content_after_sidebar_rounded_right(sidebar, titlebar, radius)` | `region.contentAfterSidebarRoundedRight(sidebar, titlebar, radius)` | The same, rounded on its right corners |
-
-`WindowRegion::full(width, height)`, `rounded_rect(width, height, radius)` and
-`rounded_left(width, height, radius)` are fixed-size versions of the adaptive shapes.
+| `WindowRegion::full()` | `region.full()` | The whole window |
+| `WindowRegion::rounded_rect(radius)` | `region.roundedRect(radius)` | The whole window with rounded corners |
+| `WindowRegion::rounded_left(width, radius)` | `region.roundedLeft(width, radius)` | A full-height column along the left edge, rounded on its left corners |
+| `WindowRegion::titlebar_and_sidebar(sidebar, titlebar, radius)` | `region.titlebarAndSidebar(sidebar, titlebar, radius)` | A titlebar strip across the top and a sidebar column below it |
+| `WindowRegion::content_after_sidebar(sidebar, titlebar)` | `region.contentAfterSidebar(sidebar, titlebar)` | Everything right of the sidebar and below the titlebar |
+| `WindowRegion::content_after_sidebar_rounded_right(sidebar, titlebar, radius)` | `region.contentAfterSidebarRoundedRight(sidebar, titlebar, radius)` | The same, rounded on its right corners |
 
 ### Changing regions while the app runs
 

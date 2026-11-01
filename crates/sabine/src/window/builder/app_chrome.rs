@@ -54,12 +54,10 @@ impl SabineWindow {
         }
         let radius = window.window_corner_radius(chrome);
         window
-            .blur_region(WindowRegion::adaptive_titlebar_sidebar(
+            .blur_region(WindowRegion::titlebar_and_sidebar(
                 sidebar, titlebar, radius,
             ))
-            .opaque_region(WindowRegion::adaptive_content_after_sidebar(
-                sidebar, titlebar,
-            ))
+            .opaque_region(WindowRegion::content_after_sidebar(sidebar, titlebar))
             .rounded_input_region(chrome)
     }
 
@@ -102,7 +100,7 @@ impl SabineWindow {
     fn rounded_input_region(self, chrome: AppChrome) -> Self {
         match self.window_corner_radius(chrome) {
             0 => self,
-            radius => self.input_region(WindowRegion::adaptive_rounded_rect(radius)),
+            radius => self.input_region(WindowRegion::rounded_rect(radius)),
         }
     }
 }

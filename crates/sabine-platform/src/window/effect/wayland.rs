@@ -100,7 +100,7 @@ impl Bound {
                 .regions
                 .blur
                 .clone()
-                .unwrap_or_else(WindowRegion::adaptive_full);
+                .unwrap_or_else(WindowRegion::full);
             let region = self.create_region(&region, width, height, transparent_holes);
             blur.effect.set_blur_region(Some(&region));
             region.destroy();

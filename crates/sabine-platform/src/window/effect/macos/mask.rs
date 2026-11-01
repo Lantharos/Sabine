@@ -25,7 +25,7 @@ pub(super) fn material_mask(
         &regions
             .blur
             .clone()
-            .unwrap_or_else(WindowRegion::adaptive_full)
+            .unwrap_or_else(WindowRegion::full)
             .resolved_rects(width, height),
     );
     let hidden = regions

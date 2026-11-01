@@ -21,6 +21,8 @@ impl WindowRegionRect {
     }
 }
 
+/// A part of the window, in logical pixels. Its shapes follow the window's
+/// size as it changes; rectangles from [`WindowRegion::rect`] stay put.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WindowRegion {
     pub rects: Vec<WindowRegionRect>,
@@ -65,86 +67,56 @@ impl WindowRegion {
         Self::empty().add_rect(x, y, width, height)
     }
 
-    pub fn full(width: i32, height: i32) -> Self {
-        Self::rect(0, 0, width, height)
+    /// The whole window.
+    pub fn full() -> Self {
+        Self::adaptive(WindowRegionAdaptive::Full)
     }
 
-    pub fn adaptive_full() -> Self {
-        Self {
-            rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::Full),
-        }
+    /// The whole window with rounded corners.
+    pub fn rounded_rect(radius: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::RoundedRect { radius })
     }
 
-    pub fn rounded_rect(width: i32, height: i32, radius: i32) -> Self {
-        let radius = radius.min(width / 2).min(height / 2).max(0);
-        let mut shape = Shape::default();
-        for span in rounded_spans(0, height, height, radius) {
-            shape.add(span.inset, span, width - span.inset * 2);
-        }
-        shape.into_region()
+    /// A full-height column along the left edge, rounded on its left corners.
+    pub fn rounded_left(width: i32, radius: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::RoundedLeft { width, radius })
     }
 
-    pub fn adaptive_rounded_rect(radius: i32) -> Self {
-        Self {
-            rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::RoundedRect { radius }),
-        }
+    /// A titlebar strip across the top and a sidebar column below it.
+    pub fn titlebar_and_sidebar(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::TitlebarAndSidebar {
+            sidebar_width,
+            titlebar_height,
+            radius,
+        })
     }
 
-    pub fn rounded_left(width: i32, height: i32, radius: i32) -> Self {
-        let radius = radius.min(width).min(height / 2).max(0);
-        let mut shape = Shape::default();
-        for span in rounded_spans(0, height, height, radius) {
-            shape.add(span.inset, span, width - span.inset);
-        }
-        shape.into_region()
+    /// Everything right of the sidebar and below the titlebar.
+    pub fn content_after_sidebar(sidebar_width: i32, titlebar_height: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::ContentAfterSidebar {
+            sidebar_width,
+            titlebar_height,
+        })
     }
 
-    pub fn adaptive_rounded_left(width: i32, radius: i32) -> Self {
-        Self {
-            rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::RoundedLeft { width, radius }),
-        }
-    }
-
-    pub fn adaptive_titlebar_sidebar(
+    /// Everything right of the sidebar and below the titlebar, rounded on its
+    /// right corners.
+    pub fn content_after_sidebar_rounded_right(
         sidebar_width: i32,
         titlebar_height: i32,
         radius: i32,
     ) -> Self {
-        Self {
-            rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::TitlebarAndSidebar {
-                sidebar_width,
-                titlebar_height,
-                radius,
-            }),
-        }
+        Self::adaptive(WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
+            sidebar_width,
+            titlebar_height,
+            radius,
+        })
     }
 
-    pub fn adaptive_content_after_sidebar(sidebar_width: i32, titlebar_height: i32) -> Self {
+    fn adaptive(adaptive: WindowRegionAdaptive) -> Self {
         Self {
             rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::ContentAfterSidebar {
-                sidebar_width,
-                titlebar_height,
-            }),
-        }
-    }
-
-    pub fn adaptive_content_after_sidebar_rounded_right(
-        sidebar_width: i32,
-        titlebar_height: i32,
-        radius: i32,
-    ) -> Self {
-        Self {
-            rects: Vec::new(),
-            adaptive: Some(WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
-                sidebar_width,
-                titlebar_height,
-                radius,
-            }),
+            adaptive: Some(adaptive),
         }
     }
 
@@ -194,114 +166,117 @@ impl WindowRegion {
 
     pub fn resolved_rects(&self, width: i32, height: i32) -> Vec<WindowRegionRect> {
         match self.adaptive {
-            Some(WindowRegionAdaptive::Full) => WindowRegion::full(width, height).rects,
+            Some(WindowRegionAdaptive::Full) => vec![WindowRegionRect::new(0, 0, width, height)],
             Some(WindowRegionAdaptive::RoundedRect { radius }) => {
-                WindowRegion::rounded_rect(width, height, radius).rects
+                rounded_rect(width, height, radius)
             }
             Some(WindowRegionAdaptive::RoundedLeft {
                 width: sidebar_width,
                 radius,
-            }) => WindowRegion::rounded_left(sidebar_width, height, radius).rects,
+            }) => rounded_left(sidebar_width, height, radius),
             Some(WindowRegionAdaptive::TitlebarAndSidebar {
                 sidebar_width,
                 titlebar_height,
                 radius,
-            }) => {
-                WindowRegion::titlebar_sidebar(
-                    width,
-                    height,
-                    sidebar_width,
-                    titlebar_height,
-                    radius,
-                )
-                .rects
-            }
+            }) => titlebar_and_sidebar(width, height, sidebar_width, titlebar_height, radius),
             Some(WindowRegionAdaptive::ContentAfterSidebar {
                 sidebar_width,
                 titlebar_height,
-            }) => {
-                WindowRegion::content_after_sidebar(width, height, sidebar_width, titlebar_height)
-                    .rects
-            }
+            }) => content_after_sidebar(width, height, sidebar_width, titlebar_height),
             Some(WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
                 sidebar_width,
                 titlebar_height,
                 radius,
-            }) => {
-                WindowRegion::content_after_sidebar_rounded_right(
-                    width,
-                    height,
-                    sidebar_width,
-                    titlebar_height,
-                    radius,
-                )
-                .rects
-            }
+            }) => content_after_sidebar_rounded_right(
+                width,
+                height,
+                sidebar_width,
+                titlebar_height,
+                radius,
+            ),
             None => self.rects.clone(),
         }
     }
+}
 
-    fn titlebar_sidebar(
-        width: i32,
-        height: i32,
-        sidebar_width: i32,
-        titlebar_height: i32,
-        radius: i32,
-    ) -> Self {
-        let width = width.max(0);
-        let height = height.max(0);
-        let sidebar_width = sidebar_width.clamp(0, width);
-        let titlebar_height = titlebar_height.clamp(0, height);
-        let radius = radius.min(width / 2).min(height / 2).max(0);
-        let mut shape = Shape::default();
-        for span in rounded_spans(0, titlebar_height, height, radius) {
-            shape.add(span.inset, span, width - span.inset * 2);
-        }
-        for span in rounded_spans(titlebar_height, height, height, radius) {
-            shape.add(span.inset, span, sidebar_width - span.inset);
-        }
-        shape.into_region()
+fn rounded_rect(width: i32, height: i32, radius: i32) -> Vec<WindowRegionRect> {
+    let radius = radius.min(width / 2).min(height / 2).max(0);
+    let mut shape = Shape::default();
+    for span in rounded_spans(0, height, height, radius) {
+        shape.add(span.inset, span, width - span.inset * 2);
     }
+    shape.0
+}
 
-    fn content_after_sidebar(
-        width: i32,
-        height: i32,
-        sidebar_width: i32,
-        titlebar_height: i32,
-    ) -> Self {
-        let width = width.max(0);
-        let height = height.max(0);
-        let sidebar_width = sidebar_width.clamp(0, width);
-        let titlebar_height = titlebar_height.clamp(0, height);
-        Self::rect(
-            sidebar_width,
-            titlebar_height,
-            width - sidebar_width,
-            height - titlebar_height,
-        )
+fn rounded_left(width: i32, height: i32, radius: i32) -> Vec<WindowRegionRect> {
+    let radius = radius.min(width).min(height / 2).max(0);
+    let mut shape = Shape::default();
+    for span in rounded_spans(0, height, height, radius) {
+        shape.add(span.inset, span, width - span.inset);
     }
+    shape.0
+}
 
-    fn content_after_sidebar_rounded_right(
-        width: i32,
-        height: i32,
-        sidebar_width: i32,
-        titlebar_height: i32,
-        radius: i32,
-    ) -> Self {
-        let width = width.max(0);
-        let height = height.max(0);
-        let sidebar_width = sidebar_width.clamp(0, width);
-        let titlebar_height = titlebar_height.clamp(0, height);
-        let radius = radius
-            .min((width - sidebar_width) / 2)
-            .min(height / 2)
-            .max(0);
-        let mut shape = Shape::default();
-        for span in rounded_spans(titlebar_height, height, height, radius) {
-            shape.add(sidebar_width, span, width - sidebar_width - span.inset);
-        }
-        shape.into_region()
+fn titlebar_and_sidebar(
+    width: i32,
+    height: i32,
+    sidebar_width: i32,
+    titlebar_height: i32,
+    radius: i32,
+) -> Vec<WindowRegionRect> {
+    let width = width.max(0);
+    let height = height.max(0);
+    let sidebar_width = sidebar_width.clamp(0, width);
+    let titlebar_height = titlebar_height.clamp(0, height);
+    let radius = radius.min(width / 2).min(height / 2).max(0);
+    let mut shape = Shape::default();
+    for span in rounded_spans(0, titlebar_height, height, radius) {
+        shape.add(span.inset, span, width - span.inset * 2);
     }
+    for span in rounded_spans(titlebar_height, height, height, radius) {
+        shape.add(span.inset, span, sidebar_width - span.inset);
+    }
+    shape.0
+}
+
+fn content_after_sidebar(
+    width: i32,
+    height: i32,
+    sidebar_width: i32,
+    titlebar_height: i32,
+) -> Vec<WindowRegionRect> {
+    let width = width.max(0);
+    let height = height.max(0);
+    let sidebar_width = sidebar_width.clamp(0, width);
+    let titlebar_height = titlebar_height.clamp(0, height);
+    vec![WindowRegionRect::new(
+        sidebar_width,
+        titlebar_height,
+        width - sidebar_width,
+        height - titlebar_height,
+    )]
+}
+
+fn content_after_sidebar_rounded_right(
+    width: i32,
+    height: i32,
+    sidebar_width: i32,
+    titlebar_height: i32,
+    radius: i32,
+) -> Vec<WindowRegionRect> {
+    let width = width.max(0);
+    let height = height.max(0);
+    let sidebar_width = sidebar_width.clamp(0, width);
+    let titlebar_height = titlebar_height.clamp(0, height);
+    let radius = radius
+        .min((width - sidebar_width) / 2)
+        .min(height / 2)
+        .max(0);
+    let mut shape = Shape::default();
+    for span in rounded_spans(titlebar_height, height, height, radius) {
+        shape.add(sidebar_width, span, width - sidebar_width - span.inset);
+    }
+    shape.0
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -408,21 +383,14 @@ impl Shape {
             _ => self.0.push(rect),
         }
     }
-
-    fn into_region(self) -> WindowRegion {
-        WindowRegion {
-            rects: self.0,
-            adaptive: None,
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn covers(region: &WindowRegion, x: i32, y: i32) -> bool {
-        region.rects.iter().any(|rect| {
+    fn covers(rects: &[WindowRegionRect], x: i32, y: i32) -> bool {
+        rects.iter().any(|rect| {
             (rect.x..rect.x + rect.width).contains(&x)
                 && (rect.y..rect.y + rect.height).contains(&y)
         })
@@ -430,9 +398,9 @@ mod tests {
 
     #[test]
     fn rounded_rects_keep_straight_rows_in_one_rect() {
-        let region = WindowRegion::rounded_rect(400, 300, 12);
-        assert!(region.rects.len() <= 12 * 2 + 1);
-        assert!(region.rects.iter().any(|rect| rect.height == 300 - 24));
+        let region = rounded_rect(400, 300, 12);
+        assert!(region.len() <= 12 * 2 + 1);
+        assert!(region.iter().any(|rect| rect.height == 300 - 24));
         assert!(!covers(&region, 0, 0));
         assert!(covers(&region, 12, 0));
         assert!(covers(&region, 0, 150));
@@ -441,7 +409,7 @@ mod tests {
 
     #[test]
     fn titlebar_and_sidebar_round_only_the_outer_corners() {
-        let region = WindowRegion::titlebar_sidebar(800, 600, 260, 38, 14);
+        let region = titlebar_and_sidebar(800, 600, 260, 38, 14);
         assert!(!covers(&region, 0, 0));
         assert!(!covers(&region, 799, 0));
         assert!(covers(&region, 799, 37));
