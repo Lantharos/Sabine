@@ -1,4 +1,4 @@
-# Sabine 0.66
+# Unreleased
 
 - On Linux with Mesa drivers the browser no longer waits for the GPU on every frame: its copy of
   each frame is fenced, Chromium's next draw and the window's GPU wait for it, so pages paint
