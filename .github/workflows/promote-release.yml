@@ -12,7 +12,7 @@ jobs:
   promote:
     runs-on: ubuntu-24.04
     steps:
-      - name: Promote the newest eligible release
+      - name: Promote the newest release once it has been out for a day
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -28,7 +28,7 @@ jobs:
           published_epoch="$(date -u -d "$published" +%s)"
           now_epoch="$(date -u +%s)"
           if (( now_epoch - published_epoch < 86400 )); then
-            echo "$tag is still inside its 24-hour soak period"
+            echo "$tag is less than a day old; promotion waits until releases have been quiet for a day"
             exit 0
           fi
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --latest

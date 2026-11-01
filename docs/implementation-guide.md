@@ -175,7 +175,10 @@ Routine Sabine and app updates become eligible 24 hours after publication plus a
 per-installation rollout offset between zero and six hours. This spreads load and leaves time to
 withdraw a bad release without repeatedly prompting users. System releases are also kept off the
 GitHub `latest` channel for their first 24 hours, which protects clients running an updater from
-before this policy existed; hourly automation promotes the newest eligible immutable release.
+before this policy existed. Hourly automation looks only at the newest release and promotes it once
+it is a day old. While releases keep landing less than a day apart, `latest` deliberately stays
+where it is: each new release restarts the cooldown, so users receive one update after releases
+settle instead of one for every release in a busy stretch.
 A newer app that declares a newer Sabine build bypasses both gates by fetching that build's signed
 versioned manifest: its bundled bootstrap stages the required system, hands off the daemon, and only
 then registers the app. System release metadata declares its current build and the oldest app build

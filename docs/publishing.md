@@ -53,7 +53,7 @@ The dry run previews version edits without changing files or GitHub state. `--pr
 
 The shared system runs one native host for every app. When the host protocol has changed since the last release, preparation raises the oldest supported app build to the new build, so apps built against an earlier host receive the incompatibility notice until they update. Installed clients hold such a release until every app on the machine supports it, and install the newest earlier release meanwhile.
 
-Publication updates version references, runs format, build, test, and Clippy checks, signs and pushes the release commit, waits for CI, signs and pushes the tag, and monitors artifact publication. It never replaces an existing tag. The release initially remains outside GitHub's `latest` channel during the normal soak period. See the [implementation guide](implementation-guide.md#release-and-update-model) for the shared-system update policy.
+Publication updates version references, runs format, build, test, and Clippy checks, signs and pushes the release commit, waits for CI, signs and pushes the tag, and monitors artifact publication. It never replaces an existing tag. The release initially remains outside GitHub's `latest` channel during the normal soak period. Promotion waits until the newest release is a day old, so publishing again within a day postpones `latest` until releases have been quiet for a full day. See the [implementation guide](implementation-guide.md#release-and-update-model) for the shared-system update policy.
 
 The changelog retains release history; each GitHub release page shows only its own version section.
 
