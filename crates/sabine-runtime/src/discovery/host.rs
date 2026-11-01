@@ -116,17 +116,10 @@ mod tests {
     fn accepts_complete_standard_tree() {
         let root = scratch("complete");
         let _ = std::fs::remove_dir_all(&root);
-        for directory in [
-            "cmake",
-            "include",
-            "libcef_dll",
-            "Release",
-            "Resources/locales",
-        ] {
+        for directory in ["Release", "Resources/locales"] {
             std::fs::create_dir_all(root.join(directory)).unwrap();
         }
         for file in [
-            "include/cef_version.h",
             "Resources/icudtl.dat",
             "Resources/resources.pak",
             "Resources/locales/en-US.pak",

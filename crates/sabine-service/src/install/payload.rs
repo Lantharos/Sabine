@@ -18,6 +18,7 @@ pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
         || !sabine_host::host_is_complete(&destination.join(sabine_host_relative_path()))
     {
         let staging = versions_dir().join(format!("{version}.installing"));
+        empty_staging(&staging)?;
         stage_system_files(
             &staging,
             service,
@@ -25,21 +26,13 @@ pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
         )?;
         sabine_runtime::install_directory(&staging, &destination)?;
     }
-    let previous_state = read_installation_state();
-    let previous = previous_state
-        .as_ref()
-        .map(|state| state.active.clone())
-        .filter(|active| active != version);
-    let previous_compatibility = previous_state
-        .as_ref()
-        .filter(|state| state.active != version)
-        .map(normalized_state_compatibility);
+    let previous = read_installation_state().filter(|state| state.active != version);
     write_installation_state(&SystemInstallationState {
         schema: 1,
         active: version.to_string(),
-        previous,
+        previous_compatibility: previous.as_ref().map(|state| state.compatibility),
+        previous: previous.map(|state| state.active),
         compatibility: SystemCompatibility::current(),
-        previous_compatibility,
     })?;
     Ok(installed_service)
 }
@@ -68,7 +61,7 @@ pub(super) fn install_system_archive(
     let downloads = sabine_data_dir().join("downloads/system");
     fs::create_dir_all(&downloads)?;
     let archive = downloads.join(format!("{}-{name}", manifest.version));
-    download_file(&artifact.url, &archive, artifact.size, on_progress)?;
+    download_system_artifact(&artifact.url, &archive, artifact.size, on_progress)?;
     verify_sha256(&archive, &artifact.sha256)?;
     let actual_size = fs::metadata(&archive)?.len();
     if actual_size != artifact.size {
@@ -79,11 +72,8 @@ pub(super) fn install_system_archive(
     }
 
     let staging = versions_dir().join(format!("{}.installing", manifest.version));
-    if staging.exists() {
-        fs::remove_dir_all(&staging)?;
-    }
-    fs::create_dir_all(&staging)?;
-    extract_system_archive(&archive, &staging)?;
+    empty_staging(&staging)?;
+    crate::archive::extract(&archive, &staging)?;
     for name in [
         PathBuf::from(service_binary_name()),
         PathBuf::from(service_daemon_binary_name()),
@@ -96,7 +86,7 @@ pub(super) fn install_system_archive(
                 name.display()
             )));
         }
-        make_executable(&source)?;
+        sabine_runtime::make_executable(&source)?;
     }
     if !sabine_host::host_is_complete(&staging.join(sabine_host_relative_path())) {
         return Err(ServiceError::Update(

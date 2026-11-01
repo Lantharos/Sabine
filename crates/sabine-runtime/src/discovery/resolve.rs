@@ -13,16 +13,6 @@ pub fn resolve_runtime(config: &RuntimeConfig) -> Result<RuntimeInfo, RuntimeErr
     })
 }
 
-pub fn ensure_runtime(config: &RuntimeConfig) -> Result<RuntimeInfo, RuntimeError> {
-    match resolve_runtime(config) {
-        Ok(runtime) => Ok(runtime),
-        Err(_) if config.allow_user_install && should_install_user_runtime(config) => {
-            crate::install::install_user_runtime(config)
-        }
-        Err(error) => Err(error),
-    }
-}
-
 pub(crate) fn select_runtime(
     config: &RuntimeConfig,
     runtimes: Vec<RuntimeInfo>,
@@ -72,11 +62,4 @@ fn runtime_priority(mode: RuntimeMode, location: &RuntimeLocation) -> u8 {
             _ => 9,
         },
     }
-}
-
-pub(crate) fn should_install_user_runtime(config: &RuntimeConfig) -> bool {
-    matches!(
-        config.mode,
-        RuntimeMode::SystemPreferred | RuntimeMode::SharedPreferred
-    )
 }

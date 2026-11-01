@@ -77,7 +77,7 @@ fn newest_release() -> ServiceResult<SystemReleaseManifest> {
         draft: bool,
         prerelease: bool,
     }
-    let releases: Vec<Release> = crate::http::fetch_manifest(&format!(
+    let releases: Vec<Release> = crate::download::fetch_manifest(&format!(
         "https://api.github.com/repos/{SERVICE_REPO}/releases?per_page=100"
     ))?;
     let version = releases
@@ -106,17 +106,14 @@ fn stage_cli(
         .join(&manifest.version);
     fs::create_dir_all(&directory)?;
     let archive = directory.join(&name);
-    download_file(&artifact.url, &archive, artifact.size, progress)?;
+    download_system_artifact(&artifact.url, &archive, artifact.size, progress)?;
     verify_sha256(&archive, &artifact.sha256)?;
     if fs::metadata(&archive)?.len() != artifact.size {
         return Err(ServiceError::Update("CLI archive size mismatch".into()));
     }
     let staging = directory.join("extracted");
-    if staging.exists() {
-        fs::remove_dir_all(&staging)?;
-    }
-    fs::create_dir_all(&staging)?;
-    extract_system_archive(&archive, &staging)?;
+    empty_staging(&staging)?;
+    crate::archive::extract(&archive, &staging)?;
     let binary = staging.join(if cfg!(windows) {
         "sabine.exe"
     } else {
@@ -127,7 +124,7 @@ fn stage_cli(
             "CLI archive has no sabine executable".into(),
         ));
     }
-    make_executable(&binary)?;
+    sabine_runtime::make_executable(&binary)?;
     fs::remove_file(archive)?;
     Ok(binary)
 }

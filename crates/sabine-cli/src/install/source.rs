@@ -1,17 +1,16 @@
 mod launcher;
 use launcher::launcher_script;
+use serde::{Deserialize, Serialize};
 use std::{
-    env, fs, io,
+    fs,
     path::{Path, PathBuf},
     process::ExitCode,
 };
 
 use crate::{
     desktop::{entry::Listing, icons, types::Associations},
-    install::{
-        assets::{self as source_assets, StagedAssets},
-        desktop as source_desktop,
-    },
+    install::{assets::stage_icon, desktop as source_desktop},
+    project::{CargoPackage, absolute_path, detect_icon, read_sabine_file, sanitize_id},
 };
 
 #[derive(Debug)]
@@ -86,47 +85,37 @@ pub(crate) fn detect_source_app(
     autostart: bool,
 ) -> Result<SourceApp, String> {
     let source = absolute_path(source)?;
-    let metadata = source_assets::metadata(&source);
-    let manifest = cargo_manifest(&source);
-    let package_name = package_name(&manifest);
-    let configured: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
-        .ok()
-        .and_then(|text| toml::from_str(&text).ok())
-        .unwrap_or_default();
-    let listing = configured
-        .get("app")
-        .cloned()
-        .map(toml::Value::try_into::<Listing>)
-        .transpose()
-        .map_err(|error| format!("invalid [app] in Sabine.toml: {error}"))?
-        .unwrap_or_default();
-    listing.validate()?;
-    let version = configured
-        .get("app")
-        .and_then(|app| app.get("version"))
-        .and_then(toml::Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| package_value(&manifest, "version"))
+    let sabine = read_sabine_file(&source)?;
+    sabine.app.listing.validate()?;
+    let cargo = CargoPackage::read(&sabine.cargo_manifest(&source)).ok();
+    let cargo_value = |field| cargo.as_ref().and_then(|cargo| cargo.string(field).ok());
+    let version = sabine
+        .app
+        .version
+        .or_else(|| cargo_value("version"))
         .unwrap_or_else(|| "0.1.0".into());
     let name = name
-        .or(metadata.name)
-        .or_else(|| package_name.clone())
+        .or(sabine.app.name)
+        .or_else(|| cargo_value("name"))
         .ok_or_else(|| {
             "source app needs --name, app metadata, or Cargo.toml package metadata".to_string()
         })?;
     let id = id
-        .or(metadata.id)
+        .or(sabine.app.id)
         .unwrap_or_else(|| format!("dev.sabine.{}", sanitize_id(&name)));
-
     Ok(SourceApp {
         id: sanitize_id(&id),
         name,
         version,
+        command: command.or(sabine.install.command).or(sabine.app.command),
+        icon: sabine
+            .app
+            .icon
+            .map(|icon| source.join(icon))
+            .or_else(|| detect_icon(&source)),
         source,
-        command: command.or(metadata.command),
-        icon: metadata.icon,
         associations: Associations::default(),
-        listing,
+        listing: sabine.app.listing,
         autostart,
     })
 }
@@ -136,20 +125,17 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     sabine_service::ensure_daemon_running().map_err(|error| error.to_string())?;
     let app_dir = app_dir(&app.id)?;
     fs::create_dir_all(&app_dir).map_err(|error| error.to_string())?;
-    let assets = source_assets::stage(&app.source, &app_dir, app.icon.as_deref())?;
-    let desktop_icon = icons::install_user_icon(&app.id, assets.icon.as_deref())?;
+    let staged_icon = stage_icon(&app_dir, app.icon.as_deref())?;
+    let desktop_icon = icons::install_user_icon(&app.id, staged_icon.as_deref())?;
     let wrapper = app_dir.join(if cfg!(target_os = "windows") {
         "launch.cmd"
     } else {
         "launch.sh"
     });
     fs::write(&wrapper, launcher_script(app)?).map_err(|error| error.to_string())?;
-    make_executable(&wrapper).map_err(|error| error.to_string())?;
-    fs::write(
-        app_dir.join("source-install.toml"),
-        registry_record(app, &wrapper, &assets),
-    )
-    .map_err(|error| error.to_string())?;
+    sabine_runtime::make_executable(&wrapper).map_err(|error| error.to_string())?;
+    let record = toml::to_string(&SourceRecord::of(app)).map_err(|error| error.to_string())?;
+    fs::write(app_dir.join(SOURCE_RECORD), record).map_err(|error| error.to_string())?;
 
     sabine_service::SabineService::default()
         .register(sabine_service::AppManifest {
@@ -194,159 +180,50 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {
-    read_registry_record(&app_dir(&sanitize_id(id))?.join("source-install.toml"))
+const SOURCE_RECORD: &str = "source-install.toml";
+
+/// What `sabine install` remembers of a checkout to update its launcher from.
+#[derive(Deserialize, Serialize)]
+struct SourceRecord {
+    id: String,
+    name: String,
+    version: String,
+    source: PathBuf,
+    command: Option<String>,
+    icon: Option<PathBuf>,
+    autostart: bool,
 }
 
-fn read_registry_record(path: &Path) -> Result<SourceApp, String> {
-    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let id =
-        registry_value(&text, "id").ok_or_else(|| "registry record is missing id".to_string())?;
-    let name = registry_value(&text, "name")
-        .ok_or_else(|| "registry record is missing name".to_string())?;
-    let source = registry_value(&text, "source")
-        .map(PathBuf::from)
-        .ok_or_else(|| "registry record is missing source".to_string())?;
-    let command = registry_value(&text, "command").filter(|value| !value.is_empty());
-    let icon = registry_value(&text, "icon")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
-    let autostart = registry_value(&text, "autostart")
-        .map(|value| value == "true")
-        .unwrap_or(false);
+impl SourceRecord {
+    fn of(app: &SourceApp) -> Self {
+        Self {
+            id: app.id.clone(),
+            name: app.name.clone(),
+            version: app.version.clone(),
+            source: app.source.clone(),
+            command: app.command.clone(),
+            icon: app.icon.clone(),
+            autostart: app.autostart,
+        }
+    }
+}
+
+pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {
+    let path = app_dir(&sanitize_id(id))?.join(SOURCE_RECORD);
+    let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let record = toml::from_str::<SourceRecord>(&text)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
     Ok(SourceApp {
-        id,
-        name,
-        version: registry_value(&text, "version").unwrap_or_else(|| "0.1.0".to_string()),
-        source,
-        command,
-        icon,
+        id: record.id,
+        name: record.name,
+        version: record.version,
+        source: record.source,
+        command: record.command,
+        icon: record.icon,
         associations: Associations::default(),
         listing: Listing::default(),
-        autostart,
+        autostart: record.autostart,
     })
-}
-
-fn registry_record(app: &SourceApp, wrapper: &Path, assets: &StagedAssets) -> String {
-    let command = app.command.clone().unwrap_or_default();
-    let icon = app
-        .icon
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
-    let staged_icon = assets
-        .icon
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
-    format!(
-        "id = \"{}\"\nname = \"{}\"\nversion = \"{}\"\nsource = \"{}\"\ncommand = \"{}\"\nwrapper = \"{}\"\nicon = \"{}\"\nstaged_icon = \"{}\"\nautostart = \"{}\"\n",
-        quote_value(&app.id),
-        quote_value(&app.name),
-        quote_value(&app.version),
-        quote_value(&app.source.display().to_string()),
-        quote_value(&command),
-        quote_value(&wrapper.display().to_string()),
-        quote_value(&icon),
-        quote_value(&staged_icon),
-        app.autostart
-    )
-}
-
-fn package_name(path: &Path) -> Option<String> {
-    package_value(path, "name")
-}
-
-fn package_value(path: &Path, key: &str) -> Option<String> {
-    let text = fs::read_to_string(path).ok()?;
-    let mut in_package = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') {
-            in_package = trimmed == "[package]";
-            continue;
-        }
-        if in_package
-            && let Some((candidate, _)) = trimmed.split_once('=')
-            && candidate.trim() == key
-        {
-            return toml_string_value(trimmed);
-        }
-    }
-    None
-}
-
-fn toml_string_value(line: &str) -> Option<String> {
-    let value = line.split_once('=')?.1.trim();
-    value
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .map(ToOwned::to_owned)
-}
-
-fn registry_value(text: &str, key: &str) -> Option<String> {
-    for line in text.lines() {
-        let trimmed = line.trim();
-        let Some((line_key, _value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        if line_key.trim() == key {
-            return toml_string_value(trimmed).map(unquote_value);
-        }
-    }
-    None
-}
-
-fn unquote_value(value: String) -> String {
-    let mut output = String::new();
-    let mut escaped = false;
-    for ch in value.chars() {
-        if escaped {
-            output.push(ch);
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else {
-            output.push(ch);
-        }
-    }
-    output
-}
-
-fn quote_value(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn sanitize_id(value: &str) -> String {
-    let mut output = String::new();
-    for ch in value.chars() {
-        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-') {
-            output.push(ch.to_ascii_lowercase());
-        } else {
-            output.push('-');
-        }
-    }
-    let output = output.trim_matches('-').to_string();
-    if output.is_empty() {
-        "app".to_string()
-    } else {
-        output
-    }
-}
-
-fn absolute_path(path: &Path) -> Result<PathBuf, String> {
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        env::current_dir()
-            .map_err(|error| error.to_string())
-            .map(|cwd| cwd.join(path))?
-    };
-    if path.exists() {
-        path.canonicalize().map_err(|error| error.to_string())
-    } else {
-        Err(format!("source path does not exist: {}", path.display()))
-    }
 }
 
 pub(crate) fn apps_root() -> Result<PathBuf, String> {
@@ -364,7 +241,7 @@ fn applications_dir() -> Result<PathBuf, String> {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn data_home() -> Result<PathBuf, String> {
-    if let Some(path) = env::var_os("XDG_DATA_HOME") {
+    if let Some(path) = std::env::var_os("XDG_DATA_HOME") {
         return Ok(PathBuf::from(path));
     }
     home_dir()
@@ -374,35 +251,5 @@ pub(crate) fn data_home() -> Result<PathBuf, String> {
 
 #[cfg(target_os = "linux")]
 fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME").map(PathBuf::from)
-}
-
-fn make_executable(path: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(path, permissions)
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
-}
-
-fn cargo_manifest(source: &Path) -> PathBuf {
-    let config: toml::Table = fs::read_to_string(source.join("Sabine.toml"))
-        .ok()
-        .and_then(|text| toml::from_str(&text).ok())
-        .unwrap_or_default();
-    source.join(
-        config
-            .get("app")
-            .and_then(|app| app.get("cargo_manifest"))
-            .and_then(toml::Value::as_str)
-            .unwrap_or("Cargo.toml"),
-    )
+    std::env::var_os("HOME").map(PathBuf::from)
 }

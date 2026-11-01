@@ -1,8 +1,8 @@
 mod bundle;
 mod desktop;
 mod dev;
-mod environment;
 mod install;
+mod project;
 mod release;
 mod runtime;
 mod template;
@@ -72,6 +72,7 @@ fn main() -> ExitCode {
         },
         Command::Runtime { command } => runtime::run_runtime(match command {
             RuntimeSubcommand::Prepare => RuntimeCommand::Prepare,
+            #[cfg(target_os = "linux")]
             RuntimeSubcommand::SandboxProfile => RuntimeCommand::SandboxProfile,
             RuntimeSubcommand::List { json } => RuntimeCommand::List { json },
             RuntimeSubcommand::Install {
@@ -189,6 +190,17 @@ fn main() -> ExitCode {
                 println!("wrote {}", output.display());
                 ExitCode::SUCCESS
             }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
+        Command::SystemReleaseStage {
+            service,
+            host,
+            output,
+        } => match release::stage_system_release(&service, &host, &output) {
+            Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("{error}");
                 ExitCode::from(1)

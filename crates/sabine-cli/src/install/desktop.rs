@@ -259,10 +259,8 @@ fn remove_windows_shortcut(id: &str) -> Result<(), String> {
     let programs =
         std::path::PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?)
             .join("Microsoft/Windows/Start Menu/Programs");
-    match std::fs::remove_file(programs.join(format!("{id}.lnk"))) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
-        _ => Ok(()),
-    }
+    sabine_runtime::remove_file_if_present(&programs.join(format!("{id}.lnk")))
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(target_os = "windows")]

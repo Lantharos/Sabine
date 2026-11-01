@@ -16,7 +16,7 @@ fn github_actions_updates() -> Option<AppUpdateConfig> {
     })
 }
 
-pub(super) fn resolve_updates(
+pub(crate) fn resolve_updates(
     section: Option<AppUpdatesSection>,
 ) -> Result<Option<AppUpdateConfig>, String> {
     let mut updates = match section {

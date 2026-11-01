@@ -1,6 +1,11 @@
-pub(super) mod artwork;
-pub(super) mod msi;
-pub(super) mod msi_actions;
+mod artwork;
+mod msi;
+mod msi_actions;
+pub(super) mod package;
+mod pe;
+pub(super) mod signing;
+
+pub(super) use pe::WindowsArchitecture;
 
 // ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
 //
@@ -8,12 +13,8 @@ pub(super) mod msi_actions;
 // running setup helper. Keep the per-user registry paths and payload inventory
 // aligned with uninstall; this is not a shell script with a wizard attached.
 
-use crate::{bundle::config::BundleApp, desktop::types::prog_id};
-use std::{
-    fs,
-    io::{Read, Seek, SeekFrom},
-    path::Path,
-};
+use crate::{desktop::types::prog_id, project::BundleApp};
+use std::{fs, path::Path};
 
 pub(super) fn nsis_script(
     app: &BundleApp,
@@ -28,14 +29,8 @@ pub(super) fn nsis_script(
     let id = escape(&app.id);
     let executable = escape(executable);
     let uninstall_files = uninstall_commands(&source, &source)?;
-    let mut files = payload_files(&source, &source)?;
-    files.push("Uninstall.exe".into());
-    fs::write(
-        source.join(".sabine-install.json"),
-        serde_json::to_vec(&serde_json::json!({"id": app.id, "files": files}))
-            .map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    sabine_service::write_install_inventory(&source, &app.id, &["Uninstall.exe"])
+        .map_err(|error| error.to_string())?;
     let icon = icon
         .map(|path| {
             format!(
@@ -260,32 +255,6 @@ document_types_kept:
     (register, unregister)
 }
 
-fn payload_files(root: &Path, directory: &Path) -> Result<Vec<String>, String> {
-    let mut files = Vec::new();
-    for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let path = entry.path();
-        if entry
-            .file_type()
-            .map_err(|error| error.to_string())?
-            .is_dir()
-        {
-            files.extend(payload_files(root, &path)?);
-        } else {
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|error| error.to_string())?
-                .to_string_lossy()
-                .replace('\\', "/");
-            if relative != ".sabine-install.json" && relative != "Uninstall.exe" {
-                files.push(relative);
-            }
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
 fn uninstall_commands(root: &Path, directory: &Path) -> Result<String, String> {
     let mut entries = fs::read_dir(directory)
         .map_err(|error| error.to_string())?
@@ -322,32 +291,4 @@ fn escape(value: &str) -> String {
         .replace('"', "$\\\"")
         .replace('\r', "$\\r")
         .replace('\n', "$\\n")
-}
-
-pub(super) fn architecture(binary: &Path) -> Result<&'static str, String> {
-    let mut file = fs::File::open(binary).map_err(|error| error.to_string())?;
-    let mut dos = [0_u8; 64];
-    file.read_exact(&mut dos)
-        .map_err(|error| error.to_string())?;
-    if &dos[..2] != b"MZ" {
-        return Err("Windows packages require a PE executable".into());
-    }
-    let offset = u32::from_le_bytes(dos[60..64].try_into().unwrap());
-    file.seek(SeekFrom::Start(u64::from(offset)))
-        .map_err(|error| error.to_string())?;
-    let mut pe = [0_u8; 26];
-    file.read_exact(&mut pe)
-        .map_err(|error| error.to_string())?;
-    if &pe[..4] != b"PE\0\0" {
-        return Err("Windows executable has an invalid PE signature".into());
-    }
-    let characteristics = u16::from_le_bytes([pe[22], pe[23]]);
-    if characteristics & 0x2002 != 0x0002 || pe[24..26] != [0x0b, 0x02] {
-        return Err("Windows packages require a 64-bit PE application executable".into());
-    }
-    match u16::from_le_bytes([pe[4], pe[5]]) {
-        0x8664 => Ok("x64"),
-        0xaa64 => Ok("ARM64"),
-        _ => Err("Windows packages require an x86_64 or ARM64 executable".into()),
-    }
 }

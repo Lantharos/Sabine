@@ -3,7 +3,7 @@
 
 use std::io;
 #[cfg(unix)]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[cfg(target_os = "linux")]
 pub fn app_autostart_path(id: &str) -> io::Result<PathBuf> {
@@ -30,7 +30,7 @@ pub const APP_AUTOSTART_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\
 
 pub fn remove_app_autostart(id: &str) -> io::Result<()> {
     #[cfg(target_os = "linux")]
-    remove_file(&app_autostart_path(id)?)?;
+    sabine_runtime::remove_file_if_present(&app_autostart_path(id)?)?;
     #[cfg(target_os = "macos")]
     {
         let service = format!(
@@ -43,17 +43,9 @@ pub fn remove_app_autostart(id: &str) -> io::Result<()> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-        remove_file(&app_autostart_path(id)?)?;
+        sabine_runtime::remove_file_if_present(&app_autostart_path(id)?)?;
     }
     #[cfg(windows)]
     crate::windows_registry::delete_current_user_value(APP_AUTOSTART_KEY, id)?;
     Ok(())
-}
-
-#[cfg(unix)]
-fn remove_file(path: &Path) -> io::Result<()> {
-    match std::fs::remove_file(path) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
-        _ => Ok(()),
-    }
 }

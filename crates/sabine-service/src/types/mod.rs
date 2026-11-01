@@ -33,8 +33,8 @@ pub enum ServiceError {
     InvalidManifest(String),
     #[error("app `{0}` is not registered")]
     AppNotFound(String),
-    #[error("{message}")]
-    IncompatibleApp { app_id: String, message: String },
+    #[error("{0}")]
+    IncompatibleApp(String),
     #[error("runtime operation failed: {0}")]
     Runtime(#[from] sabine_runtime::RuntimeError),
     #[error("app update failed: {0}")]

@@ -1,12 +1,9 @@
-use crate::{
-    SabineVersion, ServiceResult, SystemCompatibility, UPDATE_SOAK, app::registry::replace_file,
-};
-use sabine_runtime::sabine_data_dir;
+use crate::{SabineVersion, ServiceResult, SystemCompatibility, UPDATE_SOAK};
+use sabine_runtime::{sabine_data_dir, write_json_atomic};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -17,9 +14,7 @@ pub(super) struct SystemInstallationState {
     pub(super) schema: u32,
     pub(super) active: String,
     pub(super) previous: Option<String>,
-    #[serde(default)]
     pub(super) compatibility: SystemCompatibility,
-    #[serde(default)]
     pub(super) previous_compatibility: Option<SystemCompatibility>,
 }
 
@@ -91,15 +86,7 @@ pub(super) fn write_installation_state_in(
     root: &Path,
     state: &SystemInstallationState,
 ) -> ServiceResult<()> {
-    let path = root.join(INSTALLATION_STATE);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension("new");
-    let mut file = fs::File::create(&temporary)?;
-    file.write_all(&serde_json::to_vec_pretty(state).expect("system state is serializable"))?;
-    file.sync_all()?;
-    replace_file(&temporary, &path)?;
+    write_json_atomic(&root.join(INSTALLATION_STATE), state)?;
     #[cfg(target_os = "linux")]
     link_active_version(root, &state.active)?;
     Ok(())
@@ -111,7 +98,7 @@ fn link_active_version(root: &Path, version: &str) -> ServiceResult<()> {
     let temporary = link.with_extension("new");
     let _ = fs::remove_file(&temporary);
     std::os::unix::fs::symlink(Path::new("versions").join(version), &temporary)?;
-    replace_file(&temporary, &link)?;
+    sabine_runtime::replace_file(&temporary, &link)?;
     Ok(())
 }
 
@@ -144,24 +131,12 @@ pub(super) fn prune_system_versions_in(
     Ok(())
 }
 
-pub(super) fn normalized_state_compatibility(
-    state: &SystemInstallationState,
-) -> SystemCompatibility {
-    if state.compatibility.build == 0 {
-        compatibility_for_version(&state.active)
-    } else {
-        state.compatibility
-    }
-}
-
-pub(super) fn compatibility_for_version(version: &str) -> SystemCompatibility {
-    SabineVersion::parse(version)
-        .map(|version| SystemCompatibility {
-            major: version.major,
-            build: version.build,
-            minimum_app_build: 1,
-        })
-        .unwrap_or_default()
+pub(super) fn compatibility_for_version(version: &str) -> Option<SystemCompatibility> {
+    SabineVersion::parse(version).map(|version| SystemCompatibility {
+        major: version.major,
+        build: version.build,
+        minimum_app_build: 1,
+    })
 }
 
 fn update_failures_path() -> PathBuf {
@@ -176,16 +151,7 @@ fn load_update_failures() -> SystemUpdateFailures {
 }
 
 fn save_update_failures(failures: &SystemUpdateFailures) -> ServiceResult<()> {
-    let path = update_failures_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension("new");
-    let mut file = fs::File::create(&temporary)?;
-    file.write_all(&serde_json::to_vec_pretty(failures).expect("failure state is serializable"))?;
-    file.sync_all()?;
-    replace_file(&temporary, &path)?;
-    Ok(())
+    Ok(write_json_atomic(&update_failures_path(), failures)?)
 }
 
 pub(super) fn record_system_failure(version: &str) -> ServiceResult<()> {
@@ -245,7 +211,7 @@ mod tests {
                     schema: 1,
                     active: version.to_string(),
                     previous: None,
-                    compatibility: compatibility_for_version(version),
+                    compatibility: compatibility_for_version(version).unwrap(),
                     previous_compatibility: None,
                 },
             )

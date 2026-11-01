@@ -1,3 +1,4 @@
+pub(crate) mod http;
 pub(crate) mod transfer;
 
 use std::{
@@ -6,7 +7,7 @@ use std::{
 };
 
 use serde::Deserialize;
-use sha1::{Digest, Sha1};
+use sha1::Sha1;
 
 use crate::discovery::paths::runtime_version_path;
 use crate::discovery::version::{
@@ -36,22 +37,33 @@ pub(crate) fn download_file(
     })
 }
 
+/// Downloads `url` beside `destination` and moves it into place once complete,
+/// so `destination` never holds a partial file.
+pub fn download_to(
+    url: &str,
+    destination: &Path,
+    expected_size: Option<u64>,
+    max_size: u64,
+    progress: &mut impl FnMut(transfer::DownloadProgress),
+) -> Result<(), RuntimeError> {
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temporary = destination.with_extension("download");
+    transfer::download_file(url, &temporary, expected_size, max_size, progress)?;
+    crate::replace_file(&temporary, destination)?;
+    Ok(())
+}
+
 pub const DEFAULT_CEF_INDEX_URL: &str = "https://cef-builds.spotifycdn.com/index.json";
 
+/// The CEF build index lists every build of every platform, past ten megabytes.
+const CEF_INDEX_LIMIT: u64 = 64 * 1024 * 1024;
+
 pub(crate) fn fetch_cef_index(index_url: &str) -> Result<CefIndex, RuntimeError> {
-    let mut response = ureq::get(index_url)
-        .config()
-        .timeout_global(Some(std::time::Duration::from_secs(60)))
-        .timeout_connect(Some(std::time::Duration::from_secs(15)))
-        .build()
-        .call()
-        .map_err(|error| RuntimeError::InstallationFailed(error.to_string()))?;
-    let output = response
-        .body_mut()
-        .read_to_vec()
-        .map_err(|error| RuntimeError::InstallationFailed(error.to_string()))?;
-    serde_json::from_slice(&output)
-        .map_err(|error| RuntimeError::InstallationFailed(error.to_string()))
+    let index = http::fetch_bytes(index_url, CEF_INDEX_LIMIT)?;
+    serde_json::from_slice(&index)
+        .map_err(|error| RuntimeError::InstallationFailed(format!("invalid CEF index: {error}")))
 }
 
 pub(crate) fn archive_url(index_url: &str, archive_name: &str) -> String {
@@ -71,21 +83,12 @@ pub(crate) fn verify_sha1_with_progress(
     expected: &str,
     progress: &mut impl FnMut(RuntimeInstallProgress),
 ) -> Result<(), RuntimeError> {
-    let metadata = std::fs::metadata(path)?;
-    let total = metadata.len().max(1);
-    let mut file = std::fs::File::open(path)?;
-    let mut hasher = Sha1::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let total = std::fs::metadata(path)?.len().max(1);
     let mut read_total = 0_u64;
     let mut last_report = std::time::Instant::now()
         .checked_sub(std::time::Duration::from_secs(1))
         .unwrap_or_else(std::time::Instant::now);
-    loop {
-        let read = std::io::Read::read(&mut file, &mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
+    let actual = crate::digest::digest_reader::<Sha1>(std::fs::File::open(path)?, |read| {
         read_total = read_total.saturating_add(read as u64);
         if last_report.elapsed() >= std::time::Duration::from_millis(100) {
             let portion = (read_total as f32 / total as f32).clamp(0.0, 1.0);
@@ -96,12 +99,7 @@ pub(crate) fn verify_sha1_with_progress(
             ));
             last_report = std::time::Instant::now();
         }
-    }
-    let actual = hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    })?;
     actual
         .eq_ignore_ascii_case(expected)
         .then_some(())
@@ -133,7 +131,9 @@ pub(crate) fn first_extracted_runtime_dir(work_dir: &Path) -> Option<PathBuf> {
         })
 }
 
-pub fn latest_install_plan(config: &RuntimeConfig) -> Result<RuntimeInstallPlan, RuntimeError> {
+pub(crate) fn latest_install_plan(
+    config: &RuntimeConfig,
+) -> Result<RuntimeInstallPlan, RuntimeError> {
     let platform = cef_platform_key().ok_or_else(|| {
         RuntimeError::InstallationFailed("unsupported OS or CPU architecture for CEF".to_string())
     })?;
@@ -186,7 +186,6 @@ pub fn latest_install_plan(config: &RuntimeConfig) -> Result<RuntimeInstallPlan,
     let install_dir = runtime_version_path(&version.cef_version);
     Ok(RuntimeInstallPlan {
         version: version.cef_version.clone(),
-        platform: platform.to_string(),
         archive_name: file.name.clone(),
         url: archive_url(index_url, &file.name),
         sha1: file.sha1.clone(),

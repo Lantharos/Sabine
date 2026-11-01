@@ -34,10 +34,6 @@ use crate::types::{
 const INSTALL_LOCK_TIMEOUT: Duration = Duration::from_secs(600);
 const INSTALL_LOCK_WAIT_HEARTBEAT: Duration = Duration::from_secs(3);
 
-pub fn install_user_runtime(config: &RuntimeConfig) -> Result<RuntimeInfo, RuntimeError> {
-    install_user_runtime_with_progress(config, |_| {})
-}
-
 pub fn install_user_runtime_with_progress(
     config: &RuntimeConfig,
     progress: impl FnMut(RuntimeInstallProgress),
@@ -78,6 +74,14 @@ fn install_user_runtime_inner(
     let plan = latest_install_plan(config)?;
     let unusable_marker = plan.install_dir.join(".sabine-unusable");
     if unusable_marker.is_file() {
+        if let Ok(runtime) = resolve_runtime(config) {
+            progress(RuntimeInstallProgress::new(
+                RuntimeInstallStep::Complete,
+                Some(1.0),
+                "Runtime ready",
+            ));
+            return Ok(runtime);
+        }
         let reason = std::fs::read_to_string(&unusable_marker)
             .unwrap_or_else(|_| "the runtime failed its health probe".to_string());
         return Err(RuntimeError::InstallationFailed(format!(

@@ -92,29 +92,10 @@ jobs:
         shell: pwsh
         run: |
           $suffix = if ($IsWindows) { ".exe" } else { "" }
-          New-Item -ItemType Directory -Force "release/system"
-          Copy-Item "target/release/sabine-service$suffix" "release/system/"
-          Copy-Item "target/release/sabine-service-daemon$suffix" "release/system/"
-          if ($IsMacOS) {
-            if ($env:SABINE_HOST_PATH -notmatch '^(.+\.app)(?:[/\\].*)?$') {
-              throw "macOS Sabine host is not inside an app bundle"
-            }
-            $hostBundle = $Matches[1]
-            if (-not (Test-Path -LiteralPath $hostBundle -PathType Container)) {
-              throw "macOS Sabine host app bundle does not exist"
-            }
-            Copy-Item -LiteralPath $hostBundle "release/system/" -Recurse
-            $stagedHostBundle = "release/system/sabine-host.app"
-            $env:SABINE_HOST_PATH = (Resolve-Path "$stagedHostBundle/Contents/MacOS/sabine-host").Path
-          } else {
-            Copy-Item $env:SABINE_HOST_PATH "release/system/"
-            if ($IsWindows) {
-              Copy-Item ([IO.Path]::ChangeExtension($env:SABINE_HOST_PATH, '.dll')) "release/system/"
-              Copy-Item (Join-Path (Split-Path $env:SABINE_HOST_PATH) 'chrome_elf.dll') "release/system/"
-            }
-            $env:SABINE_HOST_PATH = (Resolve-Path "release/system/sabine-host$suffix").Path
-          }
-          "SABINE_HOST_PATH=$env:SABINE_HOST_PATH" >> $env:GITHUB_ENV
+          & "target/release/sabine$suffix" system-release-stage --service "target/release/sabine-service$suffix" --host $env:SABINE_HOST_PATH --output release/system
+          if ($LASTEXITCODE -ne 0) { throw 'Sabine system staging failed' }
+          $stagedHost = if ($IsMacOS) { 'release/system/sabine-host.app/Contents/MacOS/sabine-host' } else { "release/system/sabine-host$suffix" }
+          "SABINE_HOST_PATH=$((Resolve-Path $stagedHost).Path)" >> $env:GITHUB_ENV
           Copy-Item "target/release/sabine$suffix" "release/"
       - name: Permit the staged Linux host sandbox under AppArmor
         if: runner.os == 'Linux'

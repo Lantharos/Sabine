@@ -1,4 +1,4 @@
-use super::{BundleFormat, BundleOptions, prepare_bundle};
+use super::{BuildTarget, BundleOptions, prepare_bundle};
 use crate::install::{
     desktop,
     source::{InstallOptions, SourceApp},
@@ -10,16 +10,9 @@ pub fn install_bundle(
     env_files: Vec<PathBuf>,
 ) -> Result<ExitCode, String> {
     let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let target = if cfg!(windows) {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "portable"
-    };
     let (app, format, staged) = prepare_bundle(BundleOptions {
         source: options.source,
-        target: target.into(),
+        target: "portable".into(),
         out: temporary.path().to_path_buf(),
         release: true,
         no_build: false,
@@ -38,12 +31,13 @@ pub fn install_bundle(
     })?;
     let service = sabine_service::SabineService::default();
     let directory = service.root().join("apps").join(&app.id);
-    let release = if format == BundleFormat::Macos {
+    let macos = format.target() == BuildTarget::Macos;
+    let release = if macos {
         directory.join("install").join(format!("{}.app", app.id))
     } else {
         directory.join("install")
     };
-    let payload = if format == BundleFormat::Macos {
+    let payload = if macos {
         staged.app_dir.as_path()
     } else {
         staged
@@ -51,7 +45,8 @@ pub fn install_bundle(
             .parent()
             .ok_or("staged binary has no directory")?
     };
-    write_inventory(payload, &app.id)?;
+    sabine_service::write_install_inventory(payload, &app.id, &[])
+        .map_err(|error| error.to_string())?;
     let binary = release.join(
         staged
             .binary
@@ -114,7 +109,7 @@ pub fn install_bundle(
     )
     .map_err(|error| error.to_string())?;
     if options.desktop {
-        if format == BundleFormat::Macos {
+        if macos {
             desktop::install_macos_bundle(&desktop_app.id, &release, desktop_app.listing.listed)?;
         } else {
             desktop::install_entry(&desktop_app, &binary)?;
@@ -130,34 +125,4 @@ pub fn install_bundle(
         binary.display()
     );
     Ok(ExitCode::SUCCESS)
-}
-
-fn write_inventory(root: &std::path::Path, id: &str) -> Result<(), String> {
-    let mut files = Vec::new();
-    let mut directories = vec![root.to_path_buf()];
-    while let Some(directory) = directories.pop() {
-        for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
-            let entry = entry.map_err(|error| error.to_string())?;
-            let path = entry.path();
-            if entry
-                .file_type()
-                .map_err(|error| error.to_string())?
-                .is_dir()
-            {
-                directories.push(path);
-            } else {
-                files.push(
-                    path.strip_prefix(root)
-                        .map_err(|error| error.to_string())?
-                        .to_path_buf(),
-                );
-            }
-        }
-    }
-    fs::write(
-        root.join(".sabine-install.json"),
-        serde_json::to_vec(&serde_json::json!({ "id": id, "files": files }))
-            .map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())
 }

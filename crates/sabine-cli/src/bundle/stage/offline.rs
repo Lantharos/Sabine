@@ -1,22 +1,17 @@
-use std::{fs, io, path::Path};
+use std::path::Path;
 
-use super::{BundleFormat, StagedBundle, copy_binary, copy_dir_recursive};
+use super::{BuildTarget, BundleFormat, StagedBundle};
+use crate::bundle::{linux, windows::WindowsArchitecture};
 
 pub(super) fn validate_platform(format: BundleFormat, binary: &Path) -> Result<(), String> {
-    let operating_system = match format {
-        BundleFormat::Macos | BundleFormat::Dmg => "macos",
-        BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe => "windows",
-        _ => "linux",
-    };
-    if operating_system != std::env::consts::OS {
+    let target = format.target();
+    if target.as_str() != std::env::consts::OS {
         return Err("offline bundles must be built on their target operating system".into());
     }
-    let architecture = match format {
-        BundleFormat::Macos | BundleFormat::Dmg => "aarch64",
-        BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe => {
-            windows_architecture(binary)?
-        }
-        _ => super::super::linux::package::architecture(binary)?.1,
+    let architecture = match target {
+        BuildTarget::Macos => "aarch64",
+        BuildTarget::Windows => WindowsArchitecture::of(binary)?.rust_name(),
+        BuildTarget::Linux => linux::package::architecture(binary)?.1,
     };
     if architecture != std::env::consts::ARCH {
         return Err(format!(
@@ -26,91 +21,33 @@ pub(super) fn validate_platform(format: BundleFormat, binary: &Path) -> Result<(
     Ok(())
 }
 
-fn windows_architecture(binary: &Path) -> Result<&'static str, String> {
-    use std::io::{Read, Seek, SeekFrom};
-    let inspect = || -> io::Result<[u8; 6]> {
-        let mut file = fs::File::open(binary)?;
-        let mut dos = [0u8; 64];
-        file.read_exact(&mut dos)?;
-        if &dos[..2] != b"MZ" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "missing DOS header",
-            ));
-        }
-        let offset = u32::from_le_bytes(dos[60..64].try_into().unwrap());
-        file.seek(SeekFrom::Start(u64::from(offset)))?;
-        let mut pe = [0u8; 6];
-        file.read_exact(&mut pe)?;
-        Ok(pe)
-    };
-    let pe = inspect().map_err(|error| format!("could not inspect Windows executable: {error}"))?;
-    if &pe[..4] != b"PE\0\0" {
-        return Err("Windows bundles require a PE executable".into());
-    }
-    match u16::from_le_bytes([pe[4], pe[5]]) {
-        0x8664 => Ok("x86_64"),
-        0xaa64 => Ok("aarch64"),
-        _ => Err("Windows bundles support x86_64 and aarch64".into()),
-    }
-}
-
+/// Ships this machine's Sabine service, host and CEF runtime inside the
+/// bundle, so the app starts without downloading them.
 pub(super) fn stage_offline_runtime(
     format: BundleFormat,
     staged: &StagedBundle,
 ) -> Result<(), String> {
-    let runtime = sabine_runtime::ensure_runtime(&sabine_runtime::RuntimeConfig::default())
+    let runtime = crate::runtime::ensure_runtime()
         .map_err(|error| format!("could not prepare offline CEF runtime: {error}"))?;
     let host = sabine_host::ensure_host(runtime.location.path())?;
     let service = sabine_service::ensure_service_executable(|_| {})
         .map_err(|error| format!("could not prepare offline Sabine service: {error}"))?;
-    let daemon = sabine_service::service_daemon_path(&service);
     let binary_dir = staged
         .binary
         .parent()
         .ok_or("offline application has no binary directory")?;
-    let manifest_dir = match format {
-        BundleFormat::Macos | BundleFormat::Dmg => staged.app_dir.join("Contents/Resources"),
+    sabine_service::stage_system_files(binary_dir, &service, &host)
+        .map_err(|error| format!("could not stage the offline Sabine service: {error}"))?;
+    let manifest_dir = match format.target() {
+        BuildTarget::Macos => staged.app_dir.join("Contents/Resources"),
         _ => binary_dir.join("resources"),
     };
-    fs::create_dir_all(binary_dir).map_err(|error| error.to_string())?;
-    for (source, name) in [
-        (&service, service.file_name().unwrap_or_default()),
-        (&daemon, daemon.file_name().unwrap_or_default()),
-    ] {
-        copy_binary(source, &binary_dir.join(name))?;
-    }
-    if cfg!(target_os = "macos") {
-        let host_bundle = host
-            .ancestors()
-            .find(|path| path.extension().is_some_and(|extension| extension == "app"))
-            .ok_or_else(|| "macOS Sabine host is not inside an app bundle".to_string())?;
-        copy_dir_recursive(host_bundle, &binary_dir.join("sabine-host.app"))
-            .map_err(|error| format!("could not stage macOS Sabine host: {error}"))?;
-    } else {
-        copy_binary(
-            &host,
-            &binary_dir.join(host.file_name().unwrap_or_default()),
-        )?;
-        if cfg!(windows) {
-            copy_binary(
-                &host.with_extension("dll"),
-                &binary_dir.join("sabine-host.dll"),
-            )?;
-            copy_binary(
-                &host.with_file_name("chrome_elf.dll"),
-                &binary_dir.join("chrome_elf.dll"),
-            )?;
-        }
-    }
     let runtime_name = runtime
         .location
         .path()
         .file_name()
         .ok_or_else(|| "offline runtime has no directory name".to_string())?;
-    sabine_runtime::copy_runtime_payload(
-        runtime.location.path(),
-        &manifest_dir.join("runtimes/cef").join(runtime_name),
-    )
-    .map_err(|error| format!("could not stage offline CEF runtime: {error}"))
+    let destination = manifest_dir.join("runtimes/cef").join(runtime_name);
+    sabine_runtime::copy_runtime_payload(runtime.location.path(), &destination)
+        .map_err(|error| format!("could not stage offline CEF runtime: {error}"))
 }

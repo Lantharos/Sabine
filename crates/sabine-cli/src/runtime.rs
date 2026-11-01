@@ -1,93 +1,88 @@
 use std::process::ExitCode;
 
 use sabine_runtime::{
-    ProgressLog, RuntimeConfig, RuntimeError, detect_runtime, latest_install_plan,
+    ProgressLog, RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, detect_runtime,
     prune_user_runtimes, remove_user_runtime_version, resolve_runtime,
-    update_user_runtime_with_progress,
 };
+use sabine_service::SabineService;
 
+#[cfg(target_os = "linux")]
 mod sandbox;
 mod system;
 
 pub enum RuntimeCommand {
     Prepare,
+    #[cfg(target_os = "linux")]
     SandboxProfile,
-    List { json: bool },
+    List {
+        json: bool,
+    },
     Install,
-    InstallSystemWide { root: Option<std::path::PathBuf> },
-    Remove { version: Option<String> },
-    Prune { keep: usize },
-    Doctor { json: bool },
+    InstallSystemWide {
+        root: Option<std::path::PathBuf>,
+    },
+    Remove {
+        version: String,
+    },
+    Prune {
+        keep: usize,
+    },
+    Doctor {
+        json: bool,
+    },
 }
 
 pub fn run_runtime(command: RuntimeCommand) -> ExitCode {
-    match command {
-        RuntimeCommand::SandboxProfile => match sandbox::profile() {
-            Ok(profile) => {
-                print!("{profile}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
-        RuntimeCommand::Prepare => match ensure_runtime_ready() {
-            Ok(host) => {
-                println!("{}", host.display());
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
-        RuntimeCommand::List { json } => list_runtimes(json),
+    let result = match command {
+        #[cfg(target_os = "linux")]
+        RuntimeCommand::SandboxProfile => sandbox::profile().map(|profile| print!("{profile}")),
+        RuntimeCommand::Prepare => {
+            ensure_runtime_ready().map(|host| println!("{}", host.display()))
+        }
+        RuntimeCommand::List { json } => return list_runtimes(json),
         RuntimeCommand::Install => install_runtime(),
-        RuntimeCommand::InstallSystemWide { root } => match system::install(root.as_deref()) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
-        RuntimeCommand::Remove { version } => remove_runtime(version.as_deref()),
-        RuntimeCommand::Prune { keep } => prune_runtime(keep),
-        RuntimeCommand::Doctor { json } => doctor_runtime(json),
+        RuntimeCommand::InstallSystemWide { root } => system::install(root.as_deref()),
+        RuntimeCommand::Remove { version } => return remove_runtime(&version),
+        RuntimeCommand::Prune { keep } => return prune_runtime(keep),
+        RuntimeCommand::Doctor { json } => return doctor_runtime(json),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
     }
 }
 
+/// The shared CEF runtime, downloaded when this machine has none.
+pub(crate) fn ensure_runtime() -> Result<RuntimeInfo, String> {
+    if resolve_runtime(&RuntimeConfig::default()).is_err() {
+        eprintln!("sabine: no CEF runtime found; installing the shared runtime…");
+    }
+    SabineService::default()
+        .ensure_runtime_with_progress(progress_printer())
+        .map_err(|error| {
+            format!(
+                "failed to prepare the Sabine runtime: {error}\ninstall it with `sabine runtime install`"
+            )
+        })
+}
+
+/// The CEF host for the shared runtime, which is installed first when missing.
 pub fn ensure_runtime_ready() -> Result<std::path::PathBuf, String> {
-    sabine_service::retry_quarantined_runtimes()
-        .map_err(|error| format!("failed to reconsider quarantined CEF runtimes: {error}"))?;
-    let config = RuntimeConfig::default();
-    let runtime = match resolve_runtime(&config) {
-        Ok(runtime) => runtime,
-        Err(RuntimeError::NotFound(_)) if config.allow_user_install => {
-            eprintln!("sabine: no CEF runtime found; installing shared runtime…");
-            install_default_runtime(&config)?
-        }
-        Err(error) => {
-            return Err(format!(
-                "failed to resolve the Sabine runtime: {error}\ninstall it with `sabine runtime install`"
-            ));
-        }
-    };
+    let runtime = ensure_runtime()?;
     sabine_host::ensure_host(runtime.location.path())
         .map_err(|error| format!("failed to prepare the Sabine CEF host: {error}"))
 }
 
-fn install_default_runtime(config: &RuntimeConfig) -> Result<sabine_runtime::RuntimeInfo, String> {
-    let plan = latest_install_plan(config)
-        .map_err(|error| format!("failed to plan runtime install: {error}"))?;
-    eprintln!("sabine: installing CEF runtime {}…", plan.version);
+fn progress_printer() -> impl FnMut(RuntimeInstallProgress) {
     let mut log = ProgressLog::default();
-    update_user_runtime_with_progress(config, |progress| {
+    move |progress| {
         if let Some(line) = log.line(&progress.message, progress.fraction) {
             eprintln!("sabine: {line}");
         }
-    })
-    .map_err(|error| format!("failed to install runtime: {error}"))
+    }
 }
 
 fn list_runtimes(json: bool) -> ExitCode {
@@ -140,63 +135,31 @@ fn list_runtimes(json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn install_runtime() -> ExitCode {
-    if let Err(error) = sabine_service::retry_quarantined_runtimes() {
-        eprintln!("failed to reconsider quarantined CEF runtimes: {error}");
-        return ExitCode::from(1);
-    }
-    let config = RuntimeConfig::default();
-
-    let plan = match latest_install_plan(&config) {
-        Ok(plan) => plan,
-        Err(error) => {
-            eprintln!("failed to plan runtime install: {error}");
-            return ExitCode::from(1);
-        }
-    };
-
-    if let Ok(runtime) = resolve_runtime(&config)
-        && runtime.version == plan.version
-    {
+/// Installs the newest CEF runtime and checks that Chromium starts on it.
+fn install_runtime() -> Result<(), String> {
+    let previous = resolve_runtime(&RuntimeConfig::default())
+        .ok()
+        .map(|runtime| runtime.version);
+    let runtime = SabineService::default()
+        .update_runtime_with_progress(progress_printer())
+        .map_err(|error| format!("failed to install runtime: {error}"))?;
+    if previous.as_deref() == Some(runtime.version.as_str()) {
         println!(
             "Latest CEF runtime {} is already installed at {}.",
             runtime.version,
             runtime.location.path().display()
         );
-        return ExitCode::SUCCESS;
+    } else {
+        println!(
+            "Installed CEF runtime {} at {}.",
+            runtime.version,
+            runtime.location.path().display()
+        );
     }
-
-    println!("Installing CEF runtime {}.", plan.version);
-    println!("Download: {}", plan.url);
-    println!("Destination: {}", plan.install_dir.display());
-
-    let mut log = ProgressLog::default();
-    match update_user_runtime_with_progress(&config, |progress| {
-        if let Some(line) = log.line(&progress.message, progress.fraction) {
-            eprintln!("sabine: {line}");
-        }
-    }) {
-        Ok(runtime) => {
-            println!(
-                "Installed CEF runtime {} at {}.",
-                runtime.version,
-                runtime.location.path().display()
-            );
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("failed to install runtime: {error}");
-            ExitCode::from(1)
-        }
-    }
+    Ok(())
 }
 
-fn remove_runtime(version: Option<&str>) -> ExitCode {
-    let Some(version) = version else {
-        eprintln!("specify a version; run `sabine runtime list` to see installed versions");
-        return ExitCode::from(1);
-    };
-
+fn remove_runtime(version: &str) -> ExitCode {
     match remove_user_runtime_version(version) {
         Ok(true) => {
             println!("Removed CEF runtime {version}.");

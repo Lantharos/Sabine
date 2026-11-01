@@ -1,5 +1,6 @@
 use std::{
-    fs, io,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -10,9 +11,6 @@ use crate::{ServiceResult, install::stable_daemon_path};
 pub(super) const UNIT: &str = "sabine.service";
 const DESCRIPTION: &str = "Sabine runtime and app service";
 const SYSTEM_UNIT_DIR: &str = "/usr/lib/systemd/user";
-/// Also points a unit an older Sabine wrote for a user at the active daemon,
-/// which then retires that unit.
-const SYSTEM_EXEC_DROP_IN: &str = "sabine.service.d/10-system-daemon.conf";
 
 pub(super) fn system_unit_installed() -> bool {
     Path::new(SYSTEM_UNIT_DIR).join(UNIT).is_file()
@@ -28,9 +26,6 @@ pub fn install_system_unit(root: Option<&Path>) -> ServiceResult<()> {
     let exec = format!("ExecStart={}\n", systemd_quote(&daemon.to_string_lossy()));
     fs::create_dir_all(&units)?;
     fs::write(units.join(UNIT), service_contents(&exec))?;
-    let drop_in = units.join(SYSTEM_EXEC_DROP_IN);
-    fs::create_dir_all(drop_in.parent().expect("the drop-in has a folder"))?;
-    fs::write(drop_in, format!("[Service]\nExecStart=\n{exec}"))?;
     let wants = units.join("default.target.wants");
     fs::create_dir_all(&wants)?;
     let link = wants.join(UNIT);
@@ -92,13 +87,6 @@ pub(super) fn user_wants_path(config_home: &Path) -> PathBuf {
         .join(UNIT)
 }
 
-pub(super) fn remove_file(path: &Path) -> io::Result<()> {
-    match fs::remove_file(path) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
-        _ => Ok(()),
-    }
-}
-
 fn systemd_quote(value: &str) -> String {
     format!(
         "\"{}\"",
@@ -111,18 +99,25 @@ fn systemd_quote(value: &str) -> String {
     )
 }
 
-fn systemd_environment() -> String {
+/// The folders this user keeps Sabine's files in, when they moved them from
+/// the defaults, which the service manager would not pass on.
+pub(super) fn data_environment() -> impl Iterator<Item = (&'static str, OsString)> {
     ["XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"]
         .into_iter()
         .filter_map(|name| {
             std::env::var_os(name)
                 .filter(|value| !value.is_empty())
-                .map(|value| {
-                    format!(
-                        "Environment={}\n",
-                        systemd_quote(&format!("{name}={}", value.to_string_lossy()))
-                    )
-                })
+                .map(|value| (name, value))
+        })
+}
+
+fn systemd_environment() -> String {
+    data_environment()
+        .map(|(name, value)| {
+            format!(
+                "Environment={}\n",
+                systemd_quote(&format!("{name}={}", value.to_string_lossy()))
+            )
         })
         .collect()
 }

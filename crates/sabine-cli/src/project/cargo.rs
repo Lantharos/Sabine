@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-pub(super) struct CargoPackage {
+pub(crate) struct CargoPackage {
     package: toml::Table,
     workspace: toml::Table,
 }

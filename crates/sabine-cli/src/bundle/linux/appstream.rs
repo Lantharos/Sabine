@@ -1,4 +1,4 @@
-use crate::bundle::config::BundleApp;
+use crate::project::BundleApp;
 
 /// AppStream metadata that lets software centers describe the app, written
 /// for apps that appear in launchers and name a homepage.

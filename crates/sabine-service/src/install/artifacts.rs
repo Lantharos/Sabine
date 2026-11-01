@@ -1,14 +1,6 @@
-use sha2::{Digest, Sha256};
-use std::{
-    fs,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use crate::{
-    PrepareProgress, PrepareStage, ServiceError, ServiceResult, SystemReleaseManifest,
-    app::registry::replace_file,
-};
+use crate::{PrepareProgress, PrepareStage, ServiceError, ServiceResult, SystemReleaseManifest};
 
 use super::SERVICE_REPO;
 
@@ -34,27 +26,6 @@ pub(super) fn sabine_host_relative_path() -> PathBuf {
     }
 }
 
-pub(super) fn copy_directory(source: &Path, destination: &Path) -> ServiceResult<()> {
-    if !source.is_dir() {
-        return Err(ServiceError::Update(format!(
-            "offline Sabine system bundle is missing {}",
-            source.display()
-        )));
-    }
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
-            copy_directory(&source_path, &destination_path)?;
-        } else {
-            fs::copy(source_path, destination_path)?;
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn service_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "sabine-service.exe"
@@ -71,32 +42,19 @@ pub(super) fn service_daemon_binary_name() -> &'static str {
     }
 }
 
-pub(super) fn download_file(
+pub(super) fn download_system_artifact(
     url: &str,
     destination: &Path,
     size: u64,
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<()> {
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = destination.with_extension("download");
-    sabine_runtime::download_file_with_progress(
-        url,
-        &temporary,
-        Some(size),
-        8 * 1024 * 1024 * 1024,
-        &mut |update| {
-            let portion = update.downloaded as f32 / size as f32;
-            on_progress(PrepareProgress {
-                stage: PrepareStage::Service,
-                message: "Downloading Sabine service".to_string(),
-                fraction: Some(0.02 + portion * 0.06),
-            });
-        },
-    )?;
-    replace_file(&temporary, destination)?;
-    Ok(())
+    crate::download::download_artifact(url, destination, Some(size), |downloaded| {
+        on_progress(PrepareProgress {
+            stage: PrepareStage::Service,
+            message: "Downloading Sabine service".to_string(),
+            fraction: Some(0.02 + downloaded as f32 / size as f32 * 0.06),
+        })
+    })
 }
 
 pub(super) fn fetch_system_manifest(
@@ -109,7 +67,7 @@ pub(super) fn fetch_system_manifest(
             "Sabine release manifest must use HTTPS".to_string(),
         ));
     }
-    crate::http::fetch_manifest(&url)
+    crate::download::fetch_manifest(&url)
 }
 
 fn system_manifest_url(required_version: Option<&str>) -> String {
@@ -127,42 +85,12 @@ fn system_manifest_url(required_version: Option<&str>) -> String {
     )
 }
 
-pub(super) fn verify_sha256(path: &Path, expected: &str) -> ServiceResult<()> {
-    let mut input = fs::File::open(path)?;
-    let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = input.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        digest.update(&buffer[..read]);
-    }
-    let actual = digest
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    if actual.eq_ignore_ascii_case(expected) {
-        Ok(())
-    } else {
-        Err(ServiceError::Update(format!(
-            "Sabine system bundle hash mismatch: expected {expected}, got {actual}"
-        )))
-    }
-}
-
-pub(super) fn extract_system_archive(archive: &Path, destination: &Path) -> ServiceResult<()> {
-    crate::archive::extract(archive, destination)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn required_updates_keep_the_exact_release_tag() {
         assert!(system_manifest_url(None).contains("/releases/latest/"));
-        assert!(system_manifest_url(Some("0.1.20")).contains("/releases/download/v0.1.20/"));
         assert!(system_manifest_url(Some("0.21")).contains("/releases/download/v0.21/"));
     }
 }

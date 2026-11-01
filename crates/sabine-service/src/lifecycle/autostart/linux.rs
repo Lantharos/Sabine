@@ -6,7 +6,7 @@ use std::{
 
 use super::run_checked;
 use super::systemd_unit::{
-    UNIT, is_sabine_user_unit, remove_file, system_unit_installed, user_unit_contents,
+    UNIT, data_environment, is_sabine_user_unit, system_unit_installed, user_unit_contents,
     user_unit_path, user_wants_path,
 };
 use crate::{
@@ -14,6 +14,7 @@ use crate::{
     app::desktop::{config_home, desktop_exec},
     identity::ICON_NAME,
 };
+use sabine_runtime::remove_file_if_present;
 
 const XDG_ENTRY: &str = "sabine-service.desktop";
 
@@ -23,11 +24,11 @@ const XDG_ENTRY: &str = "sabine-service.desktop";
 pub(super) fn install(_executable: &Path, daemon: &Path) -> ServiceResult<bool> {
     let config = config_home()?;
     if systemd_main_pid().is_none() {
-        remove_file(&user_unit_path(&config))?;
+        remove_file_if_present(&user_unit_path(&config))?;
         write_xdg_entry(daemon)?;
         return Ok(false);
     }
-    remove_file(&config.join("autostart").join(XDG_ENTRY))?;
+    remove_file_if_present(&config.join("autostart").join(XDG_ENTRY))?;
     if !system_unit_installed() {
         install_user_unit(daemon)?;
         return Ok(true);
@@ -51,7 +52,7 @@ pub(super) fn uninstall() -> ServiceResult<()> {
         fs::remove_file(user_unit_path(&config))?;
         let _ = run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]));
     }
-    remove_file(&config.join("autostart").join(XDG_ENTRY))?;
+    remove_file_if_present(&config.join("autostart").join(XDG_ENTRY))?;
     Ok(())
 }
 
@@ -72,6 +73,34 @@ pub(in crate::lifecycle) fn retire_shadowing_user_unit() -> ServiceResult<()> {
         fs::remove_file(wants)?;
     }
     run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))
+}
+
+/// Starts `program` in a systemd unit of its own when the daemon runs in one,
+/// so it outlives the daemon's unit stopping; otherwise as a plain process.
+pub(in crate::lifecycle) fn launch_outside_unit(
+    program: &Path,
+    arguments: &[String],
+) -> ServiceResult<()> {
+    if systemd_main_pid() != Some(std::process::id()) {
+        Command::new(program)
+            .args(arguments)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        return Ok(());
+    }
+    let mut command = Command::new("systemd-run");
+    command.args([
+        "--user",
+        "--collect",
+        "--quiet",
+        "--property=KillMode=process",
+    ]);
+    for (name, value) in data_environment() {
+        command.arg(format!("--setenv={name}={}", value.to_string_lossy()));
+    }
+    run_checked(command.arg("--").arg(program).args(arguments))
 }
 
 /// Whether the daemon the service manager supervises is `expected`. Without a

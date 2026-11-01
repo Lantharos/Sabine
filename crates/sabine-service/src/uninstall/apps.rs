@@ -25,7 +25,7 @@ pub(super) fn remove(service: &SabineService, app: &RegisteredApp) -> ServiceRes
 /// The name people know `app` by, telling a version in development apart
 /// from the installed one.
 pub(super) fn display_name(app: &RegisteredApp) -> String {
-    if app.manifest.id.ends_with(".dev") {
+    if crate::AppEnvironment::of(&app.manifest.id) == crate::AppEnvironment::Development {
         format!("{} (in development)", app.manifest.name)
     } else {
         app.manifest.name.clone()

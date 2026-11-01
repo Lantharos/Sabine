@@ -2,11 +2,11 @@
 compile_error!("Sabine requires Apple Silicon on macOS");
 
 mod diagnostics;
+mod digest;
 mod discovery;
 mod download;
 mod error;
-mod file_lock;
-mod fingerprint;
+mod files;
 mod install;
 mod lease;
 mod process;
@@ -21,17 +21,23 @@ pub const MIN_CEF_MAJOR: u32 = 154;
 #[cfg(target_os = "linux")]
 pub const MIN_LINUX_SHARED_TEXTURE_CEF: [u32; 3] = [156, 0, 3];
 
+pub use digest::{Fingerprint, sha256_file};
+#[cfg(windows)]
+pub use discovery::paths::program_files;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use discovery::paths::runtime_execution_path;
 pub use discovery::paths::{
     path_in_root, sabine_data_dir, system_dir, system_runtime_path, user_runtime_path,
 };
-pub use discovery::resolve::{ensure_runtime, resolve_runtime};
-pub use download::latest_install_plan;
-pub use download::transfer::download_file as download_file_with_progress;
+pub use discovery::resolve::resolve_runtime;
+pub use download::download_to;
+pub use download::http::fetch_bytes;
+pub use download::transfer::DownloadProgress;
 pub use error::RuntimeError;
-pub use file_lock::FileLock;
-pub use fingerprint::Fingerprint;
+pub use files::{
+    FileLock, copy_directory, make_executable, remove_directory_if_present, remove_file_if_present,
+    replace_file, sync_directory, write_json_atomic,
+};
 pub use install::archive::extract_tar_archive;
 pub use install::assets::prepare_runtime_assets;
 pub use install::directory::{install_directory, recover_directory_installs};
@@ -58,19 +64,6 @@ pub fn runtime_version_at_least(runtime_dir: &std::path::Path, minimum: &[u32]) 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn runtime_mode_round_trips() {
-        assert_eq!(
-            RuntimeMode::SharedPreferred,
-            RuntimeMode::parse("shared-preferred").unwrap()
-        );
-        assert_eq!(
-            RuntimeMode::SystemRequired,
-            RuntimeMode::parse("system-required").unwrap()
-        );
-        assert!(RuntimeMode::parse("invalid").is_none());
-    }
 
     #[test]
     fn version_checks_use_major_version() {

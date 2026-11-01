@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
+use crate::project::{WebSection, read_sabine_file};
 
 #[derive(Debug, Clone)]
 pub struct DevProject {
@@ -23,42 +23,14 @@ pub struct DevFrontend {
     pub package_manager: &'static str,
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct SabineFile {
-    #[serde(default)]
-    app: AppSection,
-    #[serde(default)]
-    web: WebSection,
-    sandbox: Option<sabine_service::SandboxSection>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct AppSection {
-    id: Option<String>,
-    cargo_manifest: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct WebSection {
-    root: Option<String>,
-    dev_url: Option<String>,
-    dev_port: Option<u16>,
-    dev_command: Option<String>,
-}
-
 pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
     let source_dir = absolute_path(source)?;
     let sabine_path = source_dir.join("Sabine.toml");
-    let sabine = if sabine_path.is_file() {
-        Some(read_sabine_file(&sabine_path)?)
-    } else {
-        None
-    };
-    let cargo_manifest = sabine
-        .as_ref()
-        .and_then(|file| file.app.cargo_manifest.as_ref())
-        .map(|path| source_dir.join(path))
-        .unwrap_or_else(|| source_dir.join("Cargo.toml"));
+    let mut sabine = read_sabine_file(&source_dir)?;
+    if let Some(sandbox) = sabine.sandbox.take() {
+        sandbox.resolve()?;
+    }
+    let cargo_manifest = sabine.cargo_manifest(&source_dir);
     if !cargo_manifest.is_file() {
         return Err(format!(
             "no Cargo.toml found at {} (looked from {})",
@@ -66,24 +38,18 @@ pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
             source_dir.display()
         ));
     }
-    let web = sabine.as_ref().map(|file| &file.web);
-    let frontend = resolve_frontend(&source_dir, web)?;
+    let frontend = resolve_frontend(&source_dir, &sabine.web)?;
     Ok(DevProject {
         source: source_dir,
-        app_id: sabine.as_ref().and_then(|file| file.app.id.clone()),
+        app_id: sabine.app.id,
         cargo_manifest,
         sabine_manifest: sabine_path.is_file().then_some(sabine_path),
         frontend,
     })
 }
 
-fn resolve_frontend(
-    source_dir: &Path,
-    web: Option<&WebSection>,
-) -> Result<Option<DevFrontend>, String> {
-    let configured_root = web
-        .and_then(|section| section.root.as_ref())
-        .map(|root| source_dir.join(root));
+fn resolve_frontend(source_dir: &Path, web: &WebSection) -> Result<Option<DevFrontend>, String> {
+    let configured_root = web.root.as_ref().map(|root| source_dir.join(root));
     let root = configured_root
         .filter(|root| root.join("package.json").is_file())
         .or_else(|| detect_package_root(source_dir));
@@ -100,19 +66,18 @@ fn resolve_frontend(
     };
     let package_manager = package_manager(&root, &package);
     let port = web
-        .and_then(|section| section.dev_port)
-        .or_else(|| {
-            web.and_then(|section| section.dev_url.as_deref())
-                .and_then(parse_localhost_port)
-        })
+        .dev_port
+        .or_else(|| web.dev_url.as_deref().and_then(parse_localhost_port))
         .or_else(|| detect_vite_port(&root))
         .unwrap_or(5173);
     let url = web
-        .and_then(|section| section.dev_url.clone())
+        .dev_url
+        .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| vite_dev_url(port));
     let command = web
-        .and_then(|section| section.dev_command.clone())
+        .dev_command
+        .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| format!("{package_manager} run {script} -- --port {port} --strictPort"));
     Ok(Some(DevFrontend {
@@ -225,16 +190,6 @@ fn read_package_json(path: &Path) -> Result<serde_json::Value, String> {
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
     serde_json::from_str(&text)
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))
-}
-
-fn read_sabine_file(path: &Path) -> Result<SabineFile, String> {
-    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let mut file: SabineFile = toml::from_str(&text)
-        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-    if let Some(sandbox) = file.sandbox.take() {
-        sandbox.resolve()?;
-    }
-    Ok(file)
 }
 
 fn absolute_path(path: &Path) -> Result<PathBuf, String> {

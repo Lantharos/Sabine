@@ -55,6 +55,75 @@ pub fn process_alive(pid: u32) -> bool {
     }
 }
 
+/// A process by its id and the moment it started, which together never repeat
+/// even when the system hands the id to a later process.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProcessIdentity {
+    pub pid: u32,
+    pub started: u64,
+}
+
+impl ProcessIdentity {
+    pub fn current() -> Option<Self> {
+        Self::of(std::process::id())
+    }
+
+    pub fn of(pid: u32) -> Option<Self> {
+        process_alive(pid).then_some(())?;
+        Some(Self {
+            pid,
+            started: process_start_time(pid)?,
+        })
+    }
+
+    pub fn is_running(self) -> bool {
+        Self::of(self.pid) == Some(self)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn process_start_time(pid: u32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let (_, fields) = stat.rsplit_once(')')?;
+    fields.split_whitespace().nth(19)?.parse().ok()
+}
+
+#[cfg(target_os = "macos")]
+fn process_start_time(pid: u32) -> Option<u64> {
+    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+    let written = unsafe {
+        libc::proc_pidinfo(
+            pid as libc::c_int,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            size,
+        )
+    };
+    (written == size).then_some(())?;
+    let info = unsafe { info.assume_init() };
+    Some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+}
+
+#[cfg(target_os = "windows")]
+fn process_start_time(pid: u32) -> Option<u64> {
+    use windows::Win32::{
+        Foundation::{CloseHandle, FILETIME},
+        System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    };
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    let result =
+        unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) };
+    let _ = unsafe { CloseHandle(process) };
+    result.ok()?;
+    Some(u64::from(created.dwHighDateTime) << 32 | u64::from(created.dwLowDateTime))
+}
+
 /// Finds an executable on `PATH`, honoring `PATHEXT` on Windows.
 pub fn find_program(name: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;

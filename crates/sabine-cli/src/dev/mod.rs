@@ -36,7 +36,7 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         let _ = runtime::ensure_runtime_ready()?;
     }
 
-    let environment = crate::environment::BuildEnvironment::load(
+    let environment = crate::project::environment::BuildEnvironment::load(
         &project.source,
         project
             .frontend
@@ -134,7 +134,7 @@ fn ensure_node_modules(frontend: &web_detect::DevFrontend) -> Result<(), String>
 
 fn spawn_frontend(
     frontend: &web_detect::DevFrontend,
-    environment: &crate::environment::BuildEnvironment,
+    environment: &crate::project::environment::BuildEnvironment,
 ) -> Result<ProcessTree, String> {
     let mut process = shell_command(&frontend.command);
     environment.apply(&mut process);
@@ -207,7 +207,7 @@ fn wait_for_port(
 fn run_cargo(
     project: &DevProject,
     options: &DevOptions,
-    environment: &crate::environment::BuildEnvironment,
+    environment: &crate::project::environment::BuildEnvironment,
     frontend: Option<&web_detect::DevFrontend>,
     mut frontend_process: Option<&mut ProcessTree>,
     interrupted: &AtomicBool,

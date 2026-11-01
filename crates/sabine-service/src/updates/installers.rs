@@ -1,11 +1,6 @@
-use sha2::{Digest, Sha256};
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use crate::app::registry::replace_file;
+use crate::download::{download_artifact, verify_sha256};
 use crate::types::{AppArtifact, AppArtifactKind, ServiceError, ServiceResult};
 
 pub(super) fn install_archive(
@@ -18,7 +13,7 @@ pub(super) fn install_archive(
     let downloads = root.join("downloads").join(id);
     std::fs::create_dir_all(&downloads)?;
     let archive = downloads.join(format!("{version}.archive"));
-    download_artifact(&artifact.url, &archive)?;
+    download_artifact(&artifact.url, &archive, None, |_| {})?;
     verify_sha256(&archive, &artifact.sha256)?;
     let parent = release_dir
         .parent()
@@ -76,7 +71,8 @@ pub(crate) fn validate_executable(path: &Path) -> ServiceResult<()> {
     #[cfg(windows)]
     {
         let mut signature = [0_u8; 2];
-        File::open(path)?.read_exact(&mut signature)?;
+        use std::io::Read;
+        std::fs::File::open(path)?.read_exact(&mut signature)?;
         if signature != *b"MZ" {
             return Err(ServiceError::Update(format!(
                 "app executable is not a Windows program: {}",
@@ -85,44 +81,6 @@ pub(crate) fn validate_executable(path: &Path) -> ServiceResult<()> {
         }
     }
     Ok(())
-}
-
-pub(super) fn download_artifact(url: &str, destination: &Path) -> ServiceResult<()> {
-    let temporary = destination.with_extension("download");
-    sabine_runtime::download_file_with_progress(
-        url,
-        &temporary,
-        None,
-        8 * 1024 * 1024 * 1024,
-        &mut |_| {},
-    )?;
-    replace_file(&temporary, destination)?;
-    Ok(())
-}
-
-pub(super) fn verify_sha256(path: &Path, expected: &str) -> ServiceResult<()> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    let actual = hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    if actual.eq_ignore_ascii_case(expected) {
-        Ok(())
-    } else {
-        Err(ServiceError::Update(
-            "artifact SHA-256 mismatch".to_string(),
-        ))
-    }
 }
 
 pub(super) fn artifact_extension(kind: AppArtifactKind) -> &'static str {
@@ -139,15 +97,6 @@ pub(super) fn artifact_extension(kind: AppArtifactKind) -> &'static str {
 
 pub(super) fn pending_path(root: &Path, id: &str) -> PathBuf {
     root.join("apps").join(id).join("pending-update.json")
-}
-
-pub(super) fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> ServiceResult<()> {
-    let temporary = path.with_extension("new");
-    let mut file = File::create(&temporary)?;
-    file.write_all(&serde_json::to_vec_pretty(value).expect("pending update is serializable"))?;
-    file.sync_all()?;
-    replace_file(&temporary, path)?;
-    Ok(())
 }
 
 pub(crate) fn safe_relative_path(path: &Path) -> bool {

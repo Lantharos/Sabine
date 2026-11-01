@@ -79,9 +79,7 @@ fn system_apps_dir() -> PathBuf {
 
 #[cfg(windows)]
 fn system_apps_dir() -> PathBuf {
-    std::env::var_os("ProgramFiles")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
+    sabine_runtime::program_files()
 }
 
 /// The apps installed for every user that this build of Sabine does not run.

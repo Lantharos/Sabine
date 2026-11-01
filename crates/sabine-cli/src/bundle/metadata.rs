@@ -1,4 +1,4 @@
-use super::config::BundleApp;
+use crate::project::BundleApp;
 use sabine_service::{AppArtifactKind, AppInstallMode, AppUpdateSource};
 
 pub(super) fn runtime_manifest(
@@ -141,10 +141,6 @@ pub(super) fn windows_manifest(app: &BundleApp) -> String {
         xml(&app.id),
         xml(&app.name)
     )
-}
-
-pub(super) fn shell_script(lines: &[&str]) -> String {
-    format!("#!/bin/sh\nset -e\n{}\n", lines.join("\n"))
 }
 
 pub(super) fn sanitize_path(value: &str) -> String {

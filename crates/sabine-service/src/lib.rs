@@ -1,6 +1,6 @@
 mod app;
 mod archive;
-mod http;
+mod download;
 mod identity;
 mod install;
 mod lifecycle;
@@ -29,25 +29,21 @@ pub use app::desktop::native_messaging::native_messaging_registry_keys;
 pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messaging_manifest_dirs};
 pub use app::environment::AppEnvironment;
 pub use app::installed::unsupported_system_apps;
-pub use app::payload::remove_app_payload;
+pub use app::payload::{remove_app_payload, write_install_inventory};
 pub use app::sandbox::{Sandbox, SandboxSection};
 pub use identity::{ICON_NAME, icon_png};
 pub use uninstall::{installer_guid, uninstall_system, uninstall_with_prompt};
 
 pub use app::registry::SabineService;
-pub(crate) use install::{
-    StagedSystemUpdate, cached_service_path, repair_system_installation, rollback_system_update,
-    stage_system_update,
-};
 pub use install::{
     ensure_service_executable, find_service_executable, held_system_update, install_system_service,
-    installed_service_version, service_daemon_path, update_components,
+    installed_service_version, service_daemon_path, stage_system_files, update_components,
 };
 #[cfg(target_os = "linux")]
 pub use lifecycle::install_system_unit;
 pub(crate) use lifecycle::{PrepareProgress, PrepareStage};
 pub use lifecycle::{
-    adopt_with_runtime, complete_system_update, ensure_daemon_running, ensure_ready, load_policy,
+    adopt, complete_system_update, ensure_daemon_running, ensure_ready, load_policy,
     prepare_machine_with_progress, resolve_service_executable, run_daemon, running_daemon_version,
     set_login_autostart,
 };

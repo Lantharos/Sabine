@@ -21,7 +21,7 @@ pub(super) fn install(executable: &Path, daemon: &Path) -> ServiceResult<bool> {
          $action=New-ScheduledTaskAction -Execute '{daemon_literal}';\
          $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity.Name;\
          $principal=New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited;\
-         $settings=New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew;\
+         $settings=New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1);\
          Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null"
     );
     run_checked(background_command("powershell.exe").args([

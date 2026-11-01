@@ -134,6 +134,16 @@ pub(crate) enum Command {
         #[arg(long)]
         executable: Vec<String>,
     },
+    /// Lay out the service, daemon and CEF host of a Sabine system release.
+    #[command(hide = true)]
+    SystemReleaseStage {
+        #[arg(long)]
+        service: PathBuf,
+        #[arg(long)]
+        host: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     SystemReleaseManifest {
         #[arg(long)]
         version: String,
@@ -156,6 +166,8 @@ pub(crate) enum Command {
 #[derive(Debug, Subcommand)]
 pub(crate) enum RuntimeSubcommand {
     Prepare,
+    /// Print an AppArmor profile that lets the CEF host create its sandbox.
+    #[cfg(target_os = "linux")]
     SandboxProfile,
     List {
         #[arg(long)]
@@ -169,8 +181,9 @@ pub(crate) enum RuntimeSubcommand {
         #[arg(long, requires = "system_wide")]
         root: Option<PathBuf>,
     },
+    /// Remove an installed CEF runtime; `sabine runtime list` shows them.
     Remove {
-        version: Option<String>,
+        version: String,
     },
     Prune {
         #[arg(long, default_value_t = 2)]

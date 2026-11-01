@@ -1,5 +1,5 @@
-use super::{BundleFormat, BundleOptions, metadata::sanitize_path, prepare_bundle};
-use crate::install::source::InstallOptions;
+use super::{BundleOptions, prepare_bundle, stage::StagedBundle};
+use crate::{install::source::InstallOptions, project::BundleApp};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -16,16 +16,9 @@ pub fn install_system_bundle(
     root: Option<&Path>,
 ) -> Result<ExitCode, String> {
     let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let target = if cfg!(windows) {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "linux"
-    };
-    let (app, format, staged) = prepare_bundle(BundleOptions {
+    let (app, _, staged) = prepare_bundle(BundleOptions {
         source: options.source,
-        target: target.into(),
+        target: "portable".into(),
         out: temporary.path().to_path_buf(),
         release: true,
         no_build: false,
@@ -42,49 +35,7 @@ pub fn install_system_bundle(
         system_wide: true,
         env_files,
     })?;
-    let executable = match format {
-        BundleFormat::Linux => {
-            let destination = sabine_runtime::path_in_root(root, Path::new("/"));
-            remove_directory(&destination.join("usr/lib/sabine").join(&app.id))?;
-            merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
-            if root.is_none() {
-                refresh_linux_databases();
-            }
-            destination.join("usr/bin").join(&staged.executable)
-        }
-        BundleFormat::Macos => {
-            let bundle = staged
-                .app_dir
-                .file_name()
-                .ok_or("the staged app has no name")?;
-            let destination =
-                sabine_runtime::path_in_root(root, Path::new("/Applications")).join(bundle);
-            remove_directory(&destination)?;
-            merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
-            destination.join("Contents/MacOS").join(&staged.executable)
-        }
-        _ => {
-            let destination =
-                sabine_runtime::path_in_root(root, &program_files()).join(sanitize_path(&app.name));
-            remove_directory(&destination)?;
-            merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
-            let executable = destination.join(&staged.executable);
-            #[cfg(windows)]
-            if root.is_none() && app.listing.listed {
-                let icon = destination.join("resources/windows-app.ico");
-                crate::install::desktop::install_windows_shortcut(
-                    &app.id,
-                    app.listing.generic_name.as_deref(),
-                    &executable,
-                    icon.is_file()
-                        .then(|| icon.to_string_lossy().into_owned())
-                        .as_deref(),
-                    true,
-                )?;
-            }
-            executable
-        }
-    };
+    let executable = place(&app, &staged, root)?;
     println!(
         "Installed {} {} for every user at {}",
         app.name,
@@ -94,19 +45,57 @@ pub fn install_system_bundle(
     Ok(ExitCode::SUCCESS)
 }
 
-fn program_files() -> PathBuf {
-    std::env::var_os("ProgramFiles")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
+#[cfg(target_os = "linux")]
+fn place(app: &BundleApp, staged: &StagedBundle, root: Option<&Path>) -> Result<PathBuf, String> {
+    let destination = sabine_runtime::path_in_root(root, Path::new("/"));
+    remove_directory(&destination.join("usr/lib/sabine").join(&app.id))?;
+    merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
+    if root.is_none() {
+        use crate::install::desktop;
+        desktop::refresh_database(Path::new("/usr/share/applications"));
+        desktop::refresh_mime_database(Path::new("/usr/share/mime"));
+        desktop::refresh_icon_cache(Path::new("/usr/share/icons/hicolor"));
+    }
+    Ok(destination.join("usr/bin").join(&staged.executable))
+}
+
+#[cfg(target_os = "macos")]
+fn place(_: &BundleApp, staged: &StagedBundle, root: Option<&Path>) -> Result<PathBuf, String> {
+    let bundle = staged
+        .app_dir
+        .file_name()
+        .ok_or("the staged app has no name")?;
+    let destination = sabine_runtime::path_in_root(root, Path::new("/Applications")).join(bundle);
+    remove_directory(&destination)?;
+    merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
+    Ok(destination.join("Contents/MacOS").join(&staged.executable))
+}
+
+#[cfg(windows)]
+fn place(app: &BundleApp, staged: &StagedBundle, root: Option<&Path>) -> Result<PathBuf, String> {
+    let destination = sabine_runtime::path_in_root(root, &sabine_runtime::program_files())
+        .join(super::metadata::sanitize_path(&app.name));
+    remove_directory(&destination)?;
+    merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
+    let executable = destination.join(&staged.executable);
+    if root.is_none() && app.listing.listed {
+        let icon = destination.join("resources/windows-app.ico");
+        crate::install::desktop::install_windows_shortcut(
+            &app.id,
+            app.listing.generic_name.as_deref(),
+            &executable,
+            icon.is_file()
+                .then(|| icon.to_string_lossy().into_owned())
+                .as_deref(),
+            true,
+        )?;
+    }
+    Ok(executable)
 }
 
 fn remove_directory(path: &Path) -> Result<(), String> {
-    match fs::remove_dir_all(path) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => {
-            Err(format!("could not replace {}: {error}", path.display()))
-        }
-        _ => Ok(()),
-    }
+    sabine_runtime::remove_directory_if_present(path)
+        .map_err(|error| format!("could not replace {}: {error}", path.display()))
 }
 
 /// Copies `source` into `destination`, replacing files that already exist and
@@ -136,14 +125,4 @@ fn merge_tree(source: &Path, destination: &Path) -> io::Result<()> {
         }
     }
     Ok(())
-}
-
-fn refresh_linux_databases() {
-    #[cfg(target_os = "linux")]
-    {
-        use crate::install::desktop;
-        desktop::refresh_database(Path::new("/usr/share/applications"));
-        desktop::refresh_mime_database(Path::new("/usr/share/mime"));
-        desktop::refresh_icon_cache(Path::new("/usr/share/icons/hicolor"));
-    }
 }

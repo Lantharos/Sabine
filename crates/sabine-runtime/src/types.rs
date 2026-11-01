@@ -1,23 +1,14 @@
 use std::path::PathBuf;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RuntimeMode {
     SystemRequired,
     SystemPreferred,
     SharedPreferred,
     Bundled,
-}
-
-impl RuntimeMode {
-    pub fn parse(value: &str) -> Option<Self> {
-        match value {
-            "system-required" => Some(Self::SystemRequired),
-            "system-preferred" => Some(Self::SystemPreferred),
-            "shared-preferred" => Some(Self::SharedPreferred),
-            "bundled" => Some(Self::Bundled),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -42,7 +33,7 @@ impl RuntimeLocation {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RuntimeConfig {
     pub mode: RuntimeMode,
     pub index_url: Option<String>,
@@ -66,7 +57,6 @@ impl Default for RuntimeConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeInstallPlan {
     pub version: String,
-    pub platform: String,
     pub archive_name: String,
     pub archive_size: u64,
     pub url: String,

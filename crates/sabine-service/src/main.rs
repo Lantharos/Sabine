@@ -17,13 +17,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Install login/startup autostart for the Sabine service.
-    Install,
     /// Remove shared Sabine components after uninstalling registered apps.
     Uninstall,
     /// Disable login autostart; apps will start the service on demand instead.
     PreferOnDemand,
-    /// Enable login autostart again.
+    /// Start the Sabine service at login.
     PreferLogin,
     EnsureRuntime,
     /// Ensure the daemon is running, refresh the runtime, and report status.
@@ -73,10 +71,6 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let service = SabineService::default();
     match cli.command {
-        Command::Install => {
-            set_login_autostart(true)?;
-            println!("installed Sabine service at login");
-        }
         Command::Uninstall => {
             sabine_service::uninstall_system(false)?;
             println!("uninstalled Sabine components; app data was kept");

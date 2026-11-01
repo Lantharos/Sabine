@@ -1,29 +1,9 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
 
-use serde::Deserialize;
-
-use crate::environment::BuildEnvironment;
-
-#[derive(Debug, Default, Deserialize)]
-struct SabineFile {
-    #[serde(default)]
-    app: AppSection,
-    bindings: Option<BindingsSection>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct AppSection {
-    cargo_manifest: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BindingsSection {
-    path: String,
-}
+use crate::project::environment::BuildEnvironment;
 
 struct Bindings {
     manifest: PathBuf,
@@ -93,16 +73,9 @@ impl Bindings {
 }
 
 fn configured(source: &Path) -> Result<Option<Bindings>, String> {
-    let path = source.join("Sabine.toml");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let text = fs::read_to_string(&path)
-        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-    let sabine: SabineFile =
-        toml::from_str(&text).map_err(|error| format!("invalid {}: {error}", path.display()))?;
-    Ok(sabine.bindings.map(|bindings| Bindings {
-        manifest: source.join(sabine.app.cargo_manifest.as_deref().unwrap_or("Cargo.toml")),
-        target: source.join(bindings.path),
+    let sabine = crate::project::read_sabine_file(source)?;
+    Ok(sabine.bindings.as_ref().map(|bindings| Bindings {
+        manifest: sabine.cargo_manifest(source),
+        target: source.join(&bindings.path),
     }))
 }

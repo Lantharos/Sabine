@@ -1,442 +1,64 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use super::{
-    BundleFormat,
-    config::BundleApp,
-    linux::package::{deb_control, deb_dependencies, rpm_spec},
-    metadata::shell_script,
-    stage::StagedBundle,
-    windows::{artwork, nsis_script},
-};
+use super::{BuildTarget, BundleFormat, linux, macos, stage::StagedBundle, windows};
+use crate::project::BundleApp;
 
-fn command_exists(name: &str) -> bool {
-    sabine_runtime::find_program(name).is_some()
-}
-
-#[derive(Default)]
-pub(super) struct PackageResult {
-    pub artifacts: Vec<PathBuf>,
-    pub notes: Vec<String>,
-}
-
+/// Packages the staged bundle with the platform's tool and returns the artifact.
 pub(super) fn package_bundle(
     app: &BundleApp,
     format: BundleFormat,
     staged: &StagedBundle,
-) -> Result<PackageResult, String> {
-    let mut result = PackageResult::default();
+) -> Result<PathBuf, String> {
     match format {
+        BundleFormat::Portable if format.target() == BuildTarget::Windows => {
+            archive(&staged.root, &artifact_path(app, staged, format, "zip"))
+        }
         BundleFormat::Portable
         | BundleFormat::Linux
         | BundleFormat::Windows
         | BundleFormat::Macos => {
-            tar_gz(
-                &staged.root,
-                &artifact_path(app, staged, format, "tar.gz"),
-                &mut result,
-            )?;
+            archive(&staged.root, &artifact_path(app, staged, format, "tar.gz"))
         }
-        BundleFormat::Deb => package_deb(app, staged, &mut result)?,
-        BundleFormat::Rpm => package_rpm(app, staged, &mut result)?,
-        BundleFormat::AppImage => package_appimage(app, staged, &mut result)?,
-        BundleFormat::Dmg => package_dmg(app, staged, &mut result)?,
-        BundleFormat::Msi => package_msi(app, staged, &mut result)?,
-        BundleFormat::Exe => package_exe(app, staged, &mut result)?,
+        BundleFormat::Deb => linux::package::package_deb(app, staged),
+        BundleFormat::Rpm => linux::package::package_rpm(app, staged),
+        BundleFormat::AppImage => linux::package::package_appimage(app, staged),
+        BundleFormat::Dmg => macos::package_dmg(app, staged),
+        BundleFormat::Msi => windows::package::package_msi(app, staged),
+        BundleFormat::Exe => windows::package::package_exe(app, staged),
     }
-    Ok(result)
 }
 
-fn package_deb(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    let debian = staged.app_dir.join("DEBIAN");
-    fs::create_dir_all(&debian).map_err(|error| error.to_string())?;
-    fs::write(
-        debian.join("control"),
-        deb_control(
-            app,
-            &staged.binary,
-            dir_size_kb(&staged.app_dir)?,
-            &deb_dependencies(staged)?,
-        )?,
-    )
-    .map_err(|error| error.to_string())?;
-    let artifact = artifact_path(app, staged, BundleFormat::Deb, "deb");
-    if command_exists("dpkg-deb") {
-        ensure_parent(&artifact)?;
-        run(Command::new("dpkg-deb")
-            .arg("--root-owner-group")
-            .arg("--build")
-            .arg(&staged.app_dir)
-            .arg(&artifact))?;
-        result.artifacts.push(artifact);
+/// Archives `source` with `tar`, as a zip or gzip tarball by the artifact's
+/// extension; the `tar` of Windows writes zip archives as well.
+fn archive(source: &Path, artifact: &Path) -> Result<PathBuf, String> {
+    ensure_parent(artifact)?;
+    let source_name = source
+        .file_name()
+        .ok_or_else(|| format!("invalid artifact source {}", source.display()))?;
+    let parent = source.parent().unwrap_or_else(|| Path::new("."));
+    let format = if artifact
+        .extension()
+        .is_some_and(|extension| extension == "zip")
+    {
+        "-a"
     } else {
-        write_script(
-            &staged.root.join("build-deb.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!(
-                    "dpkg-deb --root-owner-group --build {} {}",
-                    shell_quote(&staged.app_dir.display().to_string()),
-                    shell_quote(&artifact.display().to_string())
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("dpkg-deb not found; wrote build-deb.sh".to_string());
-    }
-    Ok(())
+        "-z"
+    };
+    run(Command::new("tar")
+        .arg("-C")
+        .arg(parent)
+        .args([format, "-c", "-f"])
+        .arg(artifact)
+        .arg("--")
+        .arg(source_name))?;
+    Ok(artifact.to_path_buf())
 }
 
-fn package_rpm(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    let spec = staged.root.join(format!("{}.spec", app.id));
-    fs::write(
-        &spec,
-        rpm_spec(
-            app,
-            &staged.executable,
-            &staged.binary,
-            &share_files(&staged.app_dir)?,
-        )?,
-    )
-    .map_err(|error| error.to_string())?;
-    let artifact = artifact_path(app, staged, BundleFormat::Rpm, "rpm");
-    let rpm_dir = staged.root.join("rpms");
-    let buildroot = staged.root.join("rpm-buildroot");
-    let top_dir = staged.root.join("rpmbuild");
-    if command_exists("rpmbuild") {
-        fs::create_dir_all(&rpm_dir).map_err(|error| error.to_string())?;
-        let spec = fs::canonicalize(&spec).map_err(|error| error.to_string())?;
-        let rpm_dir = fs::canonicalize(&rpm_dir).map_err(|error| error.to_string())?;
-        let source_dir = dunce::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
-        run(Command::new("rpmbuild")
-            .arg("-bb")
-            .arg(&spec)
-            .arg("--buildroot")
-            .arg(&buildroot)
-            .arg("--define")
-            .arg(format!("_rpmdir {}", rpm_dir.display()))
-            .arg("--define")
-            .arg(format!("_topdir {}", top_dir.display()))
-            .arg("--define")
-            .arg(format!("sabine_source {}", source_dir.display())))?;
-        let built = find_file_with_extension(&rpm_dir, "rpm")
-            .ok_or_else(|| "rpmbuild completed without producing an RPM".to_string())?;
-        ensure_parent(&artifact)?;
-        fs::copy(built, &artifact).map_err(|error| error.to_string())?;
-        result.artifacts.push(artifact);
-    } else {
-        let quoted = |path: &Path| shell_quote(&path.display().to_string());
-        write_script(
-            &staged.root.join("build-rpm.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!("mkdir -p {}", quoted(&rpm_dir)),
-                &format!(
-                    "rpmbuild -bb {} --buildroot {} --define {} --define {} --define {}",
-                    quoted(&spec),
-                    quoted(&buildroot),
-                    shell_quote(&format!("_rpmdir {}", rpm_dir.display())),
-                    shell_quote(&format!("_topdir {}", top_dir.display())),
-                    shell_quote(&format!("sabine_source {}", staged.app_dir.display()))
-                ),
-                &format!(
-                    "find {} -name '*.rpm' -exec cp {{}} {} \\;",
-                    quoted(&rpm_dir),
-                    quoted(&artifact)
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("rpmbuild not found; wrote build-rpm.sh".to_string());
-    }
-    Ok(())
-}
-
-/// The files staged under `usr/share`, as absolute paths on the target system.
-fn share_files(app_dir: &Path) -> Result<Vec<String>, String> {
-    fn walk(root: &Path, directory: &Path, files: &mut Vec<String>) -> io::Result<()> {
-        for entry in fs::read_dir(directory)? {
-            let path = entry?.path();
-            if path.is_dir() {
-                walk(root, &path, files)?;
-            } else if let Ok(relative) = path.strip_prefix(root) {
-                files.push(format!(
-                    "/{}",
-                    relative.to_string_lossy().replace('\\', "/")
-                ));
-            }
-        }
-        Ok(())
-    }
-    let mut files = Vec::new();
-    walk(app_dir, &app_dir.join("usr/share"), &mut files).map_err(|error| error.to_string())?;
-    files.sort();
-    Ok(files)
-}
-
-fn find_file_with_extension(root: &Path, extension: &str) -> Option<PathBuf> {
-    for entry in fs::read_dir(root).ok()?.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_file_with_extension(&path, extension) {
-                return Some(found);
-            }
-        } else if path
-            .extension()
-            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(extension))
-        {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn package_appimage(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    let artifact = artifact_path(app, staged, BundleFormat::AppImage, "AppImage");
-    let (_, architecture) = super::linux::package::architecture(&staged.binary)?;
-    if command_exists("appimagetool") {
-        ensure_parent(&artifact)?;
-        run(Command::new("appimagetool")
-            .env("ARCH", architecture)
-            .arg(&staged.app_dir)
-            .arg(&artifact))?;
-        result.artifacts.push(artifact);
-    } else {
-        write_script(
-            &staged.root.join("build-appimage.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!(
-                    "ARCH={architecture} appimagetool {} {}",
-                    shell_quote(&staged.app_dir.display().to_string()),
-                    shell_quote(&artifact.display().to_string())
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("appimagetool not found; wrote build-appimage.sh".to_string());
-    }
-    Ok(())
-}
-
-fn package_dmg(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    let artifact = artifact_path(app, staged, BundleFormat::Dmg, "dmg");
-    if command_exists("hdiutil") {
-        ensure_parent(&artifact)?;
-        run(Command::new("hdiutil")
-            .arg("create")
-            .arg("-volname")
-            .arg(&app.name)
-            .arg("-srcfolder")
-            .arg(&staged.root)
-            .arg("-ov")
-            .arg("-format")
-            .arg("UDZO")
-            .arg(&artifact))?;
-        result.artifacts.push(artifact);
-    } else {
-        tar_gz(
-            &staged.root,
-            &artifact_path(app, staged, BundleFormat::Dmg, "app.tar.gz"),
-            result,
-        )?;
-        write_script(
-            &staged.root.join("build-dmg.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!(
-                    "hdiutil create -volname {} -srcfolder {} -ov -format UDZO {}",
-                    shell_quote(&app.name),
-                    shell_quote(&staged.root.display().to_string()),
-                    shell_quote(&artifact.display().to_string())
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("hdiutil not found; wrote build-dmg.sh and app tarball".to_string());
-    }
-    Ok(())
-}
-
-fn package_msi(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    let wxs = staged.root.join("installer.wxs");
-    let architecture = super::windows::architecture(&staged.binary)?;
-    let actions = super::windows::msi_actions::stage(&staged.root, architecture)?;
-    let artifact = artifact_path(app, staged, BundleFormat::Msi, "msi");
-    let source_dir = dunce::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
-    let icon = source_dir.join("resources").join("windows-app.ico");
-    let icon = icon.is_file().then(|| icon.display().to_string());
-    let dialog_bitmap = app
-        .installer_image
-        .as_deref()
-        .map(|image| artwork::wix_dialog(image, &staged.root))
-        .transpose()?
-        .map(|bitmap| dunce::simplified(&bitmap).display().to_string());
-    fs::write(
-        &wxs,
-        super::windows::msi::wix_source(
-            app,
-            &source_dir.display().to_string(),
-            &staged.executable,
-            icon.as_deref(),
-            dialog_bitmap.as_deref(),
-            &dunce::simplified(&actions).display().to_string(),
-        )?,
-    )
-    .map_err(|error| error.to_string())?;
-    if command_exists("wix") {
-        ensure_parent(&artifact)?;
-        let _ = fs::remove_file(artifact.with_extension("wixpdb"));
-        run(Command::new("wix")
-            .arg("build")
-            .args(["-arch", &architecture.to_ascii_lowercase()])
-            .arg("-wx")
-            .args(["-pdbtype", "none"])
-            .args(["-ext", "WixToolset.UI.wixext"])
-            .arg(dunce::simplified(&wxs))
-            .arg("-o")
-            .arg(dunce::simplified(&artifact)))?;
-        result.artifacts.push(artifact);
-    } else {
-        write_script(
-            &staged.root.join("build-msi.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!(
-                    "if [ ! -f {} ]; then",
-                    shell_quote(&actions.display().to_string())
-                ),
-                &format!(
-                    "cmake -S {} -B {} -A {architecture}",
-                    shell_quote(&staged.root.join("msi-actions").display().to_string()),
-                    shell_quote(&staged.root.join("msi-actions/build").display().to_string())
-                ),
-                &format!(
-                    "cmake --build {} --config Release",
-                    shell_quote(&staged.root.join("msi-actions/build").display().to_string())
-                ),
-                "fi",
-                &format!(
-                    "wix build -arch {} -wx -pdbtype none -ext WixToolset.UI.wixext {} -o {}",
-                    architecture.to_ascii_lowercase(),
-                    shell_quote(&dunce::simplified(&wxs).display().to_string()),
-                    shell_quote(&dunce::simplified(&artifact).display().to_string())
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("WiX not found; wrote installer.wxs and build-msi.sh".to_string());
-    }
-    Ok(())
-}
-
-fn package_exe(
-    app: &BundleApp,
-    staged: &StagedBundle,
-    result: &mut PackageResult,
-) -> Result<(), String> {
-    super::windows::architecture(&staged.binary)?;
-    let script = staged.root.join("installer.nsi");
-    let artifact = artifact_path(app, staged, BundleFormat::Exe, "exe");
-    let icon = staged.app_dir.join("resources/windows-app.ico");
-    let icon = icon.is_file().then(|| icon.display().to_string());
-    let welcome_bitmap = app
-        .installer_image
-        .as_deref()
-        .map(|image| artwork::nsis_welcome(image, &staged.root))
-        .transpose()?;
-    fs::write(
-        &script,
-        nsis_script(
-            app,
-            &staged.app_dir,
-            &staged.executable,
-            &artifact.display().to_string(),
-            icon.as_deref(),
-            welcome_bitmap.as_deref(),
-        )?,
-    )
-    .map_err(|error| error.to_string())?;
-    if command_exists("makensis") {
-        ensure_parent(&artifact)?;
-        run(Command::new("makensis")
-            .arg("-WX")
-            .current_dir(&staged.root)
-            .arg(dunce::simplified(&script)))?;
-        result.artifacts.push(artifact);
-    } else {
-        write_script(
-            &staged.root.join("build-exe.sh"),
-            &shell_script(&[
-                &mkdir_parent_line(&artifact),
-                &format!(
-                    "makensis -WX {}",
-                    shell_quote(&script.display().to_string())
-                ),
-            ]),
-        )?;
-        result
-            .notes
-            .push("makensis not found; wrote installer.nsi and build-exe.sh".to_string());
-    }
-    Ok(())
-}
-
-fn tar_gz(source: &Path, artifact: &Path, result: &mut PackageResult) -> Result<(), String> {
-    if command_exists("tar") {
-        if let Some(parent) = artifact.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        let source_name = source
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| format!("invalid artifact source {}", source.display()))?;
-        let parent = source.parent().unwrap_or_else(|| Path::new("."));
-        run(Command::new("tar")
-            .arg("-C")
-            .arg(parent)
-            .arg("-czf")
-            .arg(artifact)
-            .arg("--")
-            .arg(source_name))?;
-        result.artifacts.push(artifact.to_path_buf());
-    } else {
-        result
-            .notes
-            .push("tar not found; staged directory only".to_string());
-    }
-    Ok(())
-}
-
-fn artifact_path(
+pub(super) fn artifact_path(
     app: &BundleApp,
     staged: &StagedBundle,
     format: BundleFormat,
@@ -457,68 +79,26 @@ fn artifact_path(
         ))
 }
 
-fn ensure_parent(path: &Path) -> Result<(), String> {
+pub(super) fn ensure_parent(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     Ok(())
 }
 
-fn mkdir_parent_line(path: &Path) -> String {
-    path.parent()
-        .map(|parent| format!("mkdir -p {}", shell_quote(&parent.display().to_string())))
-        .unwrap_or_else(|| "true".to_string())
-}
-
-fn dir_size_kb(path: &Path) -> Result<u64, String> {
-    fn walk(path: &Path, total: &mut u64) -> io::Result<()> {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let metadata = entry.metadata()?;
-            if metadata.is_dir() {
-                walk(&entry.path(), total)?;
-            } else {
-                *total += metadata.len();
-            }
+/// Runs a packaging tool, which must be installed.
+pub(super) fn run(command: &mut Command) -> Result<(), String> {
+    let tool = command.get_program().to_string_lossy().into_owned();
+    let status = command.status().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            format!("{tool} is required to build this package; install it and retry")
+        } else {
+            format!("failed to run {tool}: {error}")
         }
-        Ok(())
-    }
-    let mut bytes = 0;
-    walk(path, &mut bytes).map_err(|error| error.to_string())?;
-    Ok(bytes.div_ceil(1024))
-}
-
-fn write_script(path: &Path, script: &str) -> Result<(), String> {
-    fs::write(path, script).map_err(|error| error.to_string())?;
-    make_executable(path).map_err(|error| error.to_string())
-}
-
-fn run(command: &mut Command) -> Result<(), String> {
-    let status = command
-        .status()
-        .map_err(|error| format!("failed to run packaging tool: {error}"))?;
+    })?;
     if status.success() {
         Ok(())
     } else {
-        Err("packaging tool failed".to_string())
+        Err(format!("{tool} failed with {status}"))
     }
-}
-
-fn make_executable(path: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(path, permissions)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }

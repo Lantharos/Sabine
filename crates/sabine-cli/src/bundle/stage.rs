@@ -1,20 +1,20 @@
 mod offline;
 
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 
 use super::{
-    BundleFormat,
-    config::BundleApp,
+    BuildTarget, BundleFormat,
     linux::appstream::metainfo,
     metadata::{app_run, desktop_entry, runtime_manifest, sanitize_path, windows_manifest},
 };
 use crate::{
-    bundle::build_target_for_format,
     desktop::{icons, mime_package::mime_package},
+    project::BundleApp,
 };
+use sabine_runtime::{copy_directory, make_executable};
 use sabine_service::{AppArtifactKind, AppInstallMode};
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ pub(super) fn stage_bundle(
     out: &Path,
     offline: bool,
 ) -> Result<StagedBundle, String> {
-    if matches!(format, BundleFormat::Macos | BundleFormat::Dmg) {
+    if format.target() == BuildTarget::Macos {
         crate::desktop::macos::validate_executable(binary)?;
     }
     if offline {
@@ -72,22 +72,16 @@ pub(super) fn stage_bundle(
         fs::remove_dir_all(&root).map_err(|error| error.to_string())?;
     }
     fs::create_dir_all(&root).map_err(|error| error.to_string())?;
-    let app_dir = match format {
-        BundleFormat::Macos | BundleFormat::Dmg => {
-            stage_macos(app, format, binary, &root, &executable)?
-        }
-        BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe => {
-            stage_windows(app, format, binary, &root, &executable)?
-        }
-        BundleFormat::AppImage => stage_appimage(app, binary, &root, &executable)?,
-        BundleFormat::Linux | BundleFormat::Deb | BundleFormat::Rpm | BundleFormat::Portable => {
-            stage_unix_root(app, format, binary, &root, &executable)?
-        }
+    let app_dir = match (format, format.target()) {
+        (_, BuildTarget::Macos) => stage_macos(app, format, binary, &root, &executable)?,
+        (_, BuildTarget::Windows) => stage_windows(app, format, binary, &root, &executable)?,
+        (BundleFormat::AppImage, _) => stage_appimage(app, binary, &root, &executable)?,
+        (_, BuildTarget::Linux) => stage_unix_root(app, format, binary, &root, &executable)?,
     };
-    let binary = match format {
-        BundleFormat::Macos | BundleFormat::Dmg => app_dir.join("Contents/MacOS").join(&executable),
-        BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe => app_dir.join(&executable),
-        _ => app_dir
+    let binary = match format.target() {
+        BuildTarget::Macos => app_dir.join("Contents/MacOS").join(&executable),
+        BuildTarget::Windows => app_dir.join(&executable),
+        BuildTarget::Linux => app_dir
             .join("usr/lib/sabine")
             .join(&app.id)
             .join(&executable),
@@ -107,7 +101,7 @@ pub(super) fn stage_bundle(
 pub(super) fn binary_path(app: &BundleApp, format: BundleFormat, release: bool) -> PathBuf {
     let profile = if release { "release" } else { "debug" };
     let file_name = executable_name(app, format);
-    let rust_target = build_target_for_format(format).and_then(|target| target.rust_target());
+    let rust_target = format.target().rust_target();
     let mut candidates = app
         .source_dir
         .ancestors()
@@ -310,7 +304,7 @@ fn stage_linux_share(
 ) -> Result<PathBuf, String> {
     let share = app_dir.join("usr/share");
     let icon = app.icon.as_ref().filter(|icon| icon.is_file()).map(|_| {
-        copy_dir_recursive(&resources.join("icons"), &share.join("icons/hicolor"))
+        copy_directory(&resources.join("icons"), &share.join("icons/hicolor"))
             .map_err(|error| error.to_string())
     });
     let icon = icon.transpose()?.map(|()| app.id.as_str());
@@ -387,12 +381,12 @@ fn stage_resources(
     if let Some(web) = &app.web
         && let Some((source, _)) = web.assets()?
     {
-        copy_dir_recursive(source, &resources.join("web")).map_err(|error| error.to_string())?;
+        copy_directory(source, &resources.join("web")).map_err(|error| error.to_string())?;
     }
     for (name, source) in &app.resources {
         let destination = resources.join(RESOURCE_FOLDER).join(name);
         let copied = if source.is_dir() {
-            copy_dir_recursive(source, &destination)
+            copy_directory(source, &destination)
         } else {
             fs::create_dir_all(resources.join(RESOURCE_FOLDER))
                 .and_then(|()| fs::copy(source, &destination).map(drop))
@@ -403,10 +397,7 @@ fn stage_resources(
 }
 
 fn executable_name(app: &BundleApp, format: BundleFormat) -> String {
-    if matches!(
-        format,
-        BundleFormat::Windows | BundleFormat::Msi | BundleFormat::Exe
-    ) {
+    if format.target() == BuildTarget::Windows {
         format!("{}.exe", app.cargo_package)
     } else {
         app.cargo_package.clone()
@@ -419,34 +410,4 @@ fn copy_binary(source: &Path, destination: &Path) -> Result<(), String> {
     }
     fs::copy(source, destination).map_err(|error| error.to_string())?;
     make_executable(destination).map_err(|error| error.to_string())
-}
-
-fn copy_dir_recursive(source: &Path, destination: &Path) -> io::Result<()> {
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let source_path = entry.path();
-        let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
-            copy_dir_recursive(&source_path, &destination_path)?;
-        } else {
-            fs::copy(&source_path, &destination_path)?;
-        }
-    }
-    Ok(())
-}
-
-fn make_executable(path: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(path, permissions)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
 }

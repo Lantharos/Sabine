@@ -6,10 +6,7 @@ use std::path::{Component, Path, PathBuf};
 pub fn system_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        std::env::var_os("ProgramFiles")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
-            .join("Sabine")
+        program_files().join("Sabine")
     }
     #[cfg(target_os = "macos")]
     {
@@ -19,6 +16,13 @@ pub fn system_dir() -> PathBuf {
     {
         PathBuf::from("/usr/lib/sabine")
     }
+}
+
+#[cfg(target_os = "windows")]
+pub fn program_files() -> PathBuf {
+    std::env::var_os("ProgramFiles")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
 }
 
 pub fn system_runtime_path() -> PathBuf {

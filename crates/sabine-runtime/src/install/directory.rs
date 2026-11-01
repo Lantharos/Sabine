@@ -1,5 +1,7 @@
 use std::{fs, io, path::Path};
 
+use crate::sync_directory;
+
 /// Publishes a validated directory and retains the previous contents until the
 /// replacement is in place. The caller must hold its installation lock.
 pub fn install_directory(staging: &Path, destination: &Path) -> io::Result<()> {
@@ -69,14 +71,6 @@ pub fn recover_directory_installs(parent: &Path) -> io::Result<()> {
         sync_directory(parent)?;
         sync_directory(&rollback)?;
     }
-    Ok(())
-}
-
-fn sync_directory(path: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    fs::File::open(path)?.sync_all()?;
-    #[cfg(not(unix))]
-    let _ = path;
     Ok(())
 }
 

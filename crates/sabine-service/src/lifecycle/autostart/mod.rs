@@ -1,13 +1,10 @@
 use std::{
-    fs,
     path::Path,
     process::{Command, Stdio},
 };
 
 use crate::{ServiceError, ServiceResult, ensure_service_executable, service_daemon_path};
-use sabine_runtime::{configure_background_command, sabine_data_dir};
-
-use super::PID_FILE;
+use sabine_runtime::configure_background_command;
 
 #[cfg(target_os = "linux")]
 #[path = "linux.rs"]
@@ -23,9 +20,11 @@ mod platform;
 mod systemd_unit;
 
 #[cfg(target_os = "macos")]
-pub(super) use platform::unload_macos_daemon;
+pub(super) use platform::{launch_outside_job, unload_macos_daemon};
 #[cfg(target_os = "linux")]
-pub(super) use platform::{retire_shadowing_user_unit, supervised_daemon_matches};
+pub(super) use platform::{
+    launch_outside_unit, retire_shadowing_user_unit, supervised_daemon_matches,
+};
 #[cfg(target_os = "linux")]
 pub use systemd_unit::install_system_unit;
 
@@ -49,13 +48,11 @@ pub fn install_login_autostart_with(executable: &Path) -> ServiceResult<bool> {
 }
 
 pub fn uninstall_login_autostart() -> ServiceResult<()> {
-    platform::uninstall()?;
-    let _ = fs::remove_file(sabine_data_dir().join(PID_FILE));
-    Ok(())
+    platform::uninstall()
 }
 
 /// Runs a helper quietly; their output would otherwise reach the setup window.
-pub(super) fn run_checked(command: &mut Command) -> ServiceResult<()> {
+pub(in crate::lifecycle) fn run_checked(command: &mut Command) -> ServiceResult<()> {
     configure_background_command(command);
     let status = command
         .stdout(Stdio::null())

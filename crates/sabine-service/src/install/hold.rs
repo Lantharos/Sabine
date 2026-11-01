@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    HeldSystemUpdate, InstalledApp, SabineService, app::installed::installed_apps,
-    app::registry::replace_file,
-};
+use crate::{HeldSystemUpdate, InstalledApp, SabineService, app::installed::installed_apps};
 
 fn held_update_path() -> PathBuf {
     sabine_runtime::sabine_data_dir().join("bin/held-update.json")
@@ -105,24 +102,14 @@ fn newest_compatible_release(
 }
 
 fn record_hold(held: &HeldSystemUpdate) -> ServiceResult<()> {
-    let path = held_update_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension("new");
-    fs::write(
-        &temporary,
-        serde_json::to_vec_pretty(held).expect("a held update is serializable"),
-    )?;
-    replace_file(&temporary, &path)?;
-    Ok(())
+    Ok(sabine_runtime::write_json_atomic(
+        &held_update_path(),
+        held,
+    )?)
 }
 
 fn clear_hold() -> ServiceResult<()> {
-    match fs::remove_file(held_update_path()) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.into()),
-        _ => Ok(()),
-    }
+    Ok(sabine_runtime::remove_file_if_present(&held_update_path())?)
 }
 
 #[cfg(test)]

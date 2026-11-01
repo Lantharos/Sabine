@@ -1,12 +1,10 @@
 use sabine_runtime::{
-    RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, ensure_runtime,
-    install_user_runtime_with_progress, resolve_runtime,
+    RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, install_user_runtime_with_progress,
+    resolve_runtime,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    fs::OpenOptions,
-    io::Write,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -53,10 +51,7 @@ impl SabineService {
             &manifest,
             crate::install::system_compatibility_in(&self.root),
         ) {
-            return Err(ServiceError::IncompatibleApp {
-                app_id: manifest.id,
-                message,
-            });
+            return Err(ServiceError::IncompatibleApp(message));
         }
         if let Some(existing) = registry.apps.get(&manifest.id)
             && version_is_newer(&existing.manifest.version, &manifest.version)
@@ -138,14 +133,6 @@ impl SabineService {
             .collect())
     }
 
-    pub fn runtime(&self) -> ServiceResult<RuntimeInfo> {
-        resolve_runtime(&self.runtime).map_err(Into::into)
-    }
-
-    pub fn ensure_runtime(&self) -> ServiceResult<RuntimeInfo> {
-        ensure_runtime(&self.runtime).map_err(Into::into)
-    }
-
     pub fn ensure_runtime_with_progress(
         &self,
         mut progress: impl FnMut(RuntimeInstallProgress),
@@ -165,38 +152,22 @@ impl SabineService {
 
     pub(crate) fn load_registry(&self) -> ServiceResult<RegistryFile> {
         let path = self.registry_path();
-        let backup = self.root.join("apps.json.bak");
-        let source = if path.is_file() {
-            path
-        } else if backup.is_file() {
-            backup
-        } else {
-            return Ok(RegistryFile::default());
-        };
-        let bytes = std::fs::read(&source)?;
-        let registry = serde_json::from_slice::<RegistryFile>(&bytes).map_err(|error| {
-            ServiceError::Decode {
-                path: source,
-                source: error,
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(RegistryFile::default());
             }
-        })?;
-        Ok(registry)
+            Err(error) => return Err(error.into()),
+        };
+        serde_json::from_slice::<RegistryFile>(&bytes)
+            .map_err(|source| ServiceError::Decode { path, source })
     }
 
     pub(crate) fn save_registry(&self, registry: &RegistryFile) -> ServiceResult<()> {
-        std::fs::create_dir_all(&self.root)?;
-        let path = self.registry_path();
-        let temporary = self.root.join("apps.json.new");
-        let bytes = serde_json::to_vec_pretty(registry).expect("registry is serializable");
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&temporary)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        replace_file(&temporary, &path)?;
-        Ok(())
+        Ok(sabine_runtime::write_json_atomic(
+            &self.registry_path(),
+            registry,
+        )?)
     }
 }
 
@@ -256,13 +227,4 @@ impl RegistryLock {
             )?,
         })
     }
-}
-
-pub(crate) fn replace_file(temporary: &Path, destination: &Path) -> std::io::Result<()> {
-    std::fs::rename(temporary, destination)?;
-    #[cfg(unix)]
-    if let Some(parent) = destination.parent() {
-        std::fs::File::open(parent)?.sync_all()?;
-    }
-    Ok(())
 }

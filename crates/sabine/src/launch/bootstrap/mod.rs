@@ -6,10 +6,10 @@ use crate::launch::executable::launch_executable;
 use crate::window::config::SabineWindowConfig;
 use crate::{SabineError, SabineResult};
 use sabine_runtime::{
-    RuntimeConfig, RuntimeMode, background_command, configure_background_command, resolve_runtime,
+    RuntimeConfig, RuntimeInfo, background_command, configure_background_command, resolve_runtime,
 };
 use sabine_service::{AppManifest, SabineService, prepare_machine_with_progress};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -66,8 +66,8 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
         eprintln!("missing Sabine bootstrap config");
         std::process::exit(1);
     };
-    let (config, register) = match read_bootstrap(path) {
-        Ok(value) => value,
+    let BootstrapRequest { runtime, register } = match read_bootstrap(path) {
+        Ok(request) => request,
         Err(error) => {
             show_failure("Sabine setup could not start", &error);
             std::process::exit(1);
@@ -77,7 +77,7 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
         "Preparing Sabine",
         icons::sabine,
         move |state, proxy| {
-            let result = prepare_machine_with_progress(config, register, |progress| {
+            let result = prepare_machine_with_progress(runtime, register, |progress| {
                 sabine_dialog::set_progress(&state, &proxy, progress.message, progress.fraction);
             });
             if let Err(error) = &result {
@@ -117,39 +117,50 @@ fn confirm_update(app_name: &str, version: &str) -> Result<bool, String> {
     })
 }
 
-pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<()> {
+/// Makes sure this machine has the Sabine service and a runtime, registering
+/// the app, and returns the runtime to launch with.
+pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<RuntimeInfo> {
     let register = app_manifest(config);
-
-    if resolve_runtime(&config.runtime).is_ok() {
-        let report =
-            match sabine_service::adopt_with_runtime(config.runtime.clone(), register.clone()) {
-                Ok(report) => report,
-                Err(error @ sabine_service::ServiceError::IncompatibleApp { .. }) => {
-                    relaunch_managed_update(config);
-                    offer_pending_update(config);
-                    let message = error.to_string();
-                    return Err(SabineError::CreationFailed { message });
-                }
-                Err(error) => {
-                    return Err(SabineError::CreationFailed {
-                        message: format!("failed to register with Sabine service: {error}"),
-                    });
-                }
-            };
-        if std::env::var_os("SABINE_TRACE").is_some() {
-            eprintln!(
-                "sabine-service ready runtime={} daemon={} login_autostart={}",
-                report.runtime_version, report.daemon_running, report.login_autostart
-            );
+    let runtime = match resolve_runtime(&config.runtime) {
+        Ok(runtime) => {
+            adopt(config, &runtime, register)?;
+            runtime
         }
-        relaunch_managed_update(config);
-        offer_pending_update(config);
-        return Ok(());
-    }
-
-    run_bootstrap_install(config, register)?;
+        Err(_) => {
+            run_bootstrap_install(config, register)?;
+            resolve_runtime(&config.runtime)?
+        }
+    };
     relaunch_managed_update(config);
     offer_pending_update(config);
+    Ok(runtime)
+}
+
+fn adopt(
+    config: &SabineWindowConfig,
+    runtime: &RuntimeInfo,
+    register: Option<AppManifest>,
+) -> SabineResult<()> {
+    let report = match sabine_service::adopt(runtime, register) {
+        Ok(report) => report,
+        Err(error @ sabine_service::ServiceError::IncompatibleApp(_)) => {
+            relaunch_managed_update(config);
+            offer_pending_update(config);
+            let message = error.to_string();
+            return Err(SabineError::CreationFailed { message });
+        }
+        Err(error) => {
+            return Err(SabineError::CreationFailed {
+                message: format!("failed to register with Sabine service: {error}"),
+            });
+        }
+    };
+    if crate::launch::metrics::trace_enabled() {
+        eprintln!(
+            "sabine-service ready runtime={} daemon={} login_autostart={}",
+            report.runtime_version, report.daemon_running, report.login_autostart
+        );
+    }
     Ok(())
 }
 
@@ -234,10 +245,12 @@ fn run_bootstrap_install(
     register: Option<AppManifest>,
 ) -> SabineResult<()> {
     let config_path = bootstrap_config_path();
-    write_bootstrap(&config_path, &config.runtime, register.as_ref()).map_err(|error| {
-        SabineError::CreationFailed {
-            message: format!("failed to prepare Sabine bootstrap: {error}"),
-        }
+    let request = BootstrapRequest {
+        runtime: config.runtime.clone(),
+        register,
+    };
+    write_bootstrap(&config_path, &request).map_err(|error| SabineError::CreationFailed {
+        message: format!("failed to prepare Sabine bootstrap: {error}"),
     })?;
     let executable = std::env::current_exe().map_err(|error| SabineError::CreationFailed {
         message: format!("failed to locate app executable: {error}"),
@@ -283,69 +296,21 @@ pub(crate) fn app_manifest(config: &SabineWindowConfig) -> Option<AppManifest> {
     })
 }
 
-fn write_bootstrap(
-    path: &Path,
-    config: &RuntimeConfig,
-    register: Option<&AppManifest>,
-) -> std::io::Result<()> {
-    let mode = match config.mode {
-        RuntimeMode::SystemRequired => "system-required",
-        RuntimeMode::SystemPreferred => "system-preferred",
-        RuntimeMode::SharedPreferred => "shared-preferred",
-        RuntimeMode::Bundled => "bundled",
-    };
-    let mut body = serde_json::json!({
-        "mode": mode,
-        "index_url": config.index_url,
-        "allow_user_install": config.allow_user_install,
-        "allow_bundled": config.allow_bundled,
-    });
-    if let Some(dir) = &config.bundled_dir {
-        body["bundled_dir"] = dir.display().to_string().into();
-    }
-    if let Some(manifest) = register {
-        body["register"] = serde_json::to_value(manifest).expect("app manifest is serializable");
-    }
-    std::fs::write(
-        path,
-        serde_json::to_vec(&body).expect("bootstrap config is serializable"),
-    )
+/// What the setup process prepares, handed to it in a file.
+#[derive(Deserialize, Serialize)]
+struct BootstrapRequest {
+    runtime: RuntimeConfig,
+    register: Option<AppManifest>,
 }
 
-fn read_bootstrap(path: PathBuf) -> Result<(RuntimeConfig, Option<AppManifest>), String> {
-    let value = serde_json::from_slice::<Value>(&std::fs::read(&path).map_err(|e| e.to_string())?)
-        .map_err(|error| error.to_string())?;
+fn write_bootstrap(path: &Path, request: &BootstrapRequest) -> std::io::Result<()> {
+    std::fs::write(path, serde_json::to_vec(request)?)
+}
+
+fn read_bootstrap(path: PathBuf) -> Result<BootstrapRequest, String> {
+    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
     let _ = std::fs::remove_file(path);
-    let config = RuntimeConfig {
-        mode: value
-            .get("mode")
-            .and_then(Value::as_str)
-            .and_then(RuntimeMode::parse)
-            .unwrap_or(RuntimeMode::SharedPreferred),
-        index_url: value
-            .get("index_url")
-            .and_then(Value::as_str)
-            .map(ToString::to_string),
-        allow_user_install: value
-            .get("allow_user_install")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        allow_bundled: value
-            .get("allow_bundled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        bundled_dir: value
-            .get("bundled_dir")
-            .and_then(Value::as_str)
-            .map(PathBuf::from),
-    };
-    let register = value
-        .get("register")
-        .cloned()
-        .map(serde_json::from_value::<AppManifest>)
-        .transpose()
-        .map_err(|error| format!("invalid app registration: {error}"))?;
-    Ok((config, register))
+    serde_json::from_slice(&bytes).map_err(|error| format!("invalid Sabine setup request: {error}"))
 }
 
 fn bootstrap_config_path() -> PathBuf {

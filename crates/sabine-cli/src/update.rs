@@ -3,9 +3,6 @@ use sabine_service::{AppUpdateStatus, SabineService};
 use std::{path::Path, process::ExitCode};
 
 pub fn run(target: Option<String>, all: bool, force: bool) -> Result<ExitCode, String> {
-    if all && target.is_some() {
-        return Err("use either an app/component target or --all".into());
-    }
     match target.as_deref() {
         None => {
             update_sabine(force)?;

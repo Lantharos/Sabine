@@ -34,17 +34,9 @@ pub(super) fn run_package_installer(
 fn installer_command(update: &PendingAppUpdate) -> ServiceResult<Command> {
     match update.kind {
         #[cfg(target_os = "linux")]
-        AppArtifactKind::Deb => Ok(elevated_command(
-            "apt-get",
-            &["install", "--yes"],
-            &update.artifact,
-        )),
+        AppArtifactKind::Deb => Ok(elevated_command(update, &["apt-get", "install", "--yes"])),
         #[cfg(target_os = "linux")]
-        AppArtifactKind::Rpm => Ok(if sabine_runtime::find_program("dnf").is_some() {
-            elevated_command("dnf", &["install", "--assumeyes"], &update.artifact)
-        } else {
-            elevated_command("rpm", &["-U"], &update.artifact)
-        }),
+        AppArtifactKind::Rpm => Ok(elevated_command(update, rpm_installer())),
         #[cfg(target_os = "windows")]
         AppArtifactKind::Msi => {
             let mut command = Command::new("msiexec");
@@ -68,9 +60,46 @@ fn installer_command(update: &PendingAppUpdate) -> ServiceResult<Command> {
 }
 
 #[cfg(target_os = "linux")]
-fn elevated_command(program: &str, args: &[&str], artifact: &Path) -> Command {
+fn rpm_installer() -> &'static [&'static str] {
+    if sabine_runtime::find_program("dnf").is_some() {
+        &["dnf", "install", "--assumeyes"]
+    } else if sabine_runtime::find_program("zypper").is_some() {
+        &[
+            "zypper",
+            "--non-interactive",
+            "install",
+            "--allow-unsigned-rpm",
+        ]
+    } else {
+        &["rpm", "-U"]
+    }
+}
+
+/// Copies the package somewhere only the administrator can write and checks
+/// it there, so the file the package manager installs is the one that
+/// matched its release, whatever happens to the download meanwhile.
+#[cfg(target_os = "linux")]
+const ELEVATED_INSTALL: &str = r#"artifact=$1 sha256=$2 extension=$3
+shift 3
+directory=$(mktemp -d) || exit 1
+trap 'rm -rf "$directory"' EXIT
+package="$directory/update.$extension"
+cp -- "$artifact" "$package" || exit 1
+if ! printf '%s  %s\n' "$sha256" "$package" | sha256sum --check --status; then
+  echo "the update does not match its release" >&2
+  exit 1
+fi
+"$@" "$package""#;
+
+#[cfg(target_os = "linux")]
+fn elevated_command(update: &PendingAppUpdate, installer: &[&str]) -> Command {
     let mut command = Command::new("pkexec");
-    command.arg(program).args(args).arg(artifact);
+    command
+        .args(["/bin/sh", "-c", ELEVATED_INSTALL, "sh"])
+        .arg(&update.artifact)
+        .arg(&update.sha256)
+        .arg(update.kind.config_value())
+        .args(installer);
     command
 }
 
@@ -85,7 +114,7 @@ fn install_appimage(update: &PendingAppUpdate, target: Option<&Path>) -> Service
     let mut permissions = std::fs::metadata(&temporary)?.permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(&temporary, permissions)?;
-    crate::app::registry::replace_file(&temporary, target)?;
+    sabine_runtime::replace_file(&temporary, target)?;
     Ok(())
 }
 

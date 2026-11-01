@@ -96,7 +96,7 @@ fn extract_zip(input: File, destination: &Path) -> io::Result<()> {
         #[cfg(unix)]
         std::os::unix::fs::symlink(target, path)?;
         #[cfg(windows)]
-        if path.parent().unwrap().join(target).is_dir() {
+        if links_to_directory(path, &links) {
             std::os::windows::fs::symlink_dir(target, path)?;
         } else {
             std::os::windows::fs::symlink_file(target, path)?;
@@ -108,6 +108,30 @@ fn extract_zip(input: File, destination: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Whether `link` ends at a directory, following the archive's other links,
+/// which Windows needs to know before they exist.
+#[cfg(windows)]
+fn links_to_directory(link: &Path, links: &[(PathBuf, String)]) -> bool {
+    let mut current = link.to_path_buf();
+    for _ in 0..=links.len() {
+        let Some((_, target)) = links.iter().find(|(path, _)| *path == current) else {
+            return current.is_dir();
+        };
+        let mut next = current.parent().expect("links have a parent").to_path_buf();
+        for part in Path::new(target).components() {
+            match part {
+                Component::ParentDir => {
+                    next.pop();
+                }
+                Component::Normal(name) => next.push(name),
+                _ => {}
+            }
+        }
+        current = next;
+    }
+    false
 }
 
 fn safe_path(path: &Path) -> bool {

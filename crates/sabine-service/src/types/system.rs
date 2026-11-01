@@ -28,10 +28,6 @@ impl SabineVersion {
                 major: *major,
                 build: *build,
             }),
-            [major, 1, build] if *build > 0 => Some(Self {
-                major: *major,
-                build: *build,
-            }),
             [major, build, 0] => Some(Self {
                 major: *major,
                 build: *build,
@@ -50,16 +46,6 @@ pub struct SystemCompatibility {
     pub major: u32,
     pub build: u32,
     pub minimum_app_build: u32,
-}
-
-impl Default for SystemCompatibility {
-    fn default() -> Self {
-        Self {
-            major: SABINE_MAJOR,
-            build: 0,
-            minimum_app_build: 0,
-        }
-    }
 }
 
 impl SystemCompatibility {
@@ -107,7 +93,6 @@ pub struct SystemReleaseManifest {
     pub schema: u32,
     pub version: String,
     pub published_at: String,
-    #[serde(default)]
     pub compatibility: SystemCompatibility,
     pub artifacts: std::collections::BTreeMap<String, SystemReleaseArtifact>,
     #[serde(default)]
@@ -124,7 +109,7 @@ pub struct SystemReleaseArtifact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{SABINE_VERSION, version_is_newer};
+    use crate::types::SABINE_VERSION;
 
     #[test]
     fn public_and_internal_versions_resolve_to_the_same_build() {
@@ -134,14 +119,6 @@ mod tests {
             SabineVersion::parse(env!("CARGO_PKG_VERSION")),
             Some(current)
         );
-        assert_eq!(
-            SabineVersion::parse("0.1.20"),
-            Some(SabineVersion {
-                major: 0,
-                build: 20
-            })
-        );
-        assert!(version_is_newer("0.21", "0.1.20"));
     }
 
     #[test]

@@ -4,6 +4,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use sabine_runtime::sync_directory;
 use serde::{Deserialize, Serialize};
 
 use crate::app::registry::RegistryLock;
@@ -45,7 +46,36 @@ pub fn remove_app_payload(root: &Path, id: &str) -> ServiceResult<()> {
     Ok(())
 }
 
-#[derive(Deserialize)]
+/// Records every file of the payload at `root`, and the `later` ones its
+/// installer adds, so setup installs and removes exactly those files.
+pub fn write_install_inventory(root: &Path, id: &str, later: &[&str]) -> ServiceResult<()> {
+    fn walk(root: &Path, directory: &Path, files: &mut BTreeSet<PathBuf>) -> ServiceResult<()> {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                walk(root, &path, files)?;
+            } else {
+                files.insert(path.strip_prefix(root).expect("walked inside root").into());
+            }
+        }
+        Ok(())
+    }
+    let mut files = later.iter().map(PathBuf::from).collect();
+    walk(root, root, &mut files)?;
+    files.remove(Path::new(INVENTORY));
+    let inventory = Inventory {
+        id: id.to_string(),
+        files,
+    };
+    fs::write(
+        root.join(INVENTORY),
+        serde_json::to_vec(&inventory).expect("an inventory is serializable"),
+    )?;
+    Ok(())
+}
+
+#[derive(Deserialize, Serialize)]
 struct Inventory {
     id: String,
     files: BTreeSet<PathBuf>,
@@ -347,14 +377,6 @@ fn validate_relative_path(path: &Path) -> ServiceResult<()> {
     Ok(())
 }
 
-fn sync_directory(path: &Path) -> ServiceResult<()> {
-    #[cfg(unix)]
-    fs::File::open(path)?.sync_all()?;
-    #[cfg(not(unix))]
-    let _ = path;
-    Ok(())
-}
-
 fn copy_file(source: &Path, destination: &Path) -> ServiceResult<()> {
     if !fs::symlink_metadata(source)?.file_type().is_file() {
         return Err(invalid("installer payloads require regular files"));
@@ -402,7 +424,7 @@ fn write_transaction(journal: &Path, transaction: &Transaction) -> ServiceResult
     file.flush()?;
     file.sync_all()?;
     drop(file);
-    crate::app::registry::replace_file(&temporary, &journal.join("transaction.json"))?;
+    sabine_runtime::replace_file(&temporary, &journal.join("transaction.json"))?;
     Ok(())
 }
 

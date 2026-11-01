@@ -1,18 +1,13 @@
 use std::path::Path;
 
-use sabine_runtime::{
-    RuntimeConfig, path_in_root, resolve_runtime, system_dir, system_runtime_path,
-};
+use sabine_runtime::{path_in_root, system_dir, system_runtime_path};
 
 /// Installs the Sabine service, CEF host and CEF runtime for every user of the
 /// machine, or stages them under `root`. The pieces come from this machine's
 /// own Sabine: a service next to the CLI or already installed, a host built
 /// for the runtime, and the newest runtime, downloaded when there is none.
 pub(super) fn install(root: Option<&Path>) -> Result<(), String> {
-    let runtime = match resolve_runtime(&RuntimeConfig::default()) {
-        Ok(runtime) => runtime,
-        Err(_) => super::install_default_runtime(&RuntimeConfig::default())?,
-    };
+    let runtime = super::ensure_runtime()?;
     let host = sabine_host::ensure_host(runtime.location.path())
         .map_err(|error| format!("failed to prepare the Sabine CEF host: {error}"))?;
     let service = match sabine_service::find_service_executable() {

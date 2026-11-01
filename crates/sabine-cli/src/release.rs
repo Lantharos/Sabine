@@ -5,27 +5,14 @@ use sabine_service::{
     sign_system_release,
 };
 
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs::File,
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
-#[derive(Deserialize)]
-struct ReleaseConfig {
-    app: AppConfig,
-    updates: Option<sabine_service::AppUpdatesSection>,
-}
-
-#[derive(Deserialize)]
-struct AppConfig {
-    id: String,
-    version: String,
-}
+use crate::project::{ConfigOverrides, absolute_path, resolve_app};
 
 pub(crate) fn write_manifest(
     source: &Path,
@@ -34,54 +21,25 @@ pub(crate) fn write_manifest(
     artifact_specs: &[String],
     executable_specs: &[String],
 ) -> Result<(), String> {
-    let source = absolute(source)?;
-    let config_path = source.join("Sabine.toml");
-    let config = toml::from_str::<ReleaseConfig>(
-        &std::fs::read_to_string(&config_path).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| format!("failed to parse {}: {error}", config_path.display()))?;
-    let updates = match config
-        .updates
-        .map(sabine_service::AppUpdatesSection::source)
-    {
-        Some(Some(updates)) if updates.policy != UpdatePolicy::Disabled => Some(updates),
-        Some(_) => return Err("updates are disabled in Sabine.toml".to_string()),
-        None => None,
-    };
-    let repository = match updates.as_ref() {
-        Some(updates) => match &updates.source {
-            AppUpdateSource::Github { repository } => repository.clone(),
-            AppUpdateSource::Http { .. } => {
-                return Err(
-                    "release manifest generation currently requires the GitHub provider".into(),
-                );
-            }
-        },
-        None => std::env::var("GITHUB_REPOSITORY")
-            .map_err(|_| "configure [updates] or run inside GitHub Actions".to_string())?,
-    };
-    let private_key = signing_key()?;
-    let signer_public_key =
-        public_key_from_private(&private_key).map_err(|error| error.to_string())?;
-    if let Some(configured) = updates
-        .as_ref()
-        .map(|updates| updates.public_key.trim())
-        .filter(|key| !key.is_empty())
-        && configured != signer_public_key
-    {
-        return Err("Sabine.toml update public_key does not match the release signing key".into());
+    let app = resolve_app(source, ConfigOverrides::default())?;
+    let updates = app.updates.ok_or_else(|| {
+        "configure [updates] in Sabine.toml, or build inside GitHub Actions".to_string()
+    })?;
+    if updates.policy == UpdatePolicy::Disabled {
+        return Err("updates are disabled in Sabine.toml".to_string());
     }
-    let tag = format!("v{}", config.app.version);
+    let AppUpdateSource::Github { repository } = &updates.source else {
+        return Err("release manifest generation currently requires the GitHub provider".into());
+    };
+    let tag = format!("v{}", app.version);
     if let Ok(ref_name) = std::env::var("GITHUB_REF_NAME")
         && ref_name != tag
     {
         return Err(format!(
-            "release tag {ref_name} does not match Sabine.toml version {tag}"
+            "release tag {ref_name} does not match the app version {tag}"
         ));
     }
-    if let Some(updates) = &updates
-        && updates.channel != channel
-    {
+    if updates.channel != channel {
         return Err(format!(
             "requested channel {channel} does not match Sabine.toml channel {}",
             updates.channel
@@ -90,7 +48,7 @@ pub(crate) fn write_manifest(
     let executables = parse_assignments(executable_specs)?;
     let mut artifacts = BTreeMap::new();
     for (target, raw_path) in parse_assignments(artifact_specs)? {
-        let path = absolute_from(&source, Path::new(&raw_path));
+        let path = app.source_dir.join(raw_path);
         if !path.is_file() {
             return Err(format!(
                 "release artifact does not exist: {}",
@@ -115,26 +73,30 @@ pub(crate) fn write_manifest(
     if artifacts.is_empty() {
         return Err("at least one --artifact target=path is required".to_string());
     }
-    let published_at = unix_now();
     let mut manifest = AppReleaseManifest {
         schema: 1,
-        app_id: config.app.id,
-        version: config.app.version,
+        app_id: app.id,
+        version: app.version,
         channel: channel.to_string(),
-        published_at,
+        published_at: unix_now(),
         requires_sabine: sabine_service::SabineVersion::current(),
         artifacts,
         signature: String::new(),
     };
-    sign_app_release(&mut manifest, &private_key).map_err(|error| error.to_string())?;
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    std::fs::write(
-        output,
-        serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())
+    sign_app_release(&mut manifest, &signing_key()?).map_err(|error| error.to_string())?;
+    write_output(output, &manifest)
+}
+
+/// Lays out the service, daemon and CEF host of a Sabine system release in
+/// `output`, as every installation unpacks them.
+pub(crate) fn stage_system_release(
+    service: &Path,
+    host: &Path,
+    output: &Path,
+) -> Result<(), String> {
+    sabine_runtime::remove_directory_if_present(output).map_err(|error| error.to_string())?;
+    sabine_service::stage_system_files(output, &absolute_path(service)?, &absolute_path(host)?)
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn write_system_manifest(
@@ -154,7 +116,7 @@ pub(crate) fn write_system_manifest(
             sabine_service::SABINE_VERSION
         ));
     }
-    let directory = absolute(directory)?;
+    let directory = absolute_path(directory)?;
     let mut artifacts = BTreeMap::new();
     for entry in std::fs::read_dir(&directory).map_err(|error| error.to_string())? {
         let path = entry.map_err(|error| error.to_string())?.path();
@@ -186,22 +148,25 @@ pub(crate) fn write_system_manifest(
     if artifacts.is_empty() {
         return Err("system release directory contains no artifacts".to_string());
     }
-    let published_at = unix_now();
     let mut manifest = SystemReleaseManifest {
         schema: 1,
         version: version.to_string(),
-        published_at,
+        published_at: unix_now(),
         compatibility: sabine_service::SystemCompatibility::current(),
         artifacts,
         signature: String::new(),
     };
     sign_system_release(&mut manifest, &signing_key()?).map_err(|error| error.to_string())?;
+    write_output(output, &manifest)
+}
+
+fn write_output(output: &Path, manifest: &impl serde::Serialize) -> Result<(), String> {
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     std::fs::write(
         output,
-        serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
+        serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())
 }
@@ -345,7 +310,7 @@ fn artifact_kind(path: &Path) -> Result<AppArtifactKind, String> {
         .and_then(|name| name.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if name.ends_with(".tar.gz") || name.ends_with(".tar.zst") || name.ends_with(".zip") {
+    if name.ends_with(".tar.gz") || name.ends_with(".zip") {
         Ok(AppArtifactKind::Archive)
     } else if name.ends_with(".deb") {
         Ok(AppArtifactKind::Deb)
@@ -368,38 +333,6 @@ fn artifact_kind(path: &Path) -> Result<AppArtifactKind, String> {
 }
 
 fn sha256(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|error| error.to_string())?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|error| error.to_string())?;
-        if read == 0 {
-            break;
-        }
-        hash.update(&buffer[..read]);
-    }
-    Ok(hash
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
-}
-
-fn absolute(path: &Path) -> Result<PathBuf, String> {
-    let path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(path)
-    };
-    path.canonicalize().map_err(|error| error.to_string())
-}
-
-fn absolute_from(source: &Path, path: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        source.join(path)
-    }
+    sabine_runtime::sha256_file(path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))
 }

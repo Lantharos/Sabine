@@ -5,6 +5,7 @@ use sabine_runtime::{
 use std::path::{Path, PathBuf};
 
 use crate::app::registry::{RegistryLock, SabineService};
+use crate::download::{download_artifact, verify_sha256};
 use crate::types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateStatus,
     MaintenanceReport, PendingAppUpdate, ServiceError, ServiceResult, UpdatePolicy, is_https_url,
@@ -16,11 +17,17 @@ pub(crate) mod installers;
 mod packages;
 
 pub(crate) use installers::safe_relative_path;
-use installers::{
-    artifact_extension, download_artifact, install_archive, pending_path, verify_sha256,
-    write_json_atomic,
-};
+use installers::{artifact_extension, install_archive, pending_path};
 use packages::run_package_installer;
+
+/// What an app update does when it needs a newer Sabine than the installed one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SystemUpdates {
+    /// Install it and restart the daemon on it, outside the daemon.
+    Install,
+    /// Report it, for the daemon to hand over to.
+    Report,
+}
 
 impl SabineService {
     pub fn maintain(&self) -> ServiceResult<MaintenanceReport> {
@@ -51,11 +58,8 @@ impl SabineService {
             if update.policy != UpdatePolicy::Automatic {
                 continue;
             }
-            let result = if incompatible_apps.contains(&app.manifest.id) {
-                self.update_app(&app.manifest.id)
-            } else {
-                self.update_app_routine(&app.manifest.id)
-            };
+            let require_soak = !incompatible_apps.contains(&app.manifest.id);
+            let result = self.update_app_as(&app.manifest.id, require_soak, SystemUpdates::Report);
             match result {
                 Ok(AppUpdateStatus::Installed { .. }) => updated_apps.push(app.manifest.id.clone()),
                 Ok(AppUpdateStatus::PendingApproval(_)) => {
@@ -120,10 +124,10 @@ impl SabineService {
         } else {
             resolve_runtime(&self.runtime)?
         };
-        let host = sabine_host::available_host(runtime.location.path()).ok_or_else(|| {
-            ServiceError::Update(
-                "installed Sabine host is unavailable for runtime validation".into(),
-            )
+        let host = sabine_host::ensure_host(runtime.location.path()).map_err(|error| {
+            ServiceError::Update(format!(
+                "the Sabine host to validate the runtime with is unavailable: {error}"
+            ))
         })?;
         if let Err(error) = sabine_host::smoke_test_runtime(&host, runtime.location.path()) {
             quarantine_user_runtime(
@@ -152,14 +156,26 @@ impl SabineService {
         self.update_app_with_soak(id, false)
     }
 
-    fn update_app_routine(&self, id: &str) -> ServiceResult<AppUpdateStatus> {
-        self.update_app_with_soak(id, true)
-    }
-
+    /// Updates `id`, after its soak period when `require_soak`. Without it the
+    /// update also installs the Sabine it needs.
     pub fn update_app_with_soak(
         &self,
         id: &str,
         require_soak: bool,
+    ) -> ServiceResult<AppUpdateStatus> {
+        let system = if require_soak {
+            SystemUpdates::Report
+        } else {
+            SystemUpdates::Install
+        };
+        self.update_app_as(id, require_soak, system)
+    }
+
+    fn update_app_as(
+        &self,
+        id: &str,
+        require_soak: bool,
+        system_updates: SystemUpdates,
     ) -> ServiceResult<AppUpdateStatus> {
         let _update_lock = self.app_update_lock(id)?;
         let app = self.app(id)?;
@@ -189,14 +205,13 @@ impl SabineService {
             build: system.build,
         };
         if release.requires_sabine > installed {
-            if !require_soak {
-                crate::install::install_required_system_update(release.requires_sabine, id)?;
-            } else {
+            if system_updates == SystemUpdates::Report {
                 return Ok(AppUpdateStatus::RequiresSystem {
                     app_version: release.version,
                     sabine: release.requires_sabine,
                 });
             }
+            crate::install::install_required_system_update(release.requires_sabine, id)?;
         }
         let system = crate::install::installed_system_compatibility();
         if !system.accepts(release.requires_sabine) {
@@ -289,7 +304,7 @@ impl SabineService {
             return Ok(false);
         };
         pending.prompt_after = unix_timestamp().saturating_add(crate::UPDATE_SOAK.as_secs());
-        write_json_atomic(&pending_path(&self.root, id), &pending)?;
+        sabine_runtime::write_json_atomic(&pending_path(&self.root, id), &pending)?;
         Ok(true)
     }
 
@@ -315,7 +330,7 @@ impl SabineService {
             std::fs::remove_file(&path)?;
         }
         if !path.is_file() {
-            download_artifact(&artifact.url, &path)?;
+            download_artifact(&artifact.url, &path, None, |_| {})?;
         }
         verify_sha256(&path, &artifact.sha256)?;
         let existing = self
@@ -338,11 +353,7 @@ impl SabineService {
                 .map(|pending| pending.prompt_after)
                 .unwrap_or_default(),
         };
-        let pending_path = pending_path(&self.root, id);
-        if let Some(parent) = pending_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        write_json_atomic(&pending_path, &pending)?;
+        sabine_runtime::write_json_atomic(&pending_path(&self.root, id), &pending)?;
         Ok(pending)
     }
 
@@ -406,7 +417,7 @@ fn fetch_release(url: &str) -> ServiceResult<AppReleaseManifest> {
             "release manifest URL must use HTTPS".to_string(),
         ));
     }
-    crate::http::fetch_manifest(url)
+    crate::download::fetch_manifest(url)
 }
 
 fn validate_release(release: &AppReleaseManifest, id: &str, channel: &str) -> ServiceResult<()> {

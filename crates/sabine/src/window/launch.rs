@@ -1,4 +1,4 @@
-use sabine_runtime::{RuntimeInfo, resolve_runtime};
+use sabine_runtime::RuntimeInfo;
 
 use super::origins::{allow_dev_origins, allow_url_origin};
 use super::{SabineWindow, SabineWindowConfig};
@@ -20,10 +20,8 @@ impl SabineWindow {
         metrics.mark("config.ready");
         let claim = DesktopClaim::acquire(&self.config)?;
         metrics.mark("single_instance.ready");
-        bootstrap::prepare(&self.config)?;
+        let runtime = bootstrap::prepare(&self.config)?;
         metrics.mark("bootstrap.ready");
-        let runtime = resolve_runtime(&self.config.runtime)?;
-        metrics.mark("runtime.ready");
         self.launch_with_runtime(runtime, claim, metrics)
     }
 

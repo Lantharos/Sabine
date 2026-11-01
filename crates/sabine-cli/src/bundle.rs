@@ -1,24 +1,24 @@
-mod cargo_metadata;
-use crate::environment;
+mod format;
 mod install;
-pub use install::install_bundle;
-mod config;
 mod linux;
+mod macos;
 mod metadata;
 mod package;
 mod signing;
 mod stage;
 mod system;
-mod updates;
-pub use system::install_system_bundle;
 mod windows;
+
+pub use install::install_bundle;
+pub use system::install_system_bundle;
 
 use std::{
     path::PathBuf,
     process::{Command, ExitCode, Stdio},
 };
 
-use config::{BundleApp, ConfigOverrides};
+use crate::project::{BundleApp, ConfigOverrides, environment};
+use format::{BuildTarget, BundleFormat};
 use package::package_bundle;
 use stage::{binary_path, stage_bundle};
 
@@ -44,112 +44,20 @@ pub struct BundleOptions {
     pub env_files: Vec<PathBuf>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum BundleFormat {
-    Linux,
-    Portable,
-    Deb,
-    Rpm,
-    AppImage,
-    Windows,
-    Exe,
-    Msi,
-    Macos,
-    Dmg,
-}
-
-impl BundleFormat {
-    fn parse(value: &str) -> Option<Self> {
-        match value {
-            "linux" => Some(Self::Linux),
-            "portable" | "tar" | "tar.gz" => Some(Self::Portable),
-            "deb" => Some(Self::Deb),
-            "rpm" => Some(Self::Rpm),
-            "appimage" => Some(Self::AppImage),
-            "windows" => Some(Self::Windows),
-            "exe" | "nsis" => Some(Self::Exe),
-            "msi" => Some(Self::Msi),
-            "macos" | "app" => Some(Self::Macos),
-            "dmg" => Some(Self::Dmg),
-            _ => None,
-        }
-    }
-
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Linux => "linux",
-            Self::Portable => "portable",
-            Self::Deb => "deb",
-            Self::Rpm => "rpm",
-            Self::AppImage => "appimage",
-            Self::Windows => "windows",
-            Self::Exe => "exe",
-            Self::Msi => "msi",
-            Self::Macos => "macos",
-            Self::Dmg => "dmg",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum BuildTarget {
-    Linux,
-    Windows,
-    Macos,
-}
-
-impl BuildTarget {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Linux => "linux",
-            Self::Windows => "windows",
-            Self::Macos => "macos",
-        }
-    }
-
-    pub(super) fn rust_target(self) -> Option<&'static str> {
-        match self {
-            Self::Linux if cfg!(target_os = "linux") => None,
-            Self::Linux if cfg!(target_arch = "aarch64") => Some("aarch64-unknown-linux-gnu"),
-            Self::Linux => Some("x86_64-unknown-linux-gnu"),
-            Self::Windows if cfg!(target_arch = "aarch64") => Some("aarch64-pc-windows-msvc"),
-            Self::Windows => Some("x86_64-pc-windows-msvc"),
-            Self::Macos => Some("aarch64-apple-darwin"),
-        }
-    }
-}
-
 pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
     let json = options.json;
     let signing = signing::Signing::from_env()?;
     let (app, format, staged) = prepare_bundle(options)?;
     signing.sign_payload(format, &staged)?;
-    let packaged = package_bundle(&app, format, &staged)?;
-    signing.sign_artifacts(format, &packaged.artifacts)?;
+    let artifact = package_bundle(&app, format, &staged)?;
+    signing.sign_artifact(format, &artifact)?;
     if json {
-        println!("{}", bundle_json(&app, format, &staged, &packaged));
+        println!("{}", bundle_json(&app, format, &staged, &artifact));
     } else {
         println!("Bundled {} to {}", app.name, staged.root.display());
-        for artifact in &packaged.artifacts {
-            println!("artifact: {}", artifact.display());
-        }
-        for note in &packaged.notes {
-            println!("note: {note}");
-        }
+        println!("artifact: {}", artifact.display());
     }
     Ok(ExitCode::SUCCESS)
-}
-
-pub(super) fn build_target_for_format(format: BundleFormat) -> Option<BuildTarget> {
-    match format {
-        BundleFormat::Linux
-        | BundleFormat::Portable
-        | BundleFormat::Deb
-        | BundleFormat::Rpm
-        | BundleFormat::AppImage => Some(BuildTarget::Linux),
-        BundleFormat::Windows | BundleFormat::Exe | BundleFormat::Msi => Some(BuildTarget::Windows),
-        BundleFormat::Macos | BundleFormat::Dmg => Some(BuildTarget::Macos),
-    }
 }
 
 fn build_web(app: &BundleApp, environment: &environment::BuildEnvironment) -> Result<(), String> {
@@ -194,7 +102,7 @@ fn build_rust(
             app.cargo_manifest.display()
         ));
     }
-    let target = build_target_for_format(format);
+    let target = format.target();
     let mut command = Command::new("cargo");
     environment.apply(&mut command);
     command
@@ -208,16 +116,13 @@ fn build_rust(
     if release {
         command.arg("--release");
     }
-    if let Some(rust_target) = target.and_then(BuildTarget::rust_target) {
+    if let Some(rust_target) = target.rust_target() {
         command.arg("--target").arg(rust_target);
     }
-    if target == Some(BuildTarget::Windows) {
+    if target == BuildTarget::Windows {
         configure_windows_linking(&mut command);
     }
-    command.env(
-        "SABINE_BUILD_TARGET",
-        target.map(BuildTarget::as_str).unwrap_or("native"),
-    );
+    command.env("SABINE_BUILD_TARGET", target.as_str());
     use std::io::{BufRead, BufReader};
     let mut child = command
         .stdout(Stdio::piped())
@@ -297,7 +202,7 @@ fn bundle_json(
     app: &BundleApp,
     format: BundleFormat,
     staged: &stage::StagedBundle,
-    packaged: &package::PackageResult,
+    artifact: &std::path::Path,
 ) -> String {
     serde_json::json!({
         "ok": true,
@@ -308,8 +213,7 @@ fn bundle_json(
             .root
             .parent()
             .and_then(|parent| staged.binary.strip_prefix(parent).ok()),
-        "artifacts": packaged.artifacts,
-        "notes": packaged.notes,
+        "artifacts": [artifact],
     })
     .to_string()
 }
@@ -320,14 +224,11 @@ fn prepare_bundle(
     let Some(format) = BundleFormat::parse(&options.target) else {
         return Err("unknown bundle target; use linux, portable, deb, rpm, appimage, windows, exe, msi, macos, or dmg".to_string());
     };
-    if options.offline
-        && build_target_for_format(format)
-            .is_some_and(|target| target.as_str() != std::env::consts::OS)
-    {
+    if options.offline && format.target().as_str() != std::env::consts::OS {
         return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
     }
     let out = absolute_path(options.out)?;
-    let mut app = config::resolve_app(
+    let mut app = crate::project::resolve_app(
         &options.source,
         ConfigOverrides {
             id: options.id,

@@ -1,10 +1,11 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{env, path::Path, process::Command};
 
-use super::{BundleFormat, stage::StagedBundle};
+use super::{
+    BuildTarget, BundleFormat,
+    macos::signing::{MacosSigning, Notary},
+    stage::StagedBundle,
+    windows::signing::{WindowsCertificate, WindowsSigning},
+};
 
 const DEFAULT_TIMESTAMP_URL: &str = "http://timestamp.digicert.com";
 
@@ -13,32 +14,6 @@ const DEFAULT_TIMESTAMP_URL: &str = "http://timestamp.digicert.com";
 pub(super) struct Signing {
     macos: Option<MacosSigning>,
     windows: Option<WindowsSigning>,
-}
-
-struct MacosSigning {
-    identity: String,
-    notary: Option<Notary>,
-}
-
-struct Notary {
-    apple_id: String,
-    team_id: String,
-    password: String,
-}
-
-struct WindowsSigning {
-    certificate: WindowsCertificate,
-    timestamp_url: String,
-}
-
-enum WindowsCertificate {
-    File {
-        path: PathBuf,
-        password: Option<String>,
-    },
-    Store {
-        thumbprint: String,
-    },
 }
 
 impl Signing {
@@ -74,7 +49,7 @@ impl Signing {
                 );
             }
             (Some(path), None) => Some(WindowsCertificate::File {
-                path: PathBuf::from(path),
+                path: path.into(),
                 password: variable("SABINE_WINDOWS_CERTIFICATE_PASSWORD"),
             }),
             (None, Some(thumbprint)) => Some(WindowsCertificate::Store { thumbprint }),
@@ -88,149 +63,53 @@ impl Signing {
         Ok(Self { macos, windows })
     }
 
-    /// Signs the staged application before it is packaged.
+    /// Signs the staged application before it is packaged. An app archived
+    /// as it is, rather than inside a disk image, is also notarized.
     pub(super) fn sign_payload(
         &self,
         format: BundleFormat,
         staged: &StagedBundle,
     ) -> Result<(), String> {
-        match format {
-            BundleFormat::Macos | BundleFormat::Dmg => {
+        match format.target() {
+            BuildTarget::Macos => {
                 if let Some(macos) = &self.macos {
-                    macos.sign(&staged.app_dir, true)?;
-                }
-            }
-            BundleFormat::Windows | BundleFormat::Exe | BundleFormat::Msi => {
-                if let Some(windows) = &self.windows {
-                    for executable in executables(&staged.app_dir)? {
-                        windows.sign(&executable)?;
+                    macos.sign_app(&staged.app_dir)?;
+                    if format != BundleFormat::Dmg {
+                        macos.notarize_app(&staged.app_dir)?;
                     }
                 }
             }
-            BundleFormat::Linux
-            | BundleFormat::Portable
-            | BundleFormat::Deb
-            | BundleFormat::Rpm
-            | BundleFormat::AppImage => {}
+            BuildTarget::Windows => {
+                if let Some(windows) = &self.windows {
+                    windows.sign_app(&staged.app_dir)?;
+                }
+            }
+            BuildTarget::Linux => {}
         }
         Ok(())
     }
 
     /// Signs installers and disk images, and notarizes disk images.
-    pub(super) fn sign_artifacts(
+    pub(super) fn sign_artifact(
         &self,
         format: BundleFormat,
-        artifacts: &[PathBuf],
+        artifact: &Path,
     ) -> Result<(), String> {
-        match format {
-            BundleFormat::Dmg => {
-                if let Some(macos) = &self.macos {
-                    for artifact in artifacts {
-                        macos.sign(artifact, false)?;
-                        if let Some(notary) = &macos.notary {
-                            notary.notarize(artifact)?;
-                        }
-                    }
-                }
+        match (format, &self.macos, &self.windows) {
+            (BundleFormat::Dmg, Some(macos), _) => macos.sign_disk_image(artifact),
+            (BundleFormat::Exe | BundleFormat::Msi, _, Some(windows)) => {
+                windows.sign(&[artifact.to_path_buf()])
             }
-            BundleFormat::Exe | BundleFormat::Msi => {
-                if let Some(windows) = &self.windows {
-                    for artifact in artifacts {
-                        windows.sign(artifact)?;
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-}
-
-impl MacosSigning {
-    fn sign(&self, path: &Path, hardened: bool) -> Result<(), String> {
-        let mut command = Command::new("codesign");
-        command
-            .args(["--force", "--timestamp", "--sign", &self.identity])
-            .arg(path);
-        if hardened {
-            command.args(["--deep", "--options", "runtime"]);
-        }
-        run(&mut command, "codesign")
-    }
-}
-
-impl Notary {
-    fn notarize(&self, path: &Path) -> Result<(), String> {
-        run(
-            Command::new("xcrun")
-                .args(["notarytool", "submit"])
-                .arg(path)
-                .args([
-                    "--apple-id",
-                    &self.apple_id,
-                    "--team-id",
-                    &self.team_id,
-                    "--password",
-                    &self.password,
-                    "--wait",
-                ]),
-            "notarytool",
-        )?;
-        run(
-            Command::new("xcrun").args(["stapler", "staple"]).arg(path),
-            "stapler",
-        )
-    }
-}
-
-impl WindowsSigning {
-    fn sign(&self, path: &Path) -> Result<(), String> {
-        let mut command = Command::new("signtool");
-        command.args([
-            "sign",
-            "/fd",
-            "SHA256",
-            "/td",
-            "SHA256",
-            "/tr",
-            &self.timestamp_url,
-        ]);
-        match &self.certificate {
-            WindowsCertificate::File { path, password } => {
-                command.arg("/f").arg(path);
-                if let Some(password) = password {
-                    command.args(["/p", password]);
-                }
-            }
-            WindowsCertificate::Store { thumbprint } => {
-                command.args(["/sha1", thumbprint]);
-            }
-        }
-        run(command.arg(path), "signtool")
-    }
-}
-
-fn executables(directory: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut found = Vec::new();
-    for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
-        let path = entry.map_err(|error| error.to_string())?.path();
-        if path.is_dir() {
-            found.extend(executables(&path)?);
-        } else if path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
-        {
-            found.push(path);
+            _ => Ok(()),
         }
     }
-    Ok(found)
 }
 
 fn variable(name: &str) -> Option<String> {
     env::var(name).ok().filter(|value| !value.trim().is_empty())
 }
 
-fn run(command: &mut Command, tool: &str) -> Result<(), String> {
+pub(super) fn run(command: &mut Command, tool: &str) -> Result<(), String> {
     let status = command
         .status()
         .map_err(|error| format!("failed to run {tool}: {error}"))?;

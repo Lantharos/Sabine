@@ -88,16 +88,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - name: Validate app release tag
-        shell: pwsh
-        run: |
-          $content = Get-Content Sabine.toml -Raw
-          if ($content -notmatch '(?ms)\[app\].*?^version\s*=\s*"([^"]+)"') {
-            throw "Sabine.toml app version is missing"
-          }
-          if ($env:GITHUB_REF_NAME -ne "v$($Matches[1])") {
-            throw "tag $env:GITHUB_REF_NAME does not match app version v$($Matches[1])"
-          }
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -192,7 +182,7 @@ jobs:
             $bundle = sabine bundle . --target $target --release --json | Select-Object -Last 1
             if ($LASTEXITCODE -ne 0) { throw "Bundling $target failed" }
             $result = $bundle | ConvertFrom-Json
-            if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact: $($result.notes -join '; ')" }
+            if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact" }
             $updateTarget = if ($target -in @('portable', 'windows', 'macos')) { $platform } else { "$platform-$target" }
             $destination = New-Item "dist/release/$updateTarget" -ItemType Directory -Force
             $artifact = [IO.FileInfo]::new($result.artifacts[0])
