@@ -62,6 +62,7 @@ impl OsrNativeHost {
             self.refresh_appearance();
         } else {
             self.cancel_context_menu();
+            self.lose_pointer_capture();
         }
         self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });
         if !focused && self.config.hide_on_blur && self.config.visible {

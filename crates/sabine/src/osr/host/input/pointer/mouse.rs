@@ -8,6 +8,7 @@ use crate::osr::host::types::{
     ClickMemory, EVENTFLAG_ALT_DOWN, EVENTFLAG_COMMAND_DOWN, EVENTFLAG_CONTROL_DOWN,
     EVENTFLAG_LEFT_MOUSE_BUTTON, EVENTFLAG_MIDDLE_MOUSE_BUTTON,
     EVENTFLAG_PRECISION_SCROLLING_DELTA, EVENTFLAG_RIGHT_MOUSE_BUTTON, EVENTFLAG_SHIFT_DOWN,
+    MouseButtons,
 };
 
 const WHEEL_DELTA_PER_LINE: f64 = 120.0;
@@ -198,6 +199,19 @@ impl OsrNativeHost {
             Some(MouseButton::Right) => self.mouse.right = pressed,
             _ => {}
         }
+    }
+
+    /// Chromium keeps a pressed button's pointer capture until the button goes up, which a window
+    /// that loses focus while the button is down never hears. A drag the page started ends
+    /// through the drag instead.
+    pub(in crate::osr::host) fn lose_pointer_capture(&mut self) {
+        if self.drag.page_operations().is_some()
+            || !(self.mouse.left || self.mouse.middle || self.mouse.right)
+        {
+            return;
+        }
+        self.mouse = MouseButtons::default();
+        self.send_control("capture_lost\n");
     }
 
     pub(in crate::osr::host) fn mouse_button_pressed(&self, button: Option<MouseButton>) -> bool {

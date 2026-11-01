@@ -124,7 +124,9 @@ pub(crate) fn apply_browser_launch_args(
     #[cfg(target_os = "macos")]
     command.arg("--use-mock-keychain");
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
-        command.arg(format!("--remote-debugging-port={port}"));
+        command
+            .arg(format!("--remote-debugging-port={port}"))
+            .arg("--remote-allow-origins=devtools://devtools");
     }
     if let Some(path) = std::env::var_os(CHROMIUM_LOG_ENV).filter(|path| !path.is_empty()) {
         let mut log_file = std::ffi::OsString::from("--log-file=");
