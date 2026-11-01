@@ -52,7 +52,7 @@ const widest = Math.max(...apps.map((app) => app.shot.width));
             sizes="(min-width: 1024px) 56vw, 90vw"
             loading="lazy"
             class="window"
-            style={`--share:${app.shot.width / widest}`}
+            style={`--share:${app.shot.width / widest};--corner:${(14 / app.shot.width) * 100}% / ${(14 / app.shot.height) * 100}%`}
             data-shot={index}
             data-active={index === 0 ? "" : undefined}
           />
@@ -98,7 +98,7 @@ const widest = Math.max(...apps.map((app) => app.shot.width));
     grid-area: 1 / 1;
     width: calc(var(--fill) * var(--share));
     height: auto;
-    border-radius: 0.7rem;
+    border-radius: var(--corner);
     box-shadow:
       0 0 0 1px rgb(18 26 44 / 0.08),
       0 2px 6px rgb(18 26 44 / 0.08),
