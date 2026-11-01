@@ -27,9 +27,9 @@ do, such as syncing or a server connection, belongs there.
 A window's page is suspended:
 
 - while the window is hidden, always;
-- while the desktop reports it out of sight, with `suspend_on_occluded` (on by default);
-- when it is minimized with `appWindow.minimize()` or Sabine's window controls, with
-  `suspend_on_minimize` (on by default);
+- while it is out of sight, with `suspend_on_occluded` (on by default): minimized, or covered
+  where the desktop reports it. A window minimized with `appWindow.minimize()` or Sabine's window
+  controls suspends right away, without waiting for the desktop;
 - while it doesn't have focus, with `suspend_on_blur` (off for `.app()`, on for palettes, tray
   apps and hidden windows).
 
@@ -93,6 +93,10 @@ does:
 
 Only actual playback counts, so a page can't keep itself awake by claiming to play.
 
+An event the app sends a frozen page, such as a tray click or a bridge event from Rust, thaws it
+so its listeners run. The page then freezes again once it has spent another `freeze_after` out of
+sight.
+
 ```rust
 use std::time::Duration;
 
@@ -138,8 +142,8 @@ const { activities, keepingRunning } = await activity.list();
 
 A page lists and ends only its own window's activities.
 
-Rust starts activities on the process. They keep every window's page running until the lease is
-dropped or ended:
+Rust starts activities on the process. They keep every window's page running, windows opened
+after the activity began included, until the lease is dropped or ended:
 
 ```rust
 use sabine::prelude::*;
@@ -214,7 +218,6 @@ change one setting each:
 | --- | --- | --- | --- |
 | `active_frame_rate` | `0`, the display's | `0` | `0` |
 | `background_frame_rate` | `5` | `5` | `1` |
-| `suspend_on_minimize` | `true` | `true` | `true` |
 | `suspend_on_occluded` | `true` | `true` | `true` |
 | `suspend_on_blur` | `false` | `false` | `true` |
 | `freeze_after` | none | 5 minutes | 1 minute |

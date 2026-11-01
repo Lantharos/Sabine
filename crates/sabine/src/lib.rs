@@ -21,10 +21,11 @@ pub use sabine_bridge::{
     SabineActivityLease,
 };
 pub use sabine_platform::{
-    Appearance, AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
-    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
-    WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
+    Appearance, AutostartEntry, GlobalShortcutActivation, GlobalShortcutFailure,
+    GlobalShortcutRegistration, NativeMessagingHost, Notification, PlatformEvent, Shortcut,
+    ShortcutModifiers, SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon,
+    TrayMenuItem, TrayMenuItemKind, Urgency, WindowBackgroundEffect, WindowRegion,
+    WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 pub use sabine_service::AppEnvironment;

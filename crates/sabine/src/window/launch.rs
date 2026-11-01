@@ -1,3 +1,4 @@
+use sabine_bridge::{BridgeError, BridgeResponse};
 use sabine_runtime::RuntimeInfo;
 
 use super::manifest::development_env;
@@ -6,7 +7,7 @@ use super::{SabineWindow, SabineWindowConfig};
 use crate::desktop::open_urls::Openable;
 use crate::desktop::{DesktopClaim, TRAY_UPDATE_COMMAND};
 use crate::error::{SabineError, SabineResult};
-use crate::host::SabineProcess;
+use crate::host::{SabineProcess, SabineProcessHandle};
 use crate::launch::metrics::LaunchMetrics;
 use crate::launch::{bootstrap, dev_server, local_entry, metrics_label};
 use crate::osr;
@@ -51,27 +52,21 @@ impl SabineWindow {
         if let Some(tray) = desktop_services.tray() {
             self = self.bridge_handler(TRAY_UPDATE_COMMAND, move |command| {
                 tray.update_from_page(command.params)
-                    .map(|()| sabine_bridge::BridgeResponse::json(serde_json::Value::Null))
-                    .map_err(sabine_bridge::BridgeError::new)
+                    .map(|()| BridgeResponse::json(serde_json::Value::Null))
+                    .map_err(BridgeError::new)
             });
         }
         let openable = Openable::new(
             &self.config.desktop_services.deep_links,
             &self.config.document_extensions,
         );
-        let open_urls = self.config.listeners.open_urls.clone();
-        open_urls.receive_arguments(
+        self.config.listeners.open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),
             std::env::current_dir().ok().as_deref(),
             &openable,
         );
-        self = self.bridge_handler("app.takeOpenUrls", move |command| {
-            let urls = match command.window {
-                Some(window) => open_urls.take_for_page(window),
-                None => open_urls.take(),
-            };
-            Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(urls)))
-        });
+        let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart());
+        self = self.app_commands(&handle);
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
         if self.config.dev_url.is_some() {
@@ -84,15 +79,47 @@ impl SabineWindow {
             &self.config,
             &self.bridge_handlers,
             &url,
+            (handle, commands),
             metrics.clone(),
         )?;
         process.desktop_services = Some(desktop_services);
         if let Some(listener) = &self.config.launched {
             listener.deliver(process.handle());
         }
-        process.start_desktop_event_forwarder(openable);
+        process.start_desktop_event_forwarder(openable, self.config.desktop_events.clone());
         metrics.mark("launch.ready");
         Ok(process)
+    }
+
+    /// The `app.*` commands every page of the app can call.
+    fn app_commands(self, handle: &SabineProcessHandle) -> Self {
+        let open_urls = self.config.listeners.open_urls.clone();
+        let quitting = handle.clone();
+        let autostart = handle.clone();
+        self.bridge_handler("app.takeOpenUrls", move |command| {
+            let urls = match command.window {
+                Some(window) => open_urls.take_for_page(window),
+                None => open_urls.take(),
+            };
+            Ok(BridgeResponse::json(serde_json::json!(urls)))
+        })
+        .bridge_handler("app.quit", move |_| {
+            quitting.quit();
+            Ok(BridgeResponse::json(serde_json::Value::Null))
+        })
+        .bridge_handler("app.setAutostart", move |command| {
+            let enabled = command
+                .params
+                .get("enabled")
+                .and_then(serde_json::Value::as_bool)
+                .ok_or_else(|| {
+                    BridgeError::new("app.setAutostart requires an `enabled` boolean")
+                })?;
+            autostart
+                .set_autostart(enabled)
+                .map(|()| BridgeResponse::json(serde_json::Value::Null))
+                .map_err(BridgeError::new)
+        })
     }
 
     fn apply_launch_environment(&mut self) {
@@ -105,10 +132,10 @@ impl SabineWindow {
             if let Some(id) = &mut self.config.desktop_services.single_instance_id {
                 *id = environment.app_id(id);
             }
+            if let Some(entry) = &mut self.config.desktop_services.autostart {
+                entry.id = environment.app_id(&entry.id);
+            }
             self.config.app_update = None;
-            self.config.desktop_services.deep_links.clear();
-            self.config.desktop_services.native_messaging_hosts.clear();
-            self.config.desktop_services.autostart.clear();
         }
         if self.config.remember_size {
             super::remembered_size::restore(&mut self.config);

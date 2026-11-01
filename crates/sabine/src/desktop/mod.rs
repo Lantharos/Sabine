@@ -18,7 +18,8 @@ mod tray;
 use std::thread::{self, JoinHandle};
 
 use sabine_platform::{
-    GlobalShortcutFailure, GlobalShortcutRegistration, PlatformEvent, SingleInstancePolicy,
+    AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration, PlatformEvent,
+    SingleInstancePolicy,
 };
 
 use instance::SingleInstanceGuard;
@@ -78,18 +79,25 @@ impl DesktopClaim {
     }
 
     /// Registers the app with the desktop and shows its tray icon and
-    /// shortcuts.
+    /// shortcuts. Development runs leave the desktop's registrations alone.
     pub(crate) fn start(self, config: &SabineWindowConfig) -> SabineResult<DesktopServiceState> {
         let services = &config.desktop_services;
         let failed = |message: String| SabineError::CreationFailed { message };
-        for entry in &services.autostart {
-            write_autostart_entry(entry).map_err(failed)?;
+        let registers = !config.dev_mode();
+        let autostart = Autostart {
+            entry: services.autostart.clone(),
+            registers,
+        };
+        if let Some(entry) = &autostart.entry {
+            autostart.set_enabled(entry.enabled).map_err(failed)?;
         }
-        for registration in &services.deep_links {
-            register_deep_links(registration).map_err(failed)?;
-        }
-        for host in &services.native_messaging_hosts {
-            register_native_messaging_host(host).map_err(failed)?;
+        if registers {
+            for registration in &services.deep_links {
+                register_deep_links(registration).map_err(failed)?;
+            }
+            for host in &services.native_messaging_hosts {
+                register_native_messaging_host(host).map_err(failed)?;
+            }
         }
         let events = self.event_sender;
         #[cfg(target_os = "macos")]
@@ -124,6 +132,7 @@ impl DesktopClaim {
         );
         Ok(DesktopServiceState {
             event_receiver: self.event_receiver,
+            autostart,
             tray,
             _shortcuts: shortcuts,
             _single_instance: self.single_instance,
@@ -139,6 +148,7 @@ impl DesktopClaim {
 /// shortcuts, single-instance endpoint and the events they produce.
 pub struct DesktopServiceState {
     event_receiver: crossbeam_channel::Receiver<PlatformEvent>,
+    autostart: Autostart,
     tray: Option<TrayHandle>,
     _shortcuts: Option<GlobalShortcuts>,
     _single_instance: Option<SingleInstanceGuard>,
@@ -161,6 +171,35 @@ impl std::fmt::Debug for DesktopServiceState {
 impl DesktopServiceState {
     pub fn tray(&self) -> Option<TrayHandle> {
         self.tray.clone()
+    }
+
+    pub(crate) fn autostart(&self) -> Autostart {
+        self.autostart.clone()
+    }
+}
+
+/// The app's login entry, which it can turn on and off while it runs.
+#[derive(Clone, Debug)]
+pub(crate) struct Autostart {
+    entry: Option<AutostartEntry>,
+    /// Development runs leave the desktop's login items alone.
+    registers: bool,
+}
+
+impl Autostart {
+    pub(crate) fn set_enabled(&self, enabled: bool) -> Result<(), String> {
+        let Some(entry) = &self.entry else {
+            return Err(
+                "the app has no autostart entry; add one with SabineWindow::autostart".into(),
+            );
+        };
+        if !self.registers {
+            return Ok(());
+        }
+        write_autostart_entry(&AutostartEntry {
+            enabled,
+            ..entry.clone()
+        })
     }
 }
 

@@ -218,7 +218,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `background_effect(WindowBackgroundEffect)` | A desktop material behind the window; any effect makes the window transparent |
 | `app_chrome(AppChrome)` | An app-drawn titlebar with window controls, and glass sidebar regions |
 | `system_chrome()` | The desktop's own decorations, the default |
-| `frameless()`, `no_chrome()` | No system decorations; the page draws everything |
+| `frameless()` | No system decorations; the page draws everything |
 | `chrome(SabineWindowChrome)` | Picks a chrome style directly, including `Sabine`, a titlebar Sabine draws itself |
 
 See [Window chrome](/docs/windows/window-chrome/) and [Glass and effects](/docs/windows/glass-and-effects/).
@@ -245,7 +245,7 @@ Pages can also mark draggable areas with `-webkit-app-region: drag`, and change 
 | `lifecycle_policy(SabineLifecyclePolicy)` | Replaces the whole lifecycle policy |
 | `active_frame_rate(u32)` | The frame rate while active; `0` follows the display |
 | `background_frame_rate(u32)` | The frame rate while suspended; at least 1 |
-| `suspend_on_minimize(bool)`, `suspend_on_occluded(bool)`, `suspend_on_blur(bool)` | When the page drops to its background frame rate |
+| `suspend_on_occluded(bool)`, `suspend_on_blur(bool)` | When the page drops to its background frame rate: out of sight, including minimized, or without focus |
 | `freeze_after(Duration)` | Freezes the page after it has been out of sight this long |
 | `disable_freezing()` | Never freezes the page |
 | `retain_hidden_frame(bool)` | Keeps the last frame while hidden, for a quick return |
@@ -269,9 +269,10 @@ See [Lifecycle](/docs/windows/lifecycle/).
 pub fn on_launched(self, listener: impl Fn(SabineProcessHandle) + Send + Sync + 'static) -> Self;
 pub fn on_visibility_changed(self, listener: impl Fn(WindowVisibility) + Send + Sync + 'static) -> Self;
 pub fn on_appearance_changed(self, listener: impl Fn(WindowId, Appearance) + Send + Sync + 'static) -> Self;
+pub fn on_desktop_event(self, listener: impl Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with.
 
 ```rust
 pub struct WindowVisibility {
@@ -337,7 +338,7 @@ impl AppChrome {
 ### Chrome, colors and controls
 
 ```rust
-pub enum SabineWindowChrome { System, Sabine, Frameless, None }
+pub enum SabineWindowChrome { System, Sabine, Frameless }
 
 pub enum SabineWindowControlAction { Minimize, Maximize, Close }
 
@@ -361,7 +362,6 @@ impl SabineColor {
 pub struct SabineLifecyclePolicy {
     pub active_frame_rate: u32,         // 0: follow the display
     pub background_frame_rate: u32,     // 5
-    pub suspend_on_minimize: bool,      // true
     pub suspend_on_occluded: bool,      // true
     pub suspend_on_blur: bool,          // false
     pub freeze_after: Option<Duration>, // None
@@ -408,7 +408,7 @@ impl SabineProcess {
 
 - `id` is the first window's id while it is open. `WindowId` is a `u32`, the id of the window host's process.
 - `open_window` opens another window with the app's id and bridge handlers; handlers registered on the window you pass are ignored. It waits up to 20 seconds for the first window to be ready, since the others join its browser. `close_window` returns `false` for an unknown id.
-- `wait` blocks until every window has closed, then returns the first window's exit status. A background app keeps waiting for its next activation.
+- `wait` blocks until every window has closed, then returns the first window's exit status. A background app keeps waiting for its next activation, until `SabineProcessHandle::quit` ends it.
 - `take_open_urls` drains the queue of URLs and documents the app was asked to open, by its arguments, a second launch, or the system.
 - `notify` shows a desktop notification from the first window; its pages hear clicks as `notification.click` events.
 - Activities keep every window's page running while it is out of sight, until the lease is ended or dropped. `ActivityOptions::new(name).keep_running(false)` records an activity without keeping pages awake.
@@ -425,10 +425,12 @@ pub struct SabineProcessHandle { /* … */ }
 impl SabineProcessHandle {
     pub fn open_window(&self, window: SabineWindow) -> SabineResult<WindowId>;
     pub fn present(&self, activation_token: Option<String>) -> bool;
+    pub fn quit(&self) -> bool;
+    pub fn set_autostart(&self, enabled: bool) -> Result<(), String>;
 }
 ```
 
-A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop.
+A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop. `quit` closes every window and ends the app, also a background app or one whose window hides on close, and `wait` then returns a success status. `set_autostart` turns the app's autostart entry on or off; see [Starting at login](/docs/desktop/autostart/).
 
 ### BridgeEventEmitter
 
@@ -454,7 +456,6 @@ impl BridgeEventEmitter {
     pub fn set_visible(&self, visible: bool) -> bool;
     pub fn focus_window(&self) -> bool;
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool;
-    pub fn quit(&self) -> bool;
 }
 ```
 
@@ -792,9 +793,22 @@ pub enum PlatformEvent {
     GlobalShortcutFailed(GlobalShortcutFailure),
     SingleInstance(SingleInstanceActivation),
 }
+
+pub struct GlobalShortcutActivation {
+    pub id: String,
+    pub action: String,
+    pub activation_token: Option<String>,
+}
+
+pub struct SingleInstanceActivation {
+    pub policy: SingleInstancePolicy,
+    pub arguments: Vec<String>,
+    pub working_directory: Option<PathBuf>,
+    pub activation_token: Option<String>,
+}
 ```
 
-`SingleInstancePolicy::AllowMultiple` is the default; `.single_instance_id` alone doesn't turn single-instance behavior on. See [Autostart](/docs/desktop/autostart/), [Single instance](/docs/desktop/single-instance/) and [Native messaging](/docs/desktop/native-messaging/).
+`.on_desktop_event` hands app code each `PlatformEvent`. `SingleInstancePolicy::AllowMultiple` is the default; `.single_instance_id` alone doesn't turn single-instance behavior on. See [Autostart](/docs/desktop/autostart/), [Single instance](/docs/desktop/single-instance/) and [Native messaging](/docs/desktop/native-messaging/).
 
 ### Effects and regions
 
@@ -816,16 +830,13 @@ impl WindowRegionRect {
 impl WindowRegion {
     pub fn empty() -> Self;
     pub fn rect(x: i32, y: i32, width: i32, height: i32) -> Self;
-    pub fn full(width: i32, height: i32) -> Self;
-    pub fn rounded_rect(width: i32, height: i32, radius: i32) -> Self;
-    pub fn rounded_left(width: i32, height: i32, radius: i32) -> Self;
     pub fn add_rect(self, x: i32, y: i32, width: i32, height: i32) -> Self;
-    pub fn adaptive_full() -> Self;
-    pub fn adaptive_rounded_rect(radius: i32) -> Self;
-    pub fn adaptive_rounded_left(width: i32, radius: i32) -> Self;
-    pub fn adaptive_titlebar_sidebar(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
-    pub fn adaptive_content_after_sidebar(sidebar_width: i32, titlebar_height: i32) -> Self;
-    pub fn adaptive_content_after_sidebar_rounded_right(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
+    pub fn full() -> Self;
+    pub fn rounded_rect(radius: i32) -> Self;
+    pub fn rounded_left(width: i32, radius: i32) -> Self;
+    pub fn titlebar_and_sidebar(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
+    pub fn content_after_sidebar(sidebar_width: i32, titlebar_height: i32) -> Self;
+    pub fn content_after_sidebar_rounded_right(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
 }
 
 impl WindowRegions {
@@ -836,7 +847,7 @@ impl WindowRegions {
 }
 ```
 
-Adaptive regions follow the window's size, and their rounded corners turn square while the window is maximized, fullscreen or tiled. The platform-only effects exist only when compiling for that platform, so use them under `#[cfg(target_os = "...")]`.
+Every shape except `rect` follows the window's size, and their rounded corners turn square while the window is maximized, fullscreen or tiled. The platform-only effects exist only when compiling for that platform, so use them under `#[cfg(target_os = "...")]`.
 
 <Aside>
   The API avoids backend types on purpose. Apps don't pick paint transports or Chromium flags, and

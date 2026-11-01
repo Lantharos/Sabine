@@ -89,4 +89,15 @@ export const app = {
   takeOpenUrls() {
     return invoke("app.takeOpenUrls");
   },
+  /** @returns {Promise<void>} */
+  quit() {
+    return invoke("app.quit");
+  },
+  /**
+   * @param {boolean} enabled
+   * @returns {Promise<void>}
+   */
+  setAutostart(enabled) {
+    return invoke("app.setAutostart", { enabled });
+  },
 };

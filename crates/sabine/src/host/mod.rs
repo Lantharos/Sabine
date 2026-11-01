@@ -4,7 +4,7 @@ use std::path::Path;
 mod process;
 mod process_tree;
 
-pub(crate) use process::PrimaryWindow;
+pub(crate) use process::{PrimaryWindow, ProcessCommand};
 pub use process::{SabineProcess, SabineProcessHandle, WindowId};
 pub(crate) use process_tree::{
     ManagedChild, prepare_child_command, prepare_detachable_child_command,

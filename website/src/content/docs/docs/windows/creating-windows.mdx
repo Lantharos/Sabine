@@ -194,7 +194,7 @@ window in the taskbar and window switcher, and Sabine's own titlebar shows it.
 | `.hidden()` | `.visible(false)` and `.active(false)` together |
 | `.active(false)` | Opens the window without taking focus |
 | `.hide_on_blur(true)` | Hides the window when it loses focus |
-| `.hide_on_close(true)` | The close button and `appWindow.close()` hide the window instead of closing it |
+| `.hide_on_close(true)` | The close button and `appWindow.close()` hide the window instead of closing it; `app.quit()` still ends the app |
 | `.skip_taskbar(true)` | Keeps the window out of the taskbar and window switcher |
 | `.always_on_top(true)` | Keeps the window above other windows |
 
@@ -327,9 +327,9 @@ The options covered on other pages:
 
 | Options | See |
 | --- | --- |
-| `system_chrome`, `frameless`, `no_chrome`, `chrome`, `app_chrome`, `drag_region`, `drag_exclusion_region`, `titlebar_drag_region`, `control_region` | [Window chrome](/docs/windows/window-chrome/) |
+| `system_chrome`, `frameless`, `chrome`, `app_chrome`, `drag_region`, `drag_exclusion_region`, `titlebar_drag_region`, `control_region` | [Window chrome](/docs/windows/window-chrome/) |
 | `glass`, `background_effect`, `regions`, `blur_region`, `opaque_region`, `input_region` | [Glass and effects](/docs/windows/glass-and-effects/) |
-| `lifecycle_policy`, `active_frame_rate`, `background_frame_rate`, `suspend_on_minimize`, `suspend_on_occluded`, `suspend_on_blur`, `freeze_after`, `disable_freezing`, `retain_hidden_frame`, `on_visibility_changed` | [Lifecycle](/docs/windows/lifecycle/) |
+| `lifecycle_policy`, `active_frame_rate`, `background_frame_rate`, `suspend_on_occluded`, `suspend_on_blur`, `freeze_after`, `disable_freezing`, `retain_hidden_frame`, `on_visibility_changed` | [Lifecycle](/docs/windows/lifecycle/) |
 | `bridge_typed`, `bridge_typed_async`, `bridge_handler`, `bridge_handler_async`, `bridge_descriptor_handler`, `bridge_descriptor_handler_async` | [Commands](/docs/bridge/commands/) |
 | `bridge_event`, `bridge_type` | [Typed bindings](/docs/bridge/typed-bindings/) |
 | `tray_icon` | [Tray](/docs/desktop/tray/) |

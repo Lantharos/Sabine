@@ -73,4 +73,14 @@ export declare const bridge: {
 export declare const app: {
   /** Consumes pending URLs from initial launch and subsequent OS activations. */
   takeOpenUrls(): Promise<string[]>;
+  /**
+   * Closes every window and ends the app, also one that runs in the
+   * background or hides its window when it closes.
+   */
+  quit(): Promise<void>;
+  /**
+   * Turns the app's autostart entry on or off. Rejects when the app has no
+   * autostart entry; development runs change nothing.
+   */
+  setAutostart(enabled: boolean): Promise<void>;
 };

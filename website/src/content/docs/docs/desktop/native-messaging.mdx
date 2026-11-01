@@ -14,27 +14,42 @@ registers such a host for your app with every browser it knows about.
 
 ## Registering a host
 
-Pass a `NativeMessagingHost` to `.native_messaging_host(...)`:
+Pass a `NativeMessagingHost` to `.native_messaging_host(...)`. The host program ships with the app
+as a [resource](/docs/web/resources-and-files/), so `resource_path` finds it in the bundle once the
+app is packaged:
 
 ```rust
 use sabine::prelude::*;
-use sabine::NativeMessagingHost;
+use sabine::{NativeMessagingHost, resource_path};
 
 fn main() {
     SabineWindow::main(|window| {
-        let executable = std::env::current_exe()
-            .map_err(|error| SabineError::CreationFailed { message: error.to_string() })?
-            .with_file_name(if cfg!(windows) { "notes-bridge.exe" } else { "notes-bridge" });
-        Ok(window.app().native_messaging_host(NativeMessagingHost {
+        let window = window.app();
+        let Some(folder) = resource_path("browser-bridge") else {
+            return Ok(window);
+        };
+        let program = if cfg!(windows) { "notes-bridge.exe" } else { "notes-bridge" };
+        Ok(window.native_messaging_host(NativeMessagingHost {
             id: "com.example.notes".into(),
             name: "Notes browser bridge".into(),
-            executable,
+            executable: folder.join(program),
             allowed_origins: vec!["chrome-extension://abcdefghijklmnopabcdefghijklmnop/".into()],
             allowed_extensions: vec!["notes@example.com".into()],
         }))
     });
 }
 ```
+
+Name the folder the host program is built into under `[resources]` in `Sabine.toml`:
+
+```toml
+[resources]
+browser-bridge = "bridge/bin"
+```
+
+Build the host program into that folder before bundling, for example with
+`cargo install --path bridge --root bridge`. The bundle copies resources as they are, keeping the
+program executable, and signs the programs among them on macOS and Windows along with the app.
 
 | Field | Meaning |
 | --- | --- |
@@ -62,7 +77,7 @@ or updates. Development runs, such as `sabine dev`, register no native messaging
 
 ## The host program
 
-The host is a separate program you ship with the app. The browser starts it when an extension
+The host is a separate program you ship with the app, as above. The browser starts it when an extension
 connects, and sends each message as a 32-bit length in native byte order followed by that many
 bytes of JSON; the host replies the same way on standard output. A minimal host that answers every
 message:

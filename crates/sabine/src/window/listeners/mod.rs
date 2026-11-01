@@ -2,7 +2,7 @@ mod visibility;
 
 use std::{fmt, sync::Arc};
 
-use sabine_platform::Appearance;
+use sabine_platform::{Appearance, PlatformEvent};
 
 use crate::desktop::open_urls::OpenUrls;
 use crate::{SabineProcessHandle, WindowId};
@@ -125,6 +125,31 @@ impl LaunchListener {
 impl fmt::Debug for LaunchListener {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("LaunchListener")
+    }
+}
+
+type DesktopEventFn = dyn Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync;
+
+/// The app's listener for tray clicks, global shortcuts, later launches and
+/// links, which hears them whether or not a window is open.
+#[derive(Clone)]
+pub(crate) struct DesktopEventListener(Arc<DesktopEventFn>);
+
+impl DesktopEventListener {
+    pub(crate) fn new(
+        listener: impl Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(listener))
+    }
+
+    pub(crate) fn deliver(&self, handle: &SabineProcessHandle, event: &PlatformEvent) {
+        (self.0)(handle, event);
+    }
+}
+
+impl fmt::Debug for DesktopEventListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("DesktopEventListener")
     }
 }
 

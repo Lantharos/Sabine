@@ -174,6 +174,28 @@ events.openUrlsAvailable(openPending);
 await openPending();
 ```
 
+A page Sabine loads again on its own, as after a renderer crash, gets the URLs the lost page took
+once more.
+
+### `app.quit()`
+
+```ts
+quit(): Promise<void>;
+```
+
+Closes every window and ends the app, also an app that runs in the background or whose window
+hides when it closes, where `appWindow.close()` only hides the window.
+
+### `app.setAutostart(enabled)`
+
+```ts
+setAutostart(enabled: boolean): Promise<void>;
+```
+
+Turns the app's autostart entry on or off while it runs. Rejects when the app has no autostart
+entry; development runs resolve without changing anything. See
+[Starting at login](/docs/desktop/autostart/#turning-it-on-and-off-while-the-app-runs).
+
 ## `events`
 
 Typed listeners for the events Sabine sends. Each takes a callback and returns a function that
@@ -258,7 +280,7 @@ These take effect without an answer.
 | `show()` | Shows the window. |
 | `hide()` | Hides the window. |
 | `focus(activationToken?)` | Brings the window forward. On Wayland, pass the token an event such as `singleInstance` or `globalShortcut` carried. |
-| `close()` | Closes the window. |
+| `close()` | Closes the window, or hides it when the window hides on close. `app.quit()` ends the app. |
 | `minimize()` | Minimizes the window. |
 | `maximize()` | Maximizes the window. |
 | `toggleMaximize()` | Maximizes the window, or restores it when maximized. |

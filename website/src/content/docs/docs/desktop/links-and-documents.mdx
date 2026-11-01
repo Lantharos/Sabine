@@ -156,15 +156,18 @@ Sabine brings the window forward when they arrive.
     files another app opens.
 
     Schemes must be in the bundle before it is signed. At launch, the app checks that its bundle
-    declares every scheme in the manifest, and stops with an error naming the missing one if it
-    doesn't. Rebuild the bundle after adding a scheme.
+    declares every scheme in the manifest, and records each missing one in its diagnostics; the
+    app opens anyway, but macOS doesn't hand it links with that scheme. Rebuild the bundle after
+    adding a scheme. An app started outside its bundle, as with `cargo run`, has no schemes.
   </TabItem>
 </Tabs>
 
 ## Testing links
 
 Development runs, such as `sabine dev`, register no URL schemes, so an installed build doesn't lose
-its handlers to a development copy. Test schemes with an installed build:
+its handlers to a development copy. They still open the links and documents on their own command
+line, so `sabine dev -- my-notes://open/42` reaches the page's open queue. Test what the desktop
+hands the app with an installed build:
 
 <Steps>
 

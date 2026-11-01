@@ -329,7 +329,8 @@ Send larger data in parts, or keep it in Rust and hand the page what it shows.
 
 Name commands with dots, such as `notes.rename` or `sync.status`. The bindings turn each name into
 a camelCase function, `notesRename` and `syncStatus`. Names that start with `sabine.` belong to
-Sabine's built-in commands, and `app.takeOpenUrls` is Sabine's too; don't register them.
+Sabine's built-in commands, and `app.takeOpenUrls`, `app.quit` and `app.setAutostart` are
+Sabine's too; don't register them.
 
 A command that exists on one desktop only is registered under `#[cfg(target_os = "...")]`, so
 pages on other desktops don't find it in `bridge.commands()`:

@@ -53,6 +53,30 @@
 - A page Sabine loads again on its own, to switch to software painting, after the browser stopped
   or after its renderer crashed, gets the links and documents the app was opened with again, so an
   app started with a document opens it even when the first page didn't survive.
+- `on_desktop_event` hands Rust each tray click, global shortcut, later launch and link as a
+  `PlatformEvent`, also while no window is open, so an app built with `.background()` or
+  `.tray_app()` can react without a page. `GlobalShortcutActivation` and
+  `SingleInstanceActivation` are exported for it.
+- `SabineProcessHandle::quit` and `app.quit()` end the app, also one that runs in the background
+  or hides its window on close. `BridgeEventEmitter::quit` is gone.
+- `SabineProcessHandle::set_autostart` and `app.setAutostart()` turn the app's autostart entry on
+  or off while it runs, for an in-app setting. Calling `.autostart(...)` again replaces the entry.
+- An event the app sends a frozen page thaws it, so a tray app's hidden page still answers a tray
+  click after it froze.
+- Windows opened after Rust began an activity keep running for it like the windows before them.
+- Development runs open the links passed on their command line, as in
+  `sabine dev -- my-notes://open/42`.
+- On macOS, a URL scheme the bundle doesn't declare is recorded in the diagnostics instead of
+  stopping the launch, so `cargo run` outside the bundle works.
+- `WindowRegion`'s shapes have the names the JavaScript `region` uses: `full()`,
+  `rounded_rect(radius)`, `rounded_left(width, radius)`, `titlebar_and_sidebar(...)`,
+  `content_after_sidebar(...)` and `content_after_sidebar_rounded_right(...)`, all following the
+  window's size. The `adaptive_` names and the fixed-size shapes are gone; `rect` stays.
+- `no_chrome()` and `SabineWindowChrome::None` are gone; use `frameless()`.
+- `suspend_on_minimize` is gone. Minimizing counts as out of sight, so `suspend_on_occluded`
+  covers it, and minimizing from the page or Sabine's controls suspends at once.
+- The native messaging guide ships the host program as a resource, which the bundler copies into
+  every package and signs with the app.
 
 # Sabine 0.67
 

@@ -98,6 +98,25 @@ Wayland compositors only let a window take focus with an activation token, which
 over with the shortcut. Pass it to `appWindow.focus`; on other desktops it is `null` and focusing
 works without it.
 
+Rust code hears each press too, with `.on_desktop_event(...)`, also while no window is open. An
+app built with `.background()` can open its window from there:
+
+```rust
+use sabine::{GlobalShortcutActivation, PlatformEvent};
+
+window.background().on_desktop_event(|app, event| {
+    if let PlatformEvent::GlobalShortcut(GlobalShortcutActivation {
+        action,
+        activation_token,
+        ..
+    }) = event
+        && action == "toggle-launcher"
+    {
+        app.present(activation_token.clone());
+    }
+})
+```
+
 ### When a shortcut can't be registered
 
 A shortcut the desktop refuses, for example because another app already holds it, is recorded in

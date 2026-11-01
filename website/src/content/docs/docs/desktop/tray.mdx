@@ -104,7 +104,7 @@ Clicks reach the app's pages as `events.trayActivate`. A click on the icon itsel
 null`; a menu item reports its `id`, its `action` and, for a checkbox item, its new `checked` state.
 
 ```ts
-import { appWindow, events } from "@lantharos/sabine";
+import { app, appWindow, events } from "@lantharos/sabine";
 
 events.trayActivate(({ itemId, checked }) => {
   switch (itemId) {
@@ -117,7 +117,7 @@ events.trayActivate(({ itemId, checked }) => {
       setSyncPaused(checked ?? false);
       break;
     case "quit":
-      appWindow.close();
+      app.quit();
       break;
   }
 });
@@ -132,6 +132,46 @@ events.trayActivate(({ itemId, checked }) => {
 
 A checkbox flips its own check mark when it is chosen, so the menu and the event agree without the
 app setting the menu again.
+
+The hidden window of a tray app freezes its page after a minute out of sight. An event for the
+page, such as a click, thaws it, so the listener runs and can show the window; the page freezes
+again after another minute out of sight.
+
+### From Rust
+
+Rust code hears the same clicks through `.on_desktop_event(...)`, whether or not a window is open.
+That suits an app built with `.background()`, which runs without a page until it opens its window:
+
+```rust
+use sabine::prelude::*;
+use sabine::{PlatformEvent, TrayActivation};
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .tray_app()
+            .background()
+            .tray_icon(TrayIcon::new("main", "Sync"))
+            .on_desktop_event(|app, event| {
+                let PlatformEvent::Tray(TrayActivation { item_id, .. }) = event else {
+                    return;
+                };
+                match item_id.as_deref() {
+                    None | Some("open") => {
+                        app.present(None);
+                    }
+                    Some("quit") => {
+                        app.quit();
+                    }
+                    _ => {}
+                }
+            }))
+    });
+}
+```
+
+The listener gets a `SabineProcessHandle` and the `PlatformEvent`, and runs before the pages hear
+about the event. It runs on a thread of its own, so hand slow work elsewhere.
 
 ## Changing the icon while the app runs
 

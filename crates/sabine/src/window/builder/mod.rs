@@ -272,7 +272,7 @@ impl SabineWindow {
     }
 
     pub fn autostart(mut self, entry: AutostartEntry) -> Self {
-        self.config.desktop_services.autostart.push(entry);
+        self.config.desktop_services.autostart = Some(entry);
         self
     }
 
@@ -302,6 +302,8 @@ impl SabineWindow {
         self
     }
 
+    /// Names the instance later launches hand off to, instead of the app id.
+    /// It only names it: [`Self::single_instance`] turns handing off on.
     pub fn single_instance_id(mut self, id: impl Into<String>) -> Self {
         self.config.desktop_services.single_instance_id = Some(id.into());
         self
@@ -315,6 +317,22 @@ impl SabineWindow {
         listener: impl Fn(crate::SabineProcessHandle) + Send + Sync + 'static,
     ) -> Self {
         self.config.launched = Some(super::LaunchListener::new(listener));
+        self
+    }
+
+    /// Calls `listener` with each tray click, global shortcut, later launch
+    /// and link the desktop hands the app, before its pages hear of it. It
+    /// runs whether or not a window is open, so an app built with
+    /// [`Self::background`] can answer a tray click with
+    /// [`SabineProcessHandle::present`](crate::SabineProcessHandle::present).
+    pub fn on_desktop_event(
+        mut self,
+        listener: impl Fn(&crate::SabineProcessHandle, &sabine_platform::PlatformEvent)
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.config.desktop_events = Some(super::DesktopEventListener::new(listener));
         self
     }
 

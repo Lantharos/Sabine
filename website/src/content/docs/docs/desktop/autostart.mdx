@@ -44,16 +44,43 @@ fn main() {
 | `command` | The command to run at login, in the platform's command-line syntax. |
 | `enabled` | `true` writes the entry; `false` removes it. |
 
-Sabine applies the entry each time the app launches. To let people choose in your app, read their
-choice from your app's settings when you build the window and pass it as `enabled`; the entry
-follows it from the next launch. With `enabled: false`, the entry is
-removed; an error removing it, such as a file that can't be deleted, stops the launch and names
-the problem.
+Sabine applies the entry each time the app launches. With `enabled: false`, the entry is removed;
+an error removing it, such as a file that can't be deleted, stops the launch and names the problem.
 
 Each launch rewrites the entry only when its contents changed, so desktops that announce new login
 items don't tell people about the app on every launch.
 
 Development runs, such as `sabine dev`, register no autostart entry.
+
+## Turning it on and off while the app runs
+
+A setting in your app can turn the entry on and off at once. From the page:
+
+```ts
+import { app } from "@lantharos/sabine";
+
+await app.setAutostart(true);
+```
+
+From Rust, with the process handle, for example from a tray checkbox:
+
+```rust
+use sabine::{PlatformEvent, TrayActivation};
+
+window.on_desktop_event(|app, event| {
+    if let PlatformEvent::Tray(TrayActivation { item_id: Some(item), checked: Some(checked), .. }) = event
+        && item == "start-at-login"
+        && let Err(error) = app.set_autostart(*checked)
+    {
+        eprintln!("could not change the login item: {error}");
+    }
+})
+```
+
+Both write the entry from `.autostart(...)` with its `enabled` replaced, and fail when the app has
+no autostart entry. Development runs accept the change without touching the desktop. Keep the
+choice in your app's settings and pass it as `enabled` when you build the window, so the next
+launch applies the same choice.
 
 ## Writing the command
 
@@ -70,7 +97,8 @@ Quoting the executable path, as in the example, works on all three.
 ## When people turn it off
 
 People can turn login items off in their system settings without going through your app. Sabine
-keeps that choice: a later launch with `enabled: true` doesn't turn the entry back on.
+keeps that choice: a later launch with `enabled: true`, or `setAutostart(true)`, doesn't turn the
+entry back on.
 
 <Tabs syncKey="platform">
   <TabItem label="Linux">

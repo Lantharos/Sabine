@@ -16,8 +16,8 @@ pub use config::{
 };
 pub use listeners::WindowVisibility;
 pub(crate) use listeners::{
-    AppearanceListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE, VISIBILITY_LINE,
-    VisibilityListener, WindowListeners, appearance_line,
+    AppearanceListener, DesktopEventListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE,
+    VISIBILITY_LINE, VisibilityListener, WindowListeners, appearance_line,
 };
 pub use manifest::resource_path;
 #[cfg(not(target_os = "windows"))]
@@ -128,7 +128,8 @@ impl SabineWindow {
     }
 
     /// Warm background/tray host: starts hidden with palette lifecycle.
-    /// Pair with [`Self::tray_icon`] and [`Self::single_instance_id`].
+    /// Pair with [`Self::tray_icon`] and
+    /// [`Self::single_instance`]`(SingleInstancePolicy::FocusExisting)`.
     pub fn tray_app(self) -> Self {
         self.hidden()
             .skip_taskbar(true)

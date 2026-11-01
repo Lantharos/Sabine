@@ -43,23 +43,27 @@ pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> Resu
 }
 
 /// macOS routes URL schemes through the bundle's Info.plist, so this checks
-/// that the bundle declares every scheme instead of registering anything.
+/// that the bundle declares every scheme instead of registering anything. A
+/// scheme the bundle lacks, as when the app runs outside its bundle, goes to
+/// the diagnostics and the app opens without it.
 pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> Result<(), String> {
-    registration.validate()?;
     if registration.schemes.is_empty() {
         return Ok(());
     }
     let declared = declared_url_schemes();
-    match registration
+    for scheme in registration
         .schemes
         .iter()
-        .find(|scheme| !declared.contains(&scheme.to_ascii_lowercase()))
+        .filter(|scheme| !declared.contains(&scheme.to_ascii_lowercase()))
     {
-        Some(scheme) => Err(format!(
-            "URL scheme {scheme} is missing from the application bundle; add x-scheme-handler/{scheme} to app.mime_types in Sabine.toml and rebuild the macOS bundle"
-        )),
-        None => Ok(()),
+        sabine_runtime::report_error(
+            "desktop",
+            format!(
+                "URL scheme {scheme} is missing from the application bundle, so macOS doesn't open its links in the app; add x-scheme-handler/{scheme} to app.mime_types in Sabine.toml and rebuild the macOS bundle"
+            ),
+        );
     }
+    Ok(())
 }
 
 fn declared_url_schemes() -> BTreeSet<String> {

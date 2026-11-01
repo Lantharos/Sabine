@@ -7,10 +7,10 @@ use std::{
 
 use crate::bridge::BridgeEventEmitter;
 use crate::bridge::{prepare_bridge_command, spawn_bridge_dispatch};
-use crate::host::PrimaryWindow;
 #[cfg(target_os = "linux")]
 use crate::host::ld_library_path;
 use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
+use crate::host::{PrimaryWindow, ProcessCommand, SabineProcessHandle};
 use crate::launch::metrics::LaunchMetrics;
 use crate::osr::transport::IpcEndpoint;
 use crate::window::config::SabineWindowConfig;
@@ -52,6 +52,10 @@ pub(crate) fn launch_process(
     config: &SabineWindowConfig,
     bridge_handlers: &BridgeHandlers,
     url: &str,
+    (handle, command_receiver): (
+        SabineProcessHandle,
+        crossbeam_channel::Receiver<ProcessCommand>,
+    ),
     metrics: LaunchMetrics,
 ) -> SabineResult<SabineProcess> {
     require_app_id(config)?;
@@ -66,7 +70,6 @@ pub(crate) fn launch_process(
     crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
-    let (command_sender, command_receiver) = crossbeam_channel::unbounded();
     let mut process = SabineProcess {
         _runtime_lease: runtime_lease,
         primary: None,
@@ -76,8 +79,9 @@ pub(crate) fn launch_process(
         pending_windows: Vec::new(),
         child_exit_sender,
         child_exit_receiver,
-        command_sender,
         command_receiver,
+        handle,
+        quitting: false,
         bridge_threads: Vec::new(),
         bridge_emitter: BridgeEventEmitter::default(),
         desktop_services: None,

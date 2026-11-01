@@ -9,10 +9,11 @@ use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
 use crate::bridge::{BridgeEventEmitter, platform_event_payload};
 use crate::desktop::open_urls::Openable;
-use crate::desktop::{DesktopServiceState, start_desktop_event_forwarder};
+use crate::desktop::{Autostart, DesktopServiceState, start_desktop_event_forwarder};
 use crate::host::process_tree::ManagedChild;
 use crate::launch::metrics::{LaunchMetrics, SabineLaunchMetricsSnapshot};
 use crate::osr::launch::WindowContext;
+use crate::window::DesktopEventListener;
 use crate::{SabineResult, SabineWindow};
 
 /// How long opening another window waits for the app's first window, whose
@@ -23,6 +24,7 @@ pub(crate) enum ProcessCommand {
     OpenWindow(PendingWindow),
     Present { activation_token: Option<String> },
     PrimaryReady { window: WindowId, ready: bool },
+    Quit,
 }
 
 /// A window to open once the app's first window is ready.
@@ -31,9 +33,12 @@ pub(crate) struct PendingWindow {
     response: crossbeam_channel::Sender<SabineResult<WindowId>>,
 }
 
+/// What app code holds on to for driving the app's process from any thread,
+/// also while [`SabineProcess::wait`] runs.
 #[derive(Clone)]
 pub struct SabineProcessHandle {
     command_sender: crossbeam_channel::Sender<ProcessCommand>,
+    autostart: Autostart,
 }
 
 /// The window the app opens with, and opens again when a background app is
@@ -53,8 +58,9 @@ pub struct SabineProcess {
     pub(crate) pending_windows: Vec<PendingWindow>,
     pub(crate) child_exit_sender: crossbeam_channel::Sender<u32>,
     pub(crate) child_exit_receiver: crossbeam_channel::Receiver<u32>,
-    pub(crate) command_sender: crossbeam_channel::Sender<ProcessCommand>,
     pub(crate) command_receiver: crossbeam_channel::Receiver<ProcessCommand>,
+    pub(crate) handle: SabineProcessHandle,
+    pub(crate) quitting: bool,
     pub(crate) bridge_threads: Vec<JoinHandle<()>>,
     pub(crate) bridge_emitter: BridgeEventEmitter,
     pub(crate) desktop_services: Option<DesktopServiceState>,
@@ -82,9 +88,7 @@ impl SabineProcess {
     }
 
     pub fn handle(&self) -> SabineProcessHandle {
-        SabineProcessHandle {
-            command_sender: self.command_sender.clone(),
-        }
+        self.handle.clone()
     }
 
     /// Open another OSR window in this process. Shares this process's bridge
@@ -143,7 +147,7 @@ impl SabineProcess {
         };
         let window = primary.child.id();
         let ready = primary.ready.clone();
-        let commands = self.command_sender.clone();
+        let commands = self.handle.command_sender.clone();
         thread::spawn(move || {
             let ready = ready.recv_timeout(PRIMARY_READY_TIMEOUT).is_ok();
             let _ = commands.send(ProcessCommand::PrimaryReady { window, ready });
@@ -195,7 +199,8 @@ impl SabineProcess {
     }
 
     /// Block until every OSR window has exited, then tear down the bridge. A
-    /// background app keeps waiting for its next activation instead.
+    /// background app keeps waiting for its next activation instead, until
+    /// [`SabineProcessHandle::quit`] ends it.
     pub fn wait(mut self) -> std::io::Result<ExitStatus> {
         #[cfg(target_os = "macos")]
         crate::desktop::desktop_wait::wait(&mut self)?;
@@ -213,6 +218,9 @@ impl SabineProcess {
 
         self.stop_desktop_event_forwarder();
         self.join_bridge_threads();
+        if self.quitting {
+            return Ok(ExitStatus::default());
+        }
         self.primary_status.ok_or_else(|| {
             std::io::Error::other("Sabine process exited without a primary window status")
         })
@@ -237,15 +245,29 @@ impl SabineProcess {
                 }
             });
 
-        Ok(!self.background && self.primary.is_none() && self.extra_windows.is_empty())
+        Ok((self.quitting || !self.background)
+            && self.primary.is_none()
+            && self.extra_windows.is_empty())
     }
 
+    /// Carries out what app code and pages asked of the process. Once the app
+    /// quits, it opens and shows nothing more.
     pub(crate) fn handle_command(&mut self, command: ProcessCommand) {
+        if self.quitting {
+            return;
+        }
         match command {
             ProcessCommand::OpenWindow(pending) => self.open_when_ready(pending),
             ProcessCommand::Present { activation_token } => self.present(activation_token),
             ProcessCommand::PrimaryReady { window, ready } => self.primary_ready(window, ready),
+            ProcessCommand::Quit => self.quit(),
         }
+    }
+
+    fn quit(&mut self) {
+        self.quitting = true;
+        self.pending_windows.clear();
+        self.bridge_emitter.quit();
     }
 
     fn present(&mut self, activation_token: Option<String>) {
@@ -318,17 +340,18 @@ impl SabineProcess {
         self.metrics.snapshot()
     }
 
-    pub(crate) fn start_desktop_event_forwarder(&mut self, openable: Openable) {
+    /// Hands the desktop's events to the open queue, the app's listener and
+    /// its pages.
+    pub(crate) fn start_desktop_event_forwarder(
+        &mut self,
+        openable: Openable,
+        listener: Option<DesktopEventListener>,
+    ) {
         let Some(services) = self.desktop_services.as_ref() else {
             return;
         };
         let emitter = self.bridge_emitter.clone();
-        let commands = self.command_sender.clone();
-        let present = move |activation_token: Option<&str>| {
-            let _ = commands.send(ProcessCommand::Present {
-                activation_token: activation_token.map(str::to_owned),
-            });
-        };
+        let handle = self.handle.clone();
         let (stop, stopped) = crossbeam_channel::bounded(1);
         let open_urls = self.open_urls.clone();
         self.desktop_event_stop = Some(stop);
@@ -349,12 +372,15 @@ impl SabineProcess {
                     let _ = emitter.emit("app.openUrlsAvailable", serde_json::Value::Null);
                 }
                 if matches!(event, PlatformEvent::OpenUrls(_)) {
-                    present(None);
+                    handle.present(None);
                 }
                 if let PlatformEvent::SingleInstance(activation) = &event
                     && activation.policy == SingleInstancePolicy::FocusExisting
                 {
-                    present(activation.activation_token.as_deref());
+                    handle.present(activation.activation_token.clone());
+                }
+                if let Some(listener) = &listener {
+                    listener.deliver(&handle, &event);
                 }
                 let (name, payload) = platform_event_payload(event);
                 let _ = emitter.emit(name, payload);
@@ -387,6 +413,18 @@ impl SabineProcess {
 }
 
 impl SabineProcessHandle {
+    /// A handle and the queue its commands reach the process on.
+    pub(crate) fn new(autostart: Autostart) -> (Self, crossbeam_channel::Receiver<ProcessCommand>) {
+        let (command_sender, commands) = crossbeam_channel::unbounded();
+        (
+            Self {
+                command_sender,
+                autostart,
+            },
+            commands,
+        )
+    }
+
     pub fn open_window(&self, window: SabineWindow) -> SabineResult<WindowId> {
         let (response, result) = crossbeam_channel::bounded(1);
         self.command_sender
@@ -410,6 +448,19 @@ impl SabineProcessHandle {
         self.command_sender
             .send(ProcessCommand::Present { activation_token })
             .is_ok()
+    }
+
+    /// Closes every window and ends the app, also one that runs in the
+    /// background or hides its window when it closes.
+    pub fn quit(&self) -> bool {
+        self.command_sender.send(ProcessCommand::Quit).is_ok()
+    }
+
+    /// Turns the app's [`SabineWindow::autostart`] entry on or off, as an
+    /// in-app setting would. Turning it on doesn't override people who turned
+    /// the app off in their system settings. Development runs change nothing.
+    pub fn set_autostart(&self, enabled: bool) -> Result<(), String> {
+        self.autostart.set_enabled(enabled)
     }
 }
 

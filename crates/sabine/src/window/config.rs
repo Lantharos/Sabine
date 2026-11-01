@@ -69,6 +69,7 @@ pub(crate) struct SabineWindowConfig {
     pub browser: BrowserOptions,
     pub listeners: super::WindowListeners,
     pub launched: Option<super::LaunchListener>,
+    pub desktop_events: Option<super::DesktopEventListener>,
 }
 
 impl Default for SabineWindowConfig {
@@ -118,6 +119,7 @@ impl Default for SabineWindowConfig {
             browser: BrowserOptions::default(),
             listeners: super::WindowListeners::default(),
             launched: None,
+            desktop_events: None,
         }
     }
 }
@@ -139,8 +141,8 @@ impl SabineWindowConfig {
         if let Some(entry) = self
             .desktop_services
             .autostart
-            .iter()
-            .find(|entry| entry.id != app_id)
+            .as_ref()
+            .filter(|entry| entry.id != app_id)
         {
             return Err(SabineError::CreationFailed {
                 message: format!(
@@ -252,7 +254,7 @@ impl SabineLifecyclePolicy {
 #[derive(Clone, Debug, Default)]
 pub struct DesktopServiceConfig {
     pub tray_icon: Option<TrayIcon>,
-    pub autostart: Vec<AutostartEntry>,
+    pub autostart: Option<AutostartEntry>,
     pub global_shortcuts: Vec<GlobalShortcutRegistration>,
     pub deep_links: Vec<DeepLinkRegistration>,
     pub native_messaging_hosts: Vec<NativeMessagingHost>,

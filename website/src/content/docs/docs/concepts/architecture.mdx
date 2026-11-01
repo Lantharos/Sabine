@@ -118,7 +118,7 @@ On Linux, every Chromium process stays in the systemd unit the app was started i
 
 2. **Configuration.** Sabine finds `Sabine.toml` and applies it, then runs your builder, so settings made in Rust win. When `sabine bindings` started the app, it writes or checks the TypeScript bindings and exits here.
 
-3. **Development identity.** In development the app id and single-instance id get a `.dev` suffix, and update sources, URL handlers, native messaging hosts and autostart entries are left out, so a development run never touches the installed app.
+3. **Development identity.** In development the app id, single-instance id and autostart id get a `.dev` suffix, update sources are left out, and URL handlers, native messaging hosts and autostart entries aren't registered with the desktop, so a development run never touches the installed app.
 
 4. **Validation.** The app id, title, sizes and content source are checked.
 

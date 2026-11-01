@@ -88,6 +88,21 @@ events.singleInstance(({ policy, arguments: args, workingDirectory, activationTo
 | `workingDirectory` | `string \| null` | The directory the later launch ran in. |
 | `activationToken` | `string \| null` | Pass to `appWindow.focus` so the desktop lets the window take focus. |
 
+Rust code hears later launches as `PlatformEvent::SingleInstance` through
+`.on_desktop_event(...)`, which runs whether or not a window is open:
+
+```rust
+use sabine::{PlatformEvent, SingleInstanceActivation};
+
+window.on_desktop_event(|app, event| {
+    if let PlatformEvent::SingleInstance(SingleInstanceActivation { arguments, .. }) = event
+        && arguments.iter().any(|argument| argument == "--quit")
+    {
+        app.quit();
+    }
+})
+```
+
 Links and documents among the arguments also go into the app's open queue, and
 `events.openUrlsAvailable` fires before `singleInstance`, so an app that reads its links through
 `app.takeOpenUrls()` handles them in one place whether they came with the first launch or a later
