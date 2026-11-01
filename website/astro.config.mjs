@@ -1,4 +1,4 @@
-import { defineConfig } from "astro/config";
+import { defineConfig, fontProviders } from "astro/config";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import starlightLinksValidator from "starlight-links-validator";
@@ -8,6 +8,28 @@ const group = (label, directory) => ({ label, items: [{ autogenerate: { director
 export default defineConfig({
   site: "https://sabine.rs",
   devToolbar: { enabled: false },
+  fonts: [
+    {
+      provider: fontProviders.fontsource(),
+      name: "Hanken Grotesk",
+      cssVariable: "--font-hanken",
+      weights: ["100 900"],
+      styles: ["normal"],
+      subsets: ["latin"],
+      display: "block",
+      fallbacks: ["ui-sans-serif", "system-ui", "sans-serif"],
+    },
+    {
+      provider: fontProviders.fontsource(),
+      name: "Geist Mono",
+      cssVariable: "--font-geist-mono",
+      weights: ["100 900"],
+      styles: ["normal"],
+      subsets: ["latin"],
+      display: "block",
+      fallbacks: ["ui-monospace", "monospace"],
+    },
+  ],
   redirects: { "/docs": "/docs/start/introduction/" },
   integrations: [
     starlight({
@@ -37,7 +59,10 @@ export default defineConfig({
           },
         },
       },
-      components: { SiteTitle: "./src/components/docs/SiteTitle.astro" },
+      components: {
+        Head: "./src/components/docs/Head.astro",
+        SiteTitle: "./src/components/docs/SiteTitle.astro",
+      },
       sidebar: [
         group("Start here", "start"),
         group("Windows", "windows"),

@@ -1,10 +1,8 @@
 @import "tailwindcss";
-@import "@fontsource-variable/hanken-grotesk";
-@import "@fontsource-variable/geist-mono";
 
 @theme {
-  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --font-sans: var(--font-hanken);
+  --font-mono: var(--font-geist-mono);
 
   --color-paper: #f9f4ea;
   --color-cream-100: #f9f4ea;
