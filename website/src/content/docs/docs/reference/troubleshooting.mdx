@@ -37,7 +37,7 @@ Every part of Sabine writes its errors to a log in Sabine's data folder:
   </TabItem>
 </Tabs>
 
-Each component has a file of its own, `<component>.jsonl`, with one JSON object per line holding `time` (Unix seconds), `pid`, `component` and `message`. When a file would grow past 4 MiB, it starts over.
+Each component has a file of its own, `<component>.jsonl`, with one JSON object per line holding `time` (Unix seconds), `pid`, `component` and `message`. When a file would grow past 4 MiB, its oldest entries are dropped, keeping the newest 2 MiB.
 
 | File | What writes it |
 | --- | --- |

@@ -1,12 +1,13 @@
 use std::{
-    fs::OpenOptions,
-    io::{self, Read, Write},
+    fs::{File, OpenOptions},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::PathBuf,
     process::Child,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 const MAX_LOG_BYTES: u64 = 4 * 1024 * 1024;
+const KEPT_LOG_BYTES: u64 = MAX_LOG_BYTES / 2;
 
 pub fn diagnostic_path(component: &str) -> PathBuf {
     let name: String = component
@@ -47,7 +48,7 @@ pub fn record_diagnostic(component: &str, message: &str) -> io::Result<()> {
         let mut bytes = serde_json::to_vec(&entry)?;
         bytes.push(b'\n');
         if file.metadata()?.len().saturating_add(bytes.len() as u64) > MAX_LOG_BYTES {
-            file.set_len(0)?;
+            discard_oldest_entries(&mut file)?;
         }
         file.write_all(&bytes)?;
         remaining = &remaining[end..];
@@ -55,6 +56,21 @@ pub fn record_diagnostic(component: &str, message: &str) -> io::Result<()> {
             return Ok(());
         }
     }
+}
+
+/// Keeps the newest entries that fit in [`KEPT_LOG_BYTES`], so a log that
+/// reached its limit still holds what led up to the next entry.
+fn discard_oldest_entries(file: &mut File) -> io::Result<()> {
+    let length = file.metadata()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(KEPT_LOG_BYTES)))?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail)?;
+    let first_whole_entry = tail
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .map_or(tail.len(), |end| end + 1);
+    file.set_len(0)?;
+    file.write_all(&tail[first_whole_entry..])
 }
 
 pub fn report_error(component: &str, error: impl std::fmt::Display) {
