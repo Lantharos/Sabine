@@ -81,7 +81,7 @@ fn place(app: &BundleApp, staged: &StagedBundle, root: Option<&Path>) -> Result<
     if root.is_none() && app.listing.listed {
         let icon = destination.join("resources/windows-app.ico");
         crate::install::desktop::install_windows_shortcut(
-            &app.id,
+            &app.name,
             app.listing.generic_name.as_deref(),
             &executable,
             icon.is_file()

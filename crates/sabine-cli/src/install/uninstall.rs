@@ -1,5 +1,5 @@
 use sabine_service::SabineService;
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::{fs, path::Path, process::ExitCode};
 
@@ -41,9 +41,12 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
             app.manifest.name
         ));
     }
-    let name = registered.map_or_else(|_| id.clone(), |app| app.manifest.name);
+    let name = registered
+        .map(|app| app.manifest.name)
+        .or_else(|_| super::source::read_registered_app(&id).map(|app| app.name))
+        .unwrap_or_else(|_| id.clone());
     let install = directory.join("install");
-    remove_desktop(&id, &directory)?;
+    remove_desktop(&id, &name, &directory)?;
     service
         .forget_app(&id, &install)
         .map_err(|error| error.to_string())?;
@@ -89,7 +92,7 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     Ok(ExitCode::SUCCESS)
 }
 
-fn remove_desktop(id: &str, directory: &Path) -> Result<(), String> {
+fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> {
     #[cfg(any(target_os = "macos", windows))]
     let install = directory.join("install");
     #[cfg(target_os = "linux")]
@@ -126,12 +129,7 @@ fn remove_desktop(id: &str, directory: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         super::handlers::windows::remove(&install)?;
-        let roaming = PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?);
-        remove_path(
-            &roaming
-                .join("Microsoft/Windows/Start Menu/Programs")
-                .join(format!("{id}.lnk")),
-        )?;
+        super::desktop::remove_windows_shortcut(name)?;
     }
     Ok(())
 }
