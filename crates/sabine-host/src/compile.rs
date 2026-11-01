@@ -1,12 +1,15 @@
 use std::{
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 use crate::{
-    build_lock::HostBuildLock, host_is_complete, sources::write_host_source,
-    toolchain::apply_cmake_generator, validate_host_protocol,
+    host_is_complete, sources::write_host_source, toolchain::apply_cmake_generator,
+    validate_host_protocol,
 };
+
+const BUILD_LOCK_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub(crate) fn host_release_binary(runtime_dir: &Path) -> PathBuf {
     let root = runtime_dir
@@ -34,7 +37,12 @@ pub(crate) fn compile_host(runtime_dir: &Path) -> Result<PathBuf, String> {
         return Err("cmake is not installed or not on PATH".into());
     }
     let binary = host_release_binary(runtime_dir);
-    let _lock = HostBuildLock::acquire(runtime_dir)?;
+    let _lock = sabine_runtime::FileLock::acquire(
+        &runtime_dir.join(".sabine-host-build.lock"),
+        BUILD_LOCK_TIMEOUT,
+        |_| {},
+    )
+    .map_err(|error| format!("could not lock the host build: {error}"))?;
     if !host_is_complete(&binary) {
         run_build(runtime_dir)?;
     }

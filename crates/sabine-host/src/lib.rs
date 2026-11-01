@@ -14,7 +14,6 @@ use std::{
     process::Command,
 };
 
-mod build_lock;
 mod compile;
 mod installed;
 #[cfg(target_os = "macos")]
