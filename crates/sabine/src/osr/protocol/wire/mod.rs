@@ -252,7 +252,9 @@ impl WireReader {
             KIND_PRINT_JOB => OsrMessage::PrintJob(parse_json(&payload)?),
             KIND_PRINT_DOCUMENT => OsrMessage::PrintDocument(parse_json(&payload)?),
             KIND_MEDIA_PLAYING => OsrMessage::MediaPlaying(width != 0),
-            KIND_MAIN_LOAD_STARTED => OsrMessage::MainLoadStarted,
+            KIND_MAIN_LOAD_STARTED => OsrMessage::MainLoadStarted {
+                page_lost: width != 0,
+            },
             KIND_MAIN_LOAD_READY => OsrMessage::MainLoadReady,
             KIND_FATAL_ERROR => OsrMessage::FatalError(
                 String::from_utf8(payload)

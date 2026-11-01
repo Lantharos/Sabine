@@ -1,6 +1,8 @@
+use std::io::Write;
 use std::time::{Duration, Instant};
 
 use crate::osr::host::{native::OsrNativeHost, types::LifecycleState};
+use crate::window::{PAGE_LOST_LINE, PAGE_STARTED_LINE};
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn fail(&mut self, message: String) {
@@ -19,6 +21,7 @@ impl OsrNativeHost {
         {
             return;
         }
+        self.report_page_lost();
         if self.lifecycle_state == LifecycleState::Frozen {
             self.lifecycle_state = LifecycleState::Suspended;
         }
@@ -62,4 +65,20 @@ impl OsrNativeHost {
         self.fail("The browser did not connect to its window within 30 seconds.".to_string());
         None
     }
+
+    /// Tells the app the page's document went away without the page leaving
+    /// it, so what it was handed at startup goes to the document after it.
+    pub(in crate::osr::host) fn report_page_lost(&self) {
+        report_page(PAGE_LOST_LINE);
+    }
+
+    pub(in crate::osr::host) fn report_page_started(&self) {
+        report_page(PAGE_STARTED_LINE);
+    }
+}
+
+fn report_page(line: &str) {
+    let mut output = std::io::stdout().lock();
+    let _ = writeln!(output, "{line}");
+    let _ = output.flush();
 }

@@ -227,6 +227,7 @@ impl OsrNativeHost {
         if !self.browser_attached() {
             return;
         }
+        self.report_page_lost();
         self.drop_connection();
         self.awaiting_connection = false;
         self.connection_deadline = None;

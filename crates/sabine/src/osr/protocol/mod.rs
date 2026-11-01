@@ -94,7 +94,11 @@ pub(crate) enum OsrMessage {
     PrintDocument(PrintDocumentOutcome),
     /// Whether any frame plays audio or video, or holds a call's camera or microphone.
     MediaPlaying(bool),
-    MainLoadStarted,
+    /// The main frame began loading a document. `page_lost` marks the reload
+    /// that replaces a page whose renderer crashed.
+    MainLoadStarted {
+        page_lost: bool,
+    },
     MainLoadReady,
     FatalError(String),
     ImeStateChanged(u32),

@@ -81,7 +81,7 @@ pub(crate) fn launch_process(
         bridge_threads: Vec::new(),
         bridge_emitter: BridgeEventEmitter::default(),
         desktop_services: None,
-        open_urls: config.open_urls.clone(),
+        open_urls: config.listeners.open_urls.clone(),
         desktop_event_thread: None,
         desktop_event_stop: None,
         activity: sabine_bridge::ActivityRegistry::default(),
@@ -146,6 +146,7 @@ pub(crate) fn attach_open_window(
     let mut window_config = config.clone();
     window_config.app_id = process.windows.primary.app_id.clone();
     window_config.bridge = process.windows.primary.bridge.clone();
+    window_config.listeners.open_urls = process.open_urls.clone();
     let (child, _) = spawn_window(process, &window_config, url, None)?;
     let window_id = child.id();
     process.extra_windows.push(child);

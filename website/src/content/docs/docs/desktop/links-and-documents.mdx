@@ -65,6 +65,11 @@ Subscribe before the first `takeOpenUrls()`, as above, so nothing that arrives w
 starts is missed. `takeOpenUrls()` empties the queue, including URLs that arrived before the page
 loaded. Call `unsubscribe()` when the listener goes away.
 
+When Sabine has to load the page again on its own, as when it switches the window to software
+painting or the page's renderer crashed, the URLs the page took go back to the front of the queue,
+so the new page opens the same documents. Once the page navigates or reloads itself, or its window
+closes, what it took counts as handled.
+
 Rust code reads the same queue with `SabineProcess::take_open_urls()`. Whichever side takes a URL
 first consumes it.
 

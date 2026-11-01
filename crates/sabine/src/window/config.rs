@@ -59,7 +59,6 @@ pub(crate) struct SabineWindowConfig {
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
     pub control_regions: Vec<SabineWindowControlRegion>,
     pub desktop_services: DesktopServiceConfig,
-    pub open_urls: crate::desktop::open_urls::OpenUrls,
     /// File extensions of the app's document types, from `[app.extensions]`.
     pub document_extensions: Vec<String>,
     pub lifecycle: SabineLifecyclePolicy,
@@ -110,7 +109,6 @@ impl Default for SabineWindowConfig {
             drag_exclusion_regions: Vec::new(),
             control_regions: Vec::new(),
             desktop_services: DesktopServiceConfig::default(),
-            open_urls: crate::desktop::open_urls::OpenUrls::default(),
             document_extensions: Vec::new(),
             lifecycle: SabineLifecyclePolicy::default(),
             runtime: RuntimeConfig::default(),

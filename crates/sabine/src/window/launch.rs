@@ -59,16 +59,18 @@ impl SabineWindow {
             &self.config.desktop_services.deep_links,
             &self.config.document_extensions,
         );
-        let open_urls = self.config.open_urls.clone();
+        let open_urls = self.config.listeners.open_urls.clone();
         open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),
             std::env::current_dir().ok().as_deref(),
             &openable,
         );
-        self = self.bridge_handler("app.takeOpenUrls", move |_| {
-            Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(
-                open_urls.take()
-            )))
+        self = self.bridge_handler("app.takeOpenUrls", move |command| {
+            let urls = match command.window {
+                Some(window) => open_urls.take_for_page(window),
+                None => open_urls.take(),
+            };
+            Ok(sabine_bridge::BridgeResponse::json(serde_json::json!(urls)))
         });
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;

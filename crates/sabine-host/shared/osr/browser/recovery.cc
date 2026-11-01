@@ -34,8 +34,10 @@ void SabineOsrHandler::OnRenderProcessTerminated(
                        ",\"recovering\":" + (recovering ? "true" : "false") +
                        "}");
   if (recovering) {
-    if (!guest)
-      SendMessage(kMainLoadStarted, 0, 0, 0, 0, nullptr, 0);
+    if (!guest) {
+      constexpr uint32_t kPageLost = 1;
+      SendMessage(kMainLoadStarted, kPageLost, 0, 0, 0, nullptr, 0);
+    }
     browser->Reload();
     return;
   }

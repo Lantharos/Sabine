@@ -50,6 +50,9 @@
 - Apps that call `SabineWindow::launch()` from their own `main` work in `exe` and `msi` installers.
 - A diagnostic log that reaches 4 MiB keeps its newest 2 MiB instead of starting over.
 - The app no longer reads `SABINE_WEB_ENTRY`.
+- A page Sabine loads again on its own, to switch to software painting, after the browser stopped
+  or after its renderer crashed, gets the links and documents the app was opened with again, so an
+  app started with a document opens it even when the first page didn't survive.
 
 # Sabine 0.67
 

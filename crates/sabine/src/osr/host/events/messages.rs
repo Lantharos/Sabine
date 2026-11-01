@@ -135,8 +135,13 @@ impl OsrNativeHost {
             OsrMessage::HideRequested => self.hide_window("hide"),
             OsrMessage::FocusRequested(token) => self.activate_window(event_loop, token),
             OsrMessage::BridgeRequest(frame) => self.relay_bridge_request(frame),
-            OsrMessage::MainLoadStarted => {
+            OsrMessage::MainLoadStarted { page_lost } => {
                 crate::osr::host::trace_host(&self.config, "browser.load_started");
+                if page_lost {
+                    self.report_page_lost();
+                } else {
+                    self.report_page_started();
+                }
                 self.dismiss_context_menu();
                 self.clear_media();
                 self.main_load_ready = false;

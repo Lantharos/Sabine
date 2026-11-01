@@ -4,17 +4,25 @@ use std::{fmt, sync::Arc};
 
 use sabine_platform::Appearance;
 
+use crate::desktop::open_urls::OpenUrls;
 use crate::{SabineProcessHandle, WindowId};
 pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
 pub(crate) const APPEARANCE_LINE: &str = "SABINE_SYSTEM_APPEARANCE";
+/// The window's page began loading a document.
+pub(crate) const PAGE_STARTED_LINE: &str = "SABINE_PAGE_STARTED";
+/// The window's page lost its document without leaving it, as when Sabine
+/// restarts the browser or the page's renderer crashed.
+pub(crate) const PAGE_LOST_LINE: &str = "SABINE_PAGE_LOST";
 
 /// The app's listeners for what a window host reports about its window.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WindowListeners {
     pub(crate) visibility: Option<VisibilityListener>,
     pub(crate) appearance: Option<AppearanceListener>,
+    /// The app's queue of links and documents, which all its windows share.
+    pub(crate) open_urls: OpenUrls,
 }
 
 impl WindowListeners {
@@ -33,11 +41,18 @@ impl WindowListeners {
             }
             return true;
         }
-        false
+        match line {
+            PAGE_STARTED_LINE => self.open_urls.release(window),
+            PAGE_LOST_LINE => self.open_urls.page_lost(window),
+            _ => return false,
+        }
+        true
     }
 
-    /// Reports a window whose host has exited as hidden.
+    /// Reports a window whose host has exited as hidden, and forgets what
+    /// its pages took from the open queue.
     pub(crate) fn closed(&self, window: WindowId) {
+        self.open_urls.release(window);
         if let Some(listener) = &self.visibility {
             listener.report(WindowVisibility {
                 window,

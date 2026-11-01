@@ -1,26 +1,38 @@
 use std::{
+    collections::HashMap,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use sabine_platform::DeepLinkRegistration;
 
+use crate::WindowId;
+
+/// Links and documents waiting for the app. What a window's page takes stays
+/// on record until the page leaves its document, so a page Sabine reloads,
+/// such as to paint in software or after a crash, gets it again.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct OpenUrls(Arc<Mutex<Vec<String>>>);
+pub(crate) struct OpenUrls(Arc<Mutex<Queue>>);
+
+#[derive(Debug, Default)]
+struct Queue {
+    pending: Vec<String>,
+    taken: HashMap<WindowId, Vec<String>>,
+}
 
 impl OpenUrls {
     pub(crate) fn receive(&self, urls: impl IntoIterator<Item = String>) -> bool {
-        let mut pending = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let mut queue = self.queue();
         let mut added = false;
         for url in urls {
-            if pending.len() == 128 || url.len() > 32768 {
+            if queue.pending.len() == 128 || url.len() > 32768 {
                 let _ = sabine_runtime::record_diagnostic(
                     "desktop",
                     "URL opening queue is full or the URL exceeds 32 KiB",
                 );
                 continue;
             }
-            pending.push(url);
+            queue.pending.push(url);
             added = true;
         }
         added
@@ -43,7 +55,37 @@ impl OpenUrls {
     }
 
     pub(crate) fn take(&self) -> Vec<String> {
-        std::mem::take(&mut *self.0.lock().unwrap_or_else(|error| error.into_inner()))
+        std::mem::take(&mut self.queue().pending)
+    }
+
+    pub(crate) fn take_for_page(&self, window: WindowId) -> Vec<String> {
+        let mut queue = self.queue();
+        let urls = std::mem::take(&mut queue.pending);
+        queue
+            .taken
+            .entry(window)
+            .or_default()
+            .extend(urls.iter().cloned());
+        urls
+    }
+
+    /// Puts what the window's lost page took back in line, ahead of anything
+    /// that arrived since.
+    pub(crate) fn page_lost(&self, window: WindowId) {
+        let mut queue = self.queue();
+        if let Some(taken) = queue.taken.remove(&window) {
+            queue.pending.splice(0..0, taken);
+        }
+    }
+
+    /// Forgets what the window's earlier pages took, once a page replaced
+    /// them or the window closed.
+    pub(crate) fn release(&self, window: WindowId) {
+        self.queue().taken.remove(&window);
+    }
+
+    fn queue(&self) -> MutexGuard<'_, Queue> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner())
     }
 }
 
@@ -127,5 +169,18 @@ mod tests {
         assert_eq!(opened.len(), 2);
         assert!(opened[0].ends_with("/note.md"));
         assert_eq!(opened[1], "notes://open");
+    }
+
+    #[test]
+    fn a_lost_page_gets_what_it_took_again() {
+        let urls = OpenUrls::default();
+        urls.receive(["notes://first".to_string()]);
+        assert_eq!(urls.take_for_page(7), ["notes://first"]);
+        urls.receive(["notes://second".to_string()]);
+        urls.page_lost(7);
+        assert_eq!(urls.take_for_page(7), ["notes://first", "notes://second"]);
+        urls.release(7);
+        urls.page_lost(7);
+        assert!(urls.take_for_page(7).is_empty());
     }
 }
