@@ -120,7 +120,7 @@ fn main() {
 }
 ```
 
-`launch` starts the app and returns its `SabineProcess` without waiting, for apps that run their own loop. Call `process.wait()` when you're done; on macOS, call it on the main thread, or run an AppKit loop there, since the tray and global shortcuts live on the main thread.
+`launch` starts the app and returns its `SabineProcess` without waiting, for apps that run their own loop. When a Windows setup program runs the executable, `launch` prepares Sabine and exits instead. Call `process.wait()` when you're done; on macOS, call it on the main thread, or run an AppKit loop there, since the tray and global shortcuts live on the main thread.
 
 A custom `main` must let Sabine run its internal modes before parsing arguments, starting a logger or doing anything else, and return when it did:
 

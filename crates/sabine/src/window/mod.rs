@@ -86,9 +86,6 @@ impl SabineWindow {
                 std::process::exit(1);
             }
         };
-        if crate::launch::bootstrap::installer::requested(&args) {
-            crate::launch::bootstrap::installer::run(&window.config, &args);
-        }
         match window.launch() {
             Ok(mut process) => {
                 launched(&mut process);

@@ -94,9 +94,9 @@ fn main() {
 macOS, call `wait()` on the main thread, or run an AppKit event loop there, so the tray icon and
 global shortcuts work.
 
-The Windows setup programs that `sabine bundle` builds run the app with arguments that only
-`SabineWindow::main` and its variants handle, so apps you package as `exe` or `msi` installers
-should enter through those.
+The Windows setup programs that `sabine bundle` builds run the app to prepare Sabine and install
+its files. `launch()` does that work and exits instead of opening the window, so the code before it
+should leave the machine as it found it.
 
 ## Recipes
 

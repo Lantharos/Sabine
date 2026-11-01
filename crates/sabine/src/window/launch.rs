@@ -13,6 +13,10 @@ use crate::osr;
 
 impl SabineWindow {
     pub fn launch(mut self) -> SabineResult<SabineProcess> {
+        let args = std::env::args().collect::<Vec<_>>();
+        if bootstrap::installer::requested(&args) {
+            bootstrap::installer::run(&self.config, &args);
+        }
         crate::bridge::export_requested_bindings(&self.bridge_bindings);
         self.apply_launch_environment();
         let metrics = LaunchMetrics::new(metrics_label(&self.config));
