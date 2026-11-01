@@ -1,3 +1,9 @@
+# Sabine 0.65
+
+- On Linux and macOS, a middle click on a page scrolls it as the pointer moves away from where it
+  was clicked, like on Windows. Another click, a key or the scroll wheel stops it. Middle clicks on
+  links still open them.
+
 # Sabine 0.64
 
 - Pages open web and mail links in the person's browser or mail app with `shell.openLink`, and

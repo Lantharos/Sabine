@@ -20,9 +20,9 @@ pub use system::{
 pub use updates_section::AppUpdatesSection;
 
 pub const REGISTRY_VERSION: u32 = 1;
-pub const SABINE_VERSION: &str = "0.64";
+pub const SABINE_VERSION: &str = "0.65";
 pub const SABINE_MAJOR: u32 = 0;
-pub const SABINE_BUILD: u32 = 64;
+pub const SABINE_BUILD: u32 = 65;
 pub const MIN_SUPPORTED_APP_BUILD: u32 = 53;
 pub const UPDATE_SOAK: Duration = Duration::from_secs(24 * 60 * 60);
 pub const UPDATE_ROLLOUT_WINDOW: Duration = Duration::from_secs(6 * 60 * 60);
