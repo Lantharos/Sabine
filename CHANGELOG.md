@@ -27,6 +27,21 @@
   `SabineLifecyclePolicy::with_freeze_after` and `without_freezing` (use the window's
   `freeze_after` and `disable_freezing`), `AppChrome::titlebar_only`, and the unused
   `SabineWindow::app_updates` and `without_debug`.
+- `sabine bundle --target portable` works on every platform: a zip of the app folder on Windows, a
+  tarball of the `.app` on macOS and the filesystem tarball on Linux. Unpacked anywhere, the app runs
+  in place and prepares Sabine on first launch.
+- `sabine bundle` stops with an error naming the packaging tool it needs instead of writing a build
+  script when the tool is missing.
+- macOS signing signs each framework, helper and executable inside an app before the app, and
+  notarizes and staples apps shipped in an archive. Windows signing also signs the app's DLLs.
+- Release manifests take the app version from Cargo when `Sabine.toml` has none, like bundles do.
+- Sabine updates itself reliably while systemd or launchd runs its daemon, and keeps running the
+  installed version when an update cannot be downloaded.
+- rpm app updates install with zypper on openSUSE, and every deb or rpm update is checked again in
+  the elevated step before the package manager installs it.
+- The Windows daemon comes back after a crash, as it does on Linux and macOS.
+- Runtime downloads read the full CEF build index, which outgrew the old 10 MB limit, and retry
+  when the index server fails.
 
 # Sabine 0.65
 

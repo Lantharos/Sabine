@@ -8,7 +8,7 @@ Set the app ID, version, web build, and update source in `Sabine.toml`. Initiali
 sabine release-init --repository owner/repository
 ```
 
-Review the generated workflow and public key, then commit the app and push a tag matching its version, such as `v1.0.0`. The workflow builds and signs the platform packages and update manifest. Keep the signing key in the repository's Actions secret; installed apps receive only its public key. The [implementation guide](implementation-guide.md#release-and-update-model) explains verification, rollout, and rollback.
+Review the generated workflow and public key, then commit the app and push a tag matching its version, such as `v1.0.0`. The version is `[app].version` in `Sabine.toml`, or the Cargo package's version when that is absent. The workflow builds and signs the platform packages and update manifest. Keep the signing key in the repository's Actions secret; installed apps receive only its public key. The [implementation guide](implementation-guide.md#release-and-update-model) explains verification, rollout, and rollback.
 
 The workflow builds every package an installed app can update from:
 
@@ -20,6 +20,8 @@ The workflow builds every package an installed app can update from:
 
 Each installation updates from the same kind of package it was installed with.
 
+`sabine bundle` builds each package with its platform's own tool and stops with an error naming the tool when it is missing: `dpkg-deb` and `dpkg-shlibdeps` (from `dpkg-dev`) for deb, `rpmbuild` for rpm, `appimagetool` for AppImage, `hdiutil` for dmg, WiX for msi, NSIS for exe, and `tar` for the archives.
+
 MSI builds use WiX 7. After reviewing the [WiX EULA](https://docs.firegiant.com/wix/osmf/), set `accept_wix_eula: true` in the reusable workflow input. Local build machines can run `wix eula accept wix7`. Windows EXE bundles use NSIS.
 
 ### Code signing
@@ -28,9 +30,9 @@ Unsigned packages build and update normally, but macOS Gatekeeper and Windows Sm
 
 | Variable | Purpose |
 | --- | --- |
-| `SABINE_MACOS_SIGNING_IDENTITY` | Developer ID Application identity in the keychain; signs `.app` bundles and disk images with the hardened runtime |
-| `SABINE_NOTARY_APPLE_ID`, `SABINE_NOTARY_TEAM_ID`, `SABINE_NOTARY_PASSWORD` | Notarize and staple disk images; set all three, with an app-specific password |
-| `SABINE_WINDOWS_CERTIFICATE` | Path to a `.pfx` Authenticode certificate; signs every `.exe` in the app and the MSI or setup `.exe` |
+| `SABINE_MACOS_SIGNING_IDENTITY` | Developer ID Application identity in the keychain; signs every framework, helper and executable inside an `.app` before the bundle itself, all with the hardened runtime, and signs disk images |
+| `SABINE_NOTARY_APPLE_ID`, `SABINE_NOTARY_TEAM_ID`, `SABINE_NOTARY_PASSWORD` | Notarize and staple disk images, and `.app` bundles shipped in an archive; set all three, with an app-specific password |
+| `SABINE_WINDOWS_CERTIFICATE` | Path to a `.pfx` Authenticode certificate; signs every `.exe` and `.dll` the app ships, and the MSI or setup `.exe` |
 | `SABINE_WINDOWS_CERTIFICATE_PASSWORD` | Password of that certificate |
 | `SABINE_WINDOWS_CERTIFICATE_SHA1` | Thumbprint of a certificate in the Windows certificate store, instead of a `.pfx`; use it for certificates kept on a token or in a cloud signing service, such as Certum SimplySign, whose software puts the certificate in the store |
 | `SABINE_WINDOWS_TIMESTAMP_URL` | RFC 3161 timestamp server, `http://timestamp.digicert.com` by default |

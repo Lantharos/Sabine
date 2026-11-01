@@ -155,8 +155,10 @@ platform system archive and `sabine-release.json` are immutable release inputs. 
 with Ed25519; bootstrap verifies the embedded trust key and artifact SHA-256, then installs the
 binaries into a versioned directory. The active pointer changes atomically and the previous version
 is retained as the rollback installation until the next successful upgrade. The old binary supervises a single-daemon
-handoff; failed startup restores the previous pointer and daemon, records the failed release, and
-applies an exponential retry delay. A damaged active installation is silently replaced from signed
+handoff from outside the service manager's job for the old daemon, in a systemd unit or launchd job
+of its own, so it keeps running when that daemon exits. Failed startup restores the previous pointer
+and daemon, records the failed release, and applies an exponential retry delay. A daemon that cannot
+fetch or stage an update reports it and keeps maintaining the installed version. A damaged active installation is silently replaced from signed
 release metadata. The host is compiled against CEF Stable API 15400 and needs CEF 154 or newer, so the runtime
 service can independently install newer compatible CEF builds. Apps negotiate Sabine behavior and capabilities
 and never request a Chromium version.
@@ -215,7 +217,10 @@ a stable bootstrap and forwards the next launch to the executable recorded in th
 Native packages are also downloaded in the background, but activation is foreground: the next app
 launch offers Install or Later, exits after acceptance, invokes MSI with its progress window, the
 `.exe` installer silently, DMG replacement, AppImage replacement, or `pkexec` for deb/rpm, and
-relaunches after a successful installer exit. A DMG update asks for an administrator password only
+relaunches after a successful installer exit. deb packages install with apt, and rpm packages with
+dnf, zypper or rpm, whichever the system has. The elevated step copies the package somewhere only
+the administrator can write and checks its SHA-256 there, so the package manager installs exactly
+the file that matched the release. A DMG update asks for an administrator password only
 when the user cannot replace the installed bundle themselves. The downloaded package is deleted once
 it is installed. Store-owned installations remain owned by the store.
 
@@ -225,8 +230,10 @@ probe, and only then leaves it selectable. The probe uses a throwaway profile wi
 macOS and basic password store on Linux, so validating a runtime never asks for the user's keychain
 or keyring. Failed runtimes receive an unusable marker and resolution
 returns to the previous runtime. Markers are scoped to the probe version so a fixed probe retries a
-runtime automatically. Each running host owns a process lease; pruning keeps the newest two runtimes
-and never removes a leased directory. Offline bundles include a real runtime and the complete system
+runtime automatically. While the newest runtime is quarantined, maintenance stays on the current one.
+Each running host owns a process lease that records its process id and start time, so a later process
+that reuses the id does not hold the runtime; pruning keeps the newest two runtimes and never removes a
+leased directory. Offline bundles include a real runtime and the complete system
 bootstrap, but first launch adopts the embedded binaries into the normal managed layout so both
 streams continue updating.
 
@@ -711,7 +718,8 @@ Runtime, shared-system, and app downloads share bounded transfers with four atte
 a 30-minute deadline, and HTTP range continuation. Signed system metadata supplies the exact
 size; app transfers use Content-Length when available and enforce an 8 GiB limit even without
 it. Runtime and system partial files resume across setup attempts. Release manifests are
-limited to 1 MiB, three attempts, and a 60-second deadline. Completed artifacts are verified
+limited to 1 MiB, and the CEF build index to 64 MiB; both are fetched with three attempts within a
+60-second deadline. Completed artifacts are verified
 before extraction.
 
 Shared-system and managed-app ZIP and tar.gz extraction also runs in process, with confined paths,
@@ -721,10 +729,10 @@ and internal framework symlinks.
 
 `sabine-service` owns the machine/user-level catalog. Its registry writes use a temporary file,
 `sync_all`, and atomic rename. Re-registering an app preserves its original registration timestamp.
-The dedicated `sabine-service-daemon` owns its PID file and maintenance loop. Linux starts it with a
+The dedicated `sabine-service-daemon` owns its maintenance loop. Linux starts it with a
 user systemd unit, or with an XDG autostart entry in sessions without a user systemd instance, macOS
-with a LaunchAgent, and Windows with a hidden per-user scheduled task; the
-Windows binary uses the GUI subsystem and never creates a console host. The maintenance loop updates
+with a LaunchAgent, and Windows with a hidden per-user scheduled task; each restarts a daemon that
+crashes. The Windows binary uses the GUI subsystem and never creates a console host. The maintenance loop updates
 CEF to the newest compatible archive and keeps two runtime versions. Runtime failures
 are reported independently from app updates. Incompatible applications remain registered
 so their update source can deliver a compatible build. Maintenance reports retain each
@@ -745,9 +753,10 @@ downloads, Sabine's folder for the app, the desktop entries and URL handler Sabi
 and the app's browser profile. Installed apps whose program is still there are never removed for
 being unused, and an app that comes back simply registers again.
 
-The maintenance daemon holds an operating-system file lock for its lifetime. Its PID and version
-files are diagnostic metadata; simultaneous launches cannot become competing owners, and a killed
-daemon releases the lock automatically so the next launch can replace stale metadata.
+The maintenance daemon holds an operating-system file lock for its lifetime. Its process id and
+version in `daemon-state.json` are diagnostic metadata; simultaneous launches cannot become competing
+owners, and a killed daemon releases the lock automatically so the next launch can replace stale
+metadata.
 
 Browser profiles live under the native per-user cache location: `LOCALAPPDATA` on Windows,
 `~/Library/Caches` on macOS, and `XDG_CACHE_HOME` on Linux. Chromium protects its cookie and password key
@@ -1356,7 +1365,9 @@ spooling.
 
 The CLI reads `Sabine.toml`, builds web assets and the selected Rust package, writes a normalized
 production manifest into the platform resource layout, stages the remaining runtime files and
-metadata, and invokes a local package tool when available. Apps do not locate or copy manifests.
+metadata, and builds the package with its platform's tool, which must be installed: `dpkg-deb` and
+`dpkg-shlibdeps` for deb, `rpmbuild` for rpm, `appimagetool` for AppImage, `hdiutil` for dmg, WiX for
+msi, NSIS for exe, and `tar` for the archives. Apps do not locate or copy manifests.
 Bundle versions use SemVer and inherit `package.version` from Cargo, including workspace values,
 when `[app].version` is absent. App IDs contain lowercase letters, digits, dots and hyphens.
 The configured web output and entry must exist before staging; `--no-web-build` packages an
@@ -1369,7 +1380,11 @@ implemented.
 `dev_port` are therefore never baked into production launch behavior.
 
 Supported targets are portable, Linux directory, deb, rpm, AppImage, Windows directory, exe, msi,
-macOS app, and dmg. Cross-host staging is allowed. `sabine bundle` signs Windows and macOS packages and notarizes disk
+macOS app, and dmg. Cross-host staging is allowed. `portable` is the app for the machine building
+it, ready to unpack anywhere and run in place: a tarball of the filesystem tree on Linux, a zip of
+the app folder on Windows, and a tarball of the `.app` on macOS. On first launch it prepares the
+shared service and runtime and registers itself like any installed app, and it updates from the same
+kind of archive. `sabine bundle` signs Windows and macOS packages and notarizes disk
 images when signing is configured in the environment; see [Publishing](publishing.md#code-signing).
 Linux packages keep each application, its resources, and any offline runtime/service payload under
 `/usr/lib/sabine/<app-id>`. A relative symlink in `/usr/bin` launches the app. Runtime and manifest
