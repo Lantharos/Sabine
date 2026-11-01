@@ -445,10 +445,18 @@ to benchmark the GPU in the background.
   CEF host first opens it on D3D11 and copies it into one of four Sabine-owned D3D12 shared textures
   before returning. Each destination is opened on the producer's D3D11 device for the copy and on
   wgpu's D3D12 device for composition. Each slot remembers the area that changed since it last
-  received a frame, so only that area is copied. The host waits for its GPU copy before returning,
-  because CEF hands its texture to the next frame as soon as the callback ends.
-  Each destination's handle is duplicated into the window once, with the first frame that uses it,
-  and the window keeps it until the host retires that texture on resize or browser close. The
+  received a frame, so only that area is copied. CEF's pooled textures are opened once and kept
+  while they stay in its pool; a handle value CEF reuses for a new texture is told apart by the
+  kernel object it names. CEF hands its texture back to Chromium's pool as soon as the callback
+  ends, and nothing makes Chromium's next draw into it wait for a copy still running: CEF creates
+  the texture without its keyed mutex, and Chromium fences only between its own devices. So the
+  host waits on a D3D11 fence until its copy finished before it returns, checking the fence's
+  value rather than trusting its event; a copy that never finishes within a second counts as a
+  lost device. Each destination's handle is duplicated straight into the window process that owns
+  the browser, once, with the first frame that uses it. Windows that share one browser process
+  each keep their own process handle, so a second window's frames reach its own process. The
+  window keeps each texture handle until the host retires that texture on resize or browser
+  close. The
   compositor imports each slot's texture once, samples it directly, and sends a release acknowledgement only
   after submitted GPU work stops using it. A bounded notification channel wakes a completion
   worker so the last frame also retires while the window is idle or closing. The worker keeps
@@ -469,25 +477,35 @@ to benchmark the GPU in the background.
 - **Linux** uses accelerated `OnAcceleratedPaint` on CEF 156.0.3 and newer. CEF returns its dma-bufs
   to Chromium's pool when the callback returns, so the host imports each one into Vulkan with its
   DRM format modifier and copies it on the GPU into one of four Sabine-owned dma-bufs per surface,
-  copying only the area that changed since that slot last received a frame, and waits for the copy
-  before publishing it. Chromium's pooled buffers are imported once and reused. Each owned dma-buf
-  is passed to the native window once over the socket with its modifier, stride and offset, and the
-  window samples it through wgpu's Vulkan device without copying. Slots are acknowledged, retired
-  and re-requested as on Windows. A window whose device cannot import dma-bufs reopens the page with
-  software `OnPaint`. A browser that sends no accelerated frame the window can use within two
-  seconds of loading logs why its frames were dropped against the size and scale the window needs,
-  and stays on the GPU. Chromium's Wayland
+  copying only the area that changed since that slot last received a frame. The copy device is the
+  GPU the desktop composites on, which Chromium renders on too, matched by its DRM device node.
+  Chromium takes its buffer back when the callback returns and waits for nothing of the host's
+  before drawing into it again, except through the fences on the dma-buf, which Mesa's drivers
+  honour and NVIDIA's do not. With Mesa the host does not wait for its copy: it attaches the copy's
+  completion as a sync file to Chromium's buffer it read, which Chromium's next draw waits for, and
+  to the owned dma-buf it wrote. Before the window first samples a frame, it takes the dma-buf's
+  fence back out as a sync file and its next submission waits for it on the GPU; a compositor
+  showing the dma-buf directly waits for it the same way. The host then waits on the CPU only
+  before it copies into a slot again. On NVIDIA's driver, or where a sync file cannot be exported
+  or attached, the host waits until each copy finished before it returns. A copy that outlasts a
+  second makes the device finish all its work before anything is reused, and counts as a lost
+  device if it never does. Chromium's pooled buffers are imported once and reused.
+  Each owned dma-buf is passed to the native window once over the socket with its modifier, stride
+  and offset, and the window samples it through wgpu's Vulkan device without copying. Slots are
+  acknowledged, retired and re-requested as on Windows. Chromium's Wayland
   fractional-scale support is turned off: it takes each page's scale from a native window, which
   off-screen pages lack, so pages would always paint at 100% and never match a scaled window.
   Without it Chromium uses the scale the window reports. Chromium reports each frame's damage against the capture before it, so a frame that
-  follows one the host never copied is copied whole. CEF hands over no fence with a frame, so the
-  host waits for Chromium's drawing through the fences on the dma-buf itself; NVIDIA's driver puts
-  none there, so its frames can still be in flight when they are copied. Until CEF passes the
-  fence along (chromiumembedded/cef#4313), a slot copies the area its previous frame changed again
-  the next time it receives one, and once a page has painted nothing for 100 ms, the host copies
-  its last frame again whole from the dma-buf Chromium drew it into, which is finished by then.
-  That copy also picks up pixels Chromium changes without reporting them as damage, such as the
-  edges of icons and rounded corners when an animated layer comes or goes. Older runtimes paint in
+  follows one the host never copied is copied whole. Before Chromium 158, Chromium hands over a
+  frame once its draw is submitted rather than finished, and CEF passes no fence with it
+  (chromiumembedded/cef#4313), so the host waits for Chromium's drawing through the fences on the
+  dma-buf itself; NVIDIA's driver puts none there, so its frames can still be in flight when they
+  are copied. On those runtimes a slot copies the area its previous frame changed again the next
+  time it receives one. Runtimes on Chromium 158 or newer deliver finished frames, so the host
+  skips both. Once a page has painted nothing for 100 ms, the host copies its last frame again
+  whole from the dma-buf Chromium drew it into, which is finished by then. That copy picks up
+  pixels Chromium changes without reporting them as damage, such as the edges of icons and
+  rounded corners when an animated layer comes or goes. Older runtimes paint in
   software from the start, because they hand NVIDIA drivers empty shared textures. Sabine runs only
   on Wayland sessions; Chromium is started with the Wayland Ozone platform. The window presents in
   mailbox mode where the driver offers it, so presenting never blocks the window thread. On Wayland
@@ -496,19 +514,29 @@ to benchmark the GPU in the background.
   presenting until input arrived.
 - **macOS** uses accelerated `OnAcceleratedPaint`. CEF recycles its IOSurface when the callback
   returns, so the host blits each frame on the GPU into one of four Sabine-owned IOSurfaces per
-  surface, copying only the area that changed since that slot last received a frame, and waits for
-  the copy before publishing it. CEF's own pooled surfaces are wrapped as Metal textures once.
+  surface, copying only the area that changed since that slot last received a frame, and waits
+  for the copy to finish before it returns: Chromium reuses the surface without checking whether
+  it is still in use and fences only its own Metal devices, so a copy merely scheduled could read
+  the next frame. CEF's own pooled surfaces are wrapped as Metal textures once.
   Windowed, the Metal layer presents without waiting for the display, since the window server
   composites it at the display's pace anyway; fullscreen windows wait for vsync so a layer the
   display scans out directly does not tear. Each owned IOSurface is handed to the native
   window once, as a mach port sent to a per-connection bootstrap service whose name travels on the
   browser command line; messages carry the window's socket token and are otherwise discarded. Frames
-  then reference the surface by id, the compositor wraps each slot's surface as a Metal texture once
-  and reuses it without copying, and the slot is acknowledged only after submitted GPU work stops
-  sampling it. Surfaces are retired when they are replaced on resize or their browser closes. As
-  on Windows, a frame dropped while every slot is in use is requested again once a slot is
-  released. Chromium can deliver software `OnPaint` frames instead, which use the shared-memory
-  path below.
+  then reference the surface by id. The socket reader keeps the surfaces it has resolved, so only a
+  frame naming a surface whose announcement is still on its way waits for it, briefly. The
+  compositor wraps each slot's surface as a Metal texture once and reuses it without copying, and
+  the slot is acknowledged only after submitted GPU work stops sampling it. Surfaces are retired
+  when they are replaced on resize or their browser closes. As on Windows, a frame dropped while
+  every slot is in use is requested again once a slot is released.
+
+On every platform, accelerated frames fall back to software painting when they turn out not to work
+on the machine: when Chromium paints the page in software because its GPU process is gone or unusable,
+when a loaded page has sent no accelerated frame the window could use within two seconds, when the
+Linux copy device fails for good, or when the window cannot import the browser's frames. The browser
+logs why its frames were dropped, against the size and scale the window needs, and the window starts
+the browser again painting with `OnPaint`, which uses the shared-memory path below. Frames dropped
+along the way are only reported with `SABINE_TRACE=1`.
 
 Windows uses wgpu D3D12. Chromium receives the compositor device’s DXGI adapter LUID and uses
 ANGLE D3D11 on that adapter. The copy device is created from the adapter that owns Chromium’s
@@ -526,18 +554,28 @@ content view. Wayland has one effect, a blur through `ext_background_effect_v1`;
 without that protocol, such as GNOME's, show the page over a clear window instead.
 
 CEF delivers BGRA dirty rectangles on the software path. Paints of 256 KiB or more are copied into
-one of at most four reusable shared-memory slots per browser; each slot is mapped once by the native
+one of at most four reusable shared-memory slots per window; each slot is mapped once by the native
 host and handed back with a release message after its pixels are consumed, so steady-state painting
-needs no per-frame allocation, mapping, or file writes. Smaller paints travel inline, and a paint
-whose slots are all still in use falls back to the inline path. Every rectangle in a batch refers to
-that batch's single byte backing instead of a separate allocation. The native host writes each
-changed rectangle from those bytes straight into the surface's GPU texture, with no intermediate
-copy on the CPU. A Linux window that is unmapped while hidden reads its textures back once and
+needs no per-frame allocation, mapping, or file writes. On Linux and macOS a slot's memory reaches
+the window as a file descriptor with its first paint; on Windows it is a file mapping whose handle
+the browser duplicates, read-only, into the window's process. Smaller paints travel inline, and a
+paint whose slots are all still in use falls back to the inline path. The browser assembles each
+paint's metadata in buffers it keeps from paint to paint. Every rectangle in a batch refers to that
+batch's single byte backing instead of a separate allocation. Rectangles that fall outside the
+surface are left out, and a paint is only dropped when its pixels are cut short. The native host
+uploads each changed rectangle from those bytes into the surface's GPU texture; wgpu stages the
+upload once on its way to the GPU, with no other copy on the CPU. A guest captured for a preview is
+read back from the GPU without blocking the window, which answers the page once the pixels arrive.
+A Linux window that is unmapped while hidden reads its textures back once and
 uploads them again when it returns, so it reappears with its last frame:
 
 - main page
 - popup overlay
 - one texture per guest (including guest `<select>` popups)
+
+Guests are drawn in the order they stack in the browser, the order pointer input also finds them
+in: a guest raised by focus is drawn above the others, each guest's popup right above its guest,
+and the page's popup above everything.
 
 On every platform, a page that has loaded but shows no frame within 10 seconds is reported once.
 The window logs the size the browser painted, or that it painted nothing, against the size, scale
@@ -609,9 +647,11 @@ backpressure before posting UI tasks and rejects unterminated control lines at 6
 
 | Platform | Transport | Paint path |
 | --- | --- | --- |
-| Linux | Unix domain socket | dirty-rect BGRA `OnPaint` → sparse wgpu uploads |
+| Linux | Unix domain socket | CEF dma-buf → acknowledged dma-buf slots, fenced → wgpu Vulkan |
 | macOS | Unix domain socket + mach | CEF IOSurface → acknowledged IOSurface slots → wgpu Metal |
 | Windows | Unix domain socket | CEF D3D11 → acknowledged NT texture slots → wgpu D3D12 |
+
+Every platform falls back to dirty-rect BGRA `OnPaint` through shared memory and sparse wgpu uploads.
 
 Palette and tray windows use the same native host as other desktop windows, with frameless chrome
 and hide-on-blur behavior when configured. `skip_taskbar` keeps a window off the Windows taskbar and

@@ -43,6 +43,7 @@ sabine-host = { path = "crates/sabine-host", version = "0.65.0" }
 sabine = { path = "crates/sabine", version = "0.65.0" }
 sabine-service = { path = "crates/sabine-service", version = "0.65.0" }
 
+ash = "0.38.0"
 bzip2 = "0.6.1"
 flate2 = "1.1.10"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2", "deflate64", "bzip2", "lzma", "xz", "zstd"] }

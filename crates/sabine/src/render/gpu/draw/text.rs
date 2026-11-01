@@ -5,11 +5,11 @@ use glyphon::{
     TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
 };
 
-use super::RendererError;
+use crate::render::RendererError;
 use crate::render::{TextAlign, TextCommand};
 use glyphon::cosmic_text::Align;
 
-pub(super) struct TextRendererState {
+pub(in crate::render::gpu) struct TextRendererState {
     font_system: FontSystem,
     swash_cache: SwashCache,
     viewport: Viewport,
@@ -25,7 +25,7 @@ struct TextBufferEntry {
 }
 
 impl TextRendererState {
-    pub(super) fn new(
+    pub(in crate::render::gpu) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
@@ -45,7 +45,7 @@ impl TextRendererState {
         }
     }
 
-    pub(super) fn prepare(
+    pub(in crate::render::gpu) fn prepare(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -116,7 +116,7 @@ impl TextRendererState {
             .map_err(|error| RendererError::Text(error.to_string()))
     }
 
-    pub(super) fn render<'pass>(
+    pub(in crate::render::gpu) fn render<'pass>(
         &'pass self,
         pass: &mut wgpu::RenderPass<'pass>,
     ) -> Result<(), RendererError> {
@@ -126,7 +126,7 @@ impl TextRendererState {
     }
 
     /// The width `text` takes on one line at `size` logical pixels.
-    pub(super) fn measure(&mut self, text: &str, size: f32) -> f32 {
+    pub(in crate::render::gpu) fn measure(&mut self, text: &str, size: f32) -> f32 {
         let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size, size));
         buffer.set_size(None, None);
         buffer.set_text(
@@ -142,7 +142,7 @@ impl TextRendererState {
             .fold(0.0, f32::max)
     }
 
-    pub(super) fn trim(&mut self) {
+    pub(in crate::render::gpu) fn trim(&mut self) {
         self.atlas.trim();
     }
 }

@@ -34,4 +34,9 @@ SabineOsrHandler* PrimaryHandler() {
   return handlers.empty() ? nullptr : handlers.front();
 }
 
+std::vector<SabineOsrHandler*> RegisteredHandlers() {
+  std::lock_guard<std::mutex> lock(handlers_mutex);
+  return handlers;
+}
+
 }  // namespace sabine_osr

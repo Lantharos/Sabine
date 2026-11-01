@@ -1,6 +1,8 @@
 #ifndef SABINE_CEF_HOST_OSR_COMMON_REGISTRY_H_
 #define SABINE_CEF_HOST_OSR_COMMON_REGISTRY_H_
 
+#include <vector>
+
 class SabineOsrHandler;
 
 namespace sabine_osr {
@@ -11,6 +13,7 @@ void RegisterHandler(SabineOsrHandler* handler);
 void UnregisterHandler(SabineOsrHandler* handler);
 bool HasRegisteredHandlers();
 SabineOsrHandler* PrimaryHandler();
+std::vector<SabineOsrHandler*> RegisteredHandlers();
 
 }  // namespace sabine_osr
 

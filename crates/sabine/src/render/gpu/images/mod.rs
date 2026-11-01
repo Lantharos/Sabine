@@ -4,12 +4,18 @@
 // sampling finishes. Its crop UVs describe pixel edges, not pixel centers;
 // adding a half-texel inset here resamples the whole page into a blurry mess.
 
+mod external;
+mod readback;
+
 use std::ops::Range;
 
 use crate::render::rect_pipeline::{ImageVertex, push_image_quad};
 use crate::render::{BgraRect, ImageCommand, ImageId};
 
-use super::{CachedTexture, GpuRenderer, RendererError};
+use crate::render::gpu::{CachedTexture, GpuRenderer, RendererError};
+
+pub(crate) use external::ExternalSlot;
+pub(super) use external::ImportedTexture;
 
 pub(super) struct ImageDraw {
     pub(super) bind_group: wgpu::BindGroup,
@@ -23,7 +29,6 @@ impl GpuRenderer {
         self.texture_cache.remove(id);
     }
 
-    #[cfg(any(windows, target_os = "linux"))]
     pub(crate) fn clear_images(&mut self) {
         for (_, completed) in self.external_texture_releases.drain() {
             self.queue.on_submitted_work_done(completed);
@@ -151,20 +156,6 @@ impl GpuRenderer {
     }
 
     pub(super) fn image_bind_group(&self, texture: &wgpu::Texture) -> wgpu::BindGroup {
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sabine image"),
-            layout: &self.image_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&self.image_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        })
+        self.pipelines.image_bind_group(&self.device, texture)
     }
 }

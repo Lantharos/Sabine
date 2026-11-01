@@ -1,11 +1,11 @@
 #[derive(Default)]
-pub(super) struct DynamicVertexBuffer {
+pub(in crate::render::gpu) struct DynamicVertexBuffer {
     buffer: Option<wgpu::Buffer>,
     capacity: u64,
 }
 
 impl DynamicVertexBuffer {
-    pub(super) fn upload<T: bytemuck::Pod>(
+    pub(in crate::render::gpu) fn upload<T: bytemuck::Pod>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

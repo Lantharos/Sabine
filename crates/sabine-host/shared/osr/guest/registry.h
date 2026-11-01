@@ -37,9 +37,6 @@ struct GuestView {
   bool ShownToPage() const { return id != kSabineDevToolsGuestId; }
 };
 
-/// Length-prefixed guest id that precedes every guest paint payload.
-std::string GuestPayloadPrefix(const std::string& id);
-
 /// Guest views keyed by id, with a separate bottom-to-top z-order used for
 /// pointer hit testing and paint ordering.
 class GuestRegistry {

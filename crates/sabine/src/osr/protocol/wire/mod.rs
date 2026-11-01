@@ -1,12 +1,12 @@
 mod accel;
 mod header;
+mod kinds;
 mod page;
 mod paint;
 mod regions;
-#[cfg(unix)]
+mod resources;
 mod shared_mem;
 
-#[cfg(unix)]
 pub(crate) use shared_mem::{PaintLease, PaintSlots};
 
 use crate::osr::transport::IpcStream;
@@ -18,80 +18,48 @@ use crate::osr::protocol::OsrMessage;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
+use accel::parse_accel_frame;
 #[cfg(target_os = "linux")]
-use accel::{KIND_ACCEL_DMABUF, KIND_ACCEL_UNAVAILABLE, parse_dmabuf_announcement};
+use accel::parse_dmabuf_announcement;
 #[cfg(any(windows, target_os = "linux"))]
-use accel::{KIND_ACCEL_RETIRE, parse_retired_resources};
-use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
+use accel::parse_retired_resources;
 use header::{read_header, read_i32, read_u32};
-use page::{parse_cursor, parse_drag_start, parse_ime_surrounding};
+use kinds::*;
+use page::{
+    parse_cursor, parse_drag_start, parse_guest_capture, parse_guest_order, parse_ime_surrounding,
+    parse_json,
+};
 use paint::{BatchHeader, BatchSurface, parse_inline_batch};
 use regions::parse_draggable_regions;
+use resources::SharedResources;
 
 pub(super) const HEADER_LEN: usize = 28;
 pub(super) const MAGIC: &[u8; 4] = b"SAB1";
 const MAX_SURFACE_DIMENSION: u32 = 16_384;
 pub(super) const MAX_PAINT_BYTES: usize = 256 * 1024 * 1024;
 const MAX_CONTROL_BYTES: usize = 64 * 1024 * 1024;
-pub(super) const KIND_POPUP_HIDDEN: u32 = 3;
-pub(super) const KIND_CURSOR: u32 = 4;
-pub(super) const KIND_CLOSE_REQUESTED: u32 = 5;
-pub(super) const KIND_START_DRAG_REQUESTED: u32 = 6;
-pub(super) const KIND_MINIMIZE_REQUESTED: u32 = 7;
-pub(super) const KIND_TOGGLE_MAXIMIZE_REQUESTED: u32 = 8;
-pub(super) const KIND_SHOW_REQUESTED: u32 = 9;
-pub(super) const KIND_HIDE_REQUESTED: u32 = 10;
-pub(super) const KIND_FOCUS_REQUESTED: u32 = 11;
-pub(super) const KIND_MAIN_BATCH: u32 = 12;
-pub(super) const KIND_POPUP_BATCH: u32 = 13;
-pub(super) const KIND_MAIN_SHARED_BATCH: u32 = 14;
-pub(super) const KIND_POPUP_SHARED_BATCH: u32 = 15;
-pub(super) const KIND_DRAG_STARTED: u32 = 16;
-pub(super) const KIND_GUEST_BATCH: u32 = 18;
-pub(super) const KIND_GUEST_SHARED_BATCH: u32 = 19;
-pub(super) const KIND_GUEST_HIDDEN: u32 = 20;
-pub(super) const KIND_DRAGGABLE_REGIONS_CHANGED: u32 = 21;
-pub(super) const KIND_GUEST_CAPTURE_REQUESTED: u32 = 22;
-pub(super) const KIND_BRIDGE_REQUEST: u32 = 23;
-pub(super) const KIND_FULLSCREEN_REQUESTED: u32 = 27;
-pub(super) const KIND_EXIT_FULLSCREEN_REQUESTED: u32 = 28;
-pub(super) const KIND_MAIN_LOAD_STARTED: u32 = 29;
-pub(super) const KIND_MAIN_LOAD_READY: u32 = 30;
-pub(super) const KIND_IME_STATE_CHANGED: u32 = 31;
-pub(super) const KIND_IME_CURSOR_AREA_CHANGED: u32 = 32;
-pub(super) const KIND_TOOLTIP_CHANGED: u32 = 33;
-pub(super) const KIND_IME_SURROUNDING_CHANGED: u32 = 34;
-pub(super) const KIND_MAXIMIZE_REQUESTED: u32 = 35;
-pub(super) const KIND_RESTORE_REQUESTED: u32 = 36;
-pub(super) const KIND_FATAL_ERROR: u32 = 37;
-pub(super) const KIND_HOST_HELLO: u32 = 38;
-pub(super) const KIND_DRAG_OPERATION: u32 = 40;
-pub(super) const KIND_CONTEXT_MENU: u32 = 41;
-pub(super) const KIND_CONTEXT_MENU_DISMISSED: u32 = 42;
-pub(super) const KIND_FILE_DIALOG: u32 = 43;
-pub(super) const KIND_MEDIA_PLAYING: u32 = 44;
-#[cfg(target_os = "linux")]
-pub(super) const KIND_PRINT_DIALOG: u32 = 47;
-#[cfg(target_os = "linux")]
-pub(super) const KIND_PRINT_JOB: u32 = 48;
-pub(super) const KIND_PRINT_DOCUMENT: u32 = 49;
 const MAX_HELLO_BYTES: usize = 64;
 pub(super) const BATCH_ENTRY_LEN: usize = 28;
 
+/// One message as it came off the wire, before it is understood.
+struct RawMessage {
+    kind: u32,
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    payload: Vec<u8>,
+    #[cfg(unix)]
+    fd: header::ReceivedFd,
+}
+
 pub(crate) struct WireReader {
     stream: IpcStream,
-    #[cfg(unix)]
     slots: PaintSlots,
-    #[cfg(target_os = "macos")]
-    surfaces: Arc<SurfaceRegistry>,
-    #[cfg(target_os = "linux")]
-    dmabufs: crate::osr::accel::Dmabufs,
-    #[cfg(windows)]
-    shared_handles: crate::osr::accel::SharedHandles,
+    resources: SharedResources,
 }
 
 impl WireReader {
-    #[cfg(unix)]
     pub(crate) fn new(
         stream: IpcStream,
         slots: PaintSlots,
@@ -101,29 +69,18 @@ impl WireReader {
             stream,
             slots,
             #[cfg(target_os = "macos")]
-            surfaces,
-            #[cfg(target_os = "linux")]
-            dmabufs: Default::default(),
-        }
-    }
-
-    #[cfg(not(unix))]
-    pub(crate) fn new(stream: IpcStream) -> Self {
-        Self {
-            stream,
-            shared_handles: Default::default(),
+            resources: SharedResources::new(surfaces),
+            #[cfg(not(target_os = "macos"))]
+            resources: SharedResources::default(),
         }
     }
 
     pub(crate) fn read_host_protocol(&mut self) -> io::Result<Option<String>> {
-        #[cfg(unix)]
-        let Some((header, _)) = read_header(&mut self.stream)? else {
-            return Ok(None);
-        };
-        #[cfg(not(unix))]
         let Some(header) = read_header(&mut self.stream)? else {
             return Ok(None);
         };
+        #[cfg(unix)]
+        let (header, _) = header;
         let payload_len = read_u32(&header[24..28]) as usize;
         if &header[0..4] != MAGIC
             || read_u32(&header[4..8]) != KIND_HOST_HELLO
@@ -141,89 +98,81 @@ impl WireReader {
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
-    #[cfg(windows)]
-    fn shared_resource(
-        &mut self,
-        resource_id: u64,
-        shared_handle: u64,
-    ) -> Option<crate::osr::accel::SharedResource> {
-        self.shared_handles.resolve(resource_id, shared_handle)
-    }
-
-    #[cfg(target_os = "macos")]
-    fn shared_resource(
-        &mut self,
-        resource_id: u64,
-        _shared_handle: u64,
-    ) -> Option<crate::osr::accel::SharedResource> {
-        self.surfaces.surface(resource_id)
-    }
-
-    #[cfg(target_os = "linux")]
-    fn shared_resource(
-        &mut self,
-        resource_id: u64,
-        _shared_handle: u64,
-    ) -> Option<crate::osr::accel::SharedResource> {
-        self.dmabufs.resolve(resource_id)
-    }
-
+    /// Reads the next message for the window, taking in the shared resources
+    /// the browser host announces or retires between them.
     pub(crate) fn read(&mut self) -> io::Result<Option<OsrMessage>> {
-        let reader = &mut self.stream;
-        #[cfg(unix)]
-        let Some((header, mut fd)) = read_header(reader)? else {
-            return Ok(None);
-        };
-        #[cfg(not(unix))]
-        let Some(header) = read_header(reader)? else {
-            return Ok(None);
-        };
-        if &header[0..4] != MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid OSR message magic",
-            ));
+        loop {
+            let Some(raw) = self.read_raw()? else {
+                return Ok(None);
+            };
+            if let Some(message) = self.parse(raw)? {
+                return Ok(Some(message));
+            }
         }
+    }
 
+    fn read_raw(&mut self) -> io::Result<Option<RawMessage>> {
+        let Some(header) = read_header(&mut self.stream)? else {
+            return Ok(None);
+        };
+        #[cfg(unix)]
+        let (header, fd) = header;
+        if &header[0..4] != MAGIC {
+            return Err(invalid("invalid OSR message magic"));
+        }
         let kind = read_u32(&header[4..8]);
         let width = read_u32(&header[8..12]);
         let height = read_u32(&header[12..16]);
-        let x = read_i32(&header[16..20]);
-        let y = read_i32(&header[20..24]);
         let payload_len = read_u32(&header[24..28]) as usize;
         if width > MAX_SURFACE_DIMENSION || height > MAX_SURFACE_DIMENSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "OSR surface dimensions exceed the protocol limit",
-            ));
+            return Err(invalid("OSR surface dimensions exceed the protocol limit"));
         }
-        if is_paint_kind(kind)
+        let paint = is_paint_kind(kind);
+        if paint
             && (width as usize)
                 .checked_mul(height as usize)
                 .and_then(|pixels| pixels.checked_mul(4))
                 .is_none_or(|bytes| bytes > MAX_PAINT_BYTES)
         {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "OSR surface exceeds the protocol byte limit",
-            ));
+            return Err(invalid("OSR surface exceeds the protocol byte limit"));
         }
-        let payload_limit = if is_paint_kind(kind) {
+        let payload_limit = if paint {
             MAX_PAINT_BYTES
         } else {
             MAX_CONTROL_BYTES
         };
         if payload_len > payload_limit {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "OSR payload exceeds the protocol limit",
-            ));
+            return Err(invalid("OSR payload exceeds the protocol limit"));
         }
         let mut payload = vec![0_u8; payload_len];
         if payload_len > 0 {
-            reader.read_exact(&mut payload)?;
+            self.stream.read_exact(&mut payload)?;
         }
+        Ok(Some(RawMessage {
+            kind,
+            width,
+            height,
+            x: read_i32(&header[16..20]),
+            y: read_i32(&header[20..24]),
+            payload,
+            #[cfg(unix)]
+            fd,
+        }))
+    }
 
+    /// The message `raw` holds for the window, or none when it only updates
+    /// the resources this reader keeps.
+    fn parse(&mut self, raw: RawMessage) -> io::Result<Option<OsrMessage>> {
+        let RawMessage {
+            kind,
+            width,
+            height,
+            x,
+            y,
+            payload,
+            #[cfg(unix)]
+            mut fd,
+        } = raw;
         let batch_header = BatchHeader {
             width,
             height,
@@ -234,40 +183,40 @@ impl WireReader {
             KIND_MAIN_BATCH | KIND_POPUP_BATCH | KIND_GUEST_BATCH => OsrMessage::PaintBatch(
                 parse_inline_batch(batch_surface(kind), batch_header, payload)?,
             ),
-            #[cfg(unix)]
             KIND_MAIN_SHARED_BATCH | KIND_POPUP_SHARED_BATCH | KIND_GUEST_SHARED_BATCH => {
                 OsrMessage::PaintBatch(paint::parse_shared_batch(
                     batch_surface(kind),
                     batch_header,
                     &payload,
+                    #[cfg(unix)]
                     &mut fd,
                     &mut self.slots,
                 )?)
             }
+            KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {
+                let (mut frame, meta) = parse_accel_frame(kind, width, height, x, y, &payload)?;
+                self.resources.attach(&mut frame, meta);
+                OsrMessage::AccelFrame(frame)
+            }
+            #[cfg(any(windows, target_os = "linux"))]
+            KIND_ACCEL_RETIRE => {
+                self.resources.retire(parse_retired_resources(&payload)?);
+                return Ok(None);
+            }
+            #[cfg(target_os = "linux")]
+            KIND_ACCEL_DMABUF => {
+                let (resource_id, dmabuf) =
+                    parse_dmabuf_announcement(width, height, &payload, fd.take())?;
+                self.resources.announce(resource_id, dmabuf);
+                return Ok(None);
+            }
+            KIND_ACCEL_UNAVAILABLE => OsrMessage::AccelUnavailable,
             KIND_POPUP_HIDDEN => OsrMessage::PopupHidden,
             KIND_GUEST_HIDDEN => {
                 OsrMessage::GuestHidden(String::from_utf8(payload).unwrap_or_default())
             }
-            KIND_GUEST_CAPTURE_REQUESTED => {
-                let mut parts = payload.splitn(3, |byte| *byte == 0);
-                let browser_id = String::from_utf8(parts.next().unwrap_or_default().to_vec())
-                    .unwrap_or_default();
-                let request_id = String::from_utf8(parts.next().unwrap_or_default().to_vec())
-                    .unwrap_or_default();
-                let guest_id = String::from_utf8(parts.next().unwrap_or_default().to_vec())
-                    .unwrap_or_default();
-                if browser_id.is_empty() || request_id.is_empty() || guest_id.is_empty() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "invalid guest capture request",
-                    ));
-                }
-                OsrMessage::GuestCaptureRequested {
-                    browser_id,
-                    request_id,
-                    guest_id,
-                }
-            }
+            KIND_GUEST_ORDER => parse_guest_order(&payload),
+            KIND_GUEST_CAPTURE_REQUESTED => parse_guest_capture(&payload)?,
             KIND_DRAGGABLE_REGIONS_CHANGED => {
                 let (drag, exclusion) = parse_draggable_regions(&payload)?;
                 OsrMessage::DraggableRegionsChanged { drag, exclusion }
@@ -293,28 +242,15 @@ impl WireReader {
             KIND_CONTEXT_MENU => OsrMessage::ContextMenu {
                 x,
                 y,
-                items: serde_json::from_slice(&payload)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+                items: parse_json(&payload)?,
             },
             KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
-            KIND_FILE_DIALOG => OsrMessage::FileDialog(
-                serde_json::from_slice(&payload)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
-            ),
+            KIND_FILE_DIALOG => OsrMessage::FileDialog(parse_json(&payload)?),
             #[cfg(target_os = "linux")]
-            KIND_PRINT_DIALOG => OsrMessage::PrintDialog(
-                serde_json::from_slice(&payload)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
-            ),
+            KIND_PRINT_DIALOG => OsrMessage::PrintDialog(parse_json(&payload)?),
             #[cfg(target_os = "linux")]
-            KIND_PRINT_JOB => OsrMessage::PrintJob(
-                serde_json::from_slice(&payload)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
-            ),
-            KIND_PRINT_DOCUMENT => OsrMessage::PrintDocument(
-                serde_json::from_slice(&payload)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
-            ),
+            KIND_PRINT_JOB => OsrMessage::PrintJob(parse_json(&payload)?),
+            KIND_PRINT_DOCUMENT => OsrMessage::PrintDocument(parse_json(&payload)?),
             KIND_MEDIA_PLAYING => OsrMessage::MediaPlaying(width != 0),
             KIND_MAIN_LOAD_STARTED => OsrMessage::MainLoadStarted,
             KIND_MAIN_LOAD_READY => OsrMessage::MainLoadReady,
@@ -336,40 +272,7 @@ impl WireReader {
             KIND_BRIDGE_REQUEST => {
                 OsrMessage::BridgeRequest(crate::bridge::frame::Frame::decode(&payload)?)
             }
-            KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL => {
-                let (frame, shared_handle) =
-                    parse_accel_frame(kind, width, height, x, y, &payload)?;
-                OsrMessage::AccelFrame(crate::osr::protocol::OsrAccelFrame {
-                    resource: self.shared_resource(frame.resource_id, shared_handle),
-                    ..frame
-                })
-            }
-            #[cfg(windows)]
-            KIND_ACCEL_RETIRE => {
-                self.shared_handles
-                    .retire(parse_retired_resources(&payload)?);
-                return self.read();
-            }
-            #[cfg(target_os = "linux")]
-            KIND_ACCEL_RETIRE => {
-                self.dmabufs.retire(parse_retired_resources(&payload)?);
-                return self.read();
-            }
-            #[cfg(target_os = "linux")]
-            KIND_ACCEL_DMABUF => {
-                let (resource_id, dmabuf) =
-                    parse_dmabuf_announcement(width, height, &payload, fd.take())?;
-                self.dmabufs.announce(resource_id, dmabuf);
-                return self.read();
-            }
-            #[cfg(target_os = "linux")]
-            KIND_ACCEL_UNAVAILABLE => OsrMessage::AccelUnavailable,
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "unknown OSR message kind",
-                ));
-            }
+            _ => return Err(invalid("unknown OSR message kind")),
         };
         Ok(Some(message))
     }
@@ -383,19 +286,8 @@ fn batch_surface(kind: u32) -> BatchSurface {
     }
 }
 
-fn is_paint_kind(kind: u32) -> bool {
-    if matches!(kind, KIND_MAIN_ACCEL | KIND_POPUP_ACCEL | KIND_GUEST_ACCEL) {
-        return true;
-    }
-    matches!(
-        kind,
-        KIND_MAIN_BATCH
-            | KIND_POPUP_BATCH
-            | KIND_MAIN_SHARED_BATCH
-            | KIND_POPUP_SHARED_BATCH
-            | KIND_GUEST_BATCH
-            | KIND_GUEST_SHARED_BATCH
-    )
+fn invalid(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
 #[cfg(all(test, unix))]

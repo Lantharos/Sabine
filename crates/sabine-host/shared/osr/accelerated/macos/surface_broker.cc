@@ -17,9 +17,6 @@ SurfaceBroker::~SurfaceBroker() {
 }
 
 bool SurfaceBroker::Announce(uint64_t surface_id, IOSurfaceRef surface) {
-  if (announced_.count(surface_id)) {
-    return true;
-  }
   const mach_port_t surface_port = IOSurfaceCreateMachPort(surface);
   if (surface_port == MACH_PORT_NULL) {
     return false;
@@ -28,14 +25,11 @@ bool SurfaceBroker::Announce(uint64_t surface_id, IOSurfaceRef surface) {
     mach_port_deallocate(mach_task_self(), surface_port);
     return false;
   }
-  announced_.insert(surface_id);
   return true;
 }
 
 void SurfaceBroker::Retire(uint64_t surface_id) {
-  if (announced_.erase(surface_id)) {
-    Send(kSurfaceRetire, surface_id, MACH_PORT_NULL);
-  }
+  Send(kSurfaceRetire, surface_id, MACH_PORT_NULL);
 }
 
 bool SurfaceBroker::Send(uint32_t kind,

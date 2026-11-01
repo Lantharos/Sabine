@@ -1,11 +1,5 @@
 #include "osr/paint/shared_pool.h"
 
-#include <cerrno>
-#include <cstdio>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
 namespace sabine_osr {
 namespace {
 
@@ -21,45 +15,11 @@ size_t SlotCapacity(size_t bytes) {
   return capacity < bytes ? bytes : capacity;
 }
 
-int CreateSharedMemory() {
-#if defined(__APPLE__)
-  static uint32_t sequence = 0;
-  char name[32];
-  for (int attempt = 0; attempt < 16; ++attempt) {
-    std::snprintf(name, sizeof(name), "/sabine-%d-%u",
-                  static_cast<int>(getpid()), sequence++);
-    const int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
-    if (fd >= 0) {
-      shm_unlink(name);
-      return fd;
-    }
-    if (errno != EEXIST) {
-      return -1;
-    }
-  }
-  return -1;
-#else
-  return memfd_create("sabine-osr-paint", MFD_CLOEXEC);
-#endif
-}
-
-void Unmap(SharedPaintSlot* slot) {
-  if (slot->data) {
-    munmap(slot->data, slot->capacity);
-  }
-  if (slot->fd >= 0) {
-    close(slot->fd);
-  }
-  slot->fd = -1;
-  slot->data = nullptr;
-  slot->capacity = 0;
-}
-
 }  // namespace
 
 SharedPaintPool::~SharedPaintPool() {
   for (SharedPaintSlot& slot : slots_) {
-    Unmap(&slot);
+    ReleaseSharedMemory(&slot.memory);
   }
 }
 
@@ -70,7 +30,7 @@ int SharedPaintPool::Acquire(size_t bytes) {
     if (slot.in_flight) {
       continue;
     }
-    if (slot.capacity >= bytes) {
+    if (slot.memory.capacity >= bytes) {
       slot.in_flight = true;
       return static_cast<int>(index);
     }
@@ -98,25 +58,10 @@ void SharedPaintPool::Release(uint32_t index, uint32_t generation) {
 }
 
 bool SharedPaintPool::Allocate(SharedPaintSlot* slot, size_t bytes) {
-  Unmap(slot);
-  const size_t capacity = SlotCapacity(bytes);
-  const int fd = CreateSharedMemory();
-  if (fd < 0) {
+  ReleaseSharedMemory(&slot->memory);
+  if (!CreateSharedMemory(SlotCapacity(bytes), &slot->memory)) {
     return false;
   }
-  if (ftruncate(fd, static_cast<off_t>(capacity)) != 0) {
-    close(fd);
-    return false;
-  }
-  void* data =
-      mmap(nullptr, capacity, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-  if (data == MAP_FAILED) {
-    close(fd);
-    return false;
-  }
-  slot->fd = fd;
-  slot->data = static_cast<char*>(data);
-  slot->capacity = capacity;
   slot->generation += 1;
   slot->announced = false;
   return true;

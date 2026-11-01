@@ -176,6 +176,7 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   guest.pending = true;
   guests_.Insert(std::move(guest));
   guests_.Raise(request.id);
+  SendGuestOrder();
   guest_creations_.creating_id = request.id;
 
   CefBrowserSettings settings;
@@ -320,6 +321,7 @@ void SabineOsrHandler::FocusGuest(const std::string& id) {
     return;
   }
   guests_.Raise(id);
+  SendGuestOrder();
   if (browser_) {
     browser_->GetHost()->SetFocus(false);
   }
@@ -409,8 +411,8 @@ bool SabineOsrHandler::SendGuestPaint(const GuestView& guest,
 }
 
 void SabineOsrHandler::SendGuestHidden(const GuestView& guest) {
-  SendMessage(kGuestHidden, 0, 0, guest.bounds.x, guest.bounds.y,
-              guest.id.data(), static_cast<uint32_t>(guest.id.size()));
+  SendMessage(kGuestHidden, 0, 0, 0, 0, guest.id.data(),
+              static_cast<uint32_t>(guest.id.size()));
   if (guest.id == kSabinePopupGuestId) {
     SendMessage(kPopupHidden, 0, 0, 0, 0, nullptr, 0);
   }

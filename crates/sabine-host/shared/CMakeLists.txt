@@ -48,10 +48,7 @@ foreach(_platform linux:OS_LINUX macos:OS_MAC windows:OS_WINDOWS)
 endforeach()
 
 if(OS_WINDOWS)
-  list(REMOVE_ITEM SABINE_HOST_SOURCES
-    osr/paint/shared_pool.cc
-    osr/paint/shared_pool.h
-  )
+  list(REMOVE_ITEM SABINE_HOST_SOURCES osr/paint/shared_memory_posix.cc)
 endif()
 
 if(OS_MAC)
@@ -85,7 +82,7 @@ else()
   target_link_libraries(sabine-host libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS})
 endif()
 if(OS_WINDOWS)
-  target_link_libraries(sabine-host ws2_32 d3d11 d3d12 dxgi shell32)
+  target_link_libraries(sabine-host ws2_32 d3d11 d3d12 dxgi kernelbase shell32)
 endif()
 if(OS_LINUX)
   find_path(SABINE_VULKAN_INCLUDE_DIR vulkan/vulkan.h REQUIRED)

@@ -39,9 +39,9 @@ impl OsrNativeHost {
                     self.send_control(format!("accel_release\t{}\n", frame.slot_token));
                 }
             }
-            #[cfg(target_os = "linux")]
             OsrMessage::AccelUnavailable => {
                 self.paint_in_software("the browser could not share its frames");
+                #[cfg(target_os = "linux")]
                 self.draw_without_direct_presentation(event_loop);
             }
             OsrMessage::PopupHidden => {
@@ -53,6 +53,10 @@ impl OsrNativeHost {
                     self.clear_overlay(&id);
                     repaint.redraw = true;
                 }
+            }
+            OsrMessage::GuestOrder(order) => {
+                self.overlays.stack(order);
+                repaint.redraw = true;
             }
             OsrMessage::GuestCaptureRequested {
                 browser_id,

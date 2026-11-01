@@ -1,12 +1,15 @@
 #include "osr/accelerated/linux/vulkan_context.h"
 
 #include <dlfcn.h>
+#include <sys/sysmacros.h>
 
 #include <array>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <optional>
+
+#include "linux/display/private_display.h"
 
 namespace sabine_osr {
 namespace {
@@ -23,6 +26,7 @@ constexpr VkFormatFeatureFlags kSharedFeatures =
 struct InstanceFunctions {
   PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
   PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = nullptr;
+  PFN_vkGetPhysicalDeviceProperties2 vkGetPhysicalDeviceProperties2 = nullptr;
   PFN_vkGetPhysicalDeviceQueueFamilyProperties
       vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
   PFN_vkEnumerateDeviceExtensionProperties
@@ -43,7 +47,10 @@ struct Candidate {
   VkPhysicalDevice device = VK_NULL_HANDLE;
   uint32_t queue_family = 0;
   bool foreign_queue = false;
-  bool semaphore_fd = false;
+  bool semaphore_import = false;
+  bool semaphore_export = false;
+  bool composites = false;
+  bool honours_dmabuf_fences = false;
   std::vector<uint64_t> modifiers[2];
 };
 
@@ -73,6 +80,40 @@ bool HasExtension(const std::vector<VkExtensionProperties>& extensions,
     }
   }
   return false;
+}
+
+// Whether `device` is the GPU the desktop composites on, named by either of
+// its device nodes.
+bool Composites(const InstanceFunctions& vk,
+                VkPhysicalDevice device,
+                const std::vector<VkExtensionProperties>& extensions) {
+  const std::optional<dev_t> compositor =
+      sabine_display::CompositorMainDevice();
+  if (!compositor ||
+      !HasExtension(extensions, VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME)) {
+    return false;
+  }
+  VkPhysicalDeviceDrmPropertiesEXT drm{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT};
+  VkPhysicalDeviceProperties2 properties{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  properties.pNext = &drm;
+  vk.vkGetPhysicalDeviceProperties2(device, &properties);
+  const auto names = [&](bool present, int64_t major, int64_t minor) {
+    return present && makedev(major, minor) == *compositor;
+  };
+  return names(drm.hasPrimary, drm.primaryMajor, drm.primaryMinor) ||
+         names(drm.hasRender, drm.renderMajor, drm.renderMinor);
+}
+
+bool HonoursDmabufFences(const InstanceFunctions& vk, VkPhysicalDevice device) {
+  VkPhysicalDeviceDriverProperties driver{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+  VkPhysicalDeviceProperties2 properties{
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  properties.pNext = &driver;
+  vk.vkGetPhysicalDeviceProperties2(device, &properties);
+  return driver.driverID != VK_DRIVER_ID_NVIDIA_PROPRIETARY;
 }
 
 bool SupportsDmabuf(const InstanceFunctions& vk,
@@ -178,6 +219,8 @@ std::optional<Candidate> Inspect(const InstanceFunctions& vk,
   }
   candidate.foreign_queue =
       HasExtension(extensions, VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
+  candidate.composites = Composites(vk, device, extensions);
+  candidate.honours_dmabuf_fences = HonoursDmabufFences(vk, device);
   if (HasExtension(extensions, VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME)) {
     VkPhysicalDeviceExternalSemaphoreInfo info{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO};
@@ -186,8 +229,10 @@ std::optional<Candidate> Inspect(const InstanceFunctions& vk,
         VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES};
     vk.vkGetPhysicalDeviceExternalSemaphoreProperties(device, &info,
                                                       &properties);
-    candidate.semaphore_fd = properties.externalSemaphoreFeatures &
-                             VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+    candidate.semaphore_import = properties.externalSemaphoreFeatures &
+                                 VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+    candidate.semaphore_export = properties.externalSemaphoreFeatures &
+                                 VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT;
   }
   return candidate;
 }
@@ -204,11 +249,17 @@ std::optional<Candidate> ChooseDevice(const InstanceFunctions& vk,
     VkPhysicalDeviceProperties properties;
     vk.vkGetPhysicalDeviceProperties(device, &properties);
     const int rank = DeviceRank(properties.deviceType);
-    if (rank < 0 || properties.apiVersion < VK_API_VERSION_1_2 ||
-        (chosen && rank >= chosen_rank)) {
+    if (rank < 0 || properties.apiVersion < VK_API_VERSION_1_2) {
       continue;
     }
-    if (auto candidate = Inspect(vk, device)) {
+    auto candidate = Inspect(vk, device);
+    if (!candidate) {
+      continue;
+    }
+    if (candidate->composites) {
+      return candidate;
+    }
+    if (!chosen || rank < chosen_rank) {
       chosen = std::move(candidate);
       chosen_rank = rank;
     }
@@ -224,7 +275,7 @@ bool CreateDevice(const InstanceFunctions& vk,
   if (candidate.foreign_queue) {
     extensions.push_back(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME);
   }
-  if (candidate.semaphore_fd) {
+  if (candidate.semaphore_import || candidate.semaphore_export) {
     extensions.push_back(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
   }
   const float priority = 1.0f;
@@ -250,11 +301,17 @@ bool CreateDevice(const InstanceFunctions& vk,
   }
   SABINE_VULKAN_DEVICE_FUNCTIONS(SABINE_VULKAN_LOAD)
 #undef SABINE_VULKAN_LOAD
-  if (candidate.semaphore_fd) {
+  if (candidate.semaphore_import) {
     context->vkImportSemaphoreFdKHR =
         reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(
             vk.vkGetDeviceProcAddr(context->device, "vkImportSemaphoreFdKHR"));
   }
+  if (candidate.semaphore_export) {
+    context->vkGetSemaphoreFdKHR = reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(
+        vk.vkGetDeviceProcAddr(context->device, "vkGetSemaphoreFdKHR"));
+  }
+  context->implicit_fences =
+      context->vkGetSemaphoreFdKHR && candidate.honours_dmabuf_fences;
 
   context->physical_device = candidate.device;
   context->queue_family = candidate.queue_family;
@@ -270,28 +327,8 @@ bool CreateDevice(const InstanceFunctions& vk,
   VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
   pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   pool.queueFamilyIndex = candidate.queue_family;
-  VkCommandBufferAllocateInfo buffers{
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-  buffers.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  buffers.commandBufferCount = 1;
-  VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-  if (context->vkCreateCommandPool(context->device, &pool, nullptr,
-                                   &context->command_pool) != VK_SUCCESS) {
-    return false;
-  }
-  buffers.commandPool = context->command_pool;
-  if (context->vkAllocateCommandBuffers(context->device, &buffers,
-                                        &context->commands) != VK_SUCCESS ||
-      context->vkCreateFence(context->device, &fence, nullptr,
-                             &context->fence) != VK_SUCCESS) {
-    return false;
-  }
-  if (context->vkImportSemaphoreFdKHR) {
-    VkSemaphoreCreateInfo semaphore{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    context->vkCreateSemaphore(context->device, &semaphore, nullptr,
-                               &context->producer_done);
-  }
-  return true;
+  return context->vkCreateCommandPool(context->device, &pool, nullptr,
+                                      &context->command_pool) == VK_SUCCESS;
 }
 
 PFN_vkGetInstanceProcAddr LoadVulkan() {
@@ -327,6 +364,7 @@ std::unique_ptr<VulkanContext> CreateContext() {
       get_instance_proc(context->instance, #name));
   SABINE_VULKAN_INSTANCE(vkEnumeratePhysicalDevices)
   SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceProperties)
+  SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceProperties2)
   SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceQueueFamilyProperties)
   SABINE_VULKAN_INSTANCE(vkEnumerateDeviceExtensionProperties)
   SABINE_VULKAN_INSTANCE(vkGetPhysicalDeviceMemoryProperties)
@@ -360,8 +398,6 @@ VkFormat UnormFormat(SharedFormat format) {
 VulkanContext::~VulkanContext() {
   if (command_pool) {
     vkDeviceWaitIdle(device);
-    vkDestroySemaphore(device, producer_done, nullptr);
-    vkDestroyFence(device, fence, nullptr);
     vkDestroyCommandPool(device, command_pool, nullptr);
   }
   if (device && vkDestroyDevice) {

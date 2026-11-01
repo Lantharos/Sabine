@@ -10,19 +10,19 @@ use std::sync::{Arc, Mutex};
 
 use winit::window::Window;
 
-use super::RendererError;
 #[cfg(windows)]
 use crate::render::Composition;
+use crate::render::RendererError;
 
-pub(super) struct GpuConnection {
-    pub(super) instance: wgpu::Instance,
-    pub(super) surface: wgpu::Surface<'static>,
-    pub(super) adapter: wgpu::Adapter,
+pub(in crate::render::gpu) struct GpuConnection {
+    pub(in crate::render::gpu) instance: wgpu::Instance,
+    pub(in crate::render::gpu) surface: wgpu::Surface<'static>,
+    pub(in crate::render::gpu) adapter: wgpu::Adapter,
 }
 
 /// What the renderer presents into: the window itself, or on Windows the
 /// page visual of the window's composition tree.
-pub(super) struct SurfaceSource {
+pub(in crate::render::gpu) struct SurfaceSource {
     #[cfg(not(windows))]
     window: Arc<dyn Window>,
     #[cfg(windows)]
@@ -30,7 +30,7 @@ pub(super) struct SurfaceSource {
 }
 
 impl SurfaceSource {
-    pub(super) fn new(window: Arc<dyn Window>) -> Result<Self, RendererError> {
+    pub(in crate::render::gpu) fn new(window: Arc<dyn Window>) -> Result<Self, RendererError> {
         Ok(Self {
             #[cfg(windows)]
             composition: Composition::for_window(window.as_ref())
@@ -40,7 +40,7 @@ impl SurfaceSource {
         })
     }
 
-    pub(super) fn create(
+    pub(in crate::render::gpu) fn create(
         &self,
         instance: &wgpu::Instance,
     ) -> Result<wgpu::Surface<'static>, RendererError> {
@@ -57,7 +57,7 @@ impl SurfaceSource {
 
     /// Shows a surface whose swapchain was just created.
     #[cfg(windows)]
-    pub(super) fn commit(&self) {
+    pub(in crate::render::gpu) fn commit(&self) {
         self.composition.commit();
     }
 }
@@ -68,7 +68,7 @@ static INSTANCE: Mutex<Option<wgpu::Instance>> = Mutex::new(None);
 /// lets only the main thread make a window's surface, so on macOS the
 /// instance and surface are made there, and the adapter and device are found
 /// from any thread.
-pub(super) struct Connecting {
+pub(in crate::render::gpu) struct Connecting {
     #[cfg(target_os = "macos")]
     instance: wgpu::Instance,
     #[cfg(target_os = "macos")]
@@ -81,7 +81,10 @@ pub(super) struct Connecting {
 /// used, so graphics drivers start only once, or through a new one after a
 /// device was lost.
 #[cfg(target_os = "macos")]
-pub(super) fn prepare(source: &SurfaceSource, afresh: bool) -> Result<Connecting, RendererError> {
+pub(in crate::render::gpu) fn prepare(
+    source: &SurfaceSource,
+    afresh: bool,
+) -> Result<Connecting, RendererError> {
     let mut shared = INSTANCE.lock().unwrap();
     if afresh {
         drop(shared.take());
@@ -95,12 +98,15 @@ pub(super) fn prepare(source: &SurfaceSource, afresh: bool) -> Result<Connecting
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) fn prepare(_source: &SurfaceSource, afresh: bool) -> Result<Connecting, RendererError> {
+pub(in crate::render::gpu) fn prepare(
+    _source: &SurfaceSource,
+    afresh: bool,
+) -> Result<Connecting, RendererError> {
     Ok(Connecting { afresh })
 }
 
 #[cfg(target_os = "macos")]
-pub(super) async fn connect(
+pub(in crate::render::gpu) async fn connect(
     _source: &SurfaceSource,
     Connecting { instance, surface }: Connecting,
 ) -> Result<GpuConnection, RendererError> {
@@ -108,7 +114,7 @@ pub(super) async fn connect(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) async fn connect(
+pub(in crate::render::gpu) async fn connect(
     source: &SurfaceSource,
     connecting: Connecting,
 ) -> Result<GpuConnection, RendererError> {

@@ -1,28 +1,39 @@
 use crate::osr::protocol::PaintRect;
 use crate::render::{BgraRect, PixelRect};
 
-/// Crops each painted rect to the `width` x `height` surface. Returns `None`
-/// when nothing lands on the surface or any rect's pixels are truncated, so a
-/// broken paint never reaches the surface.
+/// Crops each painted rect to the `width` x `height` surface, leaving out
+/// rects that land beside it. Returns `None` when nothing lands on the surface
+/// or any rect's pixels are truncated, so a broken paint never reaches the
+/// surface.
 pub(crate) fn surface_rects(
     rects: &[PaintRect],
     width: u32,
     height: u32,
 ) -> Option<Vec<BgraRect<'_>>> {
-    let rects = rects
-        .iter()
-        .map(|rect| surface_rect(rect, width, height))
-        .collect::<Option<Vec<_>>>()?;
-    (!rects.is_empty()).then_some(rects)
+    let mut cropped = Vec::with_capacity(rects.len());
+    for rect in rects {
+        match surface_rect(rect, width, height) {
+            Crop::Lands(rect) => cropped.push(rect),
+            Crop::Beside => {}
+            Crop::Truncated => return None,
+        }
+    }
+    (!cropped.is_empty()).then_some(cropped)
 }
 
-fn surface_rect(rect: &PaintRect, width: u32, height: u32) -> Option<BgraRect<'_>> {
+enum Crop<'a> {
+    Lands(BgraRect<'a>),
+    Beside,
+    Truncated,
+}
+
+fn surface_rect(rect: &PaintRect, width: u32, height: u32) -> Crop<'_> {
     let left = i64::from(rect.x).max(0);
     let top = i64::from(rect.y).max(0);
     let right = (i64::from(rect.x) + i64::from(rect.width)).min(i64::from(width));
     let bottom = (i64::from(rect.y) + i64::from(rect.height)).min(i64::from(height));
     if right <= left || bottom <= top {
-        return None;
+        return Crop::Beside;
     }
     let target = PixelRect {
         x: left as u32,
@@ -38,7 +49,10 @@ fn surface_rect(rect: &PaintRect, width: u32, height: u32) -> Option<BgraRect<'_
         + u64::from(target.width))
         * 4;
     let bytes = rect.bytes();
-    (last_row_end <= bytes.len() as u64).then_some(BgraRect {
+    if last_row_end > bytes.len() as u64 {
+        return Crop::Truncated;
+    }
+    Crop::Lands(BgraRect {
         bytes,
         offset,
         bytes_per_row: rect.width * 4,
@@ -106,6 +120,17 @@ mod tests {
         );
         let start = rects[0].offset as usize;
         assert_eq!(&rects[0].bytes[start..start + 4], &[4, 4, 4, 255]);
+    }
+
+    #[test]
+    fn rect_beside_the_surface_is_left_out() {
+        let inside = rect(0, 0, 1, 1, vec![8, 8, 8, 255]);
+        let beside = rect(5, 0, 1, 1, vec![9, 9, 9, 255]);
+        let painted = [inside, beside];
+        let rects = surface_rects(&painted, 2, 1).expect("paint keeps its rect");
+
+        assert_eq!(rects.len(), 1);
+        assert_eq!(rects[0].target.x, 0);
     }
 
     #[test]

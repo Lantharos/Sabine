@@ -257,7 +257,6 @@ fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
                     source.len()
                 }
             }
-            #[cfg(unix)]
             FrameBytes::Shared { range, .. } => range.len(),
         })
         .sum()

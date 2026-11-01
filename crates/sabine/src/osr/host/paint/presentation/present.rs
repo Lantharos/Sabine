@@ -2,7 +2,6 @@ use sabine_platform::WindowEffect;
 
 use std::sync::Arc;
 
-use crate::osr::protocol::POPUP_OVERLAY_ID;
 use crate::render::{
     DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand,
 };
@@ -163,16 +162,9 @@ impl OsrNativeHost {
         if let Some(surface) = self.main_surface {
             list.push(surface_image(ImageId::Main, surface, top, scale));
         }
-        let popup = self.overlays.get_key_value(POPUP_OVERLAY_ID);
-        for (overlay_id, overlay) in &self.overlays {
-            if &**overlay_id != POPUP_OVERLAY_ID {
-                let image = ImageId::Overlay(Arc::clone(overlay_id));
-                list.push(surface_image(image, overlay.geometry, top, scale));
-            }
-        }
-        if let Some((popup_id, popup)) = popup {
-            let image = ImageId::Overlay(Arc::clone(popup_id));
-            list.push(surface_image(image, popup.geometry, top, scale));
+        for (overlay_id, geometry) in self.overlays.in_drawing_order() {
+            let image = ImageId::Overlay(Arc::clone(overlay_id));
+            list.push(surface_image(image, geometry, top, scale));
         }
         if let Some((fade, opacity)) = self
             .loading_fade

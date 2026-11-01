@@ -5,12 +5,12 @@
 #include <cstdint>
 #include <vector>
 
+#include "osr/paint/shared_memory.h"
+
 namespace sabine_osr {
 
 struct SharedPaintSlot {
-  int fd = -1;
-  char* data = nullptr;
-  size_t capacity = 0;
+  SharedMemory memory;
   uint32_t generation = 0;
   bool in_flight = false;
   bool announced = false;

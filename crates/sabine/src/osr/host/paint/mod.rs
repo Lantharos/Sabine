@@ -1,11 +1,6 @@
-mod accel;
-mod first_frame;
-mod gpu_recovery;
-pub(in crate::osr::host) mod guest_preview;
-mod ingest;
-mod policy;
-mod present;
-mod resize;
-mod reveal;
+mod device;
+mod presentation;
+mod surfaces;
 
-pub(in crate::osr::host) use gpu_recovery::GpuReconnect;
+pub(in crate::osr::host) use device::GpuReconnect;
+pub(in crate::osr::host) use surfaces::Overlays;

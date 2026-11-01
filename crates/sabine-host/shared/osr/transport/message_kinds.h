@@ -45,5 +45,6 @@ constexpr uint32_t kMediaPlaying = 44;
 constexpr uint32_t kPrintDialog = 47;
 constexpr uint32_t kPrintJob = 48;
 constexpr uint32_t kPrintDocument = 49;
+constexpr uint32_t kGuestOrder = 50;
 
 #endif

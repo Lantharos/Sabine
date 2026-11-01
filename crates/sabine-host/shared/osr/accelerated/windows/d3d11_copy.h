@@ -24,11 +24,10 @@ struct AccelD3d11CopiedFrame {
 /// `OnAcceleratedPaint` returns. CEF recycles the source handle when the
 /// callback returns; the compositor must only ever receive handles to our copy.
 /// Only the pixels that changed since the chosen slot last received a frame
-/// are copied.
+/// are copied, and the copy has finished when this returns.
 bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
                                HANDLE cef_shared_handle,
                                const PixelRegion& damage,
-                               uint32_t cef_format,
                                AccelD3d11CopiedFrame* out);
 
 /// Allow a copied texture slot to be reused after the compositor stops sampling

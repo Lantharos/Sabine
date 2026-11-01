@@ -4,14 +4,13 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "osr/handler.h"
 
-// Stopgap until CEF hands Chromium's fence over with each accelerated frame
-// (chromiumembedded/cef#4313). Without it, drivers that attach no implicit
-// fence to the dma-buf, such as NVIDIA's, can have a frame copied while
-// Chromium is still drawing it. Chromium also changes some pixels without
-// reporting them as damage, such as the edges of icons and rounded corners
-// when an animated layer comes or goes. Once a page stops painting, its last
-// frame is copied again whole from the dma-buf it was drawn into, so the
-// window settles on the page as drawn.
+// Chromium changes some pixels without reporting them as damage, such as the
+// edges of icons and rounded corners when an animated layer comes or goes.
+// Before Chromium 158 it also hands over frames it is still drawing, and
+// drivers that attach no implicit fence to the dma-buf, such as NVIDIA's, let
+// such a frame be copied half drawn (chromiumembedded/cef#4313). Once a page
+// stops painting, its last frame is copied again whole from the dma-buf it was
+// drawn into, so the window settles on the page as drawn.
 
 using namespace sabine_osr;
 

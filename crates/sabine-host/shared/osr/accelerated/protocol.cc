@@ -1,80 +1,51 @@
 #include "osr/accelerated/protocol.h"
 
-#include <cstring>
-#include <limits>
-
 #include "osr/transport/wire.h"
 
 namespace sabine_osr {
 
 namespace {
 
-std::string GuestPrefix(const std::string& guest_id) {
-  if (guest_id.empty()) {
-    return {};
-  }
-  std::string out(2 + guest_id.size(), '\0');
-  const uint16_t len = static_cast<uint16_t>(guest_id.size());
-  out[0] = static_cast<char>(len & 0xff);
-  out[1] = static_cast<char>((len >> 8) & 0xff);
-  std::memcpy(out.data() + 2, guest_id.data(), guest_id.size());
-  return out;
-}
+constexpr size_t kMetaLen = 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
 
 }  // namespace
 
-std::string BuildAccelPayload(const std::string& guest_id,
-                              const AccelPaintMeta& meta) {
-  if (guest_id.size() > std::numeric_limits<uint16_t>::max()) {
-    return {};
-  }
-  const std::string prefix = GuestPrefix(guest_id);
-  const size_t meta_len = prefix.size() + 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
-  if (meta_len > std::numeric_limits<uint32_t>::max()) {
-    return {};
-  }
-  std::vector<char> payload(meta_len, 0);
-  size_t at = 0;
-  std::memcpy(payload.data() + at, prefix.data(), prefix.size());
-  at += prefix.size();
-  PutU32(&payload, at, meta.format);
-  at += 4;
-  PutI32(&payload, at, meta.visible_x);
-  at += 4;
-  PutI32(&payload, at, meta.visible_y);
-  at += 4;
-  PutU32(&payload, at, meta.visible_width);
-  at += 4;
-  PutU32(&payload, at, meta.visible_height);
-  at += 4;
-  PutU64(&payload, at, meta.resource_id);
-  at += 8;
-  PutU32(&payload, at, meta.resource_slot);
-  at += 4;
-  PutU64(&payload, at, meta.shared_handle);
-  at += 8;
-  PutU64(&payload, at, meta.slot_token);
-  return std::string(payload.begin(), payload.end());
+void BuildAccelPayload(const std::string& guest_id,
+                       const AccelPaintMeta& meta,
+                       std::vector<char>* payload) {
+  const size_t prefix_len = guest_id.empty() ? 0 : 2 + guest_id.size();
+  payload->resize(prefix_len + kMetaLen);
+  const size_t at = PutGuestPrefix(payload, guest_id);
+  PutU32(payload, at, meta.format);
+  PutI32(payload, at + 4, meta.visible_x);
+  PutI32(payload, at + 8, meta.visible_y);
+  PutU32(payload, at + 12, meta.visible_width);
+  PutU32(payload, at + 16, meta.visible_height);
+  PutU64(payload, at + 20, meta.resource_id);
+  PutU32(payload, at + 28, meta.resource_slot);
+  PutU64(payload, at + 32, meta.shared_handle);
+  PutU64(payload, at + 40, meta.slot_token);
 }
 
-std::string BuildAccelRetirePayload(const std::vector<uint64_t>& resource_ids) {
+std::vector<char> BuildAccelRetirePayload(
+    const std::vector<uint64_t>& resource_ids) {
   std::vector<char> payload(resource_ids.size() * 8, 0);
   for (size_t index = 0; index < resource_ids.size(); ++index) {
     PutU64(&payload, index * 8, resource_ids[index]);
   }
-  return std::string(payload.begin(), payload.end());
+  return payload;
 }
 
-std::string BuildDmabufAnnouncePayload(uint64_t resource_id,
-                                       uint64_t modifier,
-                                       uint32_t stride,
-                                       uint32_t offset) {
+std::vector<char> BuildDmabufAnnouncePayload(uint64_t resource_id,
+                                             uint64_t modifier,
+                                             uint32_t stride,
+                                             uint32_t offset) {
   std::vector<char> payload(8 + 8 + 4 + 4, 0);
   PutU64(&payload, 0, resource_id);
   PutU64(&payload, 8, modifier);
   PutU32(&payload, 16, stride);
   PutU32(&payload, 20, offset);
-  return std::string(payload.begin(), payload.end());
+  return payload;
 }
 
 }  // namespace sabine_osr

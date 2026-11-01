@@ -6,17 +6,17 @@
 #include <CoreVideo/CVPixelBuffer.h>
 #include <IOSurface/IOSurface.h>
 
-#include <array>
 #include <cstdio>
 #include <map>
+
+#include "osr/accelerated/slot_ring.h"
 
 namespace sabine_osr {
 namespace {
 
-constexpr uint32_t kSlotsPerSurface = 4;
 constexpr size_t kMaxCachedSources = 8;
 
-struct OwnedSurfaceSlot {
+struct OwnedSurfaceSlot : RingSlot {
   OwnedSurfaceSlot() = default;
   OwnedSurfaceSlot(const OwnedSurfaceSlot&) = delete;
   OwnedSurfaceSlot& operator=(const OwnedSurfaceSlot&) = delete;
@@ -24,10 +24,6 @@ struct OwnedSurfaceSlot {
 
   IOSurfaceRef surface = nullptr;
   id<MTLTexture> texture = nil;
-  uint64_t surface_id = 0;
-  bool in_use = false;
-  uint64_t token = 0;
-  PixelRegion stale;
 
   void Reset() {
     [texture release];
@@ -36,16 +32,11 @@ struct OwnedSurfaceSlot {
       CFRelease(surface);
       surface = nullptr;
     }
-    surface_id = 0;
+    resource_id = 0;
     in_use = false;
     token = 0;
     stale = {};
   }
-};
-
-struct SurfaceSlots {
-  std::array<OwnedSurfaceSlot, kSlotsPerSurface> slots;
-  uint32_t next = 0;
 };
 
 // CEF hands out the same few pooled surfaces frame after frame, so each one
@@ -55,12 +46,12 @@ struct CachedSource {
   id<MTLTexture> texture = nil;
 };
 
+using SurfaceSlots = SurfaceRing<OwnedSurfaceSlot, NoExtra>;
+
 id<MTLDevice> g_device = nil;
 id<MTLCommandQueue> g_queue = nil;
-std::map<AcceleratedSurfaceKey, SurfaceSlots> g_surfaces;
+SlotRings<OwnedSurfaceSlot> g_surfaces;
 std::map<IOSurfaceRef, CachedSource> g_sources;
-uint64_t g_next_token = 1;
-uint64_t g_next_surface_id = 1;
 
 bool EnsureDevice() {
   if (g_queue) {
@@ -165,8 +156,8 @@ bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
       IOSurfaceGetPixelFormat(slot->surface) == pixel_format) {
     return true;
   }
-  if (slot->surface_id != 0) {
-    retired->push_back(slot->surface_id);
+  if (slot->resource_id != 0) {
+    retired->push_back(slot->resource_id);
   }
   slot->Reset();
   IOSurfaceRef surface = CreateSurface(width, height, pixel_format);
@@ -181,9 +172,38 @@ bool EnsureOwnedSlot(OwnedSurfaceSlot* slot,
   }
   slot->surface = surface;
   slot->texture = texture;
-  slot->surface_id = g_next_surface_id++;
+  slot->resource_id = g_surfaces.NewResourceId();
   slot->stale =
       PixelRegion::Whole(static_cast<int>(width), static_cast<int>(height));
+  return true;
+}
+
+// CEF's surface goes back to Chromium's pool when the paint callback
+// returns, and Chromium neither checks whether it is still in use nor waits
+// for another process's Metal work on it, so the copy has finished reading
+// before the callback returns.
+bool Copy(id<MTLTexture> source,
+          id<MTLTexture> target,
+          const PixelRegion& region) {
+  id<MTLCommandBuffer> commands = [g_queue commandBuffer];
+  id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
+  const MTLOrigin origin = MTLOriginMake(region.x, region.y, 0);
+  [blit copyFromTexture:source
+            sourceSlice:0
+            sourceLevel:0
+           sourceOrigin:origin
+             sourceSize:MTLSizeMake(region.width, region.height, 1)
+              toTexture:target
+       destinationSlice:0
+       destinationLevel:0
+      destinationOrigin:origin];
+  [blit endEncoding];
+  [commands commit];
+  [commands waitUntilCompleted];
+  if (commands.status != MTLCommandBufferStatusCompleted) {
+    std::fprintf(stderr, "Sabine CEF: shared paint copy failed\n");
+    return false;
+  }
   return true;
 }
 
@@ -193,39 +213,18 @@ bool CopyIntoSlot(id<MTLTexture> source,
                   OwnedSurfaceSlot* slot,
                   AccelIOSurfaceCopiedFrame* out) {
   if (!EnsureOwnedSlot(slot, source_surface, format,
-                       &out->retired_surface_ids)) {
+                       &out->retired_resource_ids)) {
     return false;
   }
   const int width = static_cast<int>(IOSurfaceGetWidth(slot->surface));
   const int height = static_cast<int>(IOSurfaceGetHeight(slot->surface));
   const PixelRegion region = slot->stale.Within(width, height);
-  if (!region.empty()) {
-    id<MTLCommandBuffer> commands = [g_queue commandBuffer];
-    id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
-    const MTLOrigin origin = MTLOriginMake(region.x, region.y, 0);
-    [blit copyFromTexture:source
-              sourceSlice:0
-              sourceLevel:0
-             sourceOrigin:origin
-               sourceSize:MTLSizeMake(region.width, region.height, 1)
-                toTexture:slot->texture
-         destinationSlice:0
-         destinationLevel:0
-        destinationOrigin:origin];
-    [blit endEncoding];
-    [commands commit];
-    [commands waitUntilCompleted];
-    if (commands.status != MTLCommandBufferStatusCompleted) {
-      std::fprintf(stderr, "Sabine CEF: shared paint copy failed\n");
-      return false;
-    }
+  if (!region.empty() && !Copy(source, slot->texture, region)) {
+    return false;
   }
-  slot->stale = {};
-  slot->in_use = true;
-  slot->token = g_next_token++;
+  out->slot_token = g_surfaces.Claim(*slot);
   out->surface = slot->surface;
-  out->surface_id = slot->surface_id;
-  out->slot_token = slot->token;
+  out->resource_id = slot->resource_id;
   out->width = static_cast<uint32_t>(width);
   out->height = static_cast<uint32_t>(height);
   return true;
@@ -252,52 +251,24 @@ bool CopyAcceleratedIOSurfaceFrame(const AcceleratedSurfaceKey& surface,
       return false;
     }
     SurfaceSlots& slots = g_surfaces[surface];
-    for (OwnedSurfaceSlot& slot : slots.slots) {
-      slot.stale.Unite(damage);
+    slots.Damage(damage);
+    const std::optional<uint32_t> slot_index = slots.FreeSlot();
+    if (!slot_index || !CopyIntoSlot(source, source_surface, format,
+                                     &slots.slots[*slot_index], out)) {
+      return false;
     }
-    const uint32_t first_slot = slots.next++ % kSlotsPerSurface;
-    for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
-      const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
-      OwnedSurfaceSlot& slot = slots.slots[slot_index];
-      if (slot.in_use) {
-        continue;
-      }
-      if (!CopyIntoSlot(source, source_surface, format, &slot, out)) {
-        return false;
-      }
-      out->slot_index = slot_index;
-      return true;
-    }
-    return false;
+    out->slot_index = *slot_index;
+    return true;
   }
 }
 
 void ReleaseAcceleratedIOSurfaceFrame(uint64_t slot_token) {
-  for (auto& [surface, slots] : g_surfaces) {
-    for (OwnedSurfaceSlot& slot : slots.slots) {
-      if (slot.in_use && slot.token == slot_token) {
-        slot.in_use = false;
-        slot.token = 0;
-        return;
-      }
-    }
-  }
+  g_surfaces.Release(slot_token);
 }
 
 std::vector<uint64_t> RetireAcceleratedIOSurfaceBrowser(int browser_id) {
-  std::vector<uint64_t> retired;
-  for (auto it = g_surfaces.begin(); it != g_surfaces.end();) {
-    if (it->first.browser_id != browser_id) {
-      ++it;
-      continue;
-    }
-    for (const OwnedSurfaceSlot& slot : it->second.slots) {
-      if (slot.surface_id != 0) {
-        retired.push_back(slot.surface_id);
-      }
-    }
-    it = g_surfaces.erase(it);
-  }
+  std::vector<uint64_t> retired =
+      g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
   if (g_surfaces.empty()) {
     ReleaseSources();
   }

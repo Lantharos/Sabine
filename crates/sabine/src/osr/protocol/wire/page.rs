@@ -112,3 +112,38 @@ pub(super) fn parse_ime_surrounding(payload: &[u8]) -> io::Result<OsrMessage> {
         base_utf16: number("base"),
     })
 }
+
+pub(super) fn parse_guest_capture(payload: &[u8]) -> io::Result<OsrMessage> {
+    let mut parts = payload
+        .splitn(3, |byte| *byte == 0)
+        .map(|part| String::from_utf8(part.to_vec()).unwrap_or_default());
+    let mut next = || parts.next().unwrap_or_default();
+    let (browser_id, request_id, guest_id) = (next(), next(), next());
+    if browser_id.is_empty() || request_id.is_empty() || guest_id.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid guest capture request",
+        ));
+    }
+    Ok(OsrMessage::GuestCaptureRequested {
+        browser_id,
+        request_id,
+        guest_id,
+    })
+}
+
+/// The guests' ids, bottom first, each ended by a NUL byte.
+pub(super) fn parse_guest_order(payload: &[u8]) -> OsrMessage {
+    OsrMessage::GuestOrder(
+        payload
+            .split(|byte| *byte == 0)
+            .filter(|id| !id.is_empty())
+            .map(|id| std::sync::Arc::from(String::from_utf8_lossy(id).as_ref()))
+            .collect(),
+    )
+}
+
+pub(super) fn parse_json<T: serde::de::DeserializeOwned>(payload: &[u8]) -> io::Result<T> {
+    serde_json::from_slice(payload)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}

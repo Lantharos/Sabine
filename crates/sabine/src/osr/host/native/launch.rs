@@ -67,10 +67,7 @@ impl OsrNativeHost {
 
         let page = self.page_viewport();
         let accelerated_paint = self.accelerated_paint();
-        #[cfg(target_os = "linux")]
-        {
-            self.accelerated_launch = accelerated_paint;
-        }
+        self.accelerated_launch = accelerated_paint;
         let launch = match osr::browser_launch(
             &self.config.runtime_dir,
             &self.config.host_binary,
@@ -226,7 +223,6 @@ impl OsrNativeHost {
 
     /// Closes the browser and starts it again, so it picks up how the window
     /// paints now.
-    #[cfg(any(windows, target_os = "linux"))]
     pub(in crate::osr::host) fn relaunch_browser(&mut self) {
         if !self.browser_attached() {
             return;

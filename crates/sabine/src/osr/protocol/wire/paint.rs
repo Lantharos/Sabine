@@ -1,11 +1,15 @@
 use std::io;
 use std::sync::Arc;
 
-use super::BATCH_ENTRY_LEN;
-use super::header::{read_i32, read_u32, read_u64};
 #[cfg(unix)]
-use super::{MAX_PAINT_BYTES, header::ReceivedFd, shared_mem::PaintSlots};
+use super::header::ReceivedFd;
+use super::header::{read_i32, read_u32, read_u64};
+use super::{BATCH_ENTRY_LEN, MAX_PAINT_BYTES, shared_mem::PaintSlots};
 use crate::osr::protocol::{FrameBytes, OsrPaintBatch, OsrSurface, PaintRect};
+
+/// A shared paint's slot index, its generation and, on Windows, the handle
+/// of its memory the first time the slot is used.
+const SHARED_SLOT_LEN: usize = 16;
 
 #[derive(Clone, Copy)]
 pub(super) enum BatchSurface {
@@ -46,25 +50,31 @@ pub(super) fn parse_inline_batch(
     Ok(batch(surface, header, rects))
 }
 
-#[cfg(unix)]
+/// Parses a paint whose pixels are in a shared slot. The slot's memory comes
+/// along the first time: on Linux and macOS as `received_fd`, on Windows as a
+/// handle in the slot metadata.
 pub(super) fn parse_shared_batch(
     target: BatchSurface,
     header: BatchHeader,
     payload: &[u8],
-    received_fd: &mut ReceivedFd,
+    #[cfg(unix)] received_fd: &mut ReceivedFd,
     slots: &mut PaintSlots,
 ) -> io::Result<OsrPaintBatch> {
     let (surface, metadata_start) = batch_surface(target, payload)?;
     let slot_metadata = payload
-        .get(metadata_start..metadata_start + 8)
+        .get(metadata_start..metadata_start + SHARED_SLOT_LEN)
         .ok_or_else(|| invalid("truncated OSR shared paint slot"))?;
+    #[cfg(unix)]
+    let announced = received_fd.take();
+    #[cfg(windows)]
+    let announced = Some(read_u64(&slot_metadata[8..16])).filter(|handle| *handle != 0);
     let lease = slots.lease(
         read_u32(&slot_metadata[0..4]),
         read_u32(&slot_metadata[4..8]),
-        received_fd.take(),
+        announced,
         MAX_PAINT_BYTES,
     )?;
-    let entries = batch_entries(&payload[metadata_start + 8..])?;
+    let entries = batch_entries(&payload[metadata_start + SHARED_SLOT_LEN..])?;
     let rects = parse_rects(entries, lease.as_slice().len(), Ok, |range| {
         FrameBytes::Shared {
             source: Arc::clone(&lease),

@@ -1,20 +1,20 @@
 use super::header::{read_i32, read_u32, read_u64};
+use super::kinds::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL};
 use super::paint::split_guest_payload;
 use crate::osr::protocol::{OsrAccelFrame, OsrSurface};
 use std::io;
 
-pub(super) const KIND_MAIN_ACCEL: u32 = 24;
-pub(super) const KIND_POPUP_ACCEL: u32 = 25;
-pub(super) const KIND_GUEST_ACCEL: u32 = 26;
-#[cfg(any(windows, target_os = "linux"))]
-pub(super) const KIND_ACCEL_RETIRE: u32 = 39;
-#[cfg(target_os = "linux")]
-pub(super) const KIND_ACCEL_DMABUF: u32 = 45;
-#[cfg(target_os = "linux")]
-pub(super) const KIND_ACCEL_UNAVAILABLE: u32 = 46;
-
 const META_LEN: usize = 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
 
+/// The texture handle a frame hands over with it on Windows, opened in this
+/// process by the browser host, or 0 when the frame names one sent before.
+#[cfg(windows)]
+pub(super) fn announced_texture(meta: &[u8]) -> u64 {
+    read_u64(&meta[32..40])
+}
+
+/// Parses an accelerated frame, returning its metadata too for what each
+/// platform reads from it alone.
 pub(super) fn parse_accel_frame(
     kind: u32,
     coded_width: u32,
@@ -22,7 +22,7 @@ pub(super) fn parse_accel_frame(
     x: i32,
     y: i32,
     payload: &[u8],
-) -> io::Result<(OsrAccelFrame, u64)> {
+) -> io::Result<(OsrAccelFrame, &[u8])> {
     let (surface, rest_start) = match kind {
         KIND_GUEST_ACCEL => {
             let (guest_id, rest) = split_guest_payload(payload)?;
@@ -46,31 +46,10 @@ pub(super) fn parse_accel_frame(
         ));
     }
 
-    let format = read_u32(&rest[0..4]);
     let visible_x = read_i32(&rest[4..8]);
     let visible_y = read_i32(&rest[8..12]);
     let visible_width = read_u32(&rest[12..16]);
     let visible_height = read_u32(&rest[16..20]);
-    let resource_id = read_u64(&rest[20..28]);
-    let resource_slot = read_u32(&rest[28..32]);
-    let shared_handle = read_u64(&rest[32..40]);
-    let slot_token = read_u64(&rest[40..48]);
-    let frame = OsrAccelFrame {
-        surface,
-        coded_width,
-        coded_height,
-        visible_x: visible_x as u32,
-        visible_y: visible_y as u32,
-        visible_width,
-        visible_height,
-        x,
-        y,
-        format,
-        resource_id,
-        resource_slot,
-        slot_token,
-        resource: None,
-    };
     if visible_x < 0
         || visible_y < 0
         || visible_width == 0
@@ -83,8 +62,23 @@ pub(super) fn parse_accel_frame(
             "invalid accelerated OSR visible rect",
         ));
     }
-
-    Ok((frame, shared_handle))
+    let frame = OsrAccelFrame {
+        surface,
+        coded_width,
+        coded_height,
+        visible_x: visible_x as u32,
+        visible_y: visible_y as u32,
+        visible_width,
+        visible_height,
+        x,
+        y,
+        format: read_u32(&rest[0..4]),
+        resource_id: read_u64(&rest[20..28]),
+        resource_slot: read_u32(&rest[28..32]),
+        slot_token: read_u64(&rest[40..48]),
+        resource: None,
+    };
+    Ok((frame, rest))
 }
 
 #[cfg(any(windows, target_os = "linux"))]

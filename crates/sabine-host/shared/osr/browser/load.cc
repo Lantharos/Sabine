@@ -72,9 +72,7 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
     if (!window_.Floating()) {
       DispatchToplevelState();
     }
-#if defined(OS_LINUX)
     WatchAcceleratedPaint();
-#endif
     return;
   }
   guest->url = frame->GetURL();

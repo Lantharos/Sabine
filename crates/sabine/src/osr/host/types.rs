@@ -76,16 +76,6 @@ impl SurfaceGeometry {
     }
 }
 
-pub(super) struct OverlayLayer {
-    pub(super) geometry: SurfaceGeometry,
-}
-
-impl OverlayLayer {
-    pub(super) fn new(geometry: SurfaceGeometry) -> Self {
-        Self { geometry }
-    }
-}
-
 pub(super) fn uses_sabine_chrome(chrome: SabineWindowChrome) -> bool {
     matches!(chrome, SabineWindowChrome::Sabine)
 }

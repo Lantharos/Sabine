@@ -17,6 +17,7 @@ namespace sabine_osr {
   X(vkDestroyCommandPool)                 \
   X(vkAllocateCommandBuffers)             \
   X(vkResetCommandBuffer)                 \
+  X(vkFreeCommandBuffers)                 \
   X(vkBeginCommandBuffer)                 \
   X(vkEndCommandBuffer)                   \
   X(vkCmdPipelineBarrier)                 \
@@ -39,7 +40,9 @@ namespace sabine_osr {
   X(vkGetMemoryFdPropertiesKHR)           \
   X(vkGetImageDrmFormatModifierPropertiesEXT)
 
-#define SABINE_VULKAN_OPTIONAL_DEVICE_FUNCTIONS(X) X(vkImportSemaphoreFdKHR)
+#define SABINE_VULKAN_OPTIONAL_DEVICE_FUNCTIONS(X) \
+  X(vkImportSemaphoreFdKHR)                        \
+  X(vkGetSemaphoreFdKHR)
 
 struct VulkanContext {
   ~VulkanContext();
@@ -52,10 +55,12 @@ struct VulkanContext {
   uint32_t queue_family = 0;
   uint32_t external_queue_family = VK_QUEUE_FAMILY_EXTERNAL;
   VkCommandPool command_pool = VK_NULL_HANDLE;
-  VkCommandBuffer commands = VK_NULL_HANDLE;
-  VkFence fence = VK_NULL_HANDLE;
-  VkSemaphore producer_done = VK_NULL_HANDLE;
   VkPhysicalDeviceMemoryProperties memory{};
+  // Whether a copy can still run after the paint callback returns: its
+  // completion can be attached to the dma-bufs it touched, and Chromium's
+  // draws on this GPU wait for it there. NVIDIA's driver ignores fences on
+  // dma-bufs, so its copies finish before the callback returns.
+  bool implicit_fences = false;
   std::vector<uint64_t> shared_modifiers[2];
 
 #define SABINE_VULKAN_MEMBER(name) PFN_##name name = nullptr;
@@ -69,8 +74,9 @@ enum class SharedFormat { kBgra, kRgba };
 VkFormat UnormFormat(SharedFormat format);
 
 // Opens the Vulkan device used to copy Chromium's frames into Sabine-owned
-// dma-bufs on first use. Returns null when this machine cannot share dma-bufs
-// through Vulkan.
+// dma-bufs on first use, on the GPU the desktop composites on when it can,
+// which is the one Chromium renders on. Returns null when this machine cannot
+// share dma-bufs through Vulkan.
 VulkanContext* SharedVulkanContext();
 
 // Replaces the shared device after it was lost. The new one comes from a new

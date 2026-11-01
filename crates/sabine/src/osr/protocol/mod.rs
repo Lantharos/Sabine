@@ -8,14 +8,12 @@ pub(crate) use config_json::{
     regions_from_json, regions_to_json,
 };
 pub(crate) use encode::encode_component;
-#[cfg(unix)]
 pub(crate) use wire::PaintSlots;
 pub(crate) use wire::WireReader;
 
 use sabine_platform::WindowRegionRect;
 use std::{ops::Range, sync::Arc};
 
-#[cfg(unix)]
 use self::wire::PaintLease;
 
 pub(crate) const POPUP_OVERLAY_ID: &str = "__sabine_popup";
@@ -26,7 +24,6 @@ pub(crate) enum FrameBytes {
         source: Arc<Vec<u8>>,
         range: Range<usize>,
     },
-    #[cfg(unix)]
     Shared {
         source: Arc<PaintLease>,
         range: Range<usize>,
@@ -37,7 +34,6 @@ impl FrameBytes {
     pub(crate) fn as_slice(&self) -> &[u8] {
         match self {
             Self::Inline { source, range } => &source[range.clone()],
-            #[cfg(unix)]
             Self::Shared { source, range } => &source.as_slice()[range.clone()],
         }
     }
@@ -48,12 +44,13 @@ pub(crate) enum OsrMessage {
     PaintBatch(OsrPaintBatch),
     AccelFrame(OsrAccelFrame),
     /// The browser host cannot share accelerated frames on this machine.
-    #[cfg(target_os = "linux")]
     AccelUnavailable,
     /// Hide the built-in popup overlay (`__sabine_popup`).
     PopupHidden,
     /// Hide a guest overlay by id.
     GuestHidden(String),
+    /// The order guests stack in, bottom first.
+    GuestOrder(Vec<Arc<str>>),
     GuestCaptureRequested {
         browser_id: String,
         request_id: String,

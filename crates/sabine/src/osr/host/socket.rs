@@ -18,7 +18,6 @@ use winit::event_loop::EventLoopProxy;
 
 use crate::osr::control::ControlWriter;
 use crate::osr::message_queue::MessageQueue;
-#[cfg(unix)]
 use crate::osr::protocol::PaintSlots;
 use crate::osr::protocol::WireReader;
 use crate::osr::transport::{IpcEndpoint, IpcListener, IpcStream};
@@ -147,15 +146,12 @@ pub(super) fn start_socket_reader(
         if let Ok(mut current) = state.stream.lock() {
             *current = Some(owned);
         }
-        #[cfg(unix)]
         let mut wire = WireReader::new(
             stream,
             PaintSlots::new(Arc::clone(&control)),
             #[cfg(target_os = "macos")]
             surfaces,
         );
-        #[cfg(not(unix))]
-        let mut wire = WireReader::new(stream);
         match wire.read_host_protocol() {
             Ok(Some(version)) if version == sabine_host::HOST_PROTOCOL_VERSION => {}
             Ok(None) | Err(_) => {

@@ -9,6 +9,7 @@ use windows::Win32::Graphics::Direct3D12::ID3D12Resource;
 
 use crate::osr::protocol::OsrAccelFrame;
 
+const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
 const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
 
 /// Open the Sabine-owned D3D12 resource on wgpu's D3D12 device.
@@ -28,9 +29,11 @@ pub(crate) fn import_d3d12(
     if frame.coded_width == 0 || frame.coded_height == 0 {
         return Err("invalid d3d11 shared handle frame".into());
     }
-    if frame.format != CEF_COLOR_TYPE_BGRA_8888 {
-        return Err(format!("unsupported d3d11 color format {}", frame.format));
-    }
+    let format = match frame.format {
+        CEF_COLOR_TYPE_BGRA_8888 => wgpu::TextureFormat::Bgra8UnormSrgb,
+        CEF_COLOR_TYPE_RGBA_8888 => wgpu::TextureFormat::Rgba8UnormSrgb,
+        other => return Err(format!("unsupported d3d11 color format {other}")),
+    };
     let desc = wgpu::TextureDescriptor {
         label: Some("sabine-osr-d3d11"),
         size: wgpu::Extent3d {
@@ -41,7 +44,7 @@ pub(crate) fn import_d3d12(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        format,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     };

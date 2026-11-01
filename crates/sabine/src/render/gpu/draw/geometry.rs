@@ -5,26 +5,26 @@ use crate::render::rect_pipeline::{
 };
 use crate::render::{DisplayCommand, DisplayList};
 
-use super::GpuRenderer;
-use super::images::ImageDraw;
+use crate::render::gpu::GpuRenderer;
+use crate::render::gpu::images::ImageDraw;
 
 /// Geometry gathered for each frame, kept between frames so drawing does not
 /// allocate. Draws keep the display list's order, so later commands such as
 /// menus and tooltips cover the page.
 #[derive(Default)]
-pub(super) struct FrameGeometry {
-    pub(super) rect_vertices: Vec<RectVertex>,
-    pub(super) image_vertices: Vec<ImageVertex>,
-    pub(super) draws: Vec<Draw>,
+pub(in crate::render::gpu) struct FrameGeometry {
+    pub(in crate::render::gpu) rect_vertices: Vec<RectVertex>,
+    pub(in crate::render::gpu) image_vertices: Vec<ImageVertex>,
+    pub(in crate::render::gpu) draws: Vec<Draw>,
 }
 
-pub(super) enum Draw {
+pub(in crate::render::gpu) enum Draw {
     Rects { vertices: Range<u32>, cutout: bool },
     Image(ImageDraw),
 }
 
 impl FrameGeometry {
-    pub(super) fn has_cutouts(&self) -> bool {
+    pub(in crate::render::gpu) fn has_cutouts(&self) -> bool {
         self.draws
             .iter()
             .any(|draw| matches!(draw, Draw::Rects { cutout: true, .. }))
@@ -46,7 +46,11 @@ impl FrameGeometry {
 }
 
 impl GpuRenderer {
-    pub(super) fn collect_geometry(&self, display_list: &DisplayList, frame: &mut FrameGeometry) {
+    pub(in crate::render::gpu) fn collect_geometry(
+        &self,
+        display_list: &DisplayList,
+        frame: &mut FrameGeometry,
+    ) {
         frame.rect_vertices.clear();
         frame.image_vertices.clear();
         frame.draws.clear();

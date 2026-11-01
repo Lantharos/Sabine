@@ -38,12 +38,14 @@
 #include "osr/transport/socket.h"
 #include "osr/transport/wire.h"
 #include "osr/window_state.h"
-#if !defined(OS_WIN)
 #include "osr/paint/shared_pool.h"
-#endif
+#include "osr/accelerated/drop.h"
 #if defined(OS_LINUX)
 #include "osr/accelerated/linux/dmabuf_copy.h"
 #include "osr/print/linux/dialogs.h"
+#endif
+#if defined(OS_WIN)
+#include "osr/accelerated/windows/parent_process.h"
 #endif
 #if defined(OS_MAC)
 #include <memory>
@@ -229,21 +231,23 @@ class SabineOsrHandler : public CefClient,
   void EmitBridgeEvent(const std::string& name_json,
                        const std::string& payload,
                        const std::optional<std::string>& body = std::nullopt);
-#if !defined(OS_WIN)
   void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
-#endif
   void UseProfile(BrowserProfile profile, bool shared_texture);
   void ReleaseAcceleratedFrame(uint64_t slot_token);
   void RetireAcceleratedBrowser(int browser_id);
+  // Lets the window drop resources Sabine retired; resources this window was
+  // never handed are ignored.
+  void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
   void RepaintAll();
   void OpenDevToolsFrontend(const std::string& port, const std::string& target);
 #if defined(OS_MAC)
   void UseSurfaceService(const std::string& service_name);
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_WIN)
+  void UseParentProcess(int pid);
+#endif
   void UseAcceleratedPaint(bool enabled);
   void WatchAcceleratedPaint();
-#endif
 
  private:
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
@@ -292,16 +296,26 @@ class SabineOsrHandler : public CefClient,
                             CopiedAccelFrame* out);
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);
-  void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
+  void RetireAcceleratedSurfaces(int browser_id);
+  void SendAcceleratedRetire(const std::vector<uint64_t>& resource_ids);
   // Chromium reports damage against the capture before it, so a frame that
   // follows one Sabine never copied has to be copied whole.
   bool FollowsCopiedCapture(
       const sabine_osr::AcceleratedSurfaceKey& surface,
       const cef_accelerated_paint_info_common_t& frame) const;
   void ForgetAcceleratedCaptures(int browser_id);
-#if defined(OS_LINUX)
+  void DropAcceleratedFrame(sabine_osr::AcceleratedDrop drop);
   void ReportAcceleratedPaintUnavailable();
   void ReportMissingAcceleratedPaint();
+  bool SendSharedPaint(PaintSurface surface,
+                       const std::string& guest_id,
+                       int32_t origin_x,
+                       int32_t origin_y,
+                       const void* buffer,
+                       int buffer_width,
+                       int buffer_height,
+                       size_t total_bytes);
+#if defined(OS_LINUX)
   void RepaintAllSoon();
   bool ShareDmabufCopy(sabine_osr::DmabufCopy result,
                        const sabine_osr::AccelDmabufCopiedFrame& copied,
@@ -324,24 +338,28 @@ class SabineOsrHandler : public CefClient,
                    const UnsettledFrame& frame);
 #endif
 
-  std::vector<std::pair<CefRefPtr<CefBrowser>, PaintElementType>>
-      dropped_accelerated_paints_;
+  sabine_osr::SharedPaintPool shared_paint_;
+  sabine_osr::PaintScratch paint_scratch_;
+  std::vector<char> accel_payload_;
+  // Surfaces whose frame was dropped, painted again once a slot frees up.
+  std::set<sabine_osr::AcceleratedSurfaceKey> dropped_accelerated_paints_;
   std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
-#if defined(OS_WIN) || defined(OS_LINUX)
   std::set<uint64_t> announced_accelerated_resources_;
+#if defined(OS_WIN)
+  sabine_osr::ParentProcess parent_process_;
 #endif
 #if defined(OS_MAC)
   std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
 #endif
-#if defined(OS_LINUX)
   bool accelerated_paint_ = false;
   bool accelerated_paint_seen_ = false;
   bool accelerated_paint_failed_ = false;
+#if defined(OS_LINUX)
   std::map<sabine_osr::AcceleratedSurfaceKey, UnsettledFrame> unsettled_frames_;
   bool settle_pending_ = false;
   bool repaint_all_pending_ = false;
 #endif
-  std::string accelerated_drop_reason_;
+  sabine_osr::AcceleratedDrop accelerated_drop_;
   // End of accelerated paint.
 
   void StartCommandReader();
@@ -472,6 +490,9 @@ class SabineOsrHandler : public CefClient,
                       int height,
                       const RectList& dirty_rects);
   void SendGuestHidden(const GuestView& guest);
+  // Tells the window the order guests stack in, bottom first, which it draws
+  // them in.
+  void SendGuestOrder();
   void EmitPrimaryEvent(const std::string& name, const std::string& payload);
   void EmitGuestEvent(const GuestView& guest,
                       const std::string& name,
@@ -493,9 +514,6 @@ class SabineOsrHandler : public CefClient,
   float scale_;
   const int active_frame_rate_;
   const int background_frame_rate_;
-#if !defined(OS_WIN)
-  sabine_osr::SharedPaintPool shared_paint_;
-#endif
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
   CefRect popup_rect_;

@@ -12,7 +12,7 @@ pub(super) use direct::DirectOutcome;
 
 use std::{
     cell::Cell,
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeSet, HashMap, VecDeque},
     sync::{Arc, mpsc},
     time::Instant,
 };
@@ -36,8 +36,8 @@ use sabine_platform::WindowEffect;
 use super::config::OsrHostConfig;
 use super::socket::SocketReader;
 use super::types::{
-    ClickMemory, HostControl, LifecycleState, MouseButtons, OsrHostEvent, OverlayLayer,
-    PendingResizePaint, SurfaceGeometry, TitlebarControl,
+    ClickMemory, HostControl, LifecycleState, MouseButtons, OsrHostEvent, PendingResizePaint,
+    SurfaceGeometry, TitlebarControl,
 };
 
 pub(super) struct OsrNativeHost {
@@ -97,7 +97,7 @@ pub(super) struct OsrNativeHost {
     pub(super) main_surface: Option<SurfaceGeometry>,
     pub(super) main_load_ready: bool,
     pub(super) retained_frames: HashMap<ImageId, BgraImage>,
-    pub(super) overlays: BTreeMap<Arc<str>, OverlayLayer>,
+    pub(super) overlays: super::paint::Overlays,
     pub(super) display_list: DisplayList,
     pub(super) page_drag_regions: Vec<WindowRegionRect>,
     pub(super) page_drag_exclusion_regions: Vec<WindowRegionRect>,
@@ -170,9 +170,7 @@ pub(super) struct OsrNativeHost {
     pub(super) printing: super::print::Printing,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
-    #[cfg(target_os = "linux")]
     pub(super) software_paint: bool,
-    #[cfg(target_os = "linux")]
     pub(super) accelerated_launch: bool,
 }
 
@@ -193,6 +191,8 @@ impl OsrNativeHost {
             &config.runtime_dir,
             &sabine_runtime::MIN_LINUX_SHARED_TEXTURE_CEF,
         );
+        #[cfg(not(target_os = "linux"))]
+        let software_paint = false;
         let focused = visible && config.active;
         let lifecycle_state = if visible {
             LifecycleState::Active
@@ -246,7 +246,7 @@ impl OsrNativeHost {
             main_surface: None,
             main_load_ready: false,
             retained_frames: HashMap::new(),
-            overlays: BTreeMap::new(),
+            overlays: Default::default(),
             display_list: DisplayList::default(),
             page_drag_regions: Vec::new(),
             page_drag_exclusion_regions: Vec::new(),
@@ -315,9 +315,7 @@ impl OsrNativeHost {
             printing: Default::default(),
             #[cfg(target_os = "linux")]
             paste_gesture: None,
-            #[cfg(target_os = "linux")]
             software_paint,
-            #[cfg(target_os = "linux")]
             accelerated_launch: false,
         }
     }

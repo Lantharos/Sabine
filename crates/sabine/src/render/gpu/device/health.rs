@@ -3,14 +3,14 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-pub(super) struct DeviceHealth {
+pub(in crate::render::gpu) struct DeviceHealth {
     failed: AtomicBool,
     message: Mutex<Option<String>>,
     wake: Box<dyn Fn() + Send + Sync>,
 }
 
 impl DeviceHealth {
-    pub(super) fn watch(
+    pub(in crate::render::gpu) fn watch(
         device: &wgpu::Device,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Arc<Self> {
@@ -26,7 +26,7 @@ impl DeviceHealth {
         health
     }
 
-    pub(super) fn fail(&self, message: String) {
+    pub(in crate::render::gpu) fn fail(&self, message: String) {
         let mut current = self.message.lock().unwrap();
         if current.is_some() {
             return;
@@ -37,7 +37,7 @@ impl DeviceHealth {
         (self.wake)();
     }
 
-    pub(super) fn failure(&self) -> Option<String> {
+    pub(in crate::render::gpu) fn failure(&self) -> Option<String> {
         if !self.failed.load(Ordering::Acquire) {
             return None;
         }

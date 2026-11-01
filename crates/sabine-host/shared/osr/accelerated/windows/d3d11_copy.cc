@@ -5,8 +5,8 @@
 // owned D3D12 shareable resource through D3D11, waits for an ordered D3D11
 // fence, and retains the copied slot until the compositor acknowledges it.
 // Seemingly redundant COM interfaces and handle transitions enforce those
-// ownership and ordering rules. Some of it may look unnecessary.
-// Unfortunately, Windows disagrees.
+// ownership and ordering rules. Some of it may look unnecessary. Unfortunately,
+// Windows disagrees.
 //
 // If it works, assume there is a reason.
 
@@ -20,19 +20,20 @@
 #include <dxgi1_4.h>
 #include <wrl/client.h>
 
-#include <array>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <memory>
+
+#include "osr/accelerated/slot_ring.h"
 
 namespace sabine_osr {
 namespace {
 
 using Microsoft::WRL::ComPtr;
 
-constexpr uint32_t kCefColorTypeBgra8888 = 1;
-constexpr DWORD kGpuFenceTimeoutMs = 1000;
-constexpr uint32_t kSlotsPerSurface = 4;
+constexpr std::chrono::milliseconds kGpuFenceTimeout{1000};
+constexpr size_t kMaxCachedSources = 8;
 
 struct D3d11Context {
   ~D3d11Context() {
@@ -50,7 +51,7 @@ struct D3d11Context {
   ComPtr<ID3D12Device> device12;
 };
 
-struct OwnedSharedSlot {
+struct OwnedSharedSlot : RingSlot {
   OwnedSharedSlot() = default;
   OwnedSharedSlot(const OwnedSharedSlot&) = delete;
   OwnedSharedSlot& operator=(const OwnedSharedSlot&) = delete;
@@ -62,10 +63,6 @@ struct OwnedSharedSlot {
   int width = 0;
   int height = 0;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-  uint64_t resource_id = 0;
-  bool in_use = false;
-  uint64_t token = 0;
-  PixelRegion stale;
 
   void Reset() {
     texture.Reset();
@@ -84,15 +81,28 @@ struct OwnedSharedSlot {
   }
 };
 
-struct SurfaceSlots {
-  std::array<OwnedSharedSlot, kSlotsPerSurface> slots;
-  uint32_t next = 0;
+// CEF hands out the same few pooled textures frame after frame, so each is
+// opened once. A handle value can name a new texture once CEF closed the old
+// one, so the cache keeps its own handle to tell them apart.
+struct CachedSource {
+  CachedSource() = default;
+  CachedSource(const CachedSource&) = delete;
+  CachedSource& operator=(const CachedSource&) = delete;
+  ~CachedSource() {
+    if (handle) {
+      CloseHandle(handle);
+    }
+  }
+
+  HANDLE handle = nullptr;
+  ComPtr<ID3D11Texture2D> texture;
 };
 
+using SurfaceSlots = SurfaceRing<OwnedSharedSlot, NoExtra>;
+
 std::unique_ptr<D3d11Context> g_d3d11;
-std::map<AcceleratedSurfaceKey, SurfaceSlots> g_surfaces;
-uint64_t g_next_token = 1;
-uint64_t g_next_resource_id = 1;
+SlotRings<OwnedSharedSlot> g_surfaces;
+std::map<HANDLE, std::unique_ptr<CachedSource>> g_sources;
 
 void LogFailure(const char* what, HRESULT hr) {
   std::fprintf(stderr, "Sabine CEF: %s (hr=0x%08lx)\n", what,
@@ -112,6 +122,17 @@ bool SharedResourceAdapter(HANDLE shared_resource,
     return false;
   }
   return true;
+}
+
+bool CreateCopyFence(ID3D11Device5* device, D3d11Context* context) {
+  const HRESULT hr = device->CreateFence(0, D3D11_FENCE_FLAG_NONE,
+                                         IID_PPV_ARGS(&context->fence));
+  if (FAILED(hr)) {
+    LogFailure("could not create the D3D11 copy fence", hr);
+    return false;
+  }
+  context->fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+  return context->fence_event != nullptr;
 }
 
 std::unique_ptr<D3d11Context> CreateContext(HANDLE shared_resource) {
@@ -168,28 +189,33 @@ std::unique_ptr<D3d11Context> CreateContext(HANDLE shared_resource) {
     LogFailure("could not create the D3D12 copy device", hr);
     return nullptr;
   }
-  if (FAILED(hr = device5->CreateFence(0, D3D11_FENCE_FLAG_NONE,
-                                       IID_PPV_ARGS(&result->fence)))) {
-    LogFailure("could not create the D3D11 copy fence", hr);
-    return nullptr;
-  }
-  result->fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-  if (!result->fence_event) {
+  if (!CreateCopyFence(device5.Get(), result.get())) {
     return nullptr;
   }
   return result;
 }
 
-bool WaitForGpu() {
-  const uint64_t fence_value = ++g_d3d11->fence_value;
-  if (FAILED(g_d3d11->context->Signal(g_d3d11->fence.Get(), fence_value)) ||
-      FAILED(g_d3d11->fence->SetEventOnCompletion(fence_value,
-                                                  g_d3d11->fence_event))) {
-    return false;
+// Waits until the fence reaches `value`. The event is auto-reset and may
+// still carry the signal of an earlier wait that timed out, so the fence's
+// completed value decides, not the event.
+bool WaitForFence(uint64_t value) {
+  const auto deadline = std::chrono::steady_clock::now() + kGpuFenceTimeout;
+  while (g_d3d11->fence->GetCompletedValue() < value) {
+    const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(
+                               deadline - std::chrono::steady_clock::now())
+                               .count();
+    if (remaining <= 0 || FAILED(g_d3d11->fence->SetEventOnCompletion(
+                              value, g_d3d11->fence_event))) {
+      return false;
+    }
+    WaitForSingleObject(g_d3d11->fence_event, static_cast<DWORD>(remaining));
   }
-  g_d3d11->context->Flush();
-  return WaitForSingleObject(g_d3d11->fence_event, kGpuFenceTimeoutMs) ==
-         WAIT_OBJECT_0;
+  return true;
+}
+
+DXGI_FORMAT TypelessFormat(DXGI_FORMAT format) {
+  return format == DXGI_FORMAT_B8G8R8A8_UNORM ? DXGI_FORMAT_B8G8R8A8_TYPELESS
+                                              : DXGI_FORMAT_R8G8B8A8_TYPELESS;
 }
 
 bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
@@ -216,9 +242,7 @@ bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
   desc.Height = static_cast<UINT>(height);
   desc.DepthOrArraySize = 1;
   desc.MipLevels = 1;
-  desc.Format = format == DXGI_FORMAT_B8G8R8A8_UNORM
-                    ? DXGI_FORMAT_B8G8R8A8_TYPELESS
-                    : format;
+  desc.Format = TypelessFormat(format);
   desc.SampleDesc.Count = 1;
   desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
@@ -251,15 +275,21 @@ bool EnsureOwnedSharedSlot(OwnedSharedSlot* slot,
   slot->width = width;
   slot->height = height;
   slot->format = format;
-  slot->resource_id = g_next_resource_id++;
+  slot->resource_id = g_surfaces.NewResourceId();
   slot->stale = PixelRegion::Whole(width, height);
   return true;
 }
 
+// CEF's texture goes back to Chromium's pool when the paint callback
+// returns, and Chromium's next draw into it waits for nothing of ours: CEF
+// removes the keyed mutex and Chromium fences only its own devices. So the
+// copy has finished reading before the callback returns. `lost` reports a
+// copy that never finished.
 bool CopyIntoSlot(ID3D11Texture2D* source,
                   const D3D11_TEXTURE2D_DESC& source_desc,
                   OwnedSharedSlot* slot,
-                  AccelD3d11CopiedFrame* out) {
+                  AccelD3d11CopiedFrame* out,
+                  bool* lost) {
   const int width = static_cast<int>(source_desc.Width);
   const int height = static_cast<int>(source_desc.Height);
   if (!EnsureOwnedSharedSlot(slot, width, height, source_desc.Format,
@@ -276,16 +306,19 @@ bool CopyIntoSlot(ID3D11Texture2D* source,
                         1};
     g_d3d11->context->CopySubresourceRegion(slot->texture.Get(), 0, box.left,
                                             box.top, 0, source, 0, &box);
-    if (!WaitForGpu()) {
+    const uint64_t value = ++g_d3d11->fence_value;
+    if (FAILED(g_d3d11->context->Signal(g_d3d11->fence.Get(), value))) {
+      return false;
+    }
+    g_d3d11->context->Flush();
+    if (!WaitForFence(value)) {
+      *lost = true;
       return false;
     }
   }
-  slot->stale = {};
-  slot->in_use = true;
-  slot->token = g_next_token++;
+  out->slot_token = g_surfaces.Claim(*slot);
   out->shared_handle = slot->shared_handle;
   out->resource_id = slot->resource_id;
-  out->slot_token = slot->token;
   out->width = source_desc.Width;
   out->height = source_desc.Height;
   return true;
@@ -306,25 +339,55 @@ bool ContextIsStale(HANDLE cef_shared_handle) {
 }
 
 void ResetContext(std::vector<uint64_t>* retired) {
-  for (const auto& [surface, slots] : g_surfaces) {
-    for (const OwnedSharedSlot& slot : slots.slots) {
-      if (slot.resource_id != 0) {
-        retired->push_back(slot.resource_id);
-      }
-    }
-  }
-  g_surfaces.clear();
+  const std::vector<uint64_t> slots =
+      g_surfaces.RetireAll([](SurfaceSlots&) {});
+  retired->insert(retired->end(), slots.begin(), slots.end());
+  g_sources.clear();
   g_d3d11.reset();
 }
 
-ComPtr<ID3D11Texture2D> OpenCefTexture(HANDLE cef_shared_handle,
-                                       std::vector<uint64_t>* retired) {
-  ComPtr<ID3D11Texture2D> texture;
+ID3D11Texture2D* CachedTexture(HANDLE cef_shared_handle) {
+  const auto cached = g_sources.find(cef_shared_handle);
+  if (cached == g_sources.end()) {
+    return nullptr;
+  }
+  if (CompareObjectHandles(cached->second->handle, cef_shared_handle)) {
+    return cached->second->texture.Get();
+  }
+  g_sources.erase(cached);
+  return nullptr;
+}
+
+ID3D11Texture2D* Cache(HANDLE cef_shared_handle,
+                       ComPtr<ID3D11Texture2D> texture) {
+  auto source = std::make_unique<CachedSource>();
+  if (!DuplicateHandle(GetCurrentProcess(), cef_shared_handle,
+                       GetCurrentProcess(), &source->handle, 0, FALSE,
+                       DUPLICATE_SAME_ACCESS)) {
+    return nullptr;
+  }
+  if (g_sources.size() >= kMaxCachedSources) {
+    g_sources.clear();
+  }
+  source->texture = std::move(texture);
+  ID3D11Texture2D* opened = source->texture.Get();
+  g_sources[cef_shared_handle] = std::move(source);
+  return opened;
+}
+
+// The returned texture stays cached while CEF keeps it in its pool, but its
+// pixels are only Chromium's frame until this paint callback returns.
+ID3D11Texture2D* OpenCefTexture(HANDLE cef_shared_handle,
+                                std::vector<uint64_t>* retired) {
   if (g_d3d11) {
+    if (ID3D11Texture2D* cached = CachedTexture(cef_shared_handle)) {
+      return cached;
+    }
+    ComPtr<ID3D11Texture2D> texture;
     const HRESULT hr = g_d3d11->device->OpenSharedResource1(
         cef_shared_handle, IID_PPV_ARGS(&texture));
     if (SUCCEEDED(hr)) {
-      return texture;
+      return Cache(cef_shared_handle, std::move(texture));
     }
     if (!ContextIsStale(cef_shared_handle)) {
       LogFailure("OpenSharedResource1 failed", hr);
@@ -339,13 +402,19 @@ ComPtr<ID3D11Texture2D> OpenCefTexture(HANDLE cef_shared_handle,
   if (!g_d3d11) {
     return nullptr;
   }
+  ComPtr<ID3D11Texture2D> texture;
   const HRESULT hr = g_d3d11->device->OpenSharedResource1(
       cef_shared_handle, IID_PPV_ARGS(&texture));
   if (FAILED(hr)) {
     LogFailure("OpenSharedResource1 failed", hr);
     return nullptr;
   }
-  return texture;
+  return Cache(cef_shared_handle, std::move(texture));
+}
+
+bool SupportedFormat(DXGI_FORMAT format) {
+  return format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+         format == DXGI_FORMAT_R8G8B8A8_UNORM;
 }
 
 }  // namespace
@@ -353,70 +422,53 @@ ComPtr<ID3D11Texture2D> OpenCefTexture(HANDLE cef_shared_handle,
 bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
                                HANDLE cef_shared_handle,
                                const PixelRegion& damage,
-                               uint32_t cef_format,
                                AccelD3d11CopiedFrame* out) {
-  if (!cef_shared_handle || cef_format != kCefColorTypeBgra8888) {
+  if (!cef_shared_handle) {
     return false;
   }
-  // The returned COM reference must not outlive this paint callback. Sabine
-  // exports its own copy instead of retaining CEF's pooled texture or handle.
-  const ComPtr<ID3D11Texture2D> source =
+  ID3D11Texture2D* source =
       OpenCefTexture(cef_shared_handle, &out->retired_resource_ids);
   if (!source) {
     return false;
   }
   D3D11_TEXTURE2D_DESC source_desc{};
   source->GetDesc(&source_desc);
-  if (source_desc.Width == 0 || source_desc.Height == 0) {
+  if (source_desc.Width == 0 || source_desc.Height == 0 ||
+      !SupportedFormat(source_desc.Format)) {
     return false;
   }
   SurfaceSlots& slots = g_surfaces[surface];
-  for (OwnedSharedSlot& slot : slots.slots) {
-    slot.stale.Unite(damage);
+  slots.Damage(damage);
+  const std::optional<uint32_t> slot_index = slots.FreeSlot();
+  if (!slot_index) {
+    return false;
   }
-  const uint32_t first_slot = slots.next++ % kSlotsPerSurface;
-  for (uint32_t offset = 0; offset < kSlotsPerSurface; ++offset) {
-    const uint32_t slot_index = (first_slot + offset) % kSlotsPerSurface;
-    OwnedSharedSlot& slot = slots.slots[slot_index];
-    if (slot.in_use) {
-      continue;
+  bool lost = false;
+  if (!CopyIntoSlot(source, source_desc, &slots.slots[*slot_index], out,
+                    &lost)) {
+    if (lost) {
+      std::fprintf(stderr,
+                   "Sabine CEF: a frame copy never finished; recreating the "
+                   "copy device\n");
+      ResetContext(&out->retired_resource_ids);
     }
-    if (!CopyIntoSlot(source.Get(), source_desc, &slot, out)) {
-      return false;
-    }
-    out->slot_index = slot_index;
-    return true;
+    return false;
   }
-  return false;
+  out->slot_index = *slot_index;
+  return true;
 }
 
 std::vector<uint64_t> RetireAcceleratedD3d11Browser(int browser_id) {
-  std::vector<uint64_t> retired;
-  for (auto it = g_surfaces.begin(); it != g_surfaces.end();) {
-    if (it->first.browser_id != browser_id) {
-      ++it;
-      continue;
-    }
-    for (const OwnedSharedSlot& slot : it->second.slots) {
-      if (slot.resource_id != 0) {
-        retired.push_back(slot.resource_id);
-      }
-    }
-    it = g_surfaces.erase(it);
+  std::vector<uint64_t> retired =
+      g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
+  if (g_surfaces.empty()) {
+    g_sources.clear();
   }
   return retired;
 }
 
 void ReleaseAcceleratedD3d11Frame(uint64_t slot_token) {
-  for (auto& [surface, slots] : g_surfaces) {
-    for (OwnedSharedSlot& slot : slots.slots) {
-      if (slot.in_use && slot.token == slot_token) {
-        slot.in_use = false;
-        slot.token = 0;
-        return;
-      }
-    }
-  }
+  g_surfaces.Release(slot_token);
 }
 
 }  // namespace sabine_osr

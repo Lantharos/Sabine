@@ -4,8 +4,8 @@
 // sampling finishes. Its crop UVs describe pixel edges, not pixel centers;
 // adding a half-texel inset here resamples the whole page into a blurry mess.
 
-use super::{CachedTexture, GpuRenderer, RendererError};
 use crate::render::ImageId;
+use crate::render::gpu::{CachedTexture, GpuRenderer, RendererError};
 
 /// The producer slot an external frame was copied into, and the texture that
 /// slot currently holds.
@@ -16,7 +16,7 @@ pub(crate) struct ExternalSlot {
 }
 
 #[derive(Clone)]
-pub(super) struct ImportedTexture {
+pub(in crate::render::gpu) struct ImportedTexture {
     slot: u32,
     resource_id: u64,
     texture: wgpu::Texture,
@@ -116,7 +116,7 @@ impl GpuRenderer {
         Ok(imported)
     }
 
-    pub(super) fn retire_external_texture(&mut self, id: &ImageId) {
+    pub(in crate::render::gpu) fn retire_external_texture(&mut self, id: &ImageId) {
         if let Some(completed) = self.external_texture_releases.remove(id) {
             self.queue.on_submitted_work_done(completed);
             self.submission_poller.notify();

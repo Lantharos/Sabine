@@ -3,7 +3,10 @@ use std::{
     ffi::CString,
     io,
     ops::Deref,
-    sync::{Arc, Condvar, Mutex},
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -68,13 +71,18 @@ impl std::fmt::Debug for SharedSurface {
     }
 }
 
+/// The surfaces the browser host announced over mach, which arrive on their
+/// own thread, apart from the frames that name them.
 #[derive(Default)]
 pub(crate) struct SurfaceRegistry {
     surfaces: Mutex<HashMap<u64, SharedSurface>>,
     announced: Condvar,
+    retirements: AtomicU64,
 }
 
 impl SurfaceRegistry {
+    /// The surface `surface_id`, waiting briefly for an announcement still on
+    /// its way.
     pub(crate) fn surface(&self, surface_id: u64) -> Option<SharedSurface> {
         let deadline = Instant::now() + SURFACE_WAIT;
         let mut surfaces = self.surfaces.lock().ok()?;
@@ -97,6 +105,20 @@ impl SurfaceRegistry {
     fn remove(&self, surface_id: u64) {
         if let Ok(mut surfaces) = self.surfaces.lock() {
             surfaces.remove(&surface_id);
+        }
+        self.retirements.fetch_add(1, Ordering::Release);
+    }
+
+    /// Counts the surfaces retired so far, so a reader can tell when the
+    /// ones it keeps may be stale.
+    pub(crate) fn retirements(&self) -> u64 {
+        self.retirements.load(Ordering::Acquire)
+    }
+
+    /// Drops the surfaces in `kept` that were retired since they were taken.
+    pub(crate) fn forget_retired(&self, kept: &mut HashMap<u64, SharedSurface>) {
+        if let Ok(surfaces) = self.surfaces.lock() {
+            kept.retain(|id, _| surfaces.contains_key(id));
         }
     }
 }

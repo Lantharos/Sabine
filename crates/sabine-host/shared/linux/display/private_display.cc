@@ -303,4 +303,13 @@ void ClosePrivateDisplay() {
   }
 }
 
+std::optional<dev_t> CompositorMainDevice() {
+  if (g_formats.main_device.size() != sizeof(dev_t)) {
+    return std::nullopt;
+  }
+  dev_t device;
+  std::memcpy(&device, g_formats.main_device.data(), sizeof(device));
+  return device;
+}
+
 }  // namespace sabine_display

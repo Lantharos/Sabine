@@ -10,7 +10,7 @@ pub(crate) use d3d12::{SharedHandles, adapter_luid};
 #[cfg(target_os = "linux")]
 pub(crate) use dmabuf::{Dmabuf, Dmabufs};
 #[cfg(target_os = "macos")]
-pub(crate) use iosurface::{SharedSurface, SurfaceBroker, SurfaceRegistry};
+pub(crate) use iosurface::{SharedSurface, SurfaceBroker, SurfaceCache, SurfaceRegistry};
 
 use crate::osr::protocol::OsrAccelFrame;
 

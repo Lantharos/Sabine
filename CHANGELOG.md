@@ -1,5 +1,24 @@
 # Unreleased
 
+- On Linux with Mesa drivers the browser no longer waits for the GPU on every frame: its copy of
+  each frame is fenced, Chromium's next draw and the window's GPU wait for it, so pages paint
+  without holding up the browser. With runtimes on Chromium 158 or newer, which hand over finished
+  frames, Linux no longer copies areas again in case they were copied while still being drawn.
+- A second window that shares a running app's browser on Windows paints again; its frames were
+  handed to the first window's process.
+- Windows and macOS fall back to software painting when shared GPU frames don't work, as Linux
+  already did, and large Windows software paints travel in shared memory instead of the socket.
+- Guests are drawn in the order they stack, the order clicks reach them in, so a focused guest
+  shows above the ones it overlaps.
+- The Linux copy device is the GPU the desktop composites on, so laptops whose page renders on the
+  discrete GPU no longer copy every frame across GPUs.
+- Windows accepts RGBA shared frames, and reuses Chromium's pooled textures instead of opening
+  them for every frame.
+- A frame copy that never finishes is treated as a lost graphics device instead of reusing a slot
+  the GPU may still be writing, and a late Windows fence signal can no longer cut the next wait
+  short.
+- A software paint with a rectangle beside the page no longer drops the whole paint, and capturing
+  a guest preview no longer blocks the window while its pixels come back from the GPU.
 - `Open DevTools` in development windows docks DevTools along the bottom of the window, on Linux
   too, instead of opening a separate Chromium window.
 - When a development build cannot compile its Sabine host, it uses the installed Sabine's host if

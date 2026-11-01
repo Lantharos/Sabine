@@ -90,8 +90,7 @@ void SabineOsrHandler::OnPopupShow(CefRefPtr<CefBrowser> browser, bool show) {
   if (GuestView* guest = GuestForBrowser(browser)) {
     if (!show) {
       const std::string popup_id = guest->id + "/popup";
-      SendMessage(kGuestHidden, 0, 0, guest->bounds.x + guest_popup_rect_.x,
-                  guest->bounds.y + guest_popup_rect_.y, popup_id.data(),
+      SendMessage(kGuestHidden, 0, 0, 0, 0, popup_id.data(),
                   static_cast<uint32_t>(popup_id.size()));
       guest_popup_rect_ = CefRect();
     }
@@ -110,8 +109,7 @@ void SabineOsrHandler::OnPopupSize(CefRefPtr<CefBrowser> browser,
         guest_popup_rect_.height != rect.height) {
       if (GuestView* guest = GuestForBrowser(browser)) {
         const std::string popup_id = guest->id + "/popup";
-        SendMessage(kGuestHidden, 0, 0, guest->bounds.x + guest_popup_rect_.x,
-                    guest->bounds.y + guest_popup_rect_.y, popup_id.data(),
+        SendMessage(kGuestHidden, 0, 0, 0, 0, popup_id.data(),
                     static_cast<uint32_t>(popup_id.size()));
       }
     }
@@ -160,15 +158,13 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
   if (view_hidden_ || !browser_ || !browser_->IsSame(browser)) {
     return;
   }
-#if defined(OS_LINUX)
   // Chromium hands over shared textures only while it composites on the GPU.
   // Software frames mean its GPU process is gone or was never usable, so no
   // shared frame will come and the window has to take these instead.
   if (accelerated_paint_ && type == PET_VIEW) {
-    accelerated_drop_reason_ = "Chromium paints without the GPU";
+    accelerated_drop_ = {sabine_osr::AcceleratedDropKind::kSoftwareFrames};
     ReportAcceleratedPaintUnavailable();
   }
-#endif
   const PaintSurface surface =
       type == PET_POPUP ? PaintSurface::kPopup : PaintSurface::kMain;
   const int32_t x = type == PET_POPUP ? popup_rect_.x : 0;
@@ -177,15 +173,15 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
     browser->GetHost()->Invalidate(PET_VIEW);
     return;
   }
-  RectList paint_rects = dirtyRects;
-  if (type == PET_VIEW &&
-      (width != last_main_paint_width_ || height != last_main_paint_height_)) {
-    paint_rects = {CefRect(0, 0, width, height)};
+  static const RectList kWholeFrame;
+  const bool resized = type == PET_VIEW && (width != last_main_paint_width_ ||
+                                            height != last_main_paint_height_);
+  if (resized) {
     last_main_paint_width_ = width;
     last_main_paint_height_ = height;
   }
   const bool sent = SendPaintBatch(surface, std::string(), x, y, buffer, width,
-                                   height, paint_rects);
+                                   height, resized ? kWholeFrame : dirtyRects);
   if (type == PET_VIEW) {
     CompleteResizeFrame(width, height);
   }

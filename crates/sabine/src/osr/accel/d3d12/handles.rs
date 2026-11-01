@@ -18,6 +18,11 @@ unsafe impl Send for SharedHandle {}
 unsafe impl Sync for SharedHandle {}
 
 impl SharedHandle {
+    /// Takes ownership of a handle the browser host opened in this process.
+    fn adopt(value: u64) -> Self {
+        Self(HANDLE(value as *mut std::ffi::c_void))
+    }
+
     pub(crate) fn raw(&self) -> HANDLE {
         self.0
     }
@@ -42,8 +47,8 @@ impl SharedHandles {
         announced: u64,
     ) -> Option<Arc<SharedHandle>> {
         if announced != 0 {
-            let handle = HANDLE(announced as *mut std::ffi::c_void);
-            self.0.insert(resource_id, Arc::new(SharedHandle(handle)));
+            self.0
+                .insert(resource_id, Arc::new(SharedHandle::adopt(announced)));
         }
         self.0.get(&resource_id).cloned()
     }

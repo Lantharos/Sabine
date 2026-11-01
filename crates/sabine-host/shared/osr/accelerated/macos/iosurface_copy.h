@@ -12,19 +12,20 @@ namespace sabine_osr {
 
 struct AccelIOSurfaceCopiedFrame {
   IOSurfaceRef surface = nullptr;
-  uint64_t surface_id = 0;
+  uint64_t resource_id = 0;
   uint32_t slot_index = 0;
   uint64_t slot_token = 0;
   uint32_t width = 0;
   uint32_t height = 0;
   // Surfaces this call replaced, whose compositor references can be dropped.
-  std::vector<uint64_t> retired_surface_ids;
+  std::vector<uint64_t> retired_resource_ids;
 };
 
 // CEF recycles its IOSurface as soon as OnAcceleratedPaint returns, so each
 // frame is copied on the GPU into a Sabine-owned surface that stays valid until
 // the compositor releases its slot. Only the pixels that changed since the
-// chosen slot last received a frame are copied.
+// chosen slot last received a frame are copied, and the copy has finished
+// when this returns.
 bool CopyAcceleratedIOSurfaceFrame(const AcceleratedSurfaceKey& surface,
                                    void* cef_io_surface,
                                    const PixelRegion& damage,

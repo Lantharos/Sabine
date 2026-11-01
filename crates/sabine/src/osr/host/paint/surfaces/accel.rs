@@ -1,7 +1,8 @@
 use crate::osr::protocol::{OsrAccelFrame, OsrSurface};
-use crate::render::{ExternalSlot, ImageId};
+use crate::render::{ExternalSlot, ImageId, RendererError};
 
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::types::SurfaceGeometry;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn update_accel_frame(&mut self, frame: OsrAccelFrame) -> bool {
@@ -20,7 +21,7 @@ impl OsrNativeHost {
                 let _ = writer.send(format!("accel_release\t{slot_token}\n"));
             }
         };
-        let geometry = self.accel_geometry(frame);
+        let geometry = accel_geometry(frame);
         if frame.surface == OsrSurface::Main && !self.fits_page(geometry) {
             self.note_rejected_main_frame(geometry.size());
             release_slot();
@@ -52,15 +53,18 @@ impl OsrNativeHost {
             (frame.visible_width, frame.visible_height),
             release_slot,
         );
+        #[cfg(target_os = "linux")]
+        if let (Ok(()), Some(dmabuf)) = (&installed, &frame.resource) {
+            use std::os::fd::AsFd;
+            renderer.wait_for_dmabuf(dmabuf.fd.as_fd());
+        }
         if let Err(error) = &installed {
-            #[cfg(target_os = "linux")]
-            let import_unsupported = matches!(error, crate::render::RendererError::Texture(_))
-                && !renderer.lost_device();
+            let import_unsupported =
+                matches!(error, RendererError::Texture(_)) && !renderer.lost_device();
             sabine_runtime::report_error(
                 "render",
                 format!("could not show a browser frame: {error}"),
             );
-            #[cfg(target_os = "linux")]
             if import_unsupported {
                 self.paint_in_software("the window could not import the browser's frames");
             }
@@ -73,7 +77,7 @@ impl OsrNativeHost {
     }
 
     fn note_accel_surface(&mut self, frame: &OsrAccelFrame) {
-        let geometry = self.accel_geometry(frame);
+        let geometry = accel_geometry(frame);
         let image = self.image_id(&frame.surface);
         if image == ImageId::Main {
             self.main_surface = Some(geometry);
@@ -85,13 +89,13 @@ impl OsrNativeHost {
             self.place_overlay(&image, geometry);
         }
     }
+}
 
-    fn accel_geometry(&self, frame: &OsrAccelFrame) -> crate::osr::host::types::SurfaceGeometry {
-        crate::osr::host::types::SurfaceGeometry {
-            x: frame.x,
-            y: frame.y,
-            width: frame.visible_width,
-            height: frame.visible_height,
-        }
+fn accel_geometry(frame: &OsrAccelFrame) -> SurfaceGeometry {
+    SurfaceGeometry {
+        x: frame.x,
+        y: frame.y,
+        width: frame.visible_width,
+        height: frame.visible_height,
     }
 }

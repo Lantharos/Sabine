@@ -1,9 +1,7 @@
 use std::io::Write;
-use std::sync::Arc;
 
 use crate::bridge::frame::Frame;
 use crate::osr::host::native::OsrNativeHost;
-use crate::render::ImageId;
 
 impl OsrNativeHost {
     /// Answers the page's bridge requests the window can answer itself, and
@@ -15,29 +13,6 @@ impl OsrNativeHost {
             let _ = output.write_all(&frame.to_bytes());
             let _ = output.flush();
         }
-    }
-
-    pub(super) fn capture_guest(&self, browser_id: &str, request_id: &str, guest_id: &str) {
-        let result = self
-            .renderer
-            .as_ref()
-            .zip(self.overlays.get_key_value(guest_id))
-            .and_then(|(renderer, (id, _))| {
-                renderer.read_bgra_image(&ImageId::Overlay(Arc::clone(id)))
-            })
-            .ok_or_else(|| "guest has no frame to capture".to_string())
-            .and_then(|frame| {
-                crate::osr::host::paint::guest_preview::guest_preview_data_url(
-                    &frame.bytes,
-                    frame.width,
-                    frame.height,
-                )
-            });
-        self.send_bridge_response(
-            browser_id,
-            request_id,
-            result.map(|data_url| serde_json::json!({ "dataUrl": data_url })),
-        );
     }
 
     pub(in crate::osr::host) fn send_bridge_response(

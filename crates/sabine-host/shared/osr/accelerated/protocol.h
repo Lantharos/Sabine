@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "include/cef_render_handler.h"
-
 constexpr uint32_t kMainAccel = 24;
 constexpr uint32_t kPopupAccel = 25;
 constexpr uint32_t kGuestAccel = 26;
@@ -34,13 +32,15 @@ struct AccelPaintMeta {
   uint64_t slot_token = 0;
 };
 
-std::string BuildAccelPayload(const std::string& guest_id,
-                              const AccelPaintMeta& meta);
-std::string BuildAccelRetirePayload(const std::vector<uint64_t>& resource_ids);
-std::string BuildDmabufAnnouncePayload(uint64_t resource_id,
-                                       uint64_t modifier,
-                                       uint32_t stride,
-                                       uint32_t offset);
+void BuildAccelPayload(const std::string& guest_id,
+                       const AccelPaintMeta& meta,
+                       std::vector<char>* payload);
+std::vector<char> BuildAccelRetirePayload(
+    const std::vector<uint64_t>& resource_ids);
+std::vector<char> BuildDmabufAnnouncePayload(uint64_t resource_id,
+                                             uint64_t modifier,
+                                             uint32_t stride,
+                                             uint32_t offset);
 
 }  // namespace sabine_osr
 

@@ -1,31 +1,24 @@
 use std::{collections::HashMap, sync::Arc};
 
 use thiserror::Error;
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 
-use crate::render::rect_pipeline::{
-    CUTOUT_BLENDING, Globals, create_image_pipeline, create_rounded_rect_pipeline, to_wgpu_color,
-};
+use crate::render::rect_pipeline::to_wgpu_color;
 use crate::render::{DisplayCommand, DisplayList, ImageId};
 
-mod external;
-mod geometry;
-mod health;
+mod device;
+mod draw;
 mod images;
-mod instance;
-mod readback;
-mod retirement;
 mod surface;
-mod text;
-mod vertex_buffer;
 
-pub(crate) use external::ExternalSlot;
+pub(crate) use images::ExternalSlot;
 
-use geometry::{Draw, FrameGeometry};
+use device::{health, instance, retirement};
+use draw::Pipelines;
+use draw::geometry::{Draw, FrameGeometry};
+use draw::text::TextRendererState;
+use draw::vertex_buffer::DynamicVertexBuffer;
 use surface::{select_present_mode, select_surface_alpha_mode};
-use text::TextRendererState;
-use vertex_buffer::DynamicVertexBuffer;
 
 #[derive(Debug, Error)]
 pub enum RendererError {
@@ -53,21 +46,16 @@ pub struct GpuRenderer {
     surface: wgpu::Surface<'static>,
     source: instance::SurfaceSource,
     surface_config: wgpu::SurfaceConfiguration,
-    pipeline: wgpu::RenderPipeline,
-    cutout_pipeline: Option<wgpu::RenderPipeline>,
-    image_pipeline: wgpu::RenderPipeline,
-    image_sampler: wgpu::Sampler,
-    image_bind_group_layout: wgpu::BindGroupLayout,
-    globals_buffer: wgpu::Buffer,
-    globals_bind_group_layout: wgpu::BindGroupLayout,
-    globals_bind_group: wgpu::BindGroup,
+    pipelines: Pipelines,
     rect_vertex_buffer: DynamicVertexBuffer,
     image_vertex_buffer: DynamicVertexBuffer,
     frame: FrameGeometry,
     text: Option<TextRendererState>,
     texture_cache: HashMap<ImageId, CachedTexture>,
     external_texture_releases: HashMap<ImageId, Box<dyn FnOnce() + Send + 'static>>,
-    external_imports: HashMap<ImageId, Vec<external::ImportedTexture>>,
+    external_imports: HashMap<ImageId, Vec<images::ImportedTexture>>,
+    #[cfg(target_os = "linux")]
+    producer_waits: Option<device::ProducerWaits>,
     submission_poller: retirement::SubmissionPoller,
     #[cfg(windows)]
     software_adapter: bool,
@@ -139,19 +127,7 @@ impl GpuRenderer {
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, RendererError> {
         let size = window.surface_size();
-        #[cfg(target_os = "linux")]
-        let required_features = adapter.features() & wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
-        #[cfg(not(target_os = "linux"))]
-        let required_features = wgpu::Features::empty();
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("sabine-gpu"),
-                required_features,
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                ..Default::default()
-            })
-            .await
-            .map_err(|error| RendererError::Device(error.to_string()))?;
+        let (device, queue) = request_device(&adapter).await?;
 
         let health = health::DeviceHealth::watch(&device, wake);
         let submission_poller = retirement::SubmissionPoller::new(&device, &queue, health.clone())?;
@@ -196,92 +172,22 @@ impl GpuRenderer {
         surface.configure(&device, &surface_config);
         #[cfg(windows)]
         source.commit();
-
-        let globals_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("sabine globals"),
-            contents: bytemuck::cast_slice(&[Globals {
-                viewport: [surface_config.width as f32, surface_config.height as f32],
-                _padding: [0.0, 0.0],
-            }]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let globals_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("sabine globals bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-        let globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sabine globals bind group"),
-            layout: &globals_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals_buffer.as_entire_binding(),
-            }],
-        });
-        let pipeline = create_rounded_rect_pipeline(
+        let pipelines = Pipelines::new(
             &device,
             format,
-            &globals_bind_group_layout,
-            wgpu::BlendState::ALPHA_BLENDING,
+            [surface_config.width as f32, surface_config.height as f32],
         );
-        let image_pipeline = create_image_pipeline(&device, format, &globals_bind_group_layout);
-        let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("sabine image sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            ..Default::default()
-        });
-        let image_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("sabine image per-texture bind group layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
 
         Ok(Self {
             instance,
             health,
+            #[cfg(target_os = "linux")]
+            producer_waits: device::ProducerWaits::new(&device, &queue),
             device,
             queue,
             surface,
             surface_config,
-            pipeline,
-            cutout_pipeline: None,
-            image_pipeline,
-            image_sampler,
-            image_bind_group_layout,
-            globals_buffer,
-            globals_bind_group_layout,
-            globals_bind_group,
+            pipelines,
             rect_vertex_buffer: DynamicVertexBuffer::default(),
             image_vertex_buffer: DynamicVertexBuffer::default(),
             frame: FrameGeometry::default(),
@@ -323,7 +229,6 @@ impl GpuRenderer {
 
     /// Whether a failure came from a lost device. A loss is only reported
     /// once wgpu next waits on the device, so this polls it first.
-    #[cfg(target_os = "linux")]
     pub(crate) fn lost_device(&self) -> bool {
         let _ = self.device.poll(wgpu::PollType::Poll);
         self.device_loss().is_some()
@@ -345,16 +250,12 @@ impl GpuRenderer {
 
     pub fn render(&mut self, display_list: &DisplayList) -> Result<(), RendererError> {
         self.check_device()?;
-        self.queue.write_buffer(
-            &self.globals_buffer,
-            0,
-            bytemuck::cast_slice(&[Globals {
-                viewport: [
-                    self.surface_config.width as f32,
-                    self.surface_config.height as f32,
-                ],
-                _padding: [0.0, 0.0],
-            }]),
+        self.pipelines.set_viewport(
+            &self.queue,
+            [
+                self.surface_config.width as f32,
+                self.surface_config.height as f32,
+            ],
         );
         let mut frame = std::mem::take(&mut self.frame);
         let result = self.render_frame(display_list, &mut frame);
@@ -368,13 +269,8 @@ impl GpuRenderer {
         geometry: &mut FrameGeometry,
     ) -> Result<(), RendererError> {
         self.collect_geometry(display_list, geometry);
-        if geometry.has_cutouts() && self.cutout_pipeline.is_none() {
-            self.cutout_pipeline = Some(create_rounded_rect_pipeline(
-                &self.device,
-                self.surface_config.format,
-                &self.globals_bind_group_layout,
-                CUTOUT_BLENDING,
-            ));
+        if geometry.has_cutouts() {
+            self.pipelines.prepare_cutouts(&self.device);
         }
         let has_text = display_list
             .commands
@@ -437,17 +333,14 @@ impl GpuRenderer {
                 multiview_mask: None,
             });
 
-            pass.set_bind_group(0, &self.globals_bind_group, &[]);
+            pass.set_bind_group(0, &self.pipelines.globals_bind_group, &[]);
             for draw in &geometry.draws {
                 match draw {
                     Draw::Rects { vertices, cutout } => {
                         let Some(vertex_buffer) = &rect_vertex_buffer else {
                             continue;
                         };
-                        pass.set_pipeline(match &self.cutout_pipeline {
-                            Some(cutout_pipeline) if *cutout => cutout_pipeline,
-                            _ => &self.pipeline,
-                        });
+                        pass.set_pipeline(self.pipelines.rects(*cutout));
                         pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         pass.draw(vertices.clone(), 0..1);
                     }
@@ -455,7 +348,7 @@ impl GpuRenderer {
                         let Some(vertex_buffer) = &image_vertex_buffer else {
                             continue;
                         };
-                        pass.set_pipeline(&self.image_pipeline);
+                        pass.set_pipeline(&self.pipelines.image);
                         pass.set_bind_group(1, &image.bind_group, &[]);
                         pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         pass.draw(image.vertices.clone(), 0..1);
@@ -469,12 +362,46 @@ impl GpuRenderer {
         }
 
         self.queue.submit(Some(encoder.finish()));
+        #[cfg(target_os = "linux")]
+        if self
+            .producer_waits
+            .as_mut()
+            .is_some_and(device::ProducerWaits::submitted)
+        {
+            self.submission_poller.notify();
+        }
         self.window.pre_present_notify();
         self.queue.present(frame);
         if let Some(text) = &mut self.text {
             text.trim();
         }
         Ok(())
+    }
+}
+
+async fn request_device(
+    adapter: &wgpu::Adapter,
+) -> Result<(wgpu::Device, wgpu::Queue), RendererError> {
+    #[cfg(target_os = "linux")]
+    let required_features = adapter.features() & wgpu::Features::VULKAN_EXTERNAL_MEMORY_DMA_BUF;
+    #[cfg(not(target_os = "linux"))]
+    let required_features = wgpu::Features::empty();
+    let descriptor = wgpu::DeviceDescriptor {
+        label: Some("sabine-gpu"),
+        required_features,
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        ..Default::default()
+    };
+    #[cfg(target_os = "linux")]
+    {
+        device::open_device(adapter, &descriptor).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        adapter
+            .request_device(&descriptor)
+            .await
+            .map_err(|error| RendererError::Device(error.to_string()))
     }
 }
 

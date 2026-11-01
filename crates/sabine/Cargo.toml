@@ -49,6 +49,7 @@ serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+ash.workspace = true
 glow.workspace = true
 khronos-egl.workspace = true
 landlock.workspace = true

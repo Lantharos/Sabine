@@ -149,11 +149,12 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
       viewport, policy, command_line->HasSwitch("sabine-dev-mode"), transparent,
       command_line->HasSwitch("sabine-retain-hidden-frame")));
   handler->UseProfile(profile, shared_texture);
+  handler->UseAcceleratedPaint(shared_texture);
 #if defined(OS_MAC)
   handler->UseSurfaceService(
       command_line->GetSwitchValue("sabine-surface-service"));
-#elif defined(OS_LINUX)
-  handler->UseAcceleratedPaint(shared_texture);
+#elif defined(OS_WIN)
+  handler->UseParentProcess(SwitchInt(command_line, "sabine-parent-pid", 0));
 #endif
   return CefBrowserHost::CreateBrowser(
       window_info, handler, url, browser_settings, policy, profile.context);

@@ -147,6 +147,7 @@ fn shared_slot_is_mapped_once_and_released_after_use() {
     let mut metadata = Vec::new();
     metadata.extend_from_slice(&3_u32.to_le_bytes());
     metadata.extend_from_slice(&1_u32.to_le_bytes());
+    metadata.extend_from_slice(&0_u64.to_le_bytes());
     metadata.extend(paint_entries(&[(0, 0, 1, 1, 0)]));
     send_with_fd(
         &connection,
@@ -161,6 +162,7 @@ fn shared_slot_is_mapped_once_and_released_after_use() {
     let mut metadata = Vec::new();
     metadata.extend_from_slice(&3_u32.to_le_bytes());
     metadata.extend_from_slice(&1_u32.to_le_bytes());
+    metadata.extend_from_slice(&0_u64.to_le_bytes());
     metadata.extend(paint_entries(&[(1, 0, 1, 1, 4)]));
     send(
         &mut connection,
@@ -188,6 +190,7 @@ fn shared_batch_for_unknown_slot_generation_is_rejected() {
     let mut metadata = Vec::new();
     metadata.extend_from_slice(&0_u32.to_le_bytes());
     metadata.extend_from_slice(&2_u32.to_le_bytes());
+    metadata.extend_from_slice(&0_u64.to_le_bytes());
     metadata.extend(paint_entries(&[(0, 0, 1, 1, 0)]));
     send(
         &mut connection,

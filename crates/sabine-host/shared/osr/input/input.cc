@@ -66,14 +66,12 @@ void SabineOsrHandler::HandleControlLine(
     dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;
   }
-#if !defined(OS_WIN)
   if (parts.size() == 3 && parts[0] == "paint_release") {
     ReleaseSharedPaint(
         static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
         static_cast<uint32_t>(std::strtoul(parts[2].c_str(), nullptr, 10)));
     return;
   }
-#endif
   if (parts.empty() || !browser_) {
     return;
   }

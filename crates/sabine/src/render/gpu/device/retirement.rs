@@ -4,7 +4,8 @@ use std::{
     time::Duration,
 };
 
-use super::{RendererError, health::DeviceHealth};
+use super::health::DeviceHealth;
+use crate::render::RendererError;
 
 /// Waits for submitted GPU work off the render thread, so release callbacks
 /// run as soon as the GPU is done with a frame.
@@ -13,13 +14,13 @@ use super::{RendererError, health::DeviceHealth};
 /// Dropping the poller waits for the thread, so the device is destroyed
 /// before the renderer is gone: graphics drivers tear down their own state
 /// when the process exits and crash if a device is destroyed meanwhile.
-pub(super) struct SubmissionPoller {
+pub(in crate::render::gpu) struct SubmissionPoller {
     wake: Option<mpsc::SyncSender<()>>,
     worker: Option<thread::JoinHandle<()>>,
 }
 
 impl SubmissionPoller {
-    pub(super) fn new(
+    pub(in crate::render::gpu) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         health: Arc<DeviceHealth>,
@@ -47,7 +48,7 @@ impl SubmissionPoller {
         })
     }
 
-    pub(super) fn notify(&self) {
+    pub(in crate::render::gpu) fn notify(&self) {
         if let Some(wake) = &self.wake {
             let _ = wake.try_send(());
         }

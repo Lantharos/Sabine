@@ -5,15 +5,6 @@
 const char kSabinePopupGuestId[] = "__sabine_popup";
 const char kSabineDevToolsGuestId[] = "__sabine_devtools";
 
-std::string GuestPayloadPrefix(const std::string& id) {
-  std::string prefix;
-  const size_t length = std::min<size_t>(id.size(), 0xffff);
-  prefix += static_cast<char>(length & 0xff);
-  prefix += static_cast<char>((length >> 8) & 0xff);
-  prefix.append(id, 0, length);
-  return prefix;
-}
-
 GuestView* GuestRegistry::Find(const std::string& id) {
   if (id.empty()) {
     return nullptr;

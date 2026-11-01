@@ -5,7 +5,6 @@
 #include <mach/mach.h>
 
 #include <cstdint>
-#include <set>
 #include <string>
 
 namespace sabine_osr {
@@ -26,8 +25,8 @@ struct SurfaceMessage {
 static_assert(sizeof(SurfaceMessage) == 120,
               "the native window host reads this exact layout");
 
-// Hands each Sabine-owned IOSurface to the native window host once, over the
-// mach service it registered for this window, before frames reference it.
+// Hands Sabine-owned IOSurfaces to the native window host, over the mach
+// service it registered for this window, before frames reference them.
 class SurfaceBroker {
  public:
   SurfaceBroker(std::string service_name, std::string token);
@@ -44,7 +43,6 @@ class SurfaceBroker {
   std::string service_name_;
   std::string token_;
   mach_port_t service_ = MACH_PORT_NULL;
-  std::set<uint64_t> announced_;
 };
 
 }  // namespace sabine_osr
