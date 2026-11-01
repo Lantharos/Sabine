@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use sabine_bridge::{BridgeEvent, Bytes};
 use sabine_platform::WindowRegions;
@@ -71,20 +71,17 @@ impl BridgeEventEmitter {
     }
 
     pub(crate) fn attach(&self, window: WindowId, writer: BridgeWriter) {
-        let square_corners = self.square_corners.lock();
-        if square_corners.as_deref().is_ok_and(|square| *square) {
-            writer.send(Frame::encode(&square_corners_control(true), None).into());
+        let square_corners = lock(&self.square_corners);
+        if *square_corners {
+            writer.send(Frame::shared(&square_corners_control(true), None));
         }
-        if let Ok(mut targets) = self.targets.lock() {
-            targets.retain(|target| target.window != window);
-            targets.push(BridgeTarget { window, writer });
-        }
+        let mut targets = lock(&self.targets);
+        targets.retain(|target| target.window != window);
+        targets.push(BridgeTarget { window, writer });
     }
 
     pub(crate) fn detach(&self, window: WindowId) {
-        if let Ok(mut targets) = self.targets.lock() {
-            targets.retain(|target| target.window != window);
-        }
+        lock(&self.targets).retain(|target| target.window != window);
     }
 
     pub fn set_visible(&self, visible: bool) -> bool {
@@ -123,9 +120,7 @@ impl BridgeEventEmitter {
     /// opened later follow it too. Windows that are maximized, fullscreen or
     /// tiled have square corners either way.
     pub fn set_square_corners(&self, square: bool) -> bool {
-        let Ok(mut current) = self.square_corners.lock() else {
-            return false;
-        };
+        let mut current = lock(&self.square_corners);
         *current = square;
         self.deliver(None, square_corners_control(square), None)
     }
@@ -200,15 +195,12 @@ impl BridgeEventEmitter {
     }
 
     fn deliver(&self, window: Option<WindowId>, line: String, body: Option<&[u8]>) -> bool {
-        let writers = match self.targets.lock() {
-            Ok(targets) => targets
-                .iter()
-                .filter(|target| window.is_none_or(|window| window == target.window))
-                .map(|target| (target.window, target.writer.clone()))
-                .collect::<Vec<_>>(),
-            Err(_) => return false,
-        };
-        let frame: Arc<[u8]> = Frame::encode(&line, body).into();
+        let writers = lock(&self.targets)
+            .iter()
+            .filter(|target| window.is_none_or(|window| window == target.window))
+            .map(|target| (target.window, target.writer.clone()))
+            .collect::<Vec<_>>();
+        let frame = Frame::shared(&line, body);
         let mut delivered = false;
         for (window, writer) in writers {
             if writer.send(Arc::clone(&frame)) {
@@ -242,8 +234,14 @@ fn square_corners_control(square: bool) -> String {
 }
 
 fn event_line(name: &str, payload: &serde_json::Value) -> String {
-    let name = serde_json::to_string(name).unwrap_or_else(|_| "\"event\"".to_string());
-    format!("SABINE_BRIDGE_EVENT\t{name}\t{payload}")
+    format!(
+        "SABINE_BRIDGE_EVENT\t{}\t{payload}",
+        serde_json::Value::from(name)
+    )
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|error| error.into_inner())
 }
 
 #[cfg(all(test, unix))]

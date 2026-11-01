@@ -1,7 +1,10 @@
 //! Bridge messages between the app, its windows and the browser host: one
 //! line each, which may carry raw bytes after it.
 
-use std::io::{self, BufRead, Read};
+use std::{
+    io::{self, BufRead, Read},
+    sync::Arc,
+};
 
 /// Starts a line whose message carries bytes: `SABINE_BRIDGE_BYTES\t<length>\t<message>`,
 /// with `<length>` bytes following its newline.
@@ -23,12 +26,23 @@ impl Frame {
     }
 
     pub(crate) fn encode(line: &str, body: Option<&[u8]>) -> Vec<u8> {
-        let Some(body) = body else {
-            return format!("{line}\n").into_bytes();
-        };
-        let mut frame = format!("{BYTES_PREFIX}{}\t{line}\n", body.len()).into_bytes();
-        frame.extend_from_slice(body);
-        frame
+        with_parts(line, body, |parts| parts.concat())
+    }
+
+    /// Encodes a message straight into the buffer every window it goes to
+    /// shares, copying its line and bytes once.
+    pub(crate) fn shared(line: &str, body: Option<&[u8]>) -> Arc<[u8]> {
+        with_parts(line, body, |parts| {
+            let mut frame =
+                Arc::<[u8]>::new_uninit_slice(parts.iter().map(|part| part.len()).sum());
+            let mut free = Arc::get_mut(&mut frame).expect("a new frame has no other owner");
+            for part in parts {
+                let (filled, rest) = free.split_at_mut(part.len());
+                filled.write_copy_of_slice(part);
+                free = rest;
+            }
+            unsafe { frame.assume_init() }
+        })
     }
 
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
@@ -74,6 +88,20 @@ impl Frame {
             body: Some(body),
         })
     }
+}
+
+/// The pieces of a message in order: the bytes header when it carries
+/// bytes, its line, the newline and its bytes.
+fn with_parts<T>(line: &str, body: Option<&[u8]>, encode: impl FnOnce([&[u8]; 4]) -> T) -> T {
+    let header = body
+        .map(|body| format!("{BYTES_PREFIX}{}\t", body.len()))
+        .unwrap_or_default();
+    encode([
+        header.as_bytes(),
+        line.as_bytes(),
+        b"\n",
+        body.unwrap_or_default(),
+    ])
 }
 
 fn split_bytes_header(line: &str) -> io::Result<Option<(usize, &str)>> {
@@ -128,6 +156,16 @@ mod tests {
         let frame = Frame::decode(&bytes).unwrap();
         assert_eq!(frame.line, "SABINE_BRIDGE_REQUEST\t1\t2\t\tsave\t{}");
         assert_eq!(frame.body.as_deref(), Some(b"data".as_slice()));
+    }
+
+    #[test]
+    fn shared_frames_match_encoded_ones() {
+        let line = "SABINE_BRIDGE_EVENT\t\"a\"\tnull";
+        assert_eq!(*Frame::shared(line, None), *Frame::encode(line, None));
+        assert_eq!(
+            *Frame::shared(line, Some(b"data")),
+            *Frame::encode(line, Some(b"data"))
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::{panic::AssertUnwindSafe, thread};
+use std::{panic::AssertUnwindSafe, sync::Arc, thread};
 
 use futures_util::FutureExt;
 use sabine_bridge::{BridgeCommand, BridgeError, BridgeFuture, BridgeOutcome, BridgeResult};
@@ -57,7 +57,7 @@ struct BridgeIpcResponse {
 }
 
 impl BridgeIpcResponse {
-    fn into_frame(self) -> Vec<u8> {
+    fn into_frame(self) -> Arc<[u8]> {
         let ReplyTo { browser_id, id } = self.reply;
         let (status, payload, body) = match self.result {
             Ok(response) => ("ok", response.result, response.body),
@@ -68,7 +68,7 @@ impl BridgeIpcResponse {
             ),
         };
         let line = format!("SABINE_BRIDGE_RESPONSE\t{browser_id}\t{id}\t{status}\t{payload}");
-        Frame::encode(&line, body.as_deref())
+        Frame::shared(&line, body.as_deref())
     }
 }
 
@@ -132,7 +132,7 @@ impl BridgeRequestDispatcher {
 
         thread::spawn(move || {
             while let Ok(response) = response_receiver.recv() {
-                if !writer.send(response.into_frame().into()) {
+                if !writer.send(response.into_frame()) {
                     break;
                 }
             }
