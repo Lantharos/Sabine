@@ -1,7 +1,5 @@
 use std::time::{Duration, Instant};
 
-use winit::event_loop::{ActiveEventLoop, ControlFlow};
-
 use crate::osr::host::{native::OsrNativeHost, types::LifecycleState};
 
 impl OsrNativeHost {
@@ -45,37 +43,23 @@ impl OsrNativeHost {
         self.proxy.wake_up();
     }
 
-    pub(in crate::osr::host) fn drive_recovery(
-        &mut self,
-        event_loop: &dyn ActiveEventLoop,
-    ) -> bool {
-        if self.failure.is_some() {
-            self.force_close(event_loop);
-            return true;
-        }
+    /// Starts the browser again once its restart is due, and gives up on a
+    /// browser that never connects.
+    pub(in crate::osr::host) fn drive_recovery(&mut self) -> Option<Instant> {
         if let Some(deadline) = self.recovery_deadline {
-            if Instant::now() >= deadline {
-                self.recovery_deadline = None;
-                self.launch_child();
-            } else {
-                event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-                return true;
+            if Instant::now() < deadline {
+                return Some(deadline);
             }
+            self.recovery_deadline = None;
+            self.launch_child();
         }
-        if self.awaiting_connection
-            && let Some(deadline) = self.connection_deadline
-        {
-            if Instant::now() >= deadline {
-                self.fail(
-                    "The browser did not connect to its window within 30 seconds.".to_string(),
-                );
-                self.force_close(event_loop);
-                return true;
-            }
-            event_loop.set_control_flow(ControlFlow::WaitUntil(
-                deadline.min(Instant::now() + Duration::from_millis(100)),
-            ));
+        let deadline = self
+            .connection_deadline
+            .filter(|_| self.awaiting_connection)?;
+        if Instant::now() < deadline {
+            return Some(deadline);
         }
-        false
+        self.fail("The browser did not connect to its window within 30 seconds.".to_string());
+        None
     }
 }

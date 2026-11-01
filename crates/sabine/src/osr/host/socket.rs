@@ -55,18 +55,10 @@ impl ReaderState {
         self.stopped.load(Ordering::Acquire)
     }
 
-    fn send(&self, sender: &mpsc::SyncSender<OsrHostEvent>, mut event: OsrHostEvent) -> bool {
-        while !self.stopped() {
-            match sender.try_send(event) {
-                Ok(()) => return true,
-                Err(mpsc::TrySendError::Disconnected(_)) => return false,
-                Err(mpsc::TrySendError::Full(pending)) => {
-                    event = pending;
-                    thread::sleep(Duration::from_millis(10));
-                }
-            }
-        }
-        false
+    /// Hands the window an event, waiting while it catches up with earlier
+    /// ones. A reader the window stopped hands it nothing more.
+    fn send(&self, sender: &mpsc::SyncSender<OsrHostEvent>, event: OsrHostEvent) -> bool {
+        !self.stopped() && sender.send(event).is_ok()
     }
 }
 

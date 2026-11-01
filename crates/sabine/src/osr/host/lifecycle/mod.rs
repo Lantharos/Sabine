@@ -1,3 +1,4 @@
+mod browser;
 mod deadlines;
 #[cfg(target_os = "linux")]
 mod reconnect;
@@ -7,7 +8,6 @@ pub(super) mod visibility;
 
 use std::time::Instant;
 
-use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::monitor::MonitorHandle;
 
 use crate::osr::protocol::encode_component;
@@ -88,24 +88,17 @@ impl OsrNativeHost {
         self.sync_lifecycle(reason);
     }
 
-    pub(in crate::osr::host) fn drive_pending_suspend(
-        &mut self,
-        event_loop: &dyn ActiveEventLoop,
-    ) -> bool {
-        let Some(deadline) = self.pending_suspend_at else {
-            return false;
-        };
+    pub(in crate::osr::host) fn drive_pending_suspend(&mut self) -> Option<Instant> {
+        let deadline = self.pending_suspend_at?;
         if !self.should_suspend() {
             self.pending_suspend_at = None;
-            return false;
+            return None;
         }
-        if Instant::now() >= deadline {
-            self.pending_suspend_at = None;
-            self.suspend("debounced");
-            return false;
+        if Instant::now() < deadline {
+            return Some(deadline);
         }
-        event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-        true
+        self.suspend("debounced");
+        None
     }
 
     pub(in crate::osr::host) fn suspend(&mut self, reason: &str) {

@@ -98,7 +98,8 @@ pub(super) enum OsrHostEvent {
     Disconnected(u64),
     IncompatibleHost(u64),
     FileDialogClosed(u64, u32, Option<Vec<std::path::PathBuf>>),
-    #[cfg(target_os = "linux")]
+    /// The window's own Chromium of a connection exited.
+    BrowserExited(u64, std::process::ExitStatus),
     RendererStarted(
         u64,
         Box<Result<crate::render::GpuRenderer, crate::render::RendererError>>,
@@ -120,9 +121,9 @@ impl OsrHostEvent {
             | Self::FileDialogClosed(generation, ..) => Some(*generation),
             #[cfg(target_os = "linux")]
             Self::SharedRuntimeOpened(generation, _) => Some(*generation),
-            Self::HostControl(_) => None,
+            Self::HostControl(_) | Self::BrowserExited(..) | Self::RendererStarted(..) => None,
             #[cfg(target_os = "linux")]
-            Self::RendererStarted(..) | Self::DirectPresentation(..) => None,
+            Self::DirectPresentation(..) => None,
         }
     }
 }

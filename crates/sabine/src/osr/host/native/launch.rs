@@ -162,7 +162,7 @@ impl OsrNativeHost {
             self.surface_broker = Some(surface_broker);
         }
         if let Some(child) = child {
-            self.children.push((generation, child));
+            self.watch_browser(generation, child);
         }
     }
 
@@ -219,52 +219,18 @@ impl OsrNativeHost {
         self.shared_runtime_refused = true;
         self.browser_shared = false;
         match command.spawn() {
-            Ok(child) => self.children.push((generation, child)),
+            Ok(child) => self.watch_browser(generation, child),
             Err(error) => self.fail(format!("Could not launch the browser: {error}")),
         }
-    }
-
-    /// Handles a browser that speaks another version of Sabine's protocol,
-    /// and returns whether the window has to close. A shared runtime started
-    /// from another build is left for the app's own Chromium. The app's own
-    /// Chromium either is that browser, from a Sabine host the app does not
-    /// match, or handed the window to the Chromium of another copy of the app
-    /// that holds the app's profile.
-    pub(in crate::osr::host) fn refuse_incompatible_browser(&mut self) -> bool {
-        self.drop_connection();
-        self.awaiting_connection = false;
-        #[cfg(target_os = "linux")]
-        if self.browser_shared {
-            sabine_runtime::report_error(
-                "window",
-                "the shared runtime runs another version of Sabine, so the app starts its own",
-            );
-            self.shared_runtime_refused = true;
-            self.launch_child();
-            return false;
-        }
-        let name = self.config.title.clone();
-        let message = if self.browser_handed_off() {
-            format!(
-                "{name} is already open with another version of Sabine. Close it, then open {name} again."
-            )
-        } else {
-            format!(
-                "This version of {name} needs another version of Sabine. Update Sabine, then open {name} again."
-            )
-        };
-        self.fail(message);
-        true
     }
 
     /// Closes the browser and starts it again, so it picks up how the window
     /// paints now.
     #[cfg(any(windows, target_os = "linux"))]
     pub(in crate::osr::host) fn relaunch_browser(&mut self) {
-        if self.socket.is_none() && !self.awaiting_connection {
+        if !self.browser_attached() {
             return;
         }
-        self.send_control("close\n");
         self.drop_connection();
         self.awaiting_connection = false;
         self.connection_deadline = None;

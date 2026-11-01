@@ -1,97 +1,47 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
 use crate::osr::host::native::OsrNativeHost;
 
 impl OsrNativeHost {
+    /// Runs whatever is due, and sleeps until the soonest thing that is not.
     pub(in crate::osr::host) fn drive_deadlines(&mut self, event_loop: &dyn ActiveEventLoop) {
-        event_loop.set_control_flow(ControlFlow::Wait);
-        let mut handoff = false;
-        let mut exited = Vec::new();
-        self.children
-            .retain_mut(|(generation, child)| match child.try_wait() {
-                Ok(Some(status)) => {
-                    if *generation != self.connection_generation {
-                        return false;
-                    }
-                    if status.code() == Some(CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED) {
-                        handoff = true;
-                    } else {
-                        exited.push(status);
-                    }
-                    false
-                }
-                Ok(None) | Err(_) => true,
-            });
+        let next = self.next_deadline(event_loop);
+        event_loop.set_control_flow(next.map_or(ControlFlow::Wait, ControlFlow::WaitUntil));
+    }
+
+    fn next_deadline(&mut self, event_loop: &dyn ActiveEventLoop) -> Option<Instant> {
         if let Some(deadline) = self.closing_deadline {
-            if Instant::now() >= deadline {
-                self.force_close(event_loop);
-                return;
+            if Instant::now() < deadline {
+                return Some(deadline);
             }
-            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-            return;
+            self.force_close(event_loop);
+            return None;
         }
-        if handoff {
-            self.cef_handed_off = true;
-            self.handoff_deadline =
-                Some(Instant::now() + Duration::from_secs(HANDOFF_CONNECT_TIMEOUT_SECS));
-            crate::osr::host::trace_host(&self.config, "cef.handed_off.waiting_for_primary");
+        let connection = [
+            self.drive_recovery(),
+            self.drive_handoff(),
+            self.drive_incompatible_browser(),
+        ];
+        if self.failure.is_some() {
+            self.force_close(event_loop);
+            return None;
         }
-        if !exited.is_empty() && self.socket.is_none() {
-            self.awaiting_connection = false;
-            for status in exited {
-                sabine_runtime::report_error(
-                    "window",
-                    format!("the browser exited ({status}); restarting it"),
-                );
-            }
-            self.begin_recovery();
-        }
-        if self.drive_recovery(event_loop) {
-            return;
-        }
-        if self.drive_pending_suspend(event_loop) {
-            return;
-        }
-        let loading_deadline = self.drive_loading();
-        let tooltip_deadline = self.drive_tooltip();
-        let first_frame_deadline = self.watch_first_frame();
-        let reveal_deadline = self.watch_reveal_hold();
-        if self.drive_resize_paint(event_loop) {
-            return;
-        }
-        let freeze_deadline = self.drive_freeze();
-        if self.cef_handed_off && self.socket.is_none() {
-            let deadline = *self.handoff_deadline.get_or_insert_with(|| {
-                Instant::now() + Duration::from_secs(HANDOFF_CONNECT_TIMEOUT_SECS)
-            });
-            if Instant::now() >= deadline {
-                self.fail(format!("The shared browser did not connect within {HANDOFF_CONNECT_TIMEOUT_SECS} seconds."));
-                self.force_close(event_loop);
-                return;
-            }
-            event_loop.set_control_flow(ControlFlow::WaitUntil(
-                loading_deadline
-                    .unwrap_or_else(|| Instant::now() + Duration::from_millis(250))
-                    .min(deadline),
-            ));
-            return;
-        }
-        if self.cef_handed_off && self.socket.is_some() {
-            self.handoff_deadline = None;
-        }
-        if let Some(deadline) = loading_deadline
+        connection
             .into_iter()
-            .chain(tooltip_deadline)
-            .chain(first_frame_deadline)
-            .chain(reveal_deadline)
-            .chain(freeze_deadline)
-            .chain(self.gpu_reconnect_deadline())
+            .chain([
+                self.drive_pending_suspend(),
+                self.drive_loading(),
+                self.drive_tooltip(),
+                self.watch_first_frame(),
+                self.watch_reveal_hold(),
+                self.drive_resize_paint(),
+                self.drive_freeze(),
+                self.gpu_reconnect_deadline(),
+            ])
+            .flatten()
             .min()
-        {
-            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-        }
     }
 
     fn drive_freeze(&mut self) -> Option<Instant> {
@@ -104,41 +54,3 @@ impl OsrNativeHost {
         None
     }
 }
-
-impl OsrNativeHost {
-    /// Whether the window's own Chromium handed the window to another
-    /// Chromium that holds the app's profile. Chromium exits right after the
-    /// handoff, so this waits for it briefly.
-    pub(in crate::osr::host) fn browser_handed_off(&mut self) -> bool {
-        let deadline = Instant::now() + HANDOFF_EXIT_TIMEOUT;
-        let generation = self.connection_generation;
-        while !self.cef_handed_off {
-            let mut running = false;
-            for (_, child) in self
-                .children
-                .iter_mut()
-                .filter(|(child_generation, _)| *child_generation == generation)
-            {
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        self.cef_handed_off |=
-                            status.code() == Some(CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED);
-                    }
-                    Ok(None) => running = true,
-                    Err(_) => {}
-                }
-            }
-            if !running || Instant::now() >= deadline {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        self.cef_handed_off
-    }
-}
-
-/// CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED — second process for the same
-/// root_cache_path notified the primary and exited.
-const CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED: i32 = 24;
-const HANDOFF_CONNECT_TIMEOUT_SECS: u64 = 15;
-const HANDOFF_EXIT_TIMEOUT: Duration = Duration::from_secs(1);
