@@ -10,28 +10,24 @@
 //! a CEF runtime. Process launch and window wiring stay in the `sabine` crate.
 
 use std::{
-    io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    process::Command,
 };
 
-use serde::Deserialize;
-
 mod build_lock;
-mod protocol;
-mod sources;
-pub use protocol::{HOST_PROTOCOL_VERSION, validate_host_protocol};
+mod compile;
+mod installed;
 #[cfg(target_os = "macos")]
 mod macos_execution;
+mod probe;
+mod protocol;
+mod sources;
 mod toolchain;
 #[cfg(target_os = "windows")]
 mod windows_execution;
 
-use build_lock::HostBuildLock;
-use sources::write_host_source;
-use toolchain::apply_cmake_generator;
+pub use probe::smoke_test_runtime;
+pub use protocol::{HOST_PROTOCOL_VERSION, validate_host_protocol};
 
 const RUNTIME_PROBE_VERSION: u32 = 6;
 
@@ -43,109 +39,30 @@ fn host_binary_name() -> &'static str {
     }
 }
 
-fn host_release_binary(runtime_dir: &Path) -> PathBuf {
-    let root = runtime_dir
-        .join(".sabine-hosts")
-        .join(host_source_fingerprint());
-    if cfg!(target_os = "macos") {
-        root.join("sabine-host.app/Contents/MacOS/sabine-host")
-    } else {
-        root.join(host_binary_name())
-    }
-}
-
-/// CMake strings treat backslashes as escapes, so `\U` in a Windows path would
-/// break CEF's build macros.
-fn to_cmake_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
+/// The host for a CEF runtime: the one Sabine was handed or ships, a host
+/// compiled from the runtime's SDK, or the installed Sabine's when compiling
+/// isn't possible or fails.
 pub fn ensure_host(runtime_dir: &Path) -> Result<PathBuf, String> {
     sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
     if let Some(host) = available_host(runtime_dir) {
         validate_host_protocol(&host, runtime_dir)?;
         return Ok(host);
     }
-    let binary = host_release_binary(runtime_dir);
-    let expected_stamp = host_source_fingerprint();
-    let work_dir = runtime_dir.join(".sabine-host-build").join(&expected_stamp);
-    let source_dir = work_dir.join("src");
-    let build_dir = work_dir.join("build");
-    if host_is_complete(&binary) {
-        return Ok(binary);
-    }
-    let _lock = HostBuildLock::acquire(runtime_dir)?;
-    if host_is_complete(&binary) {
-        return Ok(binary);
-    }
-    let missing = [
-        ("cmake", runtime_dir.join("cmake").is_dir()),
-        ("include", runtime_dir.join("include").is_dir()),
-        (
-            "include/cef_version.h",
-            runtime_dir.join("include").join("cef_version.h").is_file(),
-        ),
-        ("libcef_dll", runtime_dir.join("libcef_dll").is_dir()),
-    ]
-    .into_iter()
-    .filter_map(|(name, ok)| (!ok).then_some(name))
-    .collect::<Vec<_>>();
-    if (!missing.is_empty() || sabine_runtime::find_program("cmake").is_none())
-        && let Some(host) = installed_host()
-    {
-        validate_host_protocol(&host, runtime_dir)?;
-        return Ok(host);
-    }
-    if !missing.is_empty() {
+    let compile_error = match compile::compile_host(runtime_dir) {
+        Ok(host) => return Ok(host),
+        Err(error) => error,
+    };
+    let Some(host) = installed::installed_host() else {
         return Err(format!(
-            "CEF runtime at {} does not contain the build SDK (missing {}). \
-Use a Minimal or Standard CEF SDK to compile sabine-host; packaged apps should use their installed prebuilt host.",
-            runtime_dir.display(),
-            missing.join(", ")
+            "Sabine could not compile its host: {compile_error}\nNo Sabine is installed for this user or for every user to provide one, and SABINE_HOST_PATH does not name one."
         ));
-    }
-
-    if work_dir.exists() {
-        std::fs::remove_dir_all(&work_dir).map_err(|error| error.to_string())?;
-    }
-    std::fs::create_dir_all(&source_dir).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(&build_dir).map_err(|error| error.to_string())?;
-    write_host_source(&source_dir)?;
-
-    let mut configure = Command::new("cmake");
-    configure
-        .arg("-S")
-        .arg(&source_dir)
-        .arg("-B")
-        .arg(&build_dir);
-    apply_cmake_generator(&mut configure)?;
-    let cef_root = to_cmake_path(runtime_dir);
-    let output_dir = to_cmake_path(&runtime_dir.join(".sabine-hosts").join(expected_stamp));
-    configure
-        .arg("-DCMAKE_BUILD_TYPE=Release")
-        .arg(format!("-DCEF_ROOT={cef_root}"))
-        .arg(format!("-DSABINE_HOST_OUTPUT_DIR={output_dir}"));
-    run_checked(&mut configure)?;
-    run_checked(
-        Command::new("cmake")
-            .arg("--build")
-            .arg(&build_dir)
-            .arg("--config")
-            .arg("Release")
-            .arg("--target")
-            .arg("sabine-host")
-            .arg("--parallel"),
-    )?;
-
-    if host_is_complete(&binary) {
-        validate_host_protocol(&binary, runtime_dir)?;
-        Ok(binary)
-    } else {
-        Err(format!(
-            "CEF host build did not create {}",
-            binary.display()
-        ))
-    }
+    };
+    validate_host_protocol(&host, runtime_dir).map_err(|installed_error| {
+        format!(
+            "Sabine could not compile its host: {compile_error}\nThe installed Sabine host cannot be used either: {installed_error}"
+        )
+    })?;
+    Ok(host)
 }
 
 pub fn host_is_complete(path: &Path) -> bool {
@@ -156,8 +73,8 @@ pub fn host_is_complete(path: &Path) -> bool {
 }
 
 pub fn available_host(runtime_dir: &Path) -> Option<PathBuf> {
-    prebuilt_host_path().or_else(|| {
-        let path = host_release_binary(runtime_dir);
+    installed::prebuilt_host_path().or_else(|| {
+        let path = compile::host_release_binary(runtime_dir);
         host_is_complete(&path).then_some(path)
     })
 }
@@ -175,126 +92,6 @@ pub fn prepare_host_execution(host: &Path, runtime: &Path) -> Result<PathBuf, St
     {
         let _ = runtime;
         Ok(host.to_path_buf())
-    }
-}
-
-pub fn smoke_test_runtime(host: &Path, runtime_dir: &Path) -> Result<(), String> {
-    let _lease =
-        sabine_runtime::RuntimeLease::acquire(runtime_dir).map_err(|error| error.to_string())?;
-    let host = host
-        .canonicalize()
-        .map_err(|error| format!("could not resolve Sabine host {}: {error}", host.display()))?;
-    sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
-    validate_host_protocol(&host, runtime_dir)?;
-    let host = prepare_host_execution(&host, runtime_dir)?;
-    let binary_dir = runtime_binary_directory(runtime_dir);
-    let cache_dir = std::env::temp_dir().join(format!(
-        "sabine-runtime-probe-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default()
-    ));
-    std::fs::create_dir_all(&cache_dir)
-        .map_err(|error| format!("could not create CEF runtime probe cache: {error}"))?;
-    let _cache = TemporaryDirectory(cache_dir.clone());
-    let stderr_path = cache_dir.join("probe.stderr");
-    let stderr = std::fs::File::create(&stderr_path)
-        .map_err(|error| format!("could not create CEF probe diagnostics: {error}"))?;
-    let mut command = Command::new(&host);
-    configure_background_command(&mut command);
-    command
-        .arg("--sabine-runtime-smoke-test")
-        .arg(format!("--root-cache-path={}", cache_dir.display()))
-        .current_dir(&binary_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(stderr);
-    apply_runtime_resource_args(&mut command, runtime_dir);
-    #[cfg(target_os = "macos")]
-    command.arg("--use-mock-keychain");
-    // From CEF 156, a headless Chromium whose GPU process can't start renders nothing instead of
-    // falling back to software, as on build machines without a display. The probe renders with
-    // SwiftShader, which the runtime ships, so it checks the runtime rather than the graphics.
-    #[cfg(target_os = "linux")]
-    {
-        command
-            .arg("--headless")
-            .arg("--ozone-platform=headless")
-            .arg("--use-angle=swiftshader")
-            .arg("--password-store=basic");
-        let release = binary_dir.to_string_lossy();
-        let existing = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        command.env(
-            "LD_LIBRARY_PATH",
-            if existing.is_empty() {
-                release.into_owned()
-            } else {
-                format!("{release}:{existing}")
-            },
-        );
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let release = binary_dir.to_string_lossy();
-        let existing = std::env::var("PATH").unwrap_or_default();
-        command.env(
-            "PATH",
-            if existing.is_empty() {
-                release.into_owned()
-            } else {
-                format!("{release};{existing}")
-            },
-        );
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("could not start CEF runtime probe: {error}"))?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|error| format!("could not wait for CEF runtime probe: {error}"))?
-        {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("CEF runtime probe timed out after 30 seconds".to_string());
-        }
-        thread::sleep(Duration::from_millis(50));
-    };
-    let mut stderr = Vec::new();
-    if let Ok(file) = std::fs::File::open(stderr_path) {
-        let _ = file.take(64 * 1024).read_to_end(&mut stderr);
-    }
-    let stderr = String::from_utf8_lossy(&stderr);
-    if status.success() {
-        Ok(())
-    } else {
-        let details = if stderr.trim().is_empty() {
-            String::new()
-        } else {
-            format!(": {}", stderr.trim())
-        };
-        let sandbox_hint = if cfg!(target_os = "linux")
-            && [
-                "No usable sandbox",
-                "Failed to move to new namespace",
-                "SUID sandbox helper",
-            ]
-            .iter()
-            .any(|message| stderr.contains(message))
-        {
-            "\nChromium's sandbox needs Linux user namespaces. On AppArmor systems, generate a profile with `sabine runtime sandbox-profile` and ask an administrator to install it as described in Sabine's Linux sandbox setup documentation."
-        } else {
-            ""
-        };
-        Err(format!(
-            "CEF runtime probe exited with {status}{details}{sandbox_hint}"
-        ))
     }
 }
 
@@ -325,67 +122,6 @@ impl Drop for TemporaryDirectory {
     }
 }
 
-fn prebuilt_host_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("SABINE_HOST_PATH")
-        && let Ok(path) = PathBuf::from(path).canonicalize()
-        && host_is_complete(&path)
-    {
-        return Some(path);
-    }
-    if let Ok(executable) = std::env::current_exe()
-        && let Some(directory) = executable.parent()
-    {
-        let path = installed_host_path(directory);
-        if host_is_complete(&path) {
-            return Some(path);
-        }
-    }
-    if cfg!(debug_assertions) {
-        return None;
-    }
-    installed_host()
-}
-
-/// The host of the newest Sabine installed for this user or for every user.
-/// Debug builds compile their own from the runtime's CEF SDK and use this
-/// one only when the runtime has no SDK or cmake isn't installed.
-fn installed_host() -> Option<PathBuf> {
-    let user = installed_system_host(&sabine_runtime::sabine_data_dir());
-    let machine = installed_system_host(&sabine_runtime::system_dir());
-    match (user, machine) {
-        (Some(user), Some(machine)) if machine.0 >= user.0 => Some(machine.1),
-        (user, machine) => user.or(machine).map(|(_, path)| path),
-    }
-}
-
-/// The host of the Sabine installation under a data directory, with its
-/// version for choosing between the user's and the machine's.
-fn installed_system_host(root: &Path) -> Option<(Vec<u64>, PathBuf)> {
-    #[derive(Deserialize)]
-    struct CurrentSystem {
-        active: String,
-    }
-    let bin = root.join("bin");
-    let current =
-        serde_json::from_slice::<CurrentSystem>(&std::fs::read(bin.join("current.json")).ok()?)
-            .ok()?;
-    let path = installed_host_path(&bin.join("versions").join(&current.active));
-    let version = current
-        .active
-        .split('.')
-        .map(|part| part.parse().unwrap_or(0))
-        .collect();
-    host_is_complete(&path).then_some((version, path))
-}
-
-fn installed_host_path(directory: &Path) -> PathBuf {
-    if cfg!(target_os = "macos") {
-        directory.join("sabine-host.app/Contents/MacOS/sabine-host")
-    } else {
-        directory.join(host_binary_name())
-    }
-}
-
 pub fn apply_runtime_resource_args(command: &mut Command, runtime_dir: &Path) {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
@@ -409,26 +145,35 @@ pub fn apply_runtime_resource_args(command: &mut Command, runtime_dir: &Path) {
     let _ = (command, runtime_dir);
 }
 
-fn host_source_fingerprint() -> String {
-    sources::host_source_fingerprint()
+/// Lets a host started outside an app find the runtime's libcef, which lies
+/// beside neither the host nor the app.
+fn apply_runtime_library_path(command: &mut Command, runtime_dir: &Path) -> Result<(), String> {
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let variable = if cfg!(target_os = "windows") {
+            "PATH"
+        } else {
+            "LD_LIBRARY_PATH"
+        };
+        let mut paths = vec![runtime_binary_directory(runtime_dir)];
+        if let Some(existing) = std::env::var_os(variable) {
+            paths.extend(std::env::split_paths(&existing));
+        }
+        command.env(
+            variable,
+            std::env::join_paths(paths).map_err(|error| error.to_string())?,
+        );
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    let _ = (command, runtime_dir);
+    Ok(())
 }
 
 pub fn runtime_probe_fingerprint() -> String {
-    format!("{}-{RUNTIME_PROBE_VERSION}", host_source_fingerprint())
-}
-
-fn run_checked(command: &mut Command) -> Result<(), String> {
-    configure_background_command(command);
-    let output = command.output().map_err(|error| error.to_string())?;
-    if output.status.success() {
-        return Ok(());
-    }
-    Err(format!(
-        "command failed: {}\n{}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    ))
+    format!(
+        "{}-{RUNTIME_PROBE_VERSION}",
+        sources::host_source_fingerprint()
+    )
 }
 
 #[cfg(test)]

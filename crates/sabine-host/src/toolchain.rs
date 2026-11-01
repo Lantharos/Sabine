@@ -1,7 +1,5 @@
 use std::{path::PathBuf, process::Command};
 
-use crate::sources::command_available;
-
 /// CEF's own detection mistakes an `aarch64` Linux machine for x86-64.
 #[cfg(target_arch = "aarch64")]
 const CEF_PROJECT_ARCH: &str = "arm64";
@@ -29,7 +27,7 @@ pub(crate) fn apply_cmake_generator(configure: &mut Command) -> Result<(), Strin
             .arg(VISUAL_STUDIO_PLATFORM);
         return Ok(());
     }
-    if command_available("ninja") {
+    if sabine_runtime::find_program("ninja").is_some() {
         configure.arg("-G").arg("Ninja");
     } else {
         configure.arg("-G").arg("Unix Makefiles");

@@ -32,7 +32,7 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
         sabine_runtime::runtime_execution_path(runtime).map_err(|error| error.to_string())?;
     let directory = cache.join(format!(
         "{}-{fingerprint}",
-        crate::host_source_fingerprint()
+        crate::sources::host_source_fingerprint()
     ));
     let executable = directory.join("sabine-host.app").join(relative_host);
     if directory.join("ready").is_file() && executable.is_file() {
@@ -61,7 +61,7 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
         .map_err(|error| error.to_string())?;
         sign_tree(&staged_bundle)
             .map_err(|error| format!("Could not sign the Chromium launch bundle: {error}"))?;
-        crate::run_checked(
+        crate::compile::run_checked(
             Command::new("/usr/bin/codesign")
                 .args(["--verify", "--deep", "--strict"])
                 .arg(&staged_bundle),
@@ -128,7 +128,7 @@ fn sign_tree(path: &Path) -> Result<(), String> {
 }
 
 fn sign(path: &Path) -> Result<(), String> {
-    crate::run_checked(
+    crate::compile::run_checked(
         Command::new("/usr/bin/codesign")
             .args([
                 "--force",

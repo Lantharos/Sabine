@@ -29,35 +29,13 @@ pub fn validate_host_protocol(host: &Path, runtime_dir: &Path) -> Result<(), Str
     let stderr_path = probe.join("stderr");
     let stderr = std::fs::File::create(&stderr_path).map_err(|error| error.to_string())?;
     let mut command = sabine_runtime::background_command(host);
-    let binary_dir = crate::runtime_binary_directory(runtime_dir);
     command
         .arg("--sabine-host-protocol")
-        .arg("--sabine-runtime-smoke-test")
-        .arg(format!(
-            "--root-cache-path={}",
-            probe.join("profile").display()
-        ))
-        .current_dir(&binary_dir)
+        .current_dir(crate::runtime_binary_directory(runtime_dir))
         .stdin(Stdio::null())
         .stdout(output)
         .stderr(stderr);
-    crate::apply_runtime_resource_args(&mut command, runtime_dir);
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    {
-        let variable = if cfg!(target_os = "windows") {
-            "PATH"
-        } else {
-            "LD_LIBRARY_PATH"
-        };
-        let mut paths = vec![binary_dir];
-        if let Some(existing) = std::env::var_os(variable) {
-            paths.extend(std::env::split_paths(&existing));
-        }
-        command.env(
-            variable,
-            std::env::join_paths(paths).map_err(|error| error.to_string())?,
-        );
-    }
+    crate::apply_runtime_library_path(&mut command, runtime_dir)?;
     let mut child = command
         .spawn()
         .map_err(|error| format!("could not check Sabine host {}: {error}", host.display()))?;

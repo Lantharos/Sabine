@@ -4,6 +4,7 @@ description = "Sabine CEF host sources and cmake build for the shared Chromium e
 keywords = ["sabine", "cef", "chromium", "host", "osr"]
 categories = ["development-tools", "gui"]
 include = [
+    "build.rs",
     "src/**/*",
     "shared/**/*",
     "README.md",
