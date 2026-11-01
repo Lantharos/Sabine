@@ -138,12 +138,7 @@ pub(super) struct Scratch(PathBuf);
 
 impl Scratch {
     fn create() -> Result<Self, String> {
-        let mut random = [0_u8; 8];
-        getrandom::fill(&mut random).map_err(|error| error.to_string())?;
-        let name = random
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let name = sabine_runtime::random_hex(8).map_err(|error| error.to_string())?;
         let path = std::env::temp_dir().join(format!("sabine-print-{name}"));
         create_private_folder(&path).map_err(preparing)?;
         Ok(Self(path))

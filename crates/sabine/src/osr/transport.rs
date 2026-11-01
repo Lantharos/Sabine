@@ -17,9 +17,7 @@ pub(crate) type IpcStream = uds_windows::UnixStream;
 pub(crate) struct IpcEndpoint(PathBuf);
 
 pub(crate) fn authentication_token() -> io::Result<String> {
-    let mut bytes = [0_u8; 32];
-    getrandom::fill(&mut bytes).map_err(io::Error::other)?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+    sabine_runtime::random_hex(32)
 }
 
 /// Reject peers that are not the same OS user as this process.

@@ -159,9 +159,7 @@ fn current_session_id() -> io::Result<u32> {
 }
 
 fn authentication_token() -> io::Result<String> {
-    let mut bytes = [0_u8; 32];
-    getrandom::fill(&mut bytes).map_err(io::Error::other)?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+    sabine_runtime::random_hex(32)
 }
 
 fn tokens_match(left: &str, right: &str) -> bool {

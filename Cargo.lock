@@ -2664,7 +2664,6 @@ dependencies = [
  "dispatch2",
  "dunce",
  "futures-util",
- "getrandom 0.4.3",
  "global-hotkey",
  "glow",
  "glyphon",
@@ -2815,6 +2814,7 @@ name = "sabine-runtime"
 version = "0.65.0"
 dependencies = [
  "bzip2",
+ "getrandom 0.4.3",
  "libc",
  "serde",
  "serde_json",

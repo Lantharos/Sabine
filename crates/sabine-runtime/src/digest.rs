@@ -39,6 +39,13 @@ impl Fingerprint {
     }
 }
 
+/// `bytes` random bytes from the operating system, as lowercase hexadecimal.
+pub fn random_hex(bytes: usize) -> io::Result<String> {
+    let mut random = vec![0_u8; bytes];
+    getrandom::fill(&mut random).map_err(io::Error::other)?;
+    Ok(hex(&random))
+}
+
 /// Lowercase hexadecimal, as release manifests and CEF indexes write digests.
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()

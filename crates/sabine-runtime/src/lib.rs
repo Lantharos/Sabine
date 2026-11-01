@@ -21,7 +21,7 @@ pub const MIN_CEF_MAJOR: u32 = 154;
 #[cfg(target_os = "linux")]
 pub const MIN_LINUX_SHARED_TEXTURE_CEF: [u32; 3] = [156, 0, 3];
 
-pub use digest::{Fingerprint, sha256_file};
+pub use digest::{Fingerprint, random_hex, sha256_file};
 #[cfg(windows)]
 pub use discovery::paths::program_files;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
