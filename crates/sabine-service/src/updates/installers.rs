@@ -1,38 +1,31 @@
 use std::path::{Path, PathBuf};
 
-use crate::download::{download_artifact, verify_sha256};
-use crate::types::{AppArtifact, AppArtifactKind, ServiceError, ServiceResult};
+use crate::types::{AppArtifactKind, ServiceError, ServiceResult};
 
+/// Unpacks a verified release archive into `release_dir`, checking that it
+/// holds `executable`.
 pub(super) fn install_archive(
-    root: &Path,
-    id: &str,
-    version: &str,
-    artifact: &AppArtifact,
+    archive: &Path,
+    executable: &Path,
     release_dir: &Path,
 ) -> ServiceResult<()> {
-    let downloads = root.join("downloads").join(id);
-    std::fs::create_dir_all(&downloads)?;
-    let archive = downloads.join(format!("{version}.archive"));
-    download_artifact(&artifact.url, &archive, None, |_| {})?;
-    verify_sha256(&archive, &artifact.sha256)?;
-    let parent = release_dir
-        .parent()
-        .ok_or_else(|| ServiceError::Update("release directory has no parent".to_string()))?;
-    let staging = parent.join(".staging").join(version);
-    if staging.exists() {
-        std::fs::remove_dir_all(&staging)?;
-    }
-    std::fs::create_dir_all(&staging)?;
-    let executable = artifact.executable.as_ref().ok_or_else(|| {
-        ServiceError::Update("managed update artifact has no executable".to_string())
-    })?;
     if !safe_relative_path(executable) {
         return Err(ServiceError::Update(
             "managed executable must be a relative path".to_string(),
         ));
     }
+    let (Some(parent), Some(version)) = (release_dir.parent(), release_dir.file_name()) else {
+        return Err(ServiceError::Update(
+            "release directory has no parent".to_string(),
+        ));
+    };
+    let staging = parent.join(".staging").join(version);
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)?;
+    }
+    std::fs::create_dir_all(&staging)?;
     let installed = (|| -> ServiceResult<()> {
-        crate::archive::extract(&archive, &staging)?;
+        crate::archive::extract(archive, &staging)?;
         validate_executable(&staging.join(executable))?;
         sabine_runtime::install_directory(&staging, release_dir)?;
         Ok(())
@@ -40,9 +33,7 @@ pub(super) fn install_archive(
     if installed.is_err() {
         let _ = std::fs::remove_dir_all(&staging);
     }
-    installed?;
-    let _ = std::fs::remove_file(archive);
-    Ok(())
+    installed
 }
 
 pub(crate) fn validate_executable(path: &Path) -> ServiceResult<()> {

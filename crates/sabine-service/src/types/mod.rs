@@ -1,4 +1,5 @@
 mod app;
+pub mod manifest;
 mod system;
 mod updates_section;
 

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 pub(crate) use app::{BundleApp, ConfigOverrides, detect_icon, resolve_app};
 pub(crate) use cargo::CargoPackage;
-pub(crate) use file::{WebSection, read_sabine_file};
+pub(crate) use file::read_sabine_file;
 
 /// An app id made from a name: lowercase letters, digits, dots and hyphens.
 pub(crate) fn sanitize_id(value: &str) -> String {

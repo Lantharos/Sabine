@@ -50,6 +50,7 @@ pub use lifecycle::{
 pub(crate) use release::rollout::release_is_soaked;
 pub use release::signing::{public_key_from_private, sign_app_release, sign_system_release};
 pub(crate) use release::signing::{verify_app_release, verify_system_release};
+pub use types::manifest;
 pub use types::{
     APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
     AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, AppUpdatesSection,
@@ -128,9 +129,15 @@ mod tests {
 
     #[test]
     fn update_paths_stay_inside_release_directory() {
-        assert!(updates::safe_relative_path(Path::new("bin/notes")));
-        assert!(!updates::safe_relative_path(Path::new("../notes")));
-        assert!(!updates::safe_relative_path(Path::new("/usr/bin/notes")));
+        assert!(updates::installers::safe_relative_path(Path::new(
+            "bin/notes"
+        )));
+        assert!(!updates::installers::safe_relative_path(Path::new(
+            "../notes"
+        )));
+        assert!(!updates::installers::safe_relative_path(Path::new(
+            "/usr/bin/notes"
+        )));
     }
 
     #[test]

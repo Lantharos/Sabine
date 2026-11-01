@@ -3,7 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::project::{WebSection, read_sabine_file};
+use crate::project::read_sabine_file;
+use sabine_service::manifest::WebSection;
 
 #[derive(Debug, Clone)]
 pub struct DevProject {
@@ -17,10 +18,14 @@ pub struct DevProject {
 #[derive(Debug, Clone)]
 pub struct DevFrontend {
     pub root: PathBuf,
-    pub port: u16,
     pub url: String,
-    pub command: String,
-    pub package_manager: &'static str,
+    /// The local port the server listens on, which `sabine dev` waits for.
+    pub port: Option<u16>,
+    /// What starts the server, unless something else already runs it.
+    pub command: Option<String>,
+    /// The package manager of a JavaScript web project, which installs its
+    /// dependencies first.
+    pub package_manager: Option<&'static str>,
 }
 
 pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
@@ -50,43 +55,60 @@ pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
 
 fn resolve_frontend(source_dir: &Path, web: &WebSection) -> Result<Option<DevFrontend>, String> {
     let configured_root = web.root.as_ref().map(|root| source_dir.join(root));
-    let root = configured_root
+    let package_root = configured_root
+        .clone()
         .filter(|root| root.join("package.json").is_file())
         .or_else(|| detect_package_root(source_dir));
-    let Some(root) = root else {
-        return Ok(None);
+    let package = package_root
+        .as_deref()
+        .map(|root| read_package_json(&root.join("package.json")))
+        .transpose()?;
+    let root = package_root
+        .or(configured_root)
+        .unwrap_or_else(|| source_dir.to_path_buf());
+    let package_manager = package
+        .as_ref()
+        .map(|package| package_manager(&root, package));
+    let dev_url = nonempty(web.dev_url.as_deref());
+    let has_dev_url = dev_url.is_some();
+    let (url, port) = match dev_url {
+        Some(url) => {
+            let port = web.dev_port.or_else(|| parse_localhost_port(&url));
+            (url, port)
+        }
+        None => {
+            let port = web
+                .dev_port
+                .or_else(|| package.as_ref().and_then(|_| detect_vite_port(&root)))
+                .unwrap_or(5173);
+            (vite_dev_url(port), Some(port))
+        }
     };
-    let package_json = root.join("package.json");
-    if !package_json.is_file() {
+    let script = package.as_ref().and_then(detect_dev_script);
+    let command = nonempty(web.dev_command.as_deref()).or_else(|| {
+        let manager = package_manager?;
+        let script = script?;
+        Some(match port {
+            Some(port) => format!("{manager} run {script} -- --port {port} --strictPort"),
+            None => format!("{manager} run {script}"),
+        })
+    });
+    if command.is_none() && !has_dev_url {
         return Ok(None);
     }
-    let package = read_package_json(&package_json)?;
-    let Some(script) = detect_dev_script(&package) else {
-        return Ok(None);
-    };
-    let package_manager = package_manager(&root, &package);
-    let port = web
-        .dev_port
-        .or_else(|| web.dev_url.as_deref().and_then(parse_localhost_port))
-        .or_else(|| detect_vite_port(&root))
-        .unwrap_or(5173);
-    let url = web
-        .dev_url
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| vite_dev_url(port));
-    let command = web
-        .dev_command
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| format!("{package_manager} run {script} -- --port {port} --strictPort"));
     Ok(Some(DevFrontend {
         root,
-        port,
         url,
+        port,
         command,
         package_manager,
     }))
+}
+
+fn nonempty(value: Option<&str>) -> Option<String> {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
 }
 
 pub fn detect_package_root(source_dir: &Path) -> Option<PathBuf> {

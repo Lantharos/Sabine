@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use super::{ConfigOverrides, file::WebSection};
+use sabine_service::manifest::WebSection;
+
+use super::ConfigOverrides;
 
 #[derive(Debug)]
 pub(crate) struct WebBundle {
@@ -55,8 +57,23 @@ pub(super) fn resolve_web(
         .web_dist
         .clone()
         .or_else(|| config.dist.as_ref().map(PathBuf::from));
-    let has_explicit_local_assets =
-        configured_root.is_some() || configured_entry.is_some() || configured_dist.is_some();
+    let build = overrides.web_build.clone().or_else(|| config.build.clone());
+    let site = url.is_some();
+    if site
+        && let Some(key) = [
+            ("entry", configured_entry.is_some()),
+            ("dist", configured_dist.is_some()),
+            ("build", build.is_some()),
+        ]
+        .into_iter()
+        .find_map(|(key, set)| set.then_some(key))
+    {
+        return Err(format!(
+            "[web] url opens a site, so it can't be combined with `{key}`, which ships local pages; keep one of them"
+        ));
+    }
+    let has_explicit_local_assets = !site
+        && (configured_root.is_some() || configured_entry.is_some() || configured_dist.is_some());
     let has_remote_url = url.is_some() || dev_url.is_some() || !allowed_origins.is_empty();
     let package_root = configured_root
         .as_deref()
@@ -94,21 +111,18 @@ pub(super) fn resolve_web(
             entry.parent().unwrap_or(&root).to_path_buf()
         }
     });
-    let build_command = overrides
-        .web_build
-        .clone()
-        .or_else(|| config.build.clone())
-        .or_else(|| {
-            if has_explicit_local_assets || !has_remote_url {
-                detect_web_build_command(&root)
-            } else {
-                None
-            }
-        });
-    let has_local_assets = has_explicit_local_assets
-        || entry.is_file()
-        || dist.exists()
-        || root.join("package.json").is_file() && !has_remote_url;
+    let build_command = build.or_else(|| {
+        if has_explicit_local_assets || !has_remote_url {
+            detect_web_build_command(&root)
+        } else {
+            None
+        }
+    });
+    let has_local_assets = !site
+        && (has_explicit_local_assets
+            || entry.is_file()
+            || dist.exists()
+            || root.join("package.json").is_file() && !has_remote_url);
 
     Ok(Some(WebBundle {
         root,
@@ -170,25 +184,33 @@ mod tests {
     }
 
     #[test]
-    fn explicit_local_assets_are_kept_for_site_backed_apps() {
+    fn a_site_ships_no_local_pages() {
         let source = PathBuf::from("/tmp/sabine-site-backed-config-test");
-        let web = resolve_web(
-            &source,
-            &WebSection {
-                root: Some("ui".to_string()),
-                dist: Some("ui/dist".to_string()),
+        let site = |web: WebSection| {
+            resolve_web(
+                &source,
+                &WebSection {
+                    url: Some("https://raday.lantharos.com".to_string()),
+                    ..web
+                },
+                &ConfigOverrides::default(),
+            )
+        };
+
+        assert!(
+            site(WebSection {
                 entry: Some("ui/dist/index.html".to_string()),
-                url: Some("https://raday.lantharos.com".to_string()),
                 ..WebSection::default()
-            },
-            &ConfigOverrides::default(),
-        )
+            })
+            .is_err()
+        );
+        let web = site(WebSection {
+            root: Some("ui".to_string()),
+            ..WebSection::default()
+        })
         .unwrap()
         .unwrap();
-
-        assert!(web.has_local_assets);
+        assert!(!web.has_local_assets);
         assert_eq!(web.root, source.join("ui"));
-        assert_eq!(web.dist, source.join("ui/dist"));
-        assert_eq!(web.entry, source.join("ui/dist/index.html"));
     }
 }

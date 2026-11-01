@@ -91,7 +91,6 @@ pub(super) fn runtime_manifest(
             "channel = \"{}\"\npolicy = \"{}\"\ninstall_mode = \"{}\"\npublic_key = \"{}\"\n",
             quote(&updates.channel),
             match updates.policy {
-                sabine_service::UpdatePolicy::Disabled => "disabled",
                 sabine_service::UpdatePolicy::Notify => "notify",
                 sabine_service::UpdatePolicy::Automatic => "automatic",
             },

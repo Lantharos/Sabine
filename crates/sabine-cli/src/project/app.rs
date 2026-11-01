@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sabine_service::{Sandbox, SandboxSection};
+use sabine_service::{Sandbox, SandboxSection, manifest::WindowSection};
 
-use super::file::{WindowSection, read_sabine_file};
+use super::file::read_sabine_file;
 use super::updates::resolve_updates;
 use super::web::{WebBundle, resolve_web};
 use super::{CargoPackage, absolute_path, sanitize_id};
@@ -50,6 +50,7 @@ pub(crate) struct ConfigOverrides {
 pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<BundleApp, String> {
     let source_dir = absolute_path(source)?;
     let sabine = read_sabine_file(&source_dir)?;
+    let listing = Listing::of(&sabine.app);
     let cargo_manifest = sabine.cargo_manifest(&source_dir);
     let updates = resolve_updates(sabine.updates)?;
     let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
@@ -139,8 +140,12 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         }
     }
     semver::Version::parse(&version).map_err(|error| format!("invalid app version: {error}"))?;
-    sabine.app.associations.validate()?;
-    sabine.app.listing.validate()?;
+    listing.validate()?;
+    let associations = Associations {
+        mime_types: sabine.app.mime_types,
+        extensions: sabine.app.extensions,
+    };
+    associations.validate()?;
     Ok(BundleApp {
         id,
         name,
@@ -152,8 +157,8 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         description: sabine.app.description,
         icon,
         installer_image,
-        associations: sabine.app.associations,
-        listing: sabine.app.listing,
+        associations,
+        listing,
         cargo_manifest,
         source_dir,
         cargo_package,

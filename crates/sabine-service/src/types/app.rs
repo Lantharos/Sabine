@@ -10,7 +10,6 @@ use super::{
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum UpdatePolicy {
-    Disabled,
     Notify,
     #[default]
     Automatic,
@@ -45,7 +44,7 @@ impl AppUpdateSource {
             Self::Github { repository } => {
                 if channel != "stable" {
                     return Err(ServiceError::InvalidManifest(
-                        "GitHub updates currently support the stable channel only".to_string(),
+                        "GitHub update sources follow the repository's latest release, so their only channel is stable; use an http source for other channels".to_string(),
                     ));
                 }
                 if !valid_github_repository(repository) {
@@ -116,12 +115,9 @@ impl AppManifest {
         }
         if let Some(update) = &self.update {
             update.source.manifest_url(&update.channel)?;
-            if update.install_mode != AppInstallMode::Store
-                && update.policy != UpdatePolicy::Disabled
-                && update.public_key.trim().is_empty()
-            {
+            if update.install_mode != AppInstallMode::Store && update.public_key.trim().is_empty() {
                 return Err(ServiceError::InvalidManifest(
-                    "enabled updates require an Ed25519 public key".to_string(),
+                    "updates require an Ed25519 public key".to_string(),
                 ));
             }
             if update.install_mode == AppInstallMode::Package && update.package_kind.is_none() {
@@ -223,6 +219,11 @@ pub struct PendingAppUpdate {
     pub staged_at: u64,
     #[serde(default)]
     pub prompt_after: u64,
+    /// The program inside an archive, which installs beside the running
+    /// version instead of through a package installer.
+    pub executable: Option<PathBuf>,
+    #[serde(default)]
+    pub sabine: SabineVersion,
 }
 
 impl PendingAppUpdate {
@@ -253,7 +254,7 @@ pub struct MaintenanceReport {
     pub runtime: Option<sabine_runtime::RuntimeInfo>,
     pub pruned_runtimes: usize,
     pub registered_apps: usize,
-    pub automatic_updates: usize,
+    pub updating_apps: usize,
     pub updated_apps: Vec<String>,
     pub pending_apps: Vec<String>,
     pub update_failures: Vec<String>,

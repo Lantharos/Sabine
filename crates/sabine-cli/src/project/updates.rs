@@ -19,19 +19,13 @@ fn github_actions_updates() -> Option<AppUpdateConfig> {
 pub(crate) fn resolve_updates(
     section: Option<AppUpdatesSection>,
 ) -> Result<Option<AppUpdateConfig>, String> {
-    let mut updates = match section {
-        Some(section) => match section.source() {
-            Some(configured) => Some(configured),
-            None => return Ok(None),
-        },
+    let updates = match section {
+        Some(section) => section.resolve()?,
         None => github_actions_updates(),
     };
-    let Some(update) = updates.as_mut() else {
+    let Some(mut update) = updates else {
         return Ok(None);
     };
-    if update.policy == UpdatePolicy::Disabled {
-        return Ok(updates);
-    }
     if let Ok(private_key) = std::env::var("SABINE_UPDATE_SIGNING_KEY")
         && !private_key.trim().is_empty()
     {
@@ -45,5 +39,5 @@ pub(crate) fn resolve_updates(
     if std::env::var_os("GITHUB_ACTIONS").is_some() && update.public_key.trim().is_empty() {
         return Err("SABINE_UPDATE_SIGNING_KEY is required for release bundles".to_string());
     }
-    Ok(updates)
+    Ok(Some(update))
 }

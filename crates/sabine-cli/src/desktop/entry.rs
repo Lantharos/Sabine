@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use sabine_service::manifest::AppSection;
 
 const MAIN_CATEGORIES: [&str; 13] = [
     "AudioVideo",
@@ -17,39 +17,35 @@ const MAIN_CATEGORIES: [&str; 13] = [
 ];
 
 /// How an app is listed and found in launchers, from `[app]` in `Sabine.toml`.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Listing {
     pub generic_name: Option<String>,
-    #[serde(default = "default_categories")]
     pub categories: Vec<String>,
-    #[serde(default)]
     pub keywords: Vec<String>,
-    #[serde(default = "default_listed")]
     pub listed: bool,
     pub autostart_arguments: Option<String>,
 }
 
 impl Default for Listing {
     fn default() -> Self {
-        Self {
-            generic_name: None,
-            categories: default_categories(),
-            keywords: Vec::new(),
-            listed: default_listed(),
-            autostart_arguments: None,
-        }
+        Self::of(&AppSection::default())
     }
 }
 
-fn default_categories() -> Vec<String> {
-    vec!["Utility".to_string()]
-}
-
-fn default_listed() -> bool {
-    true
-}
-
 impl Listing {
+    pub(crate) fn of(app: &AppSection) -> Self {
+        Self {
+            generic_name: app.generic_name.clone(),
+            categories: app
+                .categories
+                .clone()
+                .unwrap_or_else(|| vec!["Utility".to_string()]),
+            keywords: app.keywords.clone(),
+            listed: app.listed.unwrap_or(true),
+            autostart_arguments: app.autostart_arguments.clone(),
+        }
+    }
+
     /// The closest macOS application category to the first main category.
     pub(crate) fn apple_category(&self) -> Option<&'static str> {
         self.categories

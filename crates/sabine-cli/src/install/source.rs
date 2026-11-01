@@ -86,7 +86,8 @@ pub(crate) fn detect_source_app(
 ) -> Result<SourceApp, String> {
     let source = absolute_path(source)?;
     let sabine = read_sabine_file(&source)?;
-    sabine.app.listing.validate()?;
+    let listing = Listing::of(&sabine.app);
+    listing.validate()?;
     let cargo = CargoPackage::read(&sabine.cargo_manifest(&source)).ok();
     let cargo_value = |field| cargo.as_ref().and_then(|cargo| cargo.string(field).ok());
     let version = sabine
@@ -115,7 +116,7 @@ pub(crate) fn detect_source_app(
             .or_else(|| detect_icon(&source)),
         source,
         associations: Associations::default(),
-        listing: sabine.app.listing,
+        listing,
         autostart,
     })
 }

@@ -103,14 +103,14 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Maintain => {
             let report = service.maintain()?;
             println!(
-                "runtime={} apps={} automatic_updates={} pruned_runtimes={}",
+                "runtime={} apps={} updating_apps={} pruned_runtimes={}",
                 report
                     .runtime
                     .as_ref()
                     .map(|runtime| runtime.version.as_str())
                     .unwrap_or("unavailable"),
                 report.registered_apps,
-                report.automatic_updates,
+                report.updating_apps,
                 report.pruned_runtimes
             );
             if let Some(held) = sabine_service::held_system_update() {

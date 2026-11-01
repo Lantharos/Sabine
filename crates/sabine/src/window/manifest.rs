@@ -5,56 +5,13 @@ use std::{
     sync::OnceLock,
 };
 
-use serde::Deserialize;
+use sabine_service::manifest::SabineFile;
 
 use super::SabineWindow;
 use crate::error::{SabineError, SabineResult};
 
 const MANIFEST_ENV: &str = "SABINE_MANIFEST_PATH";
 const APP_ID_ENV: &str = "SABINE_APP_ID";
-
-#[derive(Debug, Default, Deserialize)]
-struct SabineFile {
-    #[serde(default)]
-    app: AppSection,
-    #[serde(default)]
-    web: WebSection,
-    #[serde(default)]
-    window: WindowSection,
-    updates: Option<sabine_service::AppUpdatesSection>,
-    #[cfg(target_os = "linux")]
-    sandbox: Option<sabine_service::SandboxSection>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct AppSection {
-    id: Option<String>,
-    #[cfg(target_os = "linux")]
-    shared_runtime: Option<bool>,
-    name: Option<String>,
-    version: Option<String>,
-    #[serde(default)]
-    mime_types: Vec<String>,
-    #[serde(default)]
-    extensions: BTreeMap<String, Vec<String>>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct WebSection {
-    entry: Option<String>,
-    url: Option<String>,
-    #[serde(default)]
-    allowed_origins: Vec<String>,
-    #[serde(default)]
-    local_files: bool,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct WindowSection {
-    #[serde(default)]
-    splash: bool,
-    splash_delay_ms: Option<u64>,
-}
 
 impl SabineWindow {
     /// Creates another window using the current app's resolved identity and
@@ -74,11 +31,21 @@ impl SabineWindow {
             path: path.to_path_buf(),
             source,
         })?;
-        let file: SabineFile =
-            toml::from_str(&text).map_err(|source| SabineError::ManifestParse {
+        let (file, unknown) =
+            SabineFile::parse(&text).map_err(|source| SabineError::ManifestParse {
                 path: path.to_path_buf(),
                 source,
             })?;
+        if !unknown.is_empty() {
+            sabine_runtime::report_error(
+                "manifest",
+                format!(
+                    "{} has keys Sabine doesn't know, which do nothing: {}",
+                    path.display(),
+                    unknown.join(", ")
+                ),
+            );
+        }
         let base = path.parent().unwrap_or_else(|| Path::new("."));
         if base.join("runtimes/cef").is_dir() {
             self.config.runtime.bundled_dir = Some(base.to_path_buf());
@@ -115,7 +82,10 @@ impl SabineWindow {
         self.config.document_extensions = file.app.extensions.into_values().flatten().collect();
         self.config.app_update = file
             .updates
-            .and_then(sabine_service::AppUpdatesSection::source);
+            .map(sabine_service::AppUpdatesSection::resolve)
+            .transpose()
+            .map_err(|message| SabineError::CreationFailed { message })?
+            .flatten();
         #[cfg(target_os = "linux")]
         {
             self.config.sandbox = file
@@ -156,17 +126,11 @@ impl SabineWindow {
     }
 }
 
-#[derive(Deserialize)]
-struct ResourcesFile {
-    #[serde(default)]
-    resources: BTreeMap<String, PathBuf>,
-}
-
 /// `[resources]` from the app's `Sabine.toml`, with the folder its paths
 /// start from.
 struct Resources {
     base: PathBuf,
-    paths: BTreeMap<String, PathBuf>,
+    paths: BTreeMap<String, String>,
 }
 
 /// A file or folder that `[resources]` in `Sabine.toml` names: in the source
@@ -187,9 +151,9 @@ fn read_resources() -> Option<Resources> {
     let manifest = framework_manifest_path()?;
     let file = fs::read_to_string(&manifest)
         .map_err(|error| error.to_string())
-        .and_then(|text| toml::from_str::<ResourcesFile>(&text).map_err(|error| error.to_string()));
+        .and_then(|text| SabineFile::parse(&text).map_err(|error| error.to_string()));
     match file {
-        Ok(file) => Some(Resources {
+        Ok((file, _)) => Some(Resources {
             base: manifest.parent()?.to_path_buf(),
             paths: file.resources,
         }),

@@ -4,7 +4,7 @@ pub(crate) mod web_detect;
 
 use std::{
     net::{TcpStream, ToSocketAddrs},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
     sync::{
         Arc,
@@ -51,26 +51,33 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
     let interrupted = interrupt_flag()?;
     let mut frontend = None;
     if let Some(dev_frontend) = &project.frontend {
-        if !options.no_install {
-            ensure_node_modules(dev_frontend)?;
+        if !options.no_install
+            && let Some(package_manager) = dev_frontend.package_manager
+        {
+            ensure_node_modules(&dev_frontend.root, package_manager)?;
         }
-        eprintln!(
-            "sabine: frontend {} ({})",
-            dev_frontend.url, dev_frontend.command
-        );
-        if port_is_ready(dev_frontend.port) {
-            eprintln!("sabine: reusing the server at {}", dev_frontend.url);
-        } else {
-            let mut child = spawn_frontend(dev_frontend, &environment)?;
-            if !wait_for_port(
-                dev_frontend.port,
-                &dev_frontend.url,
-                Some(&mut child),
-                &interrupted,
-            )? {
-                return Ok(ExitCode::from(130));
+        let url = &dev_frontend.url;
+        match (&dev_frontend.command, dev_frontend.port) {
+            (_, Some(port)) if port_is_ready(port) => {
+                eprintln!("sabine: reusing the server at {url}");
             }
-            frontend = Some(child);
+            (Some(command), port) => {
+                eprintln!("sabine: frontend {url} ({command})");
+                let mut child = spawn_frontend(&dev_frontend.root, command, &environment)?;
+                if let Some(port) = port
+                    && !wait_for_port(port, url, Some(&mut child), &interrupted)?
+                {
+                    return Ok(ExitCode::from(130));
+                }
+                frontend = Some(child);
+            }
+            (None, Some(port)) => {
+                eprintln!("sabine: waiting for the server at {url}");
+                if !wait_for_port(port, url, None, &interrupted)? {
+                    return Ok(ExitCode::from(130));
+                }
+            }
+            (None, None) => eprintln!("sabine: frontend {url}"),
         }
         if options.web_only {
             eprintln!("sabine: web-only mode; Ctrl+C to stop");
@@ -105,46 +112,40 @@ fn interrupt_flag() -> Result<Arc<AtomicBool>, String> {
     Ok(interrupted)
 }
 
-fn ensure_node_modules(frontend: &web_detect::DevFrontend) -> Result<(), String> {
-    if frontend.root.join("node_modules").is_dir() {
+fn ensure_node_modules(root: &Path, package_manager: &str) -> Result<(), String> {
+    if root.join("node_modules").is_dir() {
         return Ok(());
     }
     eprintln!(
-        "sabine: installing JS deps with {} in {}",
-        frontend.package_manager,
-        frontend.root.display()
+        "sabine: installing JS deps with {package_manager} in {}",
+        root.display()
     );
-    let status = shell_command(&format!("{} install", frontend.package_manager))
-        .current_dir(&frontend.root)
+    let status = shell_command(&format!("{package_manager} install"))
+        .current_dir(root)
         .status()
-        .map_err(|error| {
-            format!(
-                "failed to run {} install: {error}",
-                frontend.package_manager
-            )
-        })?;
+        .map_err(|error| format!("failed to run {package_manager} install: {error}"))?;
     if !status.success() {
         return Err(format!(
-            "{} install failed with status {status}",
-            frontend.package_manager
+            "{package_manager} install failed with status {status}"
         ));
     }
     Ok(())
 }
 
 fn spawn_frontend(
-    frontend: &web_detect::DevFrontend,
+    root: &Path,
+    command: &str,
     environment: &crate::project::environment::BuildEnvironment,
 ) -> Result<ProcessTree, String> {
-    let mut process = shell_command(&frontend.command);
+    let mut process = shell_command(command);
     environment.apply(&mut process);
     process
-        .current_dir(&frontend.root)
+        .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
     ProcessTree::spawn(&mut process)
-        .map_err(|error| format!("failed to start frontend `{}`: {error}", frontend.command))
+        .map_err(|error| format!("failed to start frontend `{command}`: {error}"))
 }
 
 fn port_is_ready(port: u16) -> bool {

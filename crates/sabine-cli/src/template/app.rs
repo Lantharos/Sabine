@@ -29,7 +29,7 @@ version = "0.1.0"
 icon = "assets/icon.svg"
 
 [web]
-root = "ui"
+root = "."
 dist = "ui/dist"
 entry = "ui/dist/index.html"
 dev_port = 5173
