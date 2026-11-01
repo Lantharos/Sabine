@@ -93,6 +93,8 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
 }
 
 fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let _ = id;
     #[cfg(not(windows))]
     let _ = name;
     #[cfg(any(target_os = "macos", windows))]
