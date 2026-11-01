@@ -93,12 +93,13 @@ pub(crate) enum Command {
         env_file: Vec<PathBuf>,
         #[arg(default_value = ".")]
         source: PathBuf,
-        #[arg(long, default_value = "linux")]
+        #[arg(long, default_value = "portable")]
         target: String,
         #[arg(long, default_value = "dist")]
         out: PathBuf,
+        /// Package a debug build instead of Cargo's release profile.
         #[arg(long)]
-        release: bool,
+        debug: bool,
         #[arg(long)]
         no_build: bool,
         #[arg(long)]

@@ -41,7 +41,7 @@ export SABINE_MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAMID)
 export SABINE_NOTARY_APPLE_ID="ada@example.com"
 export SABINE_NOTARY_TEAM_ID="TEAMID"
 export SABINE_NOTARY_PASSWORD="abcd-efgh-ijkl-mnop"
-sabine bundle . --target dmg --release
+sabine bundle . --target dmg
 ```
 
 ### Inside-out signing
@@ -96,7 +96,7 @@ signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f certifi
     ```powershell
     $env:SABINE_WINDOWS_CERTIFICATE = "C:\certs\example.pfx"
     $env:SABINE_WINDOWS_CERTIFICATE_PASSWORD = "certificate password"
-    sabine bundle . --target msi --release
+    sabine bundle . --target msi
     ```
   </TabItem>
   <TabItem label="Certificate store">
@@ -107,7 +107,7 @@ signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f certifi
 
     ```powershell
     $env:SABINE_WINDOWS_CERTIFICATE_SHA1 = "0123456789ABCDEF0123456789ABCDEF01234567"
-    sabine bundle . --target exe --release
+    sabine bundle . --target exe
     ```
   </TabItem>
 </Tabs>

@@ -12,12 +12,12 @@ builds your web assets and Rust executable, lays the app out the way its platfor
 packages it with that platform's own tool.
 
 ```sh
-sabine bundle . --target deb --release
+sabine bundle . --target deb
 ```
 
-`--release` builds Cargo's release profile. Without it, `sabine bundle` packages a debug build,
-which is useful for checking a package quickly but is not what you ship. `--target` defaults to
-`linux`, so name the target you want on every platform.
+Without `--target`, `sabine bundle` builds a `portable` archive for the machine it runs on. Bundles
+use Cargo's release profile; `--debug` packages a debug build instead, which is quicker to build
+for checking a package but is not what you ship.
 
 ## What a bundle build does
 
@@ -167,7 +167,7 @@ workflow builds every package on the platform it is for.
 app starts without downloading anything:
 
 ```sh
-sabine bundle . --target msi --release --offline
+sabine bundle . --target msi --offline
 ```
 
 An offline bundle must be built on the operating system and CPU architecture it is for, so the
@@ -180,7 +180,7 @@ on they update like any other installation.
 
 | Flag | Effect |
 | --- | --- |
-| `--release` | Builds and packages Cargo's release profile |
+| `--debug` | Builds and packages a debug build instead of Cargo's release profile |
 | `--no-build` | Skips `cargo build` and packages the executable already in Cargo's default output folder |
 | `--binary <path>` | Packages this executable instead of building one |
 | `--no-web-build` | Skips the web build command and packages the existing output |

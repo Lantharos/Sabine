@@ -179,7 +179,7 @@ jobs:
         run: |
           $platform = '${{ matrix.platform }}'
           foreach ($target in -split '${{ matrix.targets }}') {
-            $bundle = sabine bundle . --target $target --release --json | Select-Object -Last 1
+            $bundle = sabine bundle . --target $target --json | Select-Object -Last 1
             if ($LASTEXITCODE -ne 0) { throw "Bundling $target failed" }
             $result = $bundle | ConvertFrom-Json
             if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact" }

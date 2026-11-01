@@ -112,9 +112,9 @@ table.
 ## sabine bundle
 
 ```sh
-sabine bundle . --target portable --release
-sabine bundle . --target msi --release --offline
-sabine bundle . --target deb --release --no-web-build --json
+sabine bundle .
+sabine bundle . --target msi --offline
+sabine bundle . --target deb --no-web-build --json
 ```
 
 Builds the app into a package. [Bundling](/docs/distribution/bundling/) explains each target and
@@ -123,9 +123,9 @@ what goes into it.
 | Argument or flag | Default | Meaning |
 | --- | --- | --- |
 | `[source]` | `.` | The project folder |
-| `--target <target>` | `linux` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos` |
+| `--target <target>` | `portable` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos` |
 | `--out <path>` | `dist` | Where staged bundles and packages go |
-| `--release` | off | Builds Cargo's release profile |
+| `--debug` | off | Packages a debug build instead of Cargo's release profile |
 | `--no-build` | off | Packages the executable already in Cargo's default output folder |
 | `--binary <path>` | | Packages this executable instead of building one |
 | `--no-web-build` | off | Skips the web build and packages the existing output |

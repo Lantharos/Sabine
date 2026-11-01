@@ -129,7 +129,7 @@ jobs:
             New-Item release-probe/ui/public -ItemType Directory -Force | Out-Null
             Set-Content release-probe/ui/public/obsolete.txt 'Owned by the first release'
           }
-          cargo run --release -p sabine-cli -- bundle release-probe --target "${{ matrix.target }}" --release @offline
+          cargo run --release -p sabine-cli -- bundle release-probe --target "${{ matrix.target }}" @offline
           if ($LASTEXITCODE -ne 0) { throw "package build failed" }
           $artifacts = @(Get-ChildItem dist/artifacts -File)
           if ($artifacts.Count -ne 1 -or $artifacts[0].Extension -cne "${{ matrix.extension }}") {
@@ -259,7 +259,7 @@ jobs:
             }
             Remove-Item release-probe/ui/public/obsolete.txt
             Set-Content release-probe/ui/public/replacement.txt 'Owned by the second release'
-            & target/release/sabine.exe bundle release-probe --target exe --release --offline --version 0.1.1
+            & target/release/sabine.exe bundle release-probe --target exe --offline --version 0.1.1
             if ($LASTEXITCODE -ne 0) { throw 'Upgrade package build failed' }
             $upgrade = Get-ChildItem dist/artifacts -Filter '*-0.1.1-exe.exe' -File | Select-Object -First 1
             $process = Start-Process $upgrade.FullName -ArgumentList '/S' -PassThru
