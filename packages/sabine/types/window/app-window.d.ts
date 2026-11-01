@@ -92,6 +92,11 @@ export interface AppWindow extends SabineWindowApi {
   onVisibilityChanged(callback: (state: WindowVisibility) => void): () => void;
   /** Calls `callback` whenever `maximized`, `fullscreen` or `tiled` changes. */
   onStateChanged(callback: (state: WindowState) => void): () => void;
+  /**
+   * Calls `callback` whenever the corner the system's window controls cover
+   * changes, such as when the window enters or leaves fullscreen.
+   */
+  onControlsOverlayChanged(callback: (overlay: ControlsOverlay) => void): () => void;
 }
 
 /** A window region built with the `region` helpers. */

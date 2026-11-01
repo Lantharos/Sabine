@@ -1,4 +1,4 @@
-import type { SystemAppearance } from "./system.js";
+import type { SystemAppearance } from "./desktop/system.js";
 import type {
   GuestDownloadEvent,
   GuestFaviconEvent,

@@ -1,4 +1,14 @@
-const defaultNotes = [
+import { appWindow, type ControlsOverlay } from "@lantharos/sabine";
+import { commands } from "./bindings";
+
+interface Note {
+  id: string;
+  title: string;
+  body: string;
+  saved: boolean;
+}
+
+const defaultNotes: Note[] = [
   {
     id: "product-notes",
     title: "Product notes",
@@ -21,40 +31,33 @@ const defaultNotes = [
 
 const storeKey = "sabine.notes.example.v1";
 
-let notes = loadNotes();
-let selected = Math.min(loadSelected(), notes.length - 1);
+const list = document.querySelector<HTMLElement>("#note-list")!;
+const count = document.querySelector<HTMLElement>("#note-count")!;
+const status = document.querySelector<HTMLElement>("#status")!;
+const title = document.querySelector<HTMLInputElement>("#note-title")!;
+const body = document.querySelector<HTMLTextAreaElement>("#note-body")!;
+const newButton = document.querySelector<HTMLButtonElement>("#new-note")!;
+const saveButton = document.querySelector<HTMLButtonElement>("#save-note")!;
+const deleteButton = document.querySelector<HTMLButtonElement>("#delete-note")!;
 
-const list = document.querySelector("#note-list");
-const count = document.querySelector("#note-count");
-const title = document.querySelector("#note-title");
-const body = document.querySelector("#note-body");
-const newButton = document.querySelector("#new-note");
-const saveButton = document.querySelector("#save-note");
-const deleteButton = document.querySelector("#delete-note");
+const stored = loadStore();
+let notes = stored.notes;
+let selected = Math.min(stored.selected, notes.length - 1);
 
-function loadNotes() {
-  try {
-    const value = JSON.parse(localStorage.getItem(storeKey) || "null");
-    if (Array.isArray(value?.notes) && value.notes.length > 0) {
-      return value.notes.map((note) => ({
-        id: String(note.id || crypto.randomUUID()),
-        title: String(note.title || "Untitled"),
-        body: String(note.body || ""),
-        saved: true,
-      }));
-    }
-  } catch {
-  }
-  return defaultNotes.map((note) => ({ ...note }));
-}
-
-function loadSelected() {
-  try {
-    const value = JSON.parse(localStorage.getItem(storeKey) || "null");
-    return Number.isInteger(value?.selected) ? value.selected : 0;
-  } catch {
-    return 0;
-  }
+function loadStore(): { notes: Note[]; selected: number } {
+  const value = JSON.parse(localStorage.getItem(storeKey) ?? "null");
+  const saved: unknown[] = Array.isArray(value?.notes) ? value.notes : [];
+  return {
+    notes: saved.length
+      ? saved.map((note: any) => ({
+          id: String(note.id),
+          title: String(note.title || "Untitled"),
+          body: String(note.body ?? ""),
+          saved: true,
+        }))
+      : defaultNotes.map((note) => ({ ...note })),
+    selected: Number.isInteger(value?.selected) ? value.selected : 0,
+  };
 }
 
 function persist() {
@@ -71,17 +74,8 @@ function currentNote() {
   return notes[selected];
 }
 
-async function invokeNative(name, params) {
-  const bridge = window.sabine?.bridge;
-  if (!bridge?.commands?.includes(name)) {
-    return null;
-  }
-  try {
-    return await bridge.invoke(name, params);
-  } catch (error) {
-    console.warn(error);
-    return null;
-  }
+function showError(error: unknown) {
+  status.textContent = error instanceof Error ? error.message : String(error);
 }
 
 function renderList() {
@@ -120,6 +114,10 @@ function persistCurrentFields() {
   note.body = body.value;
 }
 
+function showControls(overlay: ControlsOverlay) {
+  document.documentElement.dataset.controls = overlay.left || overlay.right ? "system" : "page";
+}
+
 title.addEventListener("input", () => {
   currentNote().title = title.value;
   currentNote().saved = false;
@@ -133,13 +131,14 @@ body.addEventListener("input", () => {
 
 newButton.addEventListener("click", async () => {
   persistCurrentFields();
-  const created = await invokeNative("notes.create", { title: "Untitled", body: "" });
-  notes.push({
-    id: created?.id || crypto.randomUUID(),
-    title: "Untitled",
-    body: "",
-    saved: false,
-  });
+  status.textContent = "";
+  try {
+    const created = await commands.notesCreate({ title: "Untitled" });
+    notes.push({ id: created.id, title: created.title, body: "", saved: false });
+  } catch (error) {
+    showError(error);
+    return;
+  }
   selected = notes.length - 1;
   persist();
   render();
@@ -156,7 +155,7 @@ saveButton.addEventListener("click", () => {
 
 deleteButton.addEventListener("click", () => {
   if (notes.length === 1) {
-    notes[0] = { id: crypto.randomUUID(), title: "Untitled", body: "", saved: false };
+    notes = [{ id: crypto.randomUUID(), title: "Untitled", body: "", saved: false }];
     selected = 0;
   } else {
     notes.splice(selected, 1);
@@ -185,4 +184,6 @@ window.addEventListener("beforeunload", () => {
   persist();
 });
 
+appWindow.onControlsOverlayChanged(showControls);
+appWindow.revealWhen(appWindow.controlsOverlay().then(showControls, showError));
 render();

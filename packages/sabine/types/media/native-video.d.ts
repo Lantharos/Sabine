@@ -3,7 +3,7 @@ export interface NativeVideoAttachOptions {
    * Ancestor to clip the video's shape out of, for opaque content beneath the
    * element. Nothing inside it can then draw over the video.
    */
-  cutout?: Element;
+  cutout?: HTMLElement;
 }
 
 export interface NativeVideoOptions extends NativeVideoAttachOptions {

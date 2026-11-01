@@ -5,4 +5,11 @@ version = "0.1.0"
 
 [web]
 root = "ui"
-entry = "ui/index.html"
+dist = "ui/dist"
+entry = "ui/dist/index.html"
+dev_port = 5173
+dev_command = "bun run dev"
+build = "bun run build"
+
+[bindings]
+path = "ui/bindings.ts"

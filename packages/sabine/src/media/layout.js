@@ -1,5 +1,12 @@
+/** @typedef {{ x: number, y: number, width: number, height: number }} Box */
+
 const LAYOUT_EVENTS = ["scroll", "resize", "fullscreenchange", "transitionend", "animationend"];
 
+/**
+ * @param {Box} a
+ * @param {Box} b
+ * @returns {Box | null}
+ */
 function intersect(a, b) {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);
@@ -8,7 +15,12 @@ function intersect(a, b) {
   return width > 0 && height > 0 ? { x, y, width, height } : null;
 }
 
+/**
+ * @param {Element} element
+ * @returns {Box}
+ */
 function clipOf(element) {
+  /** @type {Box | null} */
   let clip = { x: 0, y: 0, width: innerWidth, height: innerHeight };
   for (let parent = element.parentElement; parent && clip; parent = parent.parentElement) {
     const style = getComputedStyle(parent);
@@ -24,6 +36,11 @@ function clipOf(element) {
   return clip ?? { x: 0, y: 0, width: 0, height: 0 };
 }
 
+/**
+ * @param {Element} container
+ * @param {Box} hole
+ * @param {number} radius
+ */
 function holePath(container, hole, radius) {
   const box = container.getBoundingClientRect();
   const x = hole.x - box.x;
@@ -31,6 +48,10 @@ function holePath(container, hole, radius) {
   const right = x + hole.width;
   const bottom = y + hole.height;
   const r = Math.min(radius, hole.width / 2, hole.height / 2);
+  /**
+   * @param {number} toX
+   * @param {number} toY
+   */
   const arc = (toX, toY) => `A${r} ${r} 0 0 1 ${toX} ${toY}`;
   return (
     `path(evenodd, "M0 0H${box.width}V${box.height}H0Z` +
@@ -53,7 +74,7 @@ export class LayoutTracker {
 
   /**
    * @param {Element} element
-   * @param {Element | null} cutout
+   * @param {HTMLElement | null} cutout
    * @param {(placement: Record<string, unknown>) => void} place
    */
   constructor(element, cutout, place) {

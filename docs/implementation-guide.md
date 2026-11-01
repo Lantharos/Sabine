@@ -190,9 +190,10 @@ notice. The service fetches their newest release right away instead of waiting f
 and an app offers a downloaded update before showing that notice.
 
 A Sabine update never retires an app that is installed. Before installing a release, the service
-weighs its oldest accepted build against every app on the machine: the apps each user registered and
-the apps installed for every user, read from the `sabine` build in their bundled `Sabine.toml`. When
-the release would stop one of them, the service holds it and installs the newest earlier release
+weighs its oldest accepted build against every app installed on the machine: the apps each user
+installed and the apps installed for every user, read from the `sabine` build in their bundled
+`Sabine.toml`. Development builds that `sabine dev` registered never hold a release back. When the
+release would stop an installed app, the service holds it and installs the newest earlier release
 that runs them all, so fixes keep arriving. The held release, with the apps it waits for, is recorded
 in `bin/held-update.json` and returned by `held_system_update()`; it installs on the next check after
 those apps update or are removed. An app whose own update needs a newer Sabine still pulls that
@@ -504,19 +505,25 @@ to benchmark the GPU in the background.
   browser command line; messages carry the window's socket token and are otherwise discarded. Frames
   then reference the surface by id, the compositor wraps each slot's surface as a Metal texture once
   and reuses it without copying, and the slot is acknowledged only after submitted GPU work stops
-  sampling it. Surfaces are retired when they are replaced on resize or their browser closes. As on Windows, a frame dropped while every slot is in use is requested
-  again once a slot is released. Chromium can deliver software `OnPaint` frames instead, which use the
-  shared-memory path below.
+  sampling it. Surfaces are retired when they are replaced on resize or their browser closes. As
+  on Windows, a frame dropped while every slot is in use is requested again once a slot is
+  released. Chromium can deliver software `OnPaint` frames instead, which use the shared-memory
+  path below.
 
 Windows uses wgpu D3D12. Chromium receives the compositor device’s DXGI adapter LUID and uses
 ANGLE D3D11 on that adapter. The copy device is created from the adapter that owns Chromium’s
 shared texture, so hybrid-GPU systems do not depend on independently selected default adapters.
-`SABINE_TRACE=1` reports the compositor adapter and the LUID passed to Chromium.
-Every window presents into a visual of
-its own DirectComposition tree, and transparent windows have no HWND redirection bitmap, allowing
-premultiplied OSR pixels to reveal the native backdrop. Sabine applies Acrylic, blur, Mica, and Mica Alt directly through Win32 composition APIs.
-On macOS, Sabine installs its own semantic `NSVisualEffectView` beneath the Metal content view.
-The Windows material follows the system's light or dark theme as it changes.
+`SABINE_TRACE=1` reports the compositor adapter and the LUID passed to Chromium. Every window
+presents into a visual of its own DirectComposition tree, and transparent windows have no HWND
+redirection bitmap, allowing premultiplied OSR pixels to reveal the native backdrop.
+
+`WindowBackgroundEffect::Glass`, which `.glass()` picks, is each desktop's standard material:
+acrylic on Windows, the under-window material on macOS and a blur on Wayland. Windows also offers
+`Blur`, a plain blur without acrylic's tint, `Mica` and `MicaAlt`, which Sabine applies through
+Win32 composition APIs and which follow the system's light or dark theme as it changes. macOS also
+offers `HudWindow` and `Sidebar`, in an `NSVisualEffectView` Sabine installs beneath the Metal
+content view. Wayland has one effect, a blur through `ext_background_effect_v1`; compositors
+without that protocol, such as GNOME's, show the page over a clear window instead.
 
 CEF delivers BGRA dirty rectangles on the software path. Paints of 256 KiB or more are copied into
 one of at most four reusable shared-memory slots per browser; each slot is mapped once by the native
@@ -853,15 +860,17 @@ Bridge commands are registered on the builder:
 - `bridge_handler_async` and `bridge_typed_async` register handlers whose futures are awaited on
   `sabine::async_runtime()`, so a handler waiting on I/O or timers holds no thread. Synchronous
   handlers run on four worker threads per window and should not wait on slow work.
+- `bridge_descriptor_handler` and `bridge_descriptor_handler_async` take a
+  `BridgeCommandDescriptor`, which lets extra origins call that command only.
+
+A command for one desktop is registered under `#[cfg(target_os = "...")]`, so pages elsewhere don't
+see it in `bridge.commands`.
 
 `sabine::async_runtime()` is the process's Tokio runtime: two worker threads, started on first use.
 Sabine runs its own D-Bus work there (notifications, the tray icon, portal requests), and apps spawn
 their background tasks on it too, so a D-Bus connection made on it serves every window. Code that
 cannot be async, such as a synchronous handler, waits on it with `async_runtime().block_on(..)`;
 async code never does.
-- `bridge_descriptor_handler` and `bridge_descriptor_handler_async` take a
-  `BridgeCommandDescriptor`, which can limit a command to targets (`desktop`, `linux`, `windows`,
-  `macos`) and allow extra origins to call that command only.
 
 Each window also accepts lifecycle settings (`lifecycle_policy`, frame rates, suspend and
 `freeze_after`), `on_visibility_changed` for the window's visibility and suspension, desktop
@@ -872,13 +881,13 @@ services (`tray_icon`, `autostart`, `global_shortcut`, `native_messaging_host`,
 The launched `SabineProcess` opens and closes further windows with `open_window` and
 `close_window`, hands out a `SabineProcessHandle` whose `present` shows and focuses the app's
 window, opening it first while a background app runs without one (`on_launched` passes the same
-handle to app code that only builds the window), starts activities that keep pages running while their window is out of sight with
-`begin_activity` or
-`begin_activity_with`, drives guests from Rust with `guest_control`, and reports launch stages
-through `metrics`. Its `BridgeEventEmitter` sends events to every window with `emit` and
-`emit_bytes`, or to one with `emit_to` and `emit_bytes_to`, and changes regions with `set_regions`
-and `set_regions_of`, and squares their corners while they float with `set_square_corners`. Guest controls take effect without an answer; the page observes the results
-through guest events.
+handle to app code that only builds the window), starts activities that keep every window's page
+running while it is out of sight with `begin_activity` or `begin_activity_with`, drives guests from
+Rust with `guest_control`, and reports launch stages through `metrics`. Its `BridgeEventEmitter`
+sends events to every window with `emit` and `emit_bytes`, or to one with `emit_to` and
+`emit_bytes_to`, changes regions with `set_regions` and `set_regions_of`, and squares their
+corners while they float with `set_square_corners`. Guest controls take effect without an answer;
+the page observes the results through guest events.
 
 The API avoids backend types. Apps do not select paint transports or Chromium launch flags.
 Runtime maintenance, service policy, and native-host build helpers stay in their owning crates
@@ -905,9 +914,12 @@ Each desktop applies regions with its own compositor:
   region's edge. AppKit decides opacity from the layers themselves, so the opaque region has no
   further effect.
 - **Windows** composes the material behind the whole window, and the page's transparency decides
-  where it shows; an empty blur region removes it. The input region becomes the window's shape:
-  outside it the window neither draws nor takes clicks, which then reach the window beneath.
-  Windows with system decorations keep their frame and are not shaped. DWM has no opaque region.
+  where it shows; an empty blur region removes it. DWM can't blur only a region: since Windows 8 the
+  region of `DwmEnableBlurBehindWindow` makes the window see-through without blurring it. The input
+  region becomes the window's shape: outside it the window neither draws nor takes clicks, which
+  then reach the window beneath. Windows with system decorations keep their frame and are not
+  shaped. DWM has no opaque region, and needs none: it draws the material beneath opaque
+  DirectComposition content all the same.
 
 ## Bridge security
 

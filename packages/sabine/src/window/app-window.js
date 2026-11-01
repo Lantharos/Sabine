@@ -1,6 +1,6 @@
-import { listen, requireApi } from "./bridge.js";
+import { listen, requireApi } from "../bridge.js";
 
-/** @type {import("../types/window.js").AppWindow} */
+/** @type {import("../../types/window/app-window.js").AppWindow} */
 export const appWindow = {
   show() {
     requireApi().window.show();
@@ -41,6 +41,9 @@ export const appWindow = {
   controlsOverlay() {
     return requireApi().window.controlsOverlay();
   },
+  onControlsOverlayChanged(callback) {
+    return listen("window.controlsOverlay", callback);
+  },
   activationToken() {
     return requireApi().window.activationToken();
   },
@@ -70,7 +73,7 @@ export const appWindow = {
   },
 };
 
-/** @type {import("../types/window.js").SabinePopupApi} */
+/** @type {import("../../types/window/app-window.js").SabinePopupApi} */
 export const popup = {
   open(options = {}) {
     return requireApi().popup.open(options);

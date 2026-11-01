@@ -3,7 +3,7 @@ function adaptiveRegion(adaptive) {
   return { adaptive, rects: [] };
 }
 
-/** @type {typeof import("../types/window.js").region} */
+/** @type {typeof import("../../types/window/app-window.js").region} */
 export const region = {
   empty() {
     return { rects: [] };

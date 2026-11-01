@@ -47,9 +47,21 @@ The default deadline is one minute. Aborting, timing out, or leaving the page re
 request and ignores later responses. This does not interrupt a Rust handler that is already running;
 handlers remain responsible for bounding their own work. A page can retain at most 128 requests.
 
-`events` has typed listeners for everything Sabine sends: tray, global shortcut and second-launch
-activations, renderer crashes, and guest lifecycle, navigation, download, shortcut,
-wheel and favicon events.
+Updates sent many times a second whose answers the page doesn't need, such as a position while
+something is dragged, go out with `bridge.send`, which waits for nothing and holds no request:
+
+```js
+import { bridge } from "@lantharos/sabine";
+
+bridge.send("canvas.cursor", { x, y });
+```
+
+`events` has typed listeners for everything Sabine sends: tray and global shortcut activations,
+`singleInstance` when the app is launched again while it runs, with the second launch's arguments,
+working directory and activation token, `rendererCrashed` when a renderer stops, with the guest it
+showed (empty for the app's own page), its exit code and whether Sabine is reloading it, and guest
+lifecycle, navigation, download, shortcut, wheel and favicon events. `guestCreated` carries the new
+guest's `GuestInfo`.
 
 Bytes travel as they are, without JSON or base64. Send them with a call, and receive them from a
 handler that answers with `BridgeResponse::bytes` or from events sent with `emit_bytes`, as a
@@ -128,9 +140,12 @@ await shell.showFolder(dataFolder);
 
 `openLink` opens `http:`, `https:` and `mailto:` links in the person's default browser or mail app,
 and `showFolder` opens a folder in their file manager. Both go through the desktop portal on Linux,
-so they work inside a sandbox, and through the system's shell on macOS and Windows. Other schemes
-and files are refused, since opening them could start programs. Guests can't call them; a page
-showing a guest opens the links the guest asks for in `events.guestNewWindow`.
+so they work inside a sandbox, and through the system's shell on macOS and Windows. On Wayland the
+app that opens takes focus, and a chooser the desktop shows stays over the window; the promise
+settles once the desktop opened the link or the person closed the chooser. macOS opens folders in
+Finder, including app bundles, which it shows instead of launching. Other schemes and files are
+refused, since opening them could start programs. Guests can't call them; a page showing a guest
+opens the links the guest asks for in `events.guestNewWindow`.
 
 ## Window controls
 
@@ -139,8 +154,35 @@ import { appWindow } from "@lantharos/sabine";
 
 appWindow.show();
 appWindow.hide();
+appWindow.minimize();
 appWindow.toggleMaximize();
+appWindow.restore();
+appWindow.setFullscreen(true);
 appWindow.startDrag();
+```
+
+`appWindow.focus(token)` brings the window forward; on Wayland, pass the activation token an event
+such as `events.singleInstance` or `events.globalShortcut` carried, since the desktop only lets a
+window take focus with one.
+
+With `AppChrome`, the page draws its own titlebar. On macOS the system's traffic lights sit over
+its left end; elsewhere the page draws minimize, maximize and close at its right end, where Sabine
+handles their clicks. `appWindow.controlsOverlay()` tells which corner the system's controls cover,
+and the page gets the same values as the `--sabine-controls-left`, `--sabine-controls-right` and
+`--sabine-controls-height` CSS properties:
+
+```js
+const place = ({ left, right }) => {
+  document.documentElement.dataset.controls = left || right ? "system" : "page";
+};
+appWindow.revealWhen(appWindow.controlsOverlay().then(place));
+appWindow.onControlsOverlayChanged(place);
+```
+
+```css
+.titlebar {
+  padding-left: calc(var(--sabine-controls-left, 0px) + 16px);
+}
 ```
 
 A settings page that records keyboard shortcuts can ask the desktop to hand over every key while
@@ -159,13 +201,13 @@ user before they allow it, and macOS needs the app to have the Accessibility per
 does, the call rejects and macOS offers to open the settings that grant it.
 
 Wayland desktops only let a window take focus when it presents a token from the app the person is
-using. Before handing something to another app, such as a link to open in the browser, ask for one
-and pass it on with the request; the app process puts it in the launched app's environment as
-`XDG_ACTIVATION_TOKEN`, or in a portal request as `activation_token`:
+using. `shell.openLink` and `shell.showFolder` hand one on by themselves. Before handing something
+else to another app, ask for one and pass it on with the request; the app process puts it in the
+launched app's environment as `XDG_ACTIVATION_TOKEN`, or in a portal request as `activation_token`:
 
 ```js
 const token = await appWindow.activationToken();
-await invoke("open_link", { url, token });
+await invoke("editor.open", { path, token });
 ```
 
 The token is made from the window's keyboard focus, so it only brings the other window forward
@@ -256,8 +298,11 @@ events.globalShortcutFailed(({ id, message }) => console.warn(id, message));
 
 `new Notification(title, { body, tag, silent })` shows a desktop notification from the app's own
 pages, without asking for permission. Clicking it brings the window forward and fires its `click`
-event. Sabine also reads `urgency` (`"low"`, `"normal"` or `"critical"`) and a freedesktop
-`category` such as `"email.arrived"` from the options.
+event. A notification shown with the `tag` of an earlier one replaces it, and the earlier one fires
+`close`. Dismissing a notification fires `close` on Windows, macOS and Linux notification servers;
+the desktop portal, which GNOME uses, doesn't report it. Sabine also reads `urgency` (`"low"`,
+`"normal"` or `"critical"`) and a freedesktop `category` such as `"email.arrived"` from the
+options; only Linux notification servers use the category.
 
 ## Drag and drop
 
@@ -285,7 +330,8 @@ const { colorScheme, accentColor } = await system.appearance();
 events.appearanceChanged(({ colorScheme, accentColor }) => applyTheme(colorScheme, accentColor));
 ```
 
-The accent color is also set on the page as the `--sabine-accent-color` CSS property.
+The accent color is also set on the page as the `--sabine-accent-color` CSS property. Changes of
+the light or dark style and of the accent color arrive as they happen on every desktop.
 
 ## Clipboard
 
@@ -356,6 +402,18 @@ for (const info of await guest.list()) {
 }
 ```
 
+Each guest, and each `Guest`, also goes back and forward with `goBack` and `goForward`, zooms with
+`setZoom(factor)`, which answers with the guest's `GuestInfo`, runs a script in its page with
+`executeJavaScript(code)` without waiting for a result, and draws itself as a PNG data URL with
+`capturePreview()`, for example for a tab switcher. While the page draws over its guests, such as
+an open dialog, `guest.setCovered(true)` hides them all until it calls `setCovered(false)`:
+
+```js
+const { dataUrl } = await tab.capturePreview();
+await tab.setZoom(1.25);
+await guest.setCovered(true);
+```
+
 `popupPolicy` decides what happens when a guest opens a window: `deny` (the default) emits
 `guest.newWindow` for the page to handle, `allow` lets Chromium open a popup, `navigateSame` loads
 the link in the same guest, and `openGuest` opens another guest in the same partition. Guest pages
@@ -378,9 +436,11 @@ await popup.close();
 ```
 
 An activity keeps the page running while its window is out of sight, instead of letting Sabine
-freeze it, unless it is started with `keepRunning: false`. `activity.list()` returns the running
-activities and how many of them keep the page running. Rust code starts the same activities with
-`begin_activity`.
+freeze it, unless it is started with `keepRunning: false`. An activity belongs to the page that
+began it: it ends when the page goes away, reloads or its renderer stops, and keeps only its own
+window running. `activity.list()` returns the activities that keep the window's page running, its
+own and the app's, and how many of them do. Rust code starts activities with `begin_activity`,
+which keep every window running until they end.
 
 ## Opening URLs and documents
 
@@ -425,7 +485,7 @@ These URLs work only inside the app's own pages.
 
 Sabine's Chromium cannot decode H.264, HEVC or AAC. `NativeVideo` plays those on a native surface
 beneath the page, with the page's own controls on top, on the platforms listed in the
-[implementation guide](../../docs/implementation-guide.md#native-media). It mirrors the parts of
+[implementation guide](implementation-guide.md#native-media). It mirrors the parts of
 `HTMLVideoElement` a custom player uses, so a player can switch to it when a `<video>` cannot play
 its source:
 

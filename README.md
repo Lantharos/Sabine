@@ -25,6 +25,8 @@ cd my-app
 sabine dev
 ```
 
+`sabine new my-notes --template notes` starts from a small notes app instead: a glass window that draws its own titlebar, with a typed command its page calls through generated bindings.
+
 A Sabine app starts with `SabineWindow`; its web assets and identity live in `Sabine.toml`:
 
 ```rust

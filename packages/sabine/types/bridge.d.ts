@@ -1,9 +1,9 @@
 import type { SabineActivityApi } from "./activity.js";
-import type { SabineClipboardApi } from "./clipboard.js";
+import type { SabineClipboardApi } from "./desktop/clipboard.js";
 import type { SabineGuestApi } from "./guest.js";
-import type { SabinePrintApi } from "./print.js";
-import type { SystemAppearance } from "./system.js";
-import type { SabinePopupApi, SabineWindowApi } from "./window.js";
+import type { SabinePrintApi } from "./desktop/print.js";
+import type { SystemAppearance } from "./desktop/system.js";
+import type { SabinePopupApi, SabineWindowApi } from "./window/app-window.js";
 
 export type JsonValue =
   | null
@@ -24,7 +24,12 @@ export interface InvokeOptions {
 export interface SabineBridge {
   readonly __native: true;
   readonly commands: string[];
-  invoke(name: string, params?: Record<string, unknown>, options?: InvokeOptions): Promise<unknown>;
+  invoke(name: string, params?: object, options?: InvokeOptions): Promise<unknown>;
+  /**
+   * Sends a command without waiting for its answer, for updates sent often
+   * whose answers the page doesn't need, such as positions while dragging.
+   */
+  send(name: string, params?: object): void;
   listen(name: string, callback: (payload: unknown) => void): () => void;
 }
 
@@ -46,7 +51,7 @@ export declare function fileUrl(path: string): string;
 export declare function sabine(): SabineApi;
 export declare function invoke<T = unknown>(
   name: string,
-  params?: Record<string, unknown>,
+  params?: object,
   options?: InvokeOptions,
 ): Promise<T>;
 export declare function listen<T = unknown>(
@@ -57,6 +62,7 @@ export declare function listen<T = unknown>(
 export declare const bridge: {
   commands(): string[];
   invoke: typeof invoke;
+  send: SabineBridge["send"];
   listen: typeof listen;
 };
 

@@ -48,7 +48,7 @@ export function sabine() {
 /**
  * @template [T=unknown]
  * @param {string} name
- * @param {Record<string, unknown>} [params]
+ * @param {object} [params]
  * @param {InvokeOptions} [options]
  * @returns {Promise<T>}
  */
@@ -66,12 +66,21 @@ export function listen(name, callback) {
   return requireBridge().listen(name, /** @type {(payload: unknown) => void} */ (callback));
 }
 
+/**
+ * @param {string} name
+ * @param {object} [params]
+ */
+function send(name, params = {}) {
+  requireBridge().send(name, params);
+}
+
 export const bridge = {
   /** @returns {string[]} */
   commands() {
     return requireBridge().commands.slice();
   },
   invoke,
+  send,
   listen,
 };
 

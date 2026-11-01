@@ -1,17 +1,21 @@
-/** @typedef {import("../types/media.js").NativeVideoOptions} NativeVideoOptions */
-/** @typedef {import("../types/media.js").NativeVideoTrack} NativeVideoTrack */
-/** @typedef {import("../types/media.js").NativeVideoCue} NativeVideoCue */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoOptions} NativeVideoOptions */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoTrack} NativeVideoTrack */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoCue} NativeVideoCue */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoError} NativeVideoError */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoAttachOptions} NativeVideoAttachOptions */
+/** @typedef {{ id: number, type: string, [field: string]: any }} MediaEvent */
 
-import { LayoutTracker } from "./media-layout.js";
+import { LayoutTracker } from "./layout.js";
 
 const EVENT = "sabine.media";
 const CREATE = "sabine.media.create";
 
 /** @type {Map<number, NativeVideo>} */
 const players = new Map();
-/** @type {Map<number, Record<string, unknown>[]>} */
+/** @type {Map<number, MediaEvent[]>} */
 const early = new Map();
 let creating = 0;
+/** @type {(() => void) | null} */
 let listening = null;
 
 function bridge() {
@@ -22,6 +26,7 @@ function bridge() {
   return bridge;
 }
 
+/** @param {MediaEvent} event */
 function route(event) {
   const player = players.get(event.id);
   if (player) {
@@ -52,19 +57,22 @@ export class NativeVideo extends EventTarget {
    */
   static async create(src, options = {}) {
     const native = bridge();
-    listening ??= native.listen(EVENT, route);
+    listening ??= native.listen(EVENT, (event) => route(/** @type {MediaEvent} */ (event)));
     const source = new URL(src, document.baseURI).href;
     creating += 1;
+    /** @type {number} */
     let id;
     try {
-      ({ id } = await native.invoke(CREATE, {
-        src: source,
-        autoplay: Boolean(options.autoplay),
-        loop: Boolean(options.loop),
-        volume: options.volume ?? 1,
-        muted: Boolean(options.muted),
-        rate: options.playbackRate ?? 1,
-      }));
+      ({ id } = /** @type {{ id: number }} */ (
+        await native.invoke(CREATE, {
+          src: source,
+          autoplay: Boolean(options.autoplay),
+          loop: Boolean(options.loop),
+          volume: options.volume ?? 1,
+          muted: Boolean(options.muted),
+          rate: options.playbackRate ?? 1,
+        })
+      ));
     } finally {
       creating -= 1;
     }
@@ -93,15 +101,23 @@ export class NativeVideo extends EventTarget {
   #loop = false;
   #width = 0;
   #height = 0;
+  /** @type {NativeVideoError | null} */
   #error = null;
+  /** @type {{ video: NativeVideoTrack[], audio: NativeVideoTrack[], subtitles: NativeVideoTrack[] }} */
   #tracks = { video: [], audio: [], subtitles: [] };
+  /** @type {NativeVideoCue | null} */
   #cue = null;
   #cueTimer = 0;
+  /** @type {LayoutTracker | null} */
   #layout = null;
   #rect = "";
   #destroyed = false;
 
-  /** @private */
+  /**
+   * @param {number} id
+   * @param {string} src
+   * @param {NativeVideoOptions} options
+   */
   constructor(id, src, options) {
     super();
     this.#id = id;
@@ -173,7 +189,7 @@ export class NativeVideo extends EventTarget {
     this.#time = this.currentTime;
     this.#timeAt = performance.now();
     this.#rate = rate;
-    this.#command("setRate", { rate });
+    this.#send("setRate", { rate });
     this.#emit("ratechange");
   }
 
@@ -184,7 +200,7 @@ export class NativeVideo extends EventTarget {
   set volume(volume) {
     if (volume === this.#volume) return;
     this.#volume = volume;
-    this.#command("setVolume", { volume });
+    this.#send("setVolume", { volume });
     this.#emit("volumechange");
   }
 
@@ -195,7 +211,7 @@ export class NativeVideo extends EventTarget {
   set muted(muted) {
     if (Boolean(muted) === this.#muted) return;
     this.#muted = Boolean(muted);
-    this.#command("setMuted", { muted: this.#muted });
+    this.#send("setMuted", { muted: this.#muted });
     this.#emit("volumechange");
   }
 
@@ -205,7 +221,7 @@ export class NativeVideo extends EventTarget {
 
   set loop(loop) {
     this.#loop = Boolean(loop);
-    this.#command("setLoop", { loop: this.#loop });
+    this.#send("setLoop", { loop: this.#loop });
   }
 
   /** @returns {NativeVideoTrack[]} */
@@ -233,26 +249,26 @@ export class NativeVideo extends EventTarget {
       this.#ended = false;
       this.#time = 0;
     }
-    return this.#command("play");
+    return this.#request("play");
   }
 
   pause() {
     if (this.#paused) return;
     this.#paused = true;
     this.#stopClock();
-    this.#command("pause");
+    this.#send("pause");
     this.#emit("pause");
   }
 
   /** @param {string} id */
   selectAudioTrack(id) {
-    return this.#command("selectTracks", { audio: id });
+    return this.#request("selectTracks", { audio: id });
   }
 
   /** @param {string | null} id `null` turns subtitles off. */
   selectSubtitleTrack(id) {
     if (id === null) this.#showCue(null);
-    return this.#command("selectTracks", { subtitle: id });
+    return this.#request("selectTracks", { subtitle: id });
   }
 
   /**
@@ -261,7 +277,7 @@ export class NativeVideo extends EventTarget {
    * transparent where the video shows; pass `cutout` to clip the video's shape
    * out of an ancestor instead, when nothing inside it draws over the video.
    * @param {Element} element
-   * @param {{ cutout?: Element }} [options]
+   * @param {NativeVideoAttachOptions} [options]
    */
   attach(element, options = {}) {
     this.detach();
@@ -289,10 +305,10 @@ export class NativeVideo extends EventTarget {
     this.#stopClock();
     clearTimeout(this.#cueTimer);
     players.delete(this.#id);
-    this.#command("destroy");
+    this.#send("destroy");
   }
 
-  /** @private */
+  /** @param {MediaEvent} event */
   _receive(event) {
     switch (event.type) {
       case "loaded":
@@ -339,6 +355,7 @@ export class NativeVideo extends EventTarget {
     }
   }
 
+  /** @param {string} state */
   #state(state) {
     if (state === "playing") {
       this.#playing = true;
@@ -369,17 +386,22 @@ export class NativeVideo extends EventTarget {
     }
   }
 
+  /**
+   * @param {number} time
+   * @param {boolean} fast
+   */
   #seek(time, fast) {
     const target = Math.max(0, Number(time) || 0);
     this.#ended = false;
     this.#seeking = true;
     this.#setTime(target);
     this.#showCue(null);
-    this.#command("seek", { time: target, fast });
+    this.#send("seek", { time: target, fast });
     this.#emit("seeking");
     this.#emit("timeupdate");
   }
 
+  /** @param {number} time */
   #setTime(time) {
     this.#time = time;
     this.#timeAt = performance.now();
@@ -390,6 +412,7 @@ export class NativeVideo extends EventTarget {
     this.#playing = false;
   }
 
+  /** @param {NativeVideoCue | null} cue */
   #showCue(cue) {
     clearTimeout(this.#cueTimer);
     if (cue === this.#cue) return;
@@ -398,29 +421,46 @@ export class NativeVideo extends EventTarget {
     if (cue) this.#expireCue(cue);
   }
 
+  /** @param {NativeVideoCue} cue */
   #expireCue(cue) {
     clearTimeout(this.#cueTimer);
-    if (!this.#playing || cue.end === null) return;
-    const remaining = (cue.end - this.currentTime) / this.#rate;
+    const end = cue.end;
+    if (!this.#playing || end === null) return;
+    const remaining = (end - this.currentTime) / this.#rate;
     this.#cueTimer = setTimeout(() => {
       if (this.#cue !== cue) return;
-      if (this.currentTime >= cue.end) this.#showCue(null);
+      if (this.currentTime >= end) this.#showCue(null);
       else this.#expireCue(cue);
     }, Math.max(16, remaining * 1000));
   }
 
+  /** @param {Record<string, unknown>} rect */
   #place(rect) {
     const key = JSON.stringify(rect);
     if (key === this.#rect || this.#destroyed) return;
     this.#rect = key;
-    this.#command("setRect", rect);
+    this.#send("setRect", rect);
   }
 
-  #command(name, params = {}) {
-    if (this.#destroyed && name !== "destroy") return Promise.resolve();
-    return bridge().invoke(`sabine.media.${name}`, { id: this.#id, ...params });
+  /**
+   * @param {string} name
+   * @param {object} [params]
+   */
+  async #request(name, params = {}) {
+    if (this.#destroyed) return;
+    await bridge().invoke(`sabine.media.${name}`, { id: this.#id, ...params });
   }
 
+  /**
+   * @param {string} name
+   * @param {object} [params]
+   */
+  #send(name, params = {}) {
+    if (this.#destroyed && name !== "destroy") return;
+    bridge().send(`sabine.media.${name}`, { id: this.#id, ...params });
+  }
+
+  /** @param {string} name */
   #emit(name) {
     this.dispatchEvent(new Event(name));
   }

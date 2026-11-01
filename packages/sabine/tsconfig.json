@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["index.js", "index.d.ts", "src", "types"]
+}

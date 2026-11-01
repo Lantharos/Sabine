@@ -1,0 +1,13 @@
+{
+  "name": "sabine-notes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --port=5173 ui/index.html",
+    "build": "tsc --noEmit && bun build ui/index.html --outdir ui/dist --minify",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

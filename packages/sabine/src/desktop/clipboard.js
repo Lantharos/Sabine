@@ -1,4 +1,4 @@
-/** @typedef {import("../types/clipboard.js").SabineClipboardApi} SabineClipboardApi */
+/** @typedef {import("../../types/desktop/clipboard.js").SabineClipboardApi} SabineClipboardApi */
 
 /** @returns {SabineClipboardApi} */
 function requireClipboard() {

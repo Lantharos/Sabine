@@ -15,5 +15,11 @@
   "files": [
     "packages/sabine"
   ],
-  "sideEffects": false
+  "sideEffects": false,
+  "scripts": {
+    "check": "tsc -p packages/sabine && tsc -p examples/sabine-notes"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
 }

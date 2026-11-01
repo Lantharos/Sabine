@@ -1,6 +1,6 @@
-import { requireApi } from "./bridge.js";
+import { requireApi } from "../bridge.js";
 
-/** @type {typeof import("../types/print.js").print} */
+/** @type {typeof import("../../types/desktop/print.js").print} */
 export const print = {
   page() {
     return requireApi().print.page();
