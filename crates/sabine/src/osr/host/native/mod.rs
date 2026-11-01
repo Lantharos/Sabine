@@ -35,8 +35,8 @@ use sabine_platform::WindowEffect;
 use super::config::OsrHostConfig;
 use super::socket::SocketReader;
 use super::types::{
-    ClickMemory, LifecycleState, MouseButtons, OsrHostEvent, OverlayLayer, PendingResizePaint,
-    SurfaceGeometry, TitlebarControl,
+    ClickMemory, HostControl, LifecycleState, MouseButtons, OsrHostEvent, OverlayLayer,
+    PendingResizePaint, SurfaceGeometry, TitlebarControl,
 };
 
 pub(super) struct OsrNativeHost {
@@ -420,6 +420,8 @@ pub(super) fn present_window(window: &Arc<dyn WinitWindow>) {
     window.request_redraw();
 }
 
+/// Reads what the app sends the window. The window closes once the app's end
+/// closes, as it does when the app crashes.
 fn start_parent_bridge_reader(
     sender: mpsc::SyncSender<OsrHostEvent>,
     proxy: EventLoopProxy,
@@ -429,7 +431,7 @@ fn start_parent_bridge_reader(
         let mut input = std::io::stdin().lock();
         while let Ok(Some(frame)) = Frame::read(&mut input) {
             if frame.body.is_none()
-                && let Some((command, value)) = crate::parse_host_control(&frame.line)
+                && let Some((command, value)) = crate::bridge::parse_host_control(&frame.line)
                 && let Some(control) = super::events::host_control_from_parts(command, value)
             {
                 if sender.send(OsrHostEvent::HostControl(control)).is_err() {
@@ -439,6 +441,12 @@ fn start_parent_bridge_reader(
                 continue;
             }
             relay.forward(frame.to_bytes());
+        }
+        if sender
+            .send(OsrHostEvent::HostControl(HostControl::Quit))
+            .is_ok()
+        {
+            proxy.wake_up();
         }
     });
 }

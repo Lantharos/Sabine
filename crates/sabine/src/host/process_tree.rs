@@ -85,10 +85,10 @@ pub(crate) fn prepare_detachable_child_command(command: &mut Command) {
 #[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 #[path = "process_tree/windows.rs"]
 mod platform;
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 use platform::ProcessGroup;
 
 #[cfg(unix)]
@@ -136,19 +136,11 @@ mod platform {
         sync::atomic::{AtomicBool, AtomicI32, Ordering},
     };
 
-    const SIGINT: i32 = 2;
-    const SIGKILL: i32 = 9;
-    const SIGTERM: i32 = 15;
     const GROUP_CAPACITY: usize = 128;
 
     static INSTALLED: AtomicBool = AtomicBool::new(false);
     static PROCESS_GROUPS: [AtomicI32; GROUP_CAPACITY] =
         [const { AtomicI32::new(0) }; GROUP_CAPACITY];
-
-    unsafe extern "C" {
-        fn kill(pid: i32, signal: i32) -> i32;
-        fn signal(signal: i32, handler: extern "C" fn(i32)) -> usize;
-    }
 
     pub(super) fn prepare_child_command(command: &mut Command, die_with_parent: bool) {
         use std::os::unix::process::CommandExt;
@@ -159,14 +151,13 @@ mod platform {
         if die_with_parent {
             terminate_with_parent(command);
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            let _ = die_with_parent;
-        }
+        #[cfg(target_os = "macos")]
+        let _ = die_with_parent;
     }
 
-    /// Window hosts must not outlive a crashed app. The shared browser process
-    /// is started without this, so closing one window leaves it to the others.
+    /// Window hosts must not outlive a crashed app, which they also notice
+    /// when the app's end of their input closes. The shared browser process is
+    /// started without this, so closing one window leaves it to the others.
     #[cfg(target_os = "linux")]
     fn terminate_with_parent(command: &mut Command) {
         use std::{io, os::unix::process::CommandExt};
@@ -188,9 +179,10 @@ mod platform {
         if INSTALLED.swap(true, Ordering::SeqCst) {
             return;
         }
+        let handler = handle_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
         unsafe {
-            signal(SIGINT, handle_signal);
-            signal(SIGTERM, handle_signal);
+            libc::signal(libc::SIGINT, handler);
+            libc::signal(libc::SIGTERM, handler);
         }
     }
 
@@ -222,14 +214,14 @@ mod platform {
     }
 
     pub(super) fn terminate_process_group(id: u32) {
-        send_process_group(id, SIGTERM);
+        send_process_group(id, libc::SIGTERM);
     }
 
     pub(super) fn kill_process_group(id: u32) {
-        send_process_group(id, SIGKILL);
+        send_process_group(id, libc::SIGKILL);
     }
 
-    extern "C" fn handle_signal(signal: i32) {
+    extern "C" fn handle_signal(signal: libc::c_int) {
         end_process_groups();
         end_by(signal);
     }
@@ -239,21 +231,21 @@ mod platform {
             let id = slot.load(Ordering::SeqCst);
             if id > 0 {
                 unsafe {
-                    kill(-id, SIGTERM);
-                    kill(-id, SIGKILL);
+                    libc::kill(-id, libc::SIGTERM);
+                    libc::kill(-id, libc::SIGKILL);
                 }
             }
         }
     }
 
-    fn end_by(signal: i32) {
+    fn end_by(signal: libc::c_int) {
         unsafe {
             libc::signal(signal, libc::SIG_DFL);
             libc::raise(signal);
         }
     }
 
-    fn send_process_group(id: u32, signal: i32) {
+    fn send_process_group(id: u32, signal: libc::c_int) {
         let Ok(id) = i32::try_from(id) else {
             return;
         };
@@ -261,7 +253,7 @@ mod platform {
             return;
         }
         unsafe {
-            kill(-id, signal);
+            libc::kill(-id, signal);
         }
     }
 }
