@@ -34,8 +34,19 @@ pub use guest::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
 };
 
-/// The `window.sabine` page API injected into every Sabine page by the native host.
-pub const INSTALL_SCRIPT: &str = include_str!("scripts/web_bridge.js");
+/// The `window.sabine` page API injected into every Sabine page by the native host. Its parts
+/// share one function scope, and every part after the first uses what `core.js` declares.
+pub const INSTALL_SCRIPT: &str = concat!(
+    "(function () {\nif (window.sabine?.bridge?.__native) return;\n",
+    include_str!("scripts/bridge/core.js"),
+    include_str!("scripts/bridge/window.js"),
+    include_str!("scripts/bridge/print.js"),
+    include_str!("scripts/bridge/notifications.js"),
+    include_str!("scripts/bridge/drag.js"),
+    include_str!("scripts/bridge/activity.js"),
+    include_str!("scripts/bridge/guest.js"),
+    "})();\n",
+);
 
 /// Middle-click autoscroll, evaluated in every frame by the native host on Linux and macOS, where
 /// Chromium has none.

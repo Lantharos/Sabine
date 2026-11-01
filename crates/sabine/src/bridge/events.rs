@@ -95,11 +95,12 @@ pub(crate) fn spawn_bridge_dispatch(
     let (ready_sender, ready) = crossbeam_channel::bounded(1);
     let detach_emitter = emitter.clone();
     let dispatcher =
-        BridgeRequestDispatcher::new(bridge_runtime, activity, emitter.clone(), writer);
+        BridgeRequestDispatcher::new(bridge_runtime, activity.clone(), emitter.clone(), writer);
     let thread = thread::spawn(move || {
         read_requests(stdout, window, &dispatcher, &listeners, || {
             let _ = ready_sender.try_send(());
         });
+        activity.release_window(window);
         detach_emitter.detach(window);
         listeners.closed(window);
     });

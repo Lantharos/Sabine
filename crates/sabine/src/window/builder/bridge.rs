@@ -77,8 +77,7 @@ impl SabineWindow {
         self
     }
 
-    /// Registers a command limited to the descriptor's targets, which the
-    /// descriptor's extra origins may also call.
+    /// Registers a command that the descriptor's extra origins may also call.
     pub fn bridge_descriptor_handler<F>(
         mut self,
         descriptor: BridgeCommandDescriptor,

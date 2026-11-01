@@ -12,12 +12,32 @@
   const pending = new Map();
   let nextRequest = 0;
 
+  const settle = (id) => {
+    const entry = pending.get(id);
+    pending.delete(id);
+    clearTimeout(entry?.timer);
+    return entry;
+  };
   const request = (op, body) =>
     new Promise((resolve, reject) => {
       const id = ++nextRequest;
-      pending.set(id, { resolve, reject });
-      post(stringify({ ...body, id, op }));
+      const timer = setTimeout(() => {
+        settle(id);
+        reject(new DOMException("The clipboard did not answer", "TimeoutError"));
+      }, 30000);
+      pending.set(id, { resolve, reject, timer });
+      try {
+        post(stringify({ ...body, id, op }));
+      } catch (error) {
+        settle(id);
+        reject(error);
+      }
     });
+  addEventListener("pagehide", () => {
+    for (const id of [...pending.keys()]) {
+      settle(id).reject(new DOMException("The page was hidden", "AbortError"));
+    }
+  });
   const read = (selection, types) => request("read", { selection, types });
   const write = (selection, items) => request("write", { selection, items });
 
@@ -203,9 +223,8 @@
 
   return (message) => {
     const reply = parse(message);
-    const entry = pending.get(reply.id);
+    const entry = settle(reply.id);
     if (!entry) return;
-    pending.delete(reply.id);
     if (reply.ok) entry.resolve(reply.value);
     else entry.reject(new DOMException(reply.value?.message ?? "The clipboard is unavailable", "NotAllowedError"));
   };

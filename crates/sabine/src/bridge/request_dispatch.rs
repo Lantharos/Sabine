@@ -101,10 +101,10 @@ impl BridgeRequestDispatcher {
             thread::spawn(move || {
                 while let Ok(BridgeIpcRequest { reply, command }) = requests.recv() {
                     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        match activity.dispatch_bridge_command(&command) {
-                            Some((result, update)) => {
-                                if let (Ok(_), Some(update)) = (result.as_ref(), update.as_ref()) {
-                                    let _ = emitter.emit_activity_update(update);
+                        match activity.dispatch_bridge_command(&command, &reply.browser_id) {
+                            Some((result, updates)) => {
+                                for update in &updates {
+                                    emitter.emit_activity_update(update);
                                 }
                                 BridgeOutcome::Ready(result)
                             }
@@ -183,7 +183,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use sabine_bridge::{BridgeHandlers, BridgeRegistry, BridgeResponse, BridgeRuntime};
+    use sabine_bridge::{BridgeHandlers, BridgeResponse, BridgeRuntime};
 
     use super::*;
     use crate::bridge::emitter::BridgeEventEmitter;
@@ -201,8 +201,6 @@ mod tests {
                 Ok(BridgeResponse::json(serde_json::Value::Null))
             }
         });
-        let mut registry = BridgeRegistry::default();
-        registry.register("wait");
         let mut window = Command::new("cat")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -210,7 +208,7 @@ mod tests {
             .expect("cat");
         let writer = BridgeWriter::spawn(window.stdin.take().expect("stdin"));
         let dispatcher = BridgeRequestDispatcher::new(
-            BridgeRuntime::new(handlers, registry),
+            BridgeRuntime::new(handlers),
             sabine_bridge::ActivityRegistry::default(),
             BridgeEventEmitter::default(),
             writer,

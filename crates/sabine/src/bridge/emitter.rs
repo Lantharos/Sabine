@@ -180,9 +180,13 @@ impl BridgeEventEmitter {
             sabine_bridge::ActivityHostUpdate::Begin(_) => "activity.begin",
             sabine_bridge::ActivityHostUpdate::End(_) => "activity.end",
         };
-        self.emit_host_control(
-            command,
-            &sabine_bridge::host_update_json(update).to_string(),
+        self.deliver(
+            update.record().window,
+            format!(
+                "{HOST_CONTROL_PREFIX}\t{command}\t{}",
+                sabine_bridge::host_update_json(update)
+            ),
+            None,
         )
     }
 

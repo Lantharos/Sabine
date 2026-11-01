@@ -1,6 +1,5 @@
-use super::command::{BridgeCommand, BridgeError};
+use super::command::BridgeCommand;
 use super::handlers::{BridgeHandlers, BridgeOutcome};
-use super::registry::{BridgeCommandDescriptor, BridgeRegistry};
 
 /// Remote origins whose documents may use the bridge. The app's own pages
 /// always may.
@@ -33,57 +32,17 @@ impl ContentSecurity {
 #[derive(Clone, Debug)]
 pub struct BridgeRuntime {
     handlers: BridgeHandlers,
-    registry: BridgeRegistry,
 }
 
 impl BridgeRuntime {
-    pub fn new(handlers: BridgeHandlers, registry: BridgeRegistry) -> Self {
-        Self { handlers, registry }
+    pub fn new(handlers: BridgeHandlers) -> Self {
+        Self { handlers }
     }
 
     /// Dispatch from an authenticated native host after it has authorized the live document.
     /// This entry point must never receive requests directly from page-controlled transports.
     pub fn dispatch_from_authorized_document(&self, command: BridgeCommand) -> BridgeOutcome {
-        if let Err(error) = validate_targets(&command, self.registry.descriptor(&command.name)) {
-            return BridgeOutcome::Ready(Err(error));
-        }
         self.handlers.dispatch(command)
-    }
-}
-
-fn validate_targets(
-    command: &BridgeCommand,
-    descriptor: Option<&BridgeCommandDescriptor>,
-) -> Result<(), BridgeError> {
-    let Some(descriptor) = descriptor else {
-        return Ok(());
-    };
-    if descriptor.targets.is_empty()
-        || descriptor
-            .targets
-            .iter()
-            .any(|target| current_bridge_targets().contains(&target.as_str()))
-    {
-        return Ok(());
-    }
-    Err(BridgeError::new(format!(
-        "Bridge command `{}` is unavailable on this target",
-        command.name
-    )))
-}
-
-fn current_bridge_targets() -> &'static [&'static str] {
-    #[cfg(target_os = "linux")]
-    {
-        &["desktop", "linux"]
-    }
-    #[cfg(target_os = "windows")]
-    {
-        &["desktop", "windows"]
-    }
-    #[cfg(target_os = "macos")]
-    {
-        &["desktop", "macos"]
     }
 }
 
@@ -117,25 +76,9 @@ mod tests {
                 serde_json::json!({ "name": command.name }),
             ))
         });
-        let mut registry = BridgeRegistry::default();
-        registry.register("notes.list");
-        let runtime = BridgeRuntime::new(handlers, registry);
+        let runtime = BridgeRuntime::new(handlers);
 
         let response = dispatch(&runtime, "notes.list").unwrap();
         assert_eq!(response.result["name"], "notes.list");
-    }
-
-    #[test]
-    fn rejects_wrong_target() {
-        let mut handlers = BridgeHandlers::default();
-        handlers.register("server.only", |_| {
-            Ok(BridgeResponse::json(serde_json::json!(true)))
-        });
-        let mut registry = BridgeRegistry::default();
-        registry.register_descriptor(BridgeCommandDescriptor::new("server.only").target("server"));
-        let runtime = BridgeRuntime::new(handlers, registry);
-
-        let error = dispatch(&runtime, "server.only").unwrap_err();
-        assert!(error.message.contains("unavailable"));
     }
 }

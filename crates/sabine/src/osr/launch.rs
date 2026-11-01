@@ -168,7 +168,7 @@ fn spawn_window(
     )?;
     let dispatch = spawn_bridge_dispatch(
         &mut child,
-        BridgeRuntime::new(context.bridge_handlers.clone(), config.bridge.clone()),
+        BridgeRuntime::new(context.bridge_handlers.clone()),
         process.activity.clone(),
         &process.bridge_emitter,
         config.listeners.clone(),

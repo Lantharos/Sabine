@@ -364,7 +364,7 @@ pub(crate) fn write_host_source(source_dir: &Path) -> Result<(), String> {
     for (header, source, constant, script) in [
         (
             "sabine_bridge_js.h",
-            "web_bridge.js",
+            "bridge/*.js",
             "SABINE_BRIDGE_JS_RAW",
             INSTALL_SCRIPT,
         ),
