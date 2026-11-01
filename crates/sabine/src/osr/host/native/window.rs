@@ -90,22 +90,10 @@ impl OsrNativeHost {
                 return;
             }
         };
-        #[cfg(not(target_os = "linux"))]
-        let renderer = {
-            let proxy = self.proxy.clone();
-            pollster::block_on(crate::render::GpuRenderer::new(
-                window.clone(),
-                self.config.transparent,
-                move || proxy.wake_up(),
-            ))
-        };
         self.surface_size = window.surface_size();
         self.scale_factor = window.scale_factor();
         self.occluded = false;
-        #[cfg(target_os = "linux")]
-        {
-            self.window_generation = self.window_generation.wrapping_add(1);
-        }
+        self.window_generation = self.window_generation.wrapping_add(1);
         self.window = Some(window.clone());
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
             sabine_runtime::report_error("media", error);
@@ -126,10 +114,7 @@ impl OsrNativeHost {
         self.send_screen_origin();
         self.send_controls_overlay();
         self.refresh_appearance();
-        #[cfg(target_os = "linux")]
         self.start_rendering(event_loop);
-        #[cfg(not(target_os = "linux"))]
-        self.renderer_started(event_loop, renderer);
     }
 
     #[cfg(target_os = "linux")]
@@ -228,8 +213,11 @@ impl OsrNativeHost {
         {
             self.direct = None;
             self.retiring_direct = None;
-            self.renderer_starting = false;
+            self.exported_window = None;
         }
+        self.renderer_starting = false;
+        #[cfg(windows)]
+        self.touch_keyboard.forget_window();
         self.window = None;
         self.renderer = None;
         self.effect = None;

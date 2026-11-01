@@ -89,26 +89,41 @@ pub(super) struct CachedTexture {
     pub(super) external: bool,
 }
 
+/// A renderer about to start, with what had to be made on the window's
+/// thread. It starts on any thread.
+pub(crate) struct RendererStart {
+    window: Arc<dyn Window>,
+    source: instance::SurfaceSource,
+    connecting: instance::Connecting,
+}
+
 impl GpuRenderer {
-    pub(crate) async fn new(
+    /// Prepares a renderer for the window, on the window's thread. A renderer
+    /// replacing one whose device was lost looks at the adapters the system
+    /// has now.
+    pub(crate) fn prepare(
         window: Arc<dyn Window>,
-        transparent: bool,
-        wake: impl Fn() + Send + Sync + 'static,
-    ) -> Result<Self, RendererError> {
+        after_device_loss: bool,
+    ) -> Result<RendererStart, RendererError> {
         let source = instance::SurfaceSource::new(window.clone())?;
-        let connection = instance::connect(&source).await?;
-        Self::connected(window, source, connection, transparent, wake).await
+        let connecting = instance::prepare(&source, after_device_loss)?;
+        Ok(RendererStart {
+            window,
+            source,
+            connecting,
+        })
     }
 
-    /// Creates the renderer again after its device was lost, on the adapters
-    /// the system has now.
-    pub(crate) async fn after_device_loss(
-        window: Arc<dyn Window>,
+    pub(crate) async fn start(
+        RendererStart {
+            window,
+            source,
+            connecting,
+        }: RendererStart,
         transparent: bool,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, RendererError> {
-        let source = instance::SurfaceSource::new(window.clone())?;
-        let connection = instance::reconnect(&source).await?;
+        let connection = instance::connect(&source, connecting).await?;
         Self::connected(window, source, connection, transparent, wake).await
     }
 

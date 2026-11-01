@@ -47,10 +47,8 @@ pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
         .run_app_on_demand(&mut host)
         .map_err(|error| error.to_string());
     let failure = host.failure.take();
-    #[cfg(target_os = "linux")]
     let gpu_starts = host.take_gpu_starts();
     drop(host);
-    #[cfg(target_os = "linux")]
     for start in gpu_starts {
         let _ = start.join();
     }

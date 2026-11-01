@@ -64,9 +64,57 @@ impl SurfaceSource {
 
 static INSTANCE: Mutex<Option<wgpu::Instance>> = Mutex::new(None);
 
-/// Connects through the instance earlier windows of this process used, so
-/// graphics drivers start only once.
-pub(super) async fn connect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
+/// What a renderer connects through, chosen on the window's thread. AppKit
+/// lets only the main thread make a window's surface, so on macOS the
+/// instance and surface are made there, and the adapter and device are found
+/// from any thread.
+pub(super) struct Connecting {
+    #[cfg(target_os = "macos")]
+    instance: wgpu::Instance,
+    #[cfg(target_os = "macos")]
+    surface: wgpu::Surface<'static>,
+    #[cfg(not(target_os = "macos"))]
+    afresh: bool,
+}
+
+/// Prepares to connect through the instance earlier windows of this process
+/// used, so graphics drivers start only once, or through a new one after a
+/// device was lost.
+#[cfg(target_os = "macos")]
+pub(super) fn prepare(source: &SurfaceSource, afresh: bool) -> Result<Connecting, RendererError> {
+    let mut shared = INSTANCE.lock().unwrap();
+    if afresh {
+        drop(shared.take());
+    }
+    let instance = shared
+        .get_or_insert_with(|| create_instance(wgpu::Backends::METAL))
+        .clone();
+    drop(shared);
+    let surface = source.create(&instance)?;
+    Ok(Connecting { instance, surface })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn prepare(_source: &SurfaceSource, afresh: bool) -> Result<Connecting, RendererError> {
+    Ok(Connecting { afresh })
+}
+
+#[cfg(target_os = "macos")]
+pub(super) async fn connect(
+    _source: &SurfaceSource,
+    Connecting { instance, surface }: Connecting,
+) -> Result<GpuConnection, RendererError> {
+    adapter_for(instance, surface).await
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) async fn connect(
+    source: &SurfaceSource,
+    connecting: Connecting,
+) -> Result<GpuConnection, RendererError> {
+    if connecting.afresh {
+        return reconnect(source).await;
+    }
     let shared = INSTANCE.lock().unwrap().clone();
     if let Some(instance) = shared
         && let Ok(connection) = request_adapter(instance, source).await
@@ -82,7 +130,8 @@ pub(super) async fn connect(source: &SurfaceSource) -> Result<GpuConnection, Ren
 /// removed, only a new instance finds the adapters that work now. The old
 /// instance is released first: NVIDIA's Vulkan driver crashes when an older
 /// instance is destroyed while a newer one has a window surface.
-pub(super) async fn reconnect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
+#[cfg(not(target_os = "macos"))]
+async fn reconnect(source: &SurfaceSource) -> Result<GpuConnection, RendererError> {
     drop(INSTANCE.lock().unwrap().take());
     let mut failure = None;
     for backends in backend_preference() {
@@ -98,11 +147,19 @@ pub(super) async fn reconnect(source: &SurfaceSource) -> Result<GpuConnection, R
     Err(failure.expect("every platform prefers at least one backend"))
 }
 
+#[cfg(not(target_os = "macos"))]
 async fn request_adapter(
     instance: wgpu::Instance,
     source: &SurfaceSource,
 ) -> Result<GpuConnection, RendererError> {
     let surface = source.create(&instance)?;
+    adapter_for(instance, surface).await
+}
+
+async fn adapter_for(
+    instance: wgpu::Instance,
+    surface: wgpu::Surface<'static>,
+) -> Result<GpuConnection, RendererError> {
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
@@ -125,6 +182,7 @@ fn create_instance(backends: wgpu::Backends) -> wgpu::Instance {
     })
 }
 
+#[cfg(not(target_os = "macos"))]
 fn backend_preference() -> &'static [wgpu::Backends] {
     #[cfg(target_os = "windows")]
     {
@@ -133,9 +191,5 @@ fn backend_preference() -> &'static [wgpu::Backends] {
     #[cfg(target_os = "linux")]
     {
         &[wgpu::Backends::VULKAN, wgpu::Backends::GL]
-    }
-    #[cfg(target_os = "macos")]
-    {
-        &[wgpu::Backends::METAL]
     }
 }

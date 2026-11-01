@@ -1,7 +1,9 @@
 use std::time::{Duration, Instant};
 
+use winit::event_loop::ActiveEventLoop;
+
 use crate::osr::host::native::OsrNativeHost;
-use crate::render::GpuRenderer;
+use crate::render::{GpuRenderer, RendererError};
 
 /// While a graphics driver restarts, its adapters can be missing for a few
 /// seconds, so the window keeps looking for one instead of giving up.
@@ -15,19 +17,22 @@ pub(in crate::osr::host) struct GpuReconnect {
 }
 
 impl OsrNativeHost {
-    pub(in crate::osr::host) fn recover_gpu(&mut self) {
+    pub(in crate::osr::host) fn recover_gpu(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.closing_deadline.is_some() || self.failure.is_some() {
             return;
         }
         if let Some(reason) = self.renderer.as_ref().and_then(GpuRenderer::device_loss) {
             self.lose_gpu(reason);
         }
-        self.reconnect_gpu();
+        self.reconnect_gpu(event_loop);
     }
 
-    /// When the window next tries to find a graphics device again.
+    /// When the window next tries to find a graphics device again, unless
+    /// it is looking for one now.
     pub(in crate::osr::host) fn gpu_reconnect_deadline(&self) -> Option<Instant> {
-        self.gpu_reconnect.map(|reconnect| reconnect.next_attempt)
+        self.gpu_reconnect
+            .filter(|_| !self.renderer_starting)
+            .map(|reconnect| reconnect.next_attempt)
     }
 
     fn lose_gpu(&mut self, reason: String) {
@@ -52,64 +57,36 @@ impl OsrNativeHost {
         });
     }
 
-    fn reconnect_gpu(&mut self) {
+    fn reconnect_gpu(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let Some(reconnect) = self.gpu_reconnect else {
+            return;
+        };
+        if self.renderer_starting || Instant::now() < reconnect.next_attempt {
+            return;
+        }
+        if self.window.is_none() {
+            self.gpu_reconnect = None;
+            return;
+        }
+        self.start_renderer(event_loop, true);
+    }
+
+    /// Looks for a graphics device again a little later, while a restarting
+    /// driver may still bring its adapters back.
+    pub(in crate::osr::host) fn gpu_reconnect_failed(&mut self, error: RendererError) {
         let Some(reconnect) = self.gpu_reconnect else {
             return;
         };
         let now = Instant::now();
-        if now < reconnect.next_attempt {
-            return;
-        }
-        let Some(window) = self.window.clone() else {
+        if now.duration_since(reconnect.since) < RECONNECT_TIMEOUT {
+            crate::osr::host::trace_host(&self.config, format!("gpu.reconnect.waiting {error}"));
+            self.gpu_reconnect = Some(GpuReconnect {
+                next_attempt: now + RECONNECT_INTERVAL,
+                ..reconnect
+            });
+        } else {
             self.gpu_reconnect = None;
-            return;
-        };
-        let proxy = self.proxy.clone();
-        match pollster::block_on(GpuRenderer::after_device_loss(
-            window,
-            self.config.transparent,
-            move || proxy.wake_up(),
-        )) {
-            Ok(renderer) => {
-                self.gpu_reconnect = None;
-                self.resume_gpu(renderer);
-            }
-            Err(error) if now.duration_since(reconnect.since) < RECONNECT_TIMEOUT => {
-                crate::osr::host::trace_host(
-                    &self.config,
-                    format!("gpu.reconnect.waiting {error}"),
-                );
-                self.gpu_reconnect = Some(GpuReconnect {
-                    next_attempt: now + RECONNECT_INTERVAL,
-                    ..reconnect
-                });
-            }
-            Err(error) => {
-                self.gpu_reconnect = None;
-                self.fail(format!("Could not restore GPU rendering: {error}"));
-            }
+            self.fail(format!("Could not restore GPU rendering: {error}"));
         }
-    }
-
-    fn resume_gpu(&mut self, renderer: GpuRenderer) {
-        #[cfg(windows)]
-        let adapter = crate::osr::accel::adapter_luid(&renderer);
-        #[cfg(target_os = "linux")]
-        let imports_dmabuf = renderer.imports_dmabuf();
-        self.renderer = Some(renderer);
-        #[cfg(target_os = "linux")]
-        if !imports_dmabuf {
-            self.paint_in_software("the graphics device cannot import dma-bufs");
-        }
-        #[cfg(windows)]
-        if self.browser_adapter.as_ref() != Some(&adapter) {
-            sabine_runtime::report_error(
-                "gpu",
-                "The graphics adapter changed; restarting the browser on the new one",
-            );
-            self.relaunch_browser();
-            return;
-        }
-        self.send_control("repaint\n");
     }
 }
