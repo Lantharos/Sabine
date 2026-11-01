@@ -77,6 +77,7 @@ pub(crate) enum OsrMessage {
     DragStarted {
         content: DragContent,
         operations: u32,
+        image: Option<DragImage>,
     },
     /// The drop the page under the pointer would accept.
     DragOperation(u32),
@@ -124,6 +125,19 @@ pub(crate) enum PageCursorMessage {
     Custom(CursorImage),
 }
 
+/// The picture of what a page drags, as Chromium drew it, and where the
+/// pointer holds it, in the picture's pixels.
+#[derive(Debug)]
+pub(crate) struct DragImage {
+    pub rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub hotspot_x: i32,
+    pub hotspot_y: i32,
+    /// The picture's pixels per page pixel.
+    pub scale: f32,
+}
+
 #[derive(Debug, Hash)]
 pub(crate) struct CursorImage {
     pub rgba: Vec<u8>,
@@ -133,7 +147,8 @@ pub(crate) struct CursorImage {
     pub hotspot_y: u16,
 }
 
-/// One entry of a page's context menu, as Chromium offers it.
+/// One entry of a page's context menu, as Chromium offers it. An entry
+/// with items opens them as a submenu.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(default)]
 pub(crate) struct ContextMenuItem {
@@ -141,6 +156,31 @@ pub(crate) struct ContextMenuItem {
     pub label: String,
     pub enabled: bool,
     pub separator: bool,
+    pub mark: MenuMark,
+    pub checked: bool,
+    pub items: Vec<ContextMenuItem>,
+}
+
+impl ContextMenuItem {
+    /// The bytes the entry and its submenu hold.
+    pub fn retained_bytes(&self) -> usize {
+        self.label.capacity()
+            + self
+                .items
+                .iter()
+                .map(ContextMenuItem::retained_bytes)
+                .sum::<usize>()
+    }
+}
+
+/// How a context menu entry shows whether it is on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum MenuMark {
+    #[default]
+    None,
+    Check,
+    Radio,
 }
 
 /// A page's request to choose files, as Chromium describes its file input.

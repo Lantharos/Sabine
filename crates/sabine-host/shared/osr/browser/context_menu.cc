@@ -20,9 +20,18 @@ bool IsEditCommand(int command_id) {
 void KeepEditCommands(CefRefPtr<CefMenuModel> model) {
   for (size_t index = model->GetCount(); index-- > 0;) {
     const cef_menu_item_type_t type = model->GetTypeAt(index);
-    if (type != MENUITEMTYPE_SEPARATOR &&
-        (type == MENUITEMTYPE_SUBMENU ||
-         !IsEditCommand(model->GetCommandIdAt(index)))) {
+    if (type == MENUITEMTYPE_SEPARATOR) {
+      continue;
+    }
+    if (type == MENUITEMTYPE_SUBMENU) {
+      CefRefPtr<CefMenuModel> submenu = model->GetSubMenuAt(index);
+      if (submenu) {
+        KeepEditCommands(submenu);
+      }
+      if (!submenu || submenu->GetCount() == 0) {
+        model->RemoveAt(index);
+      }
+    } else if (!IsEditCommand(model->GetCommandIdAt(index))) {
       model->RemoveAt(index);
     }
   }
@@ -60,15 +69,24 @@ std::string MenuItemsJson(CefRefPtr<CefMenuModel> model) {
     if (index > 0) {
       items += ",";
     }
-    if (model->GetTypeAt(index) == MENUITEMTYPE_SEPARATOR) {
+    const cef_menu_item_type_t type = model->GetTypeAt(index);
+    if (type == MENUITEMTYPE_SEPARATOR) {
       items += "{\"separator\":true}";
       continue;
     }
     items += "{\"id\":" + std::to_string(model->GetCommandIdAt(index)) +
              ",\"label\":" +
              JsString(MenuLabel(model->GetLabelAt(index).ToString())) +
-             ",\"enabled\":" + (model->IsEnabledAt(index) ? "true" : "false") +
-             "}";
+             ",\"enabled\":" + (model->IsEnabledAt(index) ? "true" : "false");
+    if (type == MENUITEMTYPE_CHECK || type == MENUITEMTYPE_RADIO) {
+      items += std::string(",\"mark\":") +
+               (type == MENUITEMTYPE_CHECK ? "\"check\"" : "\"radio\"") +
+               ",\"checked\":" + (model->IsCheckedAt(index) ? "true" : "false");
+    }
+    if (type == MENUITEMTYPE_SUBMENU) {
+      items += ",\"items\":" + MenuItemsJson(model->GetSubMenuAt(index));
+    }
+    items += "}";
   }
   return items + "]";
 }

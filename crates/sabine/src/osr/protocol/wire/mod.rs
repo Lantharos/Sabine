@@ -1,5 +1,6 @@
 mod accel;
 mod header;
+mod page;
 mod paint;
 mod regions;
 #[cfg(unix)]
@@ -13,7 +14,7 @@ use std::io::{self, Read};
 
 #[cfg(target_os = "macos")]
 use crate::osr::accel::SurfaceRegistry;
-use crate::osr::protocol::{CursorImage, DragContent, OsrMessage, PageCursorMessage};
+use crate::osr::protocol::OsrMessage;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
@@ -23,6 +24,7 @@ use accel::{KIND_ACCEL_DMABUF, KIND_ACCEL_UNAVAILABLE, parse_dmabuf_announcement
 use accel::{KIND_ACCEL_RETIRE, parse_retired_resources};
 use accel::{KIND_GUEST_ACCEL, KIND_MAIN_ACCEL, KIND_POPUP_ACCEL, parse_accel_frame};
 use header::{read_header, read_i32, read_u32};
+use page::{parse_cursor, parse_drag_start, parse_ime_surrounding};
 use paint::{BatchHeader, BatchSurface, parse_inline_batch};
 use regions::parse_draggable_regions;
 
@@ -286,7 +288,7 @@ impl WireReader {
                     .ok()
                     .filter(|token| !token.trim().is_empty()),
             ),
-            KIND_DRAG_STARTED => parse_drag_start(&payload)?,
+            KIND_DRAG_STARTED => parse_drag_start(width, height, x, y, payload)?,
             KIND_DRAG_OPERATION => OsrMessage::DragOperation(width),
             KIND_CONTEXT_MENU => OsrMessage::ContextMenu {
                 x,
@@ -371,89 +373,6 @@ impl WireReader {
         };
         Ok(Some(message))
     }
-}
-
-const CEF_CURSOR_CUSTOM: u32 = 45;
-
-fn parse_cursor(
-    width: u32,
-    height: u32,
-    hotspot_x: i32,
-    hotspot_y: i32,
-    mut payload: Vec<u8>,
-) -> io::Result<PageCursorMessage> {
-    let kind = payload
-        .get(0..4)
-        .map(read_u32)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing cursor type"))?;
-    if kind != CEF_CURSOR_CUSTOM {
-        return Ok(PageCursorMessage::Named(kind));
-    }
-    let size = |value: u32| u16::try_from(value).ok().filter(|value| *value > 0);
-    let hotspot = |value: i32| u16::try_from(value).ok();
-    let (Some(width), Some(height), Some(hotspot_x), Some(hotspot_y)) = (
-        size(width),
-        size(height),
-        hotspot(hotspot_x),
-        hotspot(hotspot_y),
-    ) else {
-        return Ok(PageCursorMessage::Named(kind));
-    };
-    let mut rgba = payload.split_off(4);
-    if rgba.len() != usize::from(width) * usize::from(height) * 4 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "cursor image does not match its size",
-        ));
-    }
-    for pixel in rgba.as_chunks_mut::<4>().0 {
-        pixel.swap(0, 2);
-    }
-    Ok(PageCursorMessage::Custom(CursorImage {
-        rgba,
-        width,
-        height,
-        hotspot_x,
-        hotspot_y,
-    }))
-}
-
-fn parse_drag_start(payload: &[u8]) -> io::Result<OsrMessage> {
-    #[derive(serde::Deserialize)]
-    struct DragStart {
-        #[serde(flatten)]
-        content: DragContent,
-        operations: u32,
-    }
-    let start: DragStart = serde_json::from_slice(payload)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    Ok(OsrMessage::DragStarted {
-        content: start.content,
-        operations: start.operations,
-    })
-}
-
-fn parse_ime_surrounding(payload: &[u8]) -> io::Result<OsrMessage> {
-    let value: serde_json::Value = serde_json::from_slice(payload)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let text = value
-        .get("text")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let number = |name: &str| {
-        value
-            .get(name)
-            .and_then(serde_json::Value::as_u64)
-            .and_then(|value| usize::try_from(value).ok())
-            .unwrap_or(0)
-    };
-    Ok(OsrMessage::ImeSurroundingChanged {
-        text,
-        cursor_utf16: number("cursor"),
-        anchor_utf16: number("anchor"),
-        base_utf16: number("base"),
-    })
 }
 
 fn batch_surface(kind: u32) -> BatchSurface {

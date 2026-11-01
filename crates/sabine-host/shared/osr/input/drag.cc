@@ -7,6 +7,7 @@
 
 #include "common/bridge_policy.h"
 #include "common/json.h"
+#include "osr/transport/wire.h"
 #include "include/base/cef_callback.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -21,8 +22,41 @@ constexpr int64_t kDragOverRepeatMs = 350;
 // the file URIs a page puts in its own drags.
 constexpr char kBlockedUrl[] = "about:blank#blocked";
 
+struct DragImage {
+  std::vector<char> pixels;
+  int width = 0;
+  int height = 0;
+  CefPoint hotspot;
+  float scale = 1.0f;
+};
+
+// The picture Chromium drew of what is dragged, at the page's scale, with
+// the pointer's place on it in the same pixels.
+DragImage DragImageOf(CefRefPtr<CefDragData> data, float scale) {
+  DragImage image;
+  CefRefPtr<CefImage> picture = data->HasImage() ? data->GetImage() : nullptr;
+  if (!picture || picture->IsEmpty() || picture->GetWidth() == 0) {
+    return image;
+  }
+  CefRefPtr<CefBinaryValue> bitmap = picture->GetAsBitmap(
+      scale, CEF_COLOR_TYPE_RGBA_8888, CEF_ALPHA_TYPE_POSTMULTIPLIED,
+      image.width, image.height);
+  if (!bitmap || image.width <= 0 || image.height <= 0) {
+    return DragImage();
+  }
+  image.pixels.resize(bitmap->GetSize());
+  bitmap->GetData(image.pixels.data(), image.pixels.size(), 0);
+  image.scale =
+      static_cast<float>(image.width) / static_cast<float>(picture->GetWidth());
+  const CefPoint hotspot = data->GetImageHotspot();
+  image.hotspot = CefPoint(static_cast<int>(hotspot.x * image.scale),
+                           static_cast<int>(hotspot.y * image.scale));
+  return image;
+}
+
 std::string DragPayload(CefRefPtr<CefDragData> data,
-                        cef_drag_operations_mask_t operations) {
+                        cef_drag_operations_mask_t operations,
+                        float image_scale) {
   std::string files;
   std::vector<CefString> paths;
   if (data->IsFile() && data->GetFilePaths(paths)) {
@@ -40,7 +74,8 @@ std::string DragPayload(CefRefPtr<CefDragData> data,
          ",\"url\":" + JsString(url) +
          ",\"urlTitle\":" + JsString(data->GetLinkTitle().ToString()) +
          ",\"files\":[" + files +
-         "],\"operations\":" + std::to_string(operations) + "}";
+         "],\"operations\":" + std::to_string(operations) +
+         ",\"imageScale\":" + std::to_string(image_scale) + "}";
 }
 
 CefRefPtr<CefDragData> DragDataFromJson(const std::string& json) {
@@ -84,8 +119,15 @@ bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
                                      int x,
                                      int y) {
   CEF_REQUIRE_UI_THREAD();
-  const std::string payload = DragPayload(drag_data, allowed_ops);
-  if (!SendMessage(kDragStarted, 0, 0, 0, 0, payload.data(),
+  const DragImage image = DragImageOf(drag_data, scale_);
+  const std::string content = DragPayload(drag_data, allowed_ops, image.scale);
+  std::vector<char> payload(4);
+  PutU32(&payload, 0, static_cast<uint32_t>(content.size()));
+  payload.insert(payload.end(), content.begin(), content.end());
+  payload.insert(payload.end(), image.pixels.begin(), image.pixels.end());
+  if (!SendMessage(kDragStarted, static_cast<uint32_t>(image.width),
+                   static_cast<uint32_t>(image.height), image.hotspot.x,
+                   image.hotspot.y, payload.data(),
                    static_cast<uint32_t>(payload.size()))) {
     return false;
   }
