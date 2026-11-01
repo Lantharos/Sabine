@@ -1,0 +1,120 @@
+---
+title: Printing
+description: Print the page, one element of it, or PDF, image and text files through the desktop's print dialog.
+sidebar:
+  order: 8
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Pages print through the desktop's own print dialog: the XDG print portal on Linux and the system's
+print dialog on macOS and Windows. `window.print()` works as in a browser, and the package's
+`print` adds printing a single element and printing files.
+
+## Printing the page
+
+```ts
+import { print } from "@lantharos/sabine";
+
+await print.page();
+```
+
+`print.page()` prints the page, like `window.print()`. Use `@media print` styles to shape the
+printed version, as you would on the web.
+
+## Printing one element
+
+```ts
+import { print } from "@lantharos/sabine";
+
+await print.element(document.querySelector("#receipt")!);
+```
+
+`print.element()` prints one element on its own, without the rest of the page around it. Images,
+canvases, SVGs and videos are scaled to fit the paper while keeping their proportions.
+
+## Printing files
+
+```ts
+import { print } from "@lantharos/sabine";
+
+const printed = await print.files(["/home/ana/Invoice.pdf", "/home/ana/Beach.jpg"], {
+  title: "Invoice and receipt",
+});
+if (!printed) {
+  showHint("Printing was cancelled");
+}
+```
+
+`print.files(paths, options)` prints PDF, image and text files as one document, in the order you
+list them. Each image and text file starts on a sheet of its own.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `title` | the first file's name | The name of the print job. |
+
+Sabine tells files apart by their contents, not their names:
+
+- **PDF** files print as they are.
+- **Images** are the formats Chromium shows: PNG, JPEG, GIF, WebP, AVIF, BMP, ICO and SVG.
+- **Text** is any other file without NUL bytes.
+
+`print.files` resolves `false` when the person cancels the Linux print dialog, and `true`
+otherwise. It rejects with a message naming any file it can't print, and when the list is empty.
+
+From Rust, print files from a window with `BridgeEventEmitter::print_files`, passing the window's
+id, the paths and an optional title. Pages don't learn the outcome of a print started this way.
+
+```rust
+use std::path::PathBuf;
+
+use sabine::SabineProcess;
+
+fn print_invoice(process: &SabineProcess) {
+    if let Some(window) = process.id() {
+        process.bridge_event_emitter().print_files(
+            window,
+            &[PathBuf::from("/home/ana/Invoice.pdf")],
+            Some("Invoice"),
+        );
+    }
+}
+```
+
+## On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Chromium on Linux has no print dialog of its own, so the window asks the desktop through the
+    XDG print portal for every print: `window.print()`, `print.page()`, `print.element()`,
+    `print.files()` and pages printed from guests. People choose the printer, pages, paper,
+    orientation, copies, two-sided printing and color in the desktop's dialog, which stays over the
+    window that printed. The printer and paper they chose are offered first the next time the app
+    prints.
+
+    Pages, images and text are laid out on the paper, orientation and pages chosen in the dialog,
+    and the desktop applies the rest without asking again. A job of only PDF files goes to the
+    desktop as it is, so the dialog chooses its pages and the printer lays them out.
+  </TabItem>
+  <TabItem label="Windows">
+    Pages print through Chromium with the system's print dialog. `print.files()` puts the files into
+    one PDF, with images and text laid out on the paper used in the person's region, and prints it
+    through the same dialog. It resolves once the dialog opens.
+  </TabItem>
+  <TabItem label="macOS">
+    Pages print through Chromium with the system's print dialog. `print.files()` puts the files into
+    one PDF, with images and text laid out on the default printer's paper, and prints it through
+    the same dialog. It resolves once the dialog opens.
+  </TabItem>
+</Tabs>
+
+## Saving as PDF
+
+Sabine has no API that writes a page to a PDF file without a dialog. People save PDFs through the
+print dialog, with the PDF printer or "Save as PDF" option their desktop offers.
+
+## Related pages
+
+- [Guests](/docs/web/guests/) covers pages embedded in a window, which print the same way.
+- [Resources and files](/docs/web/resources-and-files/) covers reaching local files from the
+  page.

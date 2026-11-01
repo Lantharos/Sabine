@@ -1,0 +1,361 @@
+---
+title: Bundling
+description: Build your app into a portable archive, a Linux package, a Windows installer or a macOS disk image with sabine bundle.
+sidebar:
+  order: 1
+---
+import { FileTree, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+`sabine bundle` turns a project into something you can hand to people: a portable archive, a deb,
+rpm or AppImage, a Windows MSI or setup program, or a macOS disk image. It reads `Sabine.toml`,
+builds your web assets and Rust executable, lays the app out the way its platform expects, and
+packages it with that platform's own tool.
+
+```sh
+sabine bundle . --target deb --release
+```
+
+`--release` builds Cargo's release profile. Without it, `sabine bundle` packages a debug build,
+which is useful for checking a package quickly but is not what you ship. `--target` defaults to
+`linux`, so name the target you want on every platform.
+
+## What a bundle build does
+
+<Steps>
+
+1. Reads `Sabine.toml` and the Cargo manifest, and resolves the app's id, name, version and
+   metadata. See [App metadata](#app-metadata) for the fallbacks.
+
+2. Loads the production environment files and runs your web build command in the web root, such as
+   `bun run build`. Pass `--no-web-build` to package assets you already built.
+
+3. Builds the executable with `cargo build --bin <package>`, for the target's Rust triple when it
+   differs from the machine you build on.
+
+4. Stages the app: the executable, your built web assets, `[resources]`, icons, desktop metadata and
+   a production `Sabine.toml` that the app reads at runtime. Development settings such as `dev_url`,
+   `dev_port` and `dev_command` are left out.
+
+5. Signs the staged app when code signing is configured. See [Code signing](/docs/distribution/code-signing/).
+
+6. Packages it, then signs and notarizes installers and disk images the same way.
+
+</Steps>
+
+The app never looks for its manifest itself. The production `Sabine.toml` sits where Sabine finds
+it next to the executable, so the same code runs from `sabine dev`, `cargo run` and an installed
+package.
+
+## Targets
+
+| Target | Also accepted as | Produces | Packaging tool |
+| --- | --- | --- | --- |
+| `portable` | `tar`, `tar.gz` | The app for the machine building it, ready to unpack anywhere | `tar` |
+| `linux` | | A tarball of the Linux filesystem tree | `tar` |
+| `deb` | | A Debian package | `dpkg-deb` and `dpkg-shlibdeps` (from `dpkg-dev`) |
+| `rpm` | | An RPM package | `rpmbuild` |
+| `appimage` | | An AppImage | `appimagetool` |
+| `windows` | | A tarball of the Windows app folder | `tar` |
+| `exe` | `nsis` | A setup program | NSIS (`makensis`) |
+| `msi` | | A Windows Installer package | WiX 7 (`wix`) with the `WixToolset.UI.wixext` extension |
+| `macos` | `app` | A tarball of the `.app` bundle | `tar` |
+| `dmg` | | A disk image holding the `.app` | `hdiutil` |
+
+When a tool is missing, `sabine bundle` stops with an error that names it, such as
+`rpmbuild is required to build this package; install it and retry`.
+
+### portable
+
+A portable bundle is the app for the platform you run `sabine bundle` on, packed so it runs in place
+wherever it is unpacked:
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    A gzip tarball of the filesystem tree, with the program in `usr/lib/sabine/<app id>` and a
+    launcher in `usr/bin`.
+  </TabItem>
+  <TabItem label="Windows">
+    A zip of the app folder, with the program and its `resources` folder.
+  </TabItem>
+  <TabItem label="macOS">
+    A gzip tarball of the `.app` bundle.
+  </TabItem>
+</Tabs>
+
+On first launch the app prepares Sabine's shared service and runtime if the machine has none,
+registers itself like any installed app, and later updates from the same kind of archive. The
+`linux`, `windows` and `macos` targets stage the same layouts for their platform, so you can build
+them from another platform, and always pack them as gzip tarballs.
+
+### Linux packages
+
+deb, rpm and AppImage packages keep the program, its resources and anything bundled with it under
+`/usr/lib/sabine/<app id>`, with a relative symlink in `/usr/bin` named after the executable. They
+also install:
+
+- a desktop entry at `/usr/share/applications/<app id>.desktop`, with `Icon=<app id>`, the app's
+  `mime_types`, `generic_name`, `categories` and `keywords`, and `NoDisplay=true` for apps with
+  `listed = false`
+- the icon in the hicolor theme under `/usr/share/icons/hicolor`
+- AppStream metadata at `/usr/share/metainfo/<app id>.metainfo.xml` (see [AppStream](#appstream))
+- a shared MIME package at `/usr/share/mime/packages/<app id>.xml` when the app lists file
+  extensions for its document types
+
+**deb** packages are named after the app id. Their dependencies come from `dpkg-shlibdeps`, which
+reads the libraries your executable links, plus the desktop libraries Chromium needs (GTK 3, NSS,
+NSPR, ALSA, CUPS, the X composite, damage and randr extensions, GBM, xkbcommon, udev and the
+Wayland client library). `dpkg-shlibdeps` has to run on the Debian or Ubuntu release you are
+packaging for, so build deb packages there.
+
+**rpm** packages are named after the app id with dots replaced by hyphens. They require Chromium's
+desktop libraries by soname, such as `libgtk-3.so.0()(64bit)`, so Fedora, openSUSE and other RPM
+distributions resolve them from their own package names, and keep RPM's automatic dependency
+generation for your executable.
+
+**AppImage** builds put an `AppRun` script, the desktop entry and the icon at the top of the AppDir,
+and name the AppStream file `<app id>.appdata.xml`, as `appimagetool` expects.
+
+Flatpak packaging is not part of `sabine bundle`.
+
+### Windows packages
+
+Windows builds link the C runtime statically and use the GUI subsystem, so the app needs no Visual
+C++ redistributable and opens no console. The app's icon is written into the executable, so
+Explorer, the Start menu, the setup program, its windows and taskbar button all show it.
+
+**exe** builds an NSIS setup wizard and **msi** a Windows Installer package. Both install for the
+current user under `%LOCALAPPDATA%\Programs\<app id>` and prepare Sabine's shared runtime during
+setup. [Installing](/docs/distribution/installing/#windows-setup-programs) describes what people
+see.
+
+MSI builds use WiX 7. Before building one on your own machine, review the
+[WiX EULA](https://docs.firegiant.com/wix/osmf/) and accept it with `wix eula accept wix7`, then add
+the UI extension with `wix extension add --global WixToolset.UI.wixext`. MSI versions are limited
+by Windows Installer: the major and minor version must be 255 or lower and the patch 65535 or lower.
+
+### macOS bundles
+
+The `.app` bundle has an `Info.plist` with the app id, name and version, a minimum system version of
+macOS 12, the URL schemes and document types from `mime_types` and `[app.extensions]`, and an
+application category mapped from your first main category (for example `Development` becomes
+`public.app-category.developer-tools`). Its icon is `Contents/Resources/app.icns` with standard and
+Retina sizes. `CFBundleVersion` uses the numeric `major.minor.patch` of your version; the full
+SemVer version, prerelease included, stays in the production manifest.
+
+**dmg** packs the bundle in a compressed disk image named after the app.
+
+## Architectures
+
+Packages take their architecture from the executable they contain:
+
+- deb, rpm and AppImage read the ELF header and accept 64-bit x86_64 and aarch64 executables. A deb
+  is `amd64` or `arm64`.
+- MSI and setup programs read the PE header and accept x86_64 and ARM64. Running `sabine bundle` on
+  an ARM64 Windows machine builds an ARM64 app.
+- macOS bundles require an Apple Silicon (aarch64) Mach-O executable, also when you pass one with
+  `--binary`.
+
+Cargo builds for the target's platform on your machine's architecture: `x86_64-pc-windows-msvc` or
+`aarch64-pc-windows-msvc` for Windows targets, `x86_64-unknown-linux-gnu` or
+`aarch64-unknown-linux-gnu` for Linux targets built elsewhere, and `aarch64-apple-darwin` for macOS.
+Staging works from any platform, but each package format needs its own tool, and the release
+workflow builds every package on the platform it is for.
+
+## Offline bundles
+
+`--offline` ships the machine's Sabine service, CEF host and CEF runtime inside the bundle, so the
+app starts without downloading anything:
+
+```sh
+sabine bundle . --target msi --release --offline
+```
+
+An offline bundle must be built on the operating system and CPU architecture it is for, so the
+service, host and runtime match the app; `sabine bundle` refuses otherwise. The runtime goes in
+`resources/runtimes/cef` beside the production manifest (`Contents/Resources/runtimes/cef` on macOS).
+On first launch the app adopts the bundled pieces into Sabine's normal shared layout, and from then
+on they update like any other installation.
+
+## Choosing what goes in
+
+| Flag | Effect |
+| --- | --- |
+| `--release` | Builds and packages Cargo's release profile |
+| `--no-build` | Skips `cargo build` and packages the executable already in Cargo's default output folder |
+| `--binary <path>` | Packages this executable instead of building one |
+| `--no-web-build` | Skips the web build command and packages the existing output |
+| `--web-build <command>` | Runs this web build command instead of `[web] build` |
+| `--web-root <path>` | Uses this folder as the web root instead of `[web] root` |
+| `--web-dist <path>` | Packages this folder as the built web assets instead of `[web] dist` |
+| `--id`, `--name`, `--version` | Overrides the app id, name or version for this build |
+| `--env-file <path>` | Loads another environment file for the build; repeat it for several |
+| `--out <path>` | Writes the bundle under this folder instead of `dist` |
+| `--json` | Prints one line of JSON describing the result |
+
+The web entry has to exist in the built output before staging, and the output folder may not
+overlap your web assets or contain the project itself.
+
+### Build environment
+
+Bundle builds use the production environment. Sabine reads `.env`, `.env.local`, `.env.production`
+and `.env.production.local` from the project and, when it differs, from the web root, then any
+`--env-file` files, which are resolved from the project. Later files override earlier ones, and
+variables already set in your shell win over all of them. The web build and Cargo see the values
+with `NODE_ENV` and `SABINE_ENV` set to `production`, and without `SABINE_DEV_URL`, `SABINE_APP_ID`,
+`SABINE_WEB_ENTRY` and `SABINE_MANIFEST_PATH`. Cargo also gets `SABINE_BUILD_TARGET` set to
+`linux`, `windows` or `macos`.
+
+Environment files are build inputs only and are never copied into the bundle. Your frontend
+framework decides which of their values end up in the built pages.
+
+A bundle built inside GitHub Actions updates from the repository's releases unless `[updates]`
+says otherwise, so it needs the update signing key in `SABINE_UPDATE_SIGNING_KEY`; see
+[Update settings](/docs/distribution/releases-and-updates/#update-settings).
+
+## App metadata
+
+Packages describe your app with the `[app]` table of `Sabine.toml`, falling back to the Cargo
+package where it can:
+
+| Key | Used for | Fallback |
+| --- | --- | --- |
+| `id` | Package names, install folders, desktop ids, the macOS bundle identifier | `dev.sabine.<name>` |
+| `name` | Display name everywhere | The Cargo package name, with underscores as spaces |
+| `version` | Package version; must be SemVer | The Cargo package version, including workspace values |
+| `publisher` | The MSI manufacturer and the AppStream developer | The name part of the first Cargo author, then the app name |
+| `maintainer` | The deb `Maintainer` field, in `Name <email>` form | The first Cargo author with an email |
+| `license` | The rpm `License` field and AppStream project license | The Cargo `license` |
+| `homepage` | The AppStream homepage | The Cargo `homepage`, then `repository` |
+| `description` | The long description in software centers and of deb and rpm packages | The generic name, then the app name |
+| `generic_name` | The desktop entry's `GenericName`, the AppStream summary and the Windows shortcut description | |
+| `categories` | The desktop entry's `Categories` and the macOS application category | `["Utility"]` |
+| `keywords` | The desktop entry's `Keywords` and AppStream keywords | |
+| `icon` | Every icon the app ships | Found in the project, see [Icons](#icons) |
+| `installer_image` | Artwork on the Windows setup pages | |
+
+Debian packages need a maintainer and RPM packages a license; the build stops with an error that
+says so when one is missing. Sabine never puts in a placeholder publisher or email address. A
+prerelease version such as `1.2.0-beta.1` becomes `1.2.0~beta.1` in deb and rpm metadata, so it sorts
+before `1.2.0`.
+
+Write `description` as plain paragraphs separated by blank lines:
+
+```toml
+[app]
+id = "com.example.tern"
+name = "Tern"
+publisher = "Example"
+maintainer = "Ada Example <ada@example.com>"
+license = "MIT"
+homepage = "https://example.com/tern"
+generic_name = "Terminal"
+categories = ["System", "TerminalEmulator"]
+keywords = ["console", "shell"]
+description = """
+Tern is a terminal that keeps every session you open in tabs.
+
+It restores them when you come back.
+"""
+```
+
+The [manifest reference](/docs/reference/manifest/#app) lists every key with its rules.
+
+### AppStream
+
+deb, rpm and AppImage packages of apps that appear in launchers ship AppStream metadata so software
+centers can show them: the name, the generic name as summary, the description, the publisher as
+developer (with the app id's reverse-DNS domain as developer id, such as `com.example` for
+`com.example.tern`), the license, the homepage, keywords, document types, the executable and this
+release. AppStream needs a homepage, so without one no metadata is written. Apps with
+`listed = false` get none either. The release timestamp honours `SOURCE_DATE_EPOCH`.
+
+### Icons
+
+`icon` names an SVG, or a PNG, JPEG, WebP, BMP or ICO image. Without it, Sabine uses the first of
+these that exists in the project: `static/icon.svg`, `static/favicon.svg`,
+`src/lib/assets/favicon.svg`, `favicon.svg`, `icon.svg`, `icon.png`, `icons/icon.svg`,
+`icons/icon.png`, `desktop/icons/icon.svg`, `static/icon.png`, `desktop/icons/icon.png`.
+
+From that one image, Sabine renders PNGs from 16 to 1024 pixels into a hicolor icon set (plus the
+SVG itself as the scalable icon), a Windows `.ico` that it embeds in the executable, and the macOS
+`app.icns`. SVGs are rendered once and reused for every size, and images that aren't square are
+centered on a transparent square.
+
+### Setup artwork
+
+Windows setup programs show your own artwork on their welcome and finish pages when
+`installer_image` names a PNG, JPEG or WebP image:
+
+```toml
+[app]
+installer_image = "installer.png"
+```
+
+The image is scaled to cover the space and cropped from its center: 164×314 pixels down the side of
+the NSIS pages, and the left 164 pixels of the MSI dialogs, which keep their white text area. A
+portrait image of about that shape, at twice the size, crops least. Without it the installers keep
+their default artwork.
+
+## Where bundles land
+
+Each target stages under `dist/<target>/<app id>/` and writes its package to `dist/artifacts/`,
+named `<app id>-<version>-<target>.<extension>`. A deb build of `com.example.tern` 1.0.0 with an
+executable named `tern` looks like this:
+
+<FileTree>
+- dist/
+  - artifacts/
+    - com.example.tern-1.0.0-deb.deb
+  - deb/
+    - com.example.tern/
+      - root/
+        - DEBIAN/
+          - control
+        - usr/
+          - bin/
+            - tern a relative symlink to the program
+          - lib/
+            - sabine/
+              - com.example.tern/
+                - tern
+                - resources/
+                  - Sabine.toml the production manifest
+                  - web/ your built web assets
+                  - files/ `[resources]`
+                  - icons/
+          - share/
+            - applications/
+            - icons/
+            - metainfo/
+            - mime/
+</FileTree>
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    `linux`, `deb` and `rpm` stage the tree above under `root/`; `appimage` stages it under
+    `AppDir/` with `AppRun` beside it.
+  </TabItem>
+  <TabItem label="Windows">
+    The app folder is named after the app, with characters other than letters, digits, `.`, `-`
+    and `_` replaced by `-`: `dist/msi/com.example.tern/Tern/tern.exe`, with
+    `resources/Sabine.toml`, `resources/windows-app.ico` and the web assets beside it.
+  </TabItem>
+  <TabItem label="macOS">
+    The bundle is `dist/dmg/com.example.tern/Tern.app`, with the executable in `Contents/MacOS` and
+    the production manifest, icon and web assets in `Contents/Resources`.
+  </TabItem>
+</Tabs>
+
+The executable is named after the Cargo package, with `.exe` on Windows. Bundling again replaces
+the staged folder.
+
+### JSON output
+
+With `--json`, `sabine bundle` prints a single line that scripts can read:
+
+```json
+{"ok":true,"target":"deb","app":{"id":"com.example.tern","name":"Tern","version":"1.0.0"},"path":"/home/ada/tern/dist/deb/com.example.tern","executable":"com.example.tern/root/usr/lib/sabine/com.example.tern/tern","artifacts":["/home/ada/tern/dist/artifacts/com.example.tern-1.0.0-deb.deb"]}
+```
+
+`executable` is the program's path inside an archive of the staged folder, which the
+[release workflow](/docs/distribution/releases-and-updates/) records in the update manifest.

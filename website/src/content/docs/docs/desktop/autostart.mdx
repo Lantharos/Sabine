@@ -1,0 +1,128 @@
+---
+title: Starting at login
+description: Register the app to start when people log in, on each desktop's own login mechanism, without overriding their choice to turn it off.
+sidebar:
+  order: 6
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+An app can register itself to start when people log in. Sabine writes the entry each desktop uses
+for this, and leaves it off when people turn it off in their system settings.
+
+## Registering an entry
+
+Pass an `AutostartEntry` to `.autostart(...)`. Its `id` must be the app id, so uninstalling the app
+removes the entry; a different id stops the launch with an error.
+
+```rust
+use sabine::prelude::*;
+use sabine::AutostartEntry;
+
+fn main() {
+    SabineWindow::main(|window| {
+        let executable = std::env::current_exe()
+            .map_err(|error| SabineError::CreationFailed { message: error.to_string() })?;
+        Ok(window
+            .tray_app()
+            .app_id("com.example.sync")
+            .title("Sync")
+            .autostart(AutostartEntry {
+                id: "com.example.sync".into(),
+                name: "Sync".into(),
+                command: format!("\"{}\" --background", executable.display()),
+                enabled: true,
+            }))
+    });
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The app id. |
+| `name` | The name the desktop shows for the entry. |
+| `command` | The command to run at login, in the platform's command-line syntax. |
+| `enabled` | `true` writes the entry; `false` removes it. |
+
+Sabine applies the entry each time the app launches. To let people choose in your app, read their
+choice from your app's settings when you build the window and pass it as `enabled`; the entry
+follows it from the next launch. With `enabled: false`, the entry is
+removed; an error removing it, such as a file that can't be deleted, stops the launch and names
+the problem.
+
+Each launch rewrites the entry only when its contents changed, so desktops that announce new login
+items don't tell people about the app on every launch.
+
+Development runs, such as `sabine dev`, register no autostart entry.
+
+## Writing the command
+
+The command uses the target platform's own command-line syntax:
+
+- **Linux**: the `Exec` syntax of desktop entries. Quote paths with spaces in double quotes.
+- **Windows**: a Windows command line, the same as a shortcut target. Quote the executable path.
+- **macOS**: POSIX shell quoting, which Sabine splits into the LaunchAgent's arguments without
+  running a shell. Quoted empty arguments and escaped characters are kept, and malformed quoting
+  stops the launch with an error.
+
+Quoting the executable path, as in the example, works on all three.
+
+## When people turn it off
+
+People can turn login items off in their system settings without going through your app. Sabine
+keeps that choice: a later launch with `enabled: true` doesn't turn the entry back on.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    The entry is an XDG autostart desktop entry at `~/.config/autostart/<app id>.desktop` (under
+    `$XDG_CONFIG_HOME` when it is set), hidden from launchers.
+
+    Desktops turn an entry off by marking it rather than deleting it. Sabine leaves an entry marked
+    `Hidden=true` or `X-GNOME-Autostart-enabled=false` as it is.
+  </TabItem>
+  <TabItem label="Windows">
+    The entry is a value named after the app id under the per-user `Run` key,
+    `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+
+    Turning the app off under Startup apps keeps the `Run` value and records the choice
+    separately, so Sabine can rewrite a changed command without turning the app back on.
+  </TabItem>
+  <TabItem label="macOS">
+    The entry is a LaunchAgent at `~/Library/LaunchAgents/dev.sabine.<app id>.plist` that runs the
+    command at load. macOS starts it at the next login.
+
+    Turning the app off under Login Items leaves the file in place and keeps it off.
+  </TabItem>
+</Tabs>
+
+## Arguments for login starts
+
+Desktops that offer their own "start at login" switch for installed apps write a login entry
+themselves. Name the arguments they should add, such as a flag that starts the app in the
+background, with `autostart_arguments` in `Sabine.toml`:
+
+```toml
+[app]
+autostart_arguments = "--background"
+```
+
+Linux desktop entries carry them as `X-Sabine-Autostart-Arguments`, and desktops that read the key
+add them to the command in the login entry they write.
+
+## Installing with an entry
+
+`sabine install --autostart` also registers an autostart entry for the installation it creates:
+
+```sh
+sabine install --bundle --autostart .
+```
+
+## Removing the entry
+
+`sabine uninstall` and the uninstallers of Windows `.exe` and MSI packages remove the app's
+autostart entry along with the rest of its registration. Upgrading an MSI package keeps it.
+
+## Related pages
+
+- [Tray icons](/docs/desktop/tray/) covers the `tray_app` recipe used above.
+- [Installing](/docs/distribution/installing/) covers `sabine install` and `sabine uninstall`.

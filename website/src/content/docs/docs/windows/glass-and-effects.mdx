@@ -1,0 +1,229 @@
+---
+title: Glass and effects
+description: Blur what is behind a window with the desktop's own materials, and control where it blurs, where it is opaque and where it takes input.
+sidebar:
+  order: 3
+---
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+A transparent Sabine window can show the desktop's own material behind its page: a blur on
+Wayland, acrylic or Mica on Windows, and the materials of `NSVisualEffectView` on macOS. The page
+decides where the material shows by leaving those parts transparent.
+
+## Glass
+
+`.glass()` gives a window each desktop's standard material:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .glass()
+            .app_chrome(AppChrome::default()))
+    });
+}
+```
+
+`.glass()` turns on transparency, so call it after `.app()`, which turns transparency off. In a
+transparent window Sabine keeps the page's `html` and `body` backgrounds transparent; give the
+page's panels translucent backgrounds of their own and the material shows through them:
+
+```css
+.sidebar {
+  background: rgb(20 20 24 / 0.35);
+}
+
+.content {
+  background: #18181b;
+}
+```
+
+`.transparent(false)` turns transparency off and removes the effect with it.
+
+## Materials
+
+`.background_effect(WindowBackgroundEffect)` picks a material. `Glass` exists everywhere; the others
+belong to one desktop and exist only when building for it:
+
+| Effect | Desktop | Material |
+| --- | --- | --- |
+| `None` | All | No material. A transparent window shows the desktop unblurred |
+| `Glass` | Linux | A blur of what is behind the window, through `ext_background_effect_v1` |
+| `Glass` | Windows | Acrylic: a blur with a light or dark tint |
+| `Glass` | macOS | The under-window background material |
+| `Blur` | Windows | A plain blur, without acrylic's tint |
+| `Mica` | Windows 11 | The material tinted by the desktop background, as main windows use it |
+| `MicaAlt` | Windows 11 | Mica tinted more strongly, as tabbed windows use it |
+| `HudWindow` | macOS | The dark material of heads-up panels |
+| `Sidebar` | macOS | The material of sidebars such as Finder's |
+
+Pick a desktop's own material with `cfg`:
+
+```rust
+use sabine::WindowBackgroundEffect;
+
+fn material() -> WindowBackgroundEffect {
+    #[cfg(target_os = "windows")]
+    return WindowBackgroundEffect::Mica;
+    #[cfg(target_os = "macos")]
+    return WindowBackgroundEffect::Sidebar;
+    #[cfg(target_os = "linux")]
+    return WindowBackgroundEffect::Glass;
+}
+
+// ...
+window.app().background_effect(material())
+```
+
+Any effect other than `None` turns on transparency, as `.glass()` does.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Wayland has one effect, a blur, which compositors offer through `ext_background_effect_v1`.
+    Compositors without that protocol, such as GNOME's, show the page over a clear window instead,
+    so design glass layouts to stay readable without the blur.
+  </TabItem>
+  <TabItem label="Windows">
+    Sabine applies the materials through the Windows composition APIs, and they follow the
+    system's light or dark theme as it changes. Mica and Mica Alt need Windows 11. When a material
+    isn't available on the running version of Windows, the window opens without it and Sabine
+    records why in its window log.
+  </TabItem>
+  <TabItem label="macOS">
+    Sabine installs an `NSVisualEffectView` with the material beneath the page. The material
+    follows the window's active state, so it takes on its inactive look while another window is in
+    front, like the system's own windows.
+  </TabItem>
+</Tabs>
+
+## Regions
+
+A transparent window has three regions, which follow its size as it resizes:
+
+| Region | Means | Default |
+| --- | --- | --- |
+| Blur | Where the material shows | The whole window |
+| Opaque | Where the page covers everything, so the material and desktop needn't be drawn | Nothing |
+| Input | Where the window takes pointer input. Outside it, clicks pass through to whatever is beneath | The whole window |
+
+Sabine paints the opaque region with the window's background color beneath the page, so content
+there never shows the desktop even while the page repaints.
+
+Most apps get their regions from [`AppChrome`](/docs/windows/window-chrome/), which sets them for a
+glass sidebar layout. Set them yourself for other layouts:
+
+```rust
+use sabine::{WindowRegion, WindowRegions};
+
+window
+    .frameless()
+    .glass()
+    .regions(
+        WindowRegions::new()
+            .blur(WindowRegion::adaptive_rounded_left(280, 14))
+            .opaque(WindowRegion::adaptive_content_after_sidebar(280, 0))
+            .input(WindowRegion::adaptive_rounded_rect(14)),
+    )
+```
+
+`.blur_region`, `.opaque_region` and `.input_region` set one region each.
+
+### Region shapes
+
+Regions are in logical pixels. Adaptive regions are computed from the window's size every time it
+changes; fixed regions keep their size.
+
+| Rust | JavaScript | Shape |
+| --- | --- | --- |
+| `WindowRegion::empty()` | `region.empty()` | Nothing |
+| `WindowRegion::rect(x, y, w, h)` | `region.rect(x, y, w, h)` | A fixed rectangle. Add more with `.add_rect(x, y, w, h)` in Rust |
+| `WindowRegion::adaptive_full()` | `region.full()` | The whole window |
+| `WindowRegion::adaptive_rounded_rect(radius)` | `region.roundedRect(radius)` | The whole window with rounded corners |
+| `WindowRegion::adaptive_rounded_left(width, radius)` | `region.roundedLeft(width, radius)` | A full-height column along the left edge, rounded on its left corners |
+| `WindowRegion::adaptive_titlebar_sidebar(sidebar, titlebar, radius)` | `region.titlebarAndSidebar(sidebar, titlebar, radius)` | A titlebar strip across the top and a sidebar column below it |
+| `WindowRegion::adaptive_content_after_sidebar(sidebar, titlebar)` | `region.contentAfterSidebar(sidebar, titlebar)` | Everything right of the sidebar and below the titlebar |
+| `WindowRegion::adaptive_content_after_sidebar_rounded_right(sidebar, titlebar, radius)` | `region.contentAfterSidebarRoundedRight(sidebar, titlebar, radius)` | The same, rounded on its right corners |
+
+`WindowRegion::full(width, height)`, `rounded_rect(width, height, radius)` and
+`rounded_left(width, height, radius)` are fixed-size versions of the adaptive shapes.
+
+### Changing regions while the app runs
+
+Regions can change at any time, for example to drop a sidebar's blur while it is collapsed. A page
+replaces its window's regions with `appWindow.setRegions`:
+
+```ts
+import { appWindow, region } from "@lantharos/sabine";
+
+async function showSidebar(open: boolean) {
+  await appWindow.setRegions(
+    open
+      ? {
+          blur: region.titlebarAndSidebar(260, 38, 14),
+          opaque: region.contentAfterSidebar(260, 38),
+          input: region.roundedRect(14),
+        }
+      : {
+          blur: region.empty(),
+          opaque: region.contentAfterSidebarRoundedRight(0, 0, 14),
+          input: region.roundedRect(14),
+        },
+  );
+}
+```
+
+Rust does the same with the app's `BridgeEventEmitter`: `set_regions(&regions)` changes every
+window, and `set_regions_of(window, &regions)` one. A region left out of the new set returns to its
+default.
+
+### Square corners
+
+A window that is maximized, fullscreen or tiled against a screen edge meets the edges of the
+screen, so Sabine squares the corners of its adaptive regions in those states. Desktops can also let
+people turn rounded window corners off. Follow such a setting with
+`BridgeEventEmitter::set_square_corners(true)`, which squares every window's regions while it
+floats too, including windows opened later.
+
+## What each desktop can do
+
+Each desktop applies regions with its own compositor, and they differ in what they allow:
+
+| | Linux | Windows | macOS |
+| --- | --- | --- | --- |
+| Blur part of the window | Yes, the blur region | No: the material is behind the whole window | Yes, the blur region |
+| Remove the material | An empty blur region | An empty blur region | An empty blur region |
+| Opaque region | Passed to the compositor | Not needed | Taken out of the material |
+| Click-through outside the input region | Yes | Frameless windows only | Yes |
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sabine sets the surface's input and opaque regions through `wl_compositor`, and the blur region
+    through `ext_background_effect_v1`. Compositors without that protocol show no blur, but still
+    honor the input and opaque regions.
+  </TabItem>
+  <TabItem label="Windows">
+    The desktop window manager composes the material behind the whole window, and the page's own
+    transparency decides where it shows. Windows can't blur only a region of a window, so a page
+    can't cut clear holes into the material: make those areas opaque in the page instead. An empty
+    blur region removes the material.
+
+    The input region becomes the window's shape: outside it the window neither draws nor takes
+    clicks, which reach the window beneath. Windows with system chrome keep their frame and are
+    never shaped. There is no opaque region, and none is needed: the material is drawn beneath
+    opaque content regardless.
+  </TabItem>
+  <TabItem label="macOS">
+    Sabine masks the material view to the blur region, minus the opaque region, which the page
+    covers anyway, so the window server blurs nothing it wouldn't show. Outside the input region
+    the window ignores the mouse, so clicks reach whatever is beneath it. AppKit only offers that
+    for a whole window, so Sabine follows the pointer and switches as it crosses the region's
+    edge. The opaque region has no other effect, since AppKit decides opacity from the window's
+    layers.
+  </TabItem>
+</Tabs>
+
+[Native video](/docs/web/native-video/) surfaces sit beneath the page, and Sabine leaves their area
+out of the blur and opaque regions by itself so the video shows through.

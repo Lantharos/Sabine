@@ -1,0 +1,861 @@
+---
+title: JavaScript API
+description: Every export of the @lantharos/sabine package, the page's interface to Sabine.
+sidebar:
+  order: 3
+---
+
+import { Code } from "@astrojs/starlight/components";
+import { tag } from "~/version";
+
+`@lantharos/sabine` is the page's interface to Sabine: bridge calls and events, the window,
+guests, native video and the desktop services. It wraps the `window.sabine` object that Sabine
+installs in every page that gets the bridge, with types for all of it.
+
+<Code code={`bun add github:Lantharos/Sabine#${tag}`} lang="sh" />
+
+Install the tag that matches the Sabine version your app depends on. Every export is a named
+export; the default export is an object holding the same values.
+
+```ts
+import { appWindow, events, invoke } from "@lantharos/sabine";
+```
+
+The functions call into `window.sabine` when they run, not when the module loads, so the package
+can be imported anywhere. Outside a Sabine window, or in a document without the bridge, they throw
+an `Error` saying that the package only works inside a Sabine window; check `isAvailable()` first
+in code that also runs in a browser.
+
+| Export | Kind | Section |
+| --- | --- | --- |
+| `isAvailable`, `sabine` | functions | [Availability](#availability) |
+| `invoke`, `listen`, `bridge` | functions, object | [Bridge](#bridge) |
+| `fileUrl` | function | [Local files](#fileurl) |
+| `app` | object | [App](#app) |
+| `events` | object | [Events](#events) |
+| `appWindow`, `region` | objects | [Window](#appwindow) |
+| `popup` | object | [Popup](#popup) |
+| `guest`, `Guest` | object, class | [Guests](#guests) |
+| `activity` | object | [Activity](#activity) |
+| `NativeVideo` | class | [Native video](#nativevideo) |
+| `clipboard` | object | [Clipboard](#clipboard) |
+| `print` | object | [Printing](#print) |
+| `shell` | object | [Shell](#shell) |
+| `system` | object | [System](#system) |
+| `tray` | object | [Tray](#tray) |
+
+## Availability
+
+### `isAvailable()`
+
+```ts
+function isAvailable(): boolean;
+```
+
+`true` when the page runs in a Sabine window and its document has the bridge. A document from an
+origin the app doesn't trust has no bridge; see [Bridge security](/docs/bridge/security/).
+
+### `sabine()`
+
+```ts
+function sabine(): SabineApi;
+```
+
+Returns the raw `window.sabine` object, and throws when it is missing. The package's exports cover
+everything on it; use them instead.
+
+## Bridge
+
+[Commands](/docs/bridge/commands/) and [Events](/docs/bridge/events/) explain the bridge.
+
+### `invoke(name, params?, options?)`
+
+```ts
+function invoke<T = unknown>(name: string, params?: object, options?: InvokeOptions): Promise<T>;
+
+interface InvokeOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  body?: ArrayBuffer | ArrayBufferView | Blob;
+}
+```
+
+Calls a command and resolves with its answer: the JSON value the handler returned, or a
+`Uint8Array` when it answered with bytes. `params` is sent as JSON and defaults to `{}`.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `signal` | | Rejects the call with the signal's reason when it aborts. |
+| `timeoutMs` | `60000` | Rejects with a `TimeoutError` when no answer arrives in time. From 1 to 2147483647; other values throw a `RangeError`. |
+| `body` | | Bytes sent with the call, up to 32 MiB. The handler reads them as `command.body`. |
+
+The promise rejects with the handler's error message, or when the command isn't registered, the
+page already waits on 128 calls, or the page goes away. The full list is in
+[Commands](/docs/bridge/commands/#errors).
+
+```ts
+const controller = new AbortController();
+const results = await invoke<SearchResult[]>("search.run", { query }, {
+  signal: controller.signal,
+  timeoutMs: 10_000,
+});
+```
+
+### `listen(name, callback)`
+
+```ts
+function listen<T = unknown>(name: string, callback: (payload: T) => void): () => void;
+```
+
+Calls `callback` with each event of that name, and returns a function that stops listening.
+Bytes events arrive as a `Uint8Array`. Callbacks run in microtasks, in the order they were added.
+
+```ts
+const stop = listen<{ path: string }>("export.finished", ({ path }) => toast(path));
+```
+
+### `bridge`
+
+```ts
+const bridge: {
+  commands(): string[];
+  invoke: typeof invoke;
+  send(name: string, params?: object): void;
+  listen: typeof listen;
+};
+```
+
+| Member | Meaning |
+| --- | --- |
+| `commands()` | Every command the page may call: the app's own and Sabine's. |
+| `invoke`, `listen` | The functions above. |
+| `send(name, params)` | Calls a command without waiting for its answer, for frequent updates such as a position while dragging. It throws when the command isn't registered, holds no slot among the page's pending calls, and drops the answer. |
+
+## `fileUrl`
+
+```ts
+function fileUrl(path: string): string;
+```
+
+Turns an absolute path into a `sabine://file/` URL that the app's own pages can load, in apps with
+`local_files = true`. Backslashes become slashes, and each part of the path is percent-encoded. See
+[Resources and files](/docs/web/resources-and-files/#local-files-in-pages).
+
+```ts
+image.src = fileUrl("/home/ana/Pictures/beach.jpg");
+```
+
+## `app`
+
+### `app.takeOpenUrls()`
+
+```ts
+takeOpenUrls(): Promise<string[]>;
+```
+
+Resolves with the URLs and documents the app was asked to open and the page hasn't taken yet,
+including those from before the page loaded, and clears them. Call it on start and whenever
+`events.openUrlsAvailable` fires. See [Links and documents](/docs/desktop/links-and-documents/).
+
+```ts
+import { app, events } from "@lantharos/sabine";
+
+async function openPending() {
+  for (const url of await app.takeOpenUrls()) await openDocument(url);
+}
+
+events.openUrlsAvailable(openPending);
+await openPending();
+```
+
+## `events`
+
+Typed listeners for the events Sabine sends. Each takes a callback and returns a function that
+stops listening.
+
+```ts
+events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
+```
+
+| Listener | Payload | Fires when |
+| --- | --- | --- |
+| `appearanceChanged` | `SystemAppearance` | The desktop switches between light and dark or changes its accent color. |
+| `trayActivate` | `TrayActivateEvent` | The tray icon or one of its menu items is activated. |
+| `globalShortcut` | `GlobalShortcutEvent` | A registered global shortcut is pressed. |
+| `globalShortcutFailed` | `GlobalShortcutFailedEvent` | The desktop refused a global shortcut. |
+| `singleInstance` | `SingleInstanceEvent` | The app is launched again while it runs. |
+| `openUrlsAvailable` | `null` | URLs or documents arrived; take them with `app.takeOpenUrls()`. |
+| `rendererCrashed` | `RendererCrashedEvent` | The page's or a guest's renderer stopped. |
+| `guestCreated` | `GuestInfo` | A guest finished opening. |
+| `guestDestroyed` | `GuestIdEvent` | A guest closed. |
+| `guestLoading` | `GuestLoadingEvent` | A guest started or finished loading. |
+| `guestTitle` | `GuestTitleEvent` | A guest's title changed. |
+| `guestNavigated` | `GuestNavigatedEvent` | A guest navigated. |
+| `guestNewWindow` | `GuestNewWindowEvent` | A guest with the `deny` popup policy tried to open a window. |
+| `guestDownload` | `GuestDownloadEvent` | A download was requested, progressed or ended. |
+| `guestShortcut` | `GuestShortcutEvent` | A focused guest received an intercepted shortcut. |
+| `guestWheel` | `GuestWheelEvent` | Horizontal scrolling over a guest was intercepted. |
+| `guestFavicon` | `GuestFaviconEvent` | A guest's favicon URLs changed. |
+
+### Payloads
+
+```ts
+interface TrayActivateEvent {
+  trayId: string;
+  itemId: string | null; // the menu item, or null for the icon itself
+  action: string | null;
+  checked: boolean | null; // a checkbox item's new state
+}
+
+interface GlobalShortcutEvent {
+  id: string;
+  action: string;
+  activationToken: string | null; // pass to appWindow.focus
+}
+
+interface GlobalShortcutFailedEvent {
+  id: string;
+  action: string;
+  message: string;
+}
+
+interface SingleInstanceEvent {
+  policy: "allowMultiple" | "reuseExisting" | "focusExisting";
+  arguments: string[]; // the second launch's command line, starting with the program
+  workingDirectory: string | null;
+  activationToken: string | null; // pass to appWindow.focus
+}
+
+interface RendererCrashedEvent {
+  guestId: string; // empty for the app's own page
+  code: number;
+  recovering: boolean; // false after three crashes within a minute
+}
+```
+
+The guest payloads are listed under [Guests](#guest-types). The desktop pages explain each event:
+[Tray](/docs/desktop/tray/), [Shortcuts](/docs/desktop/shortcuts/),
+[Single instance](/docs/desktop/single-instance/) and
+[Appearance and shell](/docs/desktop/appearance-and-shell/).
+
+## `appWindow`
+
+Controls the window that shows the page. [Window chrome](/docs/windows/window-chrome/) and
+[Lifecycle](/docs/windows/lifecycle/) explain the concepts.
+
+### Window controls
+
+These take effect without an answer.
+
+| Method | Effect |
+| --- | --- |
+| `show()` | Shows the window. |
+| `hide()` | Hides the window. |
+| `focus(activationToken?)` | Brings the window forward. On Wayland, pass the token an event such as `singleInstance` or `globalShortcut` carried. |
+| `close()` | Closes the window. |
+| `minimize()` | Minimizes the window. |
+| `maximize()` | Maximizes the window. |
+| `toggleMaximize()` | Maximizes the window, or restores it when maximized. |
+| `setFullscreen(enabled)` | Enters or leaves fullscreen. |
+| `restore()` | Leaves fullscreen, maximized and minimized states. |
+| `startDrag()` | Starts moving the window with the pointer, from a `pointerdown` handler. |
+
+### State
+
+| Member | Kind | Meaning |
+| --- | --- | --- |
+| `visible` | `boolean` | Whether the window is shown and the desktop hasn't reported it out of sight, as for a minimized or fully covered window. |
+| `suspended` | `boolean` | Whether Sabine runs the page at its background frame rate. |
+| `onVisibilityChanged(callback)` | `(state: { visible, suspended }) => void` | Calls `callback` when either changes. Returns a function that stops listening. |
+| `maximized` | `boolean` | Whether the window is maximized. |
+| `fullscreen` | `boolean` | Whether the window covers its screen. |
+| `tiled` | `boolean` | Whether the desktop tiled the window against a screen edge. Wayland only. |
+| `onStateChanged(callback)` | `(state: { maximized, fullscreen, tiled }) => void` | Calls `callback` when any of these change. Returns a function that stops listening. |
+
+```ts
+const stop = appWindow.onStateChanged(({ maximized, fullscreen, tiled }) => {
+  document.documentElement.classList.toggle("docked", maximized || fullscreen || tiled);
+});
+```
+
+### `controlsOverlay()`
+
+```ts
+controlsOverlay(): Promise<ControlsOverlay>;
+onControlsOverlayChanged(callback: (overlay: ControlsOverlay) => void): () => void;
+
+interface ControlsOverlay {
+  left: number;
+  right: number;
+  height: number;
+}
+```
+
+The top corners the system's own window controls cover, in CSS pixels, which a page-drawn
+titlebar leaves free. With `AppChrome` on macOS the traffic lights cover the left; elsewhere the
+page draws its controls and nothing is covered. Every page also gets the values as the
+`--sabine-controls-left`, `--sabine-controls-right` and `--sabine-controls-height` CSS properties.
+`onControlsOverlayChanged` follows changes, such as entering fullscreen.
+
+### `revealWhen(ready)`
+
+```ts
+revealWhen(ready: PromiseLike<unknown>): void;
+```
+
+Keeps the window off screen until `ready` settles, so it first appears with the page's real first
+view. Call it while the page starts. After five seconds the window shows the page anyway. See
+[Frontend](/docs/web/frontend/#splash-and-reveal).
+
+### `activationToken()`
+
+```ts
+activationToken(): Promise<string | null>;
+```
+
+A token that lets another app's window take focus, for handing something to that app because the
+person asked to. Pass it to the app as `XDG_ACTIVATION_TOKEN` in its environment, or as
+`activation_token` in a portal request. It works only while this window is in front, and is
+`null` where the desktop needs none.
+
+### `inhibitShortcuts(enabled)`
+
+```ts
+inhibitShortcuts(enabled: boolean): Promise<void>;
+```
+
+While enabled and the window is focused, the desktop's own keyboard shortcuts reach the page,
+for example to record a shortcut in a settings page. It rejects on desktops that don't allow it,
+and on macOS until the app has the Accessibility permission.
+
+### `setRegions(regions)`
+
+```ts
+setRegions(regions: WindowRegions): Promise<void>;
+
+interface WindowRegions {
+  blur?: WindowRegion | null;
+  opaque?: WindowRegion | null;
+  input?: WindowRegion | null;
+}
+```
+
+Replaces the window's blur, opaque and input regions. A region left out returns to its default:
+blur behind the whole window, nothing opaque, and input everywhere. Build regions with `region`.
+See [Glass and effects](/docs/windows/glass-and-effects/).
+
+### `region`
+
+Builds regions for `setRegions`. Regions other than `rect` follow the window's size as it resizes,
+and rounded corners turn square while the window is maximized, fullscreen or tiled.
+
+| Function | Region |
+| --- | --- |
+| `region.empty()` | Nothing. |
+| `region.rect(x, y, width, height)` | One fixed rectangle. |
+| `region.full()` | The whole window. |
+| `region.roundedRect(radius)` | The whole window, with rounded corners. |
+| `region.roundedLeft(width, radius)` | A strip `width` wide along the left edge, rounded on the left. |
+| `region.titlebarAndSidebar(sidebarWidth, titlebarHeight, radius)` | A titlebar across the top and a sidebar down the left. |
+| `region.contentAfterSidebar(sidebarWidth, titlebarHeight?)` | Everything right of the sidebar and below the titlebar. |
+| `region.contentAfterSidebarRoundedRight(sidebarWidth, titlebarHeight, radius)` | The same, with its right corners rounded. |
+
+```ts
+import { appWindow, region } from "@lantharos/sabine";
+
+await appWindow.setRegions({
+  blur: sidebarOpen ? region.roundedLeft(240, 12) : region.empty(),
+  opaque: region.contentAfterSidebarRoundedRight(sidebarOpen ? 240 : 0, 0, 12),
+});
+```
+
+## `popup`
+
+```ts
+const popup: {
+  open(options?: PopupOptions): Promise<void>;
+  close(): Promise<void>;
+};
+
+interface PopupOptions {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  html?: string;
+  url?: string;
+}
+```
+
+One surface drawn over the window and its guests, such as a menu or a tooltip that must reach past
+a guest. It shows `html` or `url` at the given position in CSS pixels, has no bridge, and closes
+when the person clicks the page beneath it. Opening another popup replaces the first. The page receives
+`popup.open` and `popup.close` events through `listen` as it appears and goes away.
+
+```ts
+await popup.open({ x: 40, y: 80, width: 280, height: 160, html: "<p>Saved</p>" });
+await popup.close();
+```
+
+## Guests
+
+[Guests](/docs/web/guests/) covers guest views in depth.
+
+### `guest`
+
+```ts
+const guest: {
+  create(options: GuestCreateOptions): Promise<Guest>;
+  list(): Promise<GuestInfo[]>;
+  get(id: string): Promise<GuestInfo>;
+  destroy(id: string): Promise<GuestIdEvent>;
+  navigate(id: string, target: GuestNavigateTarget): Promise<void>;
+  setBounds(id: string, bounds: GuestBounds): Promise<GuestInfo>;
+  setVisible(id: string, visible: boolean): Promise<GuestInfo>;
+  setCovered(covered: boolean): Promise<void>;
+  capturePreview(id: string): Promise<GuestPreview>;
+  focus(id: string): Promise<void>;
+  reload(id: string, options?: { ignoreCache?: boolean }): Promise<void>;
+  goBack(id: string): Promise<void>;
+  goForward(id: string): Promise<void>;
+  setZoom(id: string, factor: number): Promise<GuestInfo>;
+  executeJavaScript(id: string, code: string): Promise<void>;
+  downloadAction(
+    downloadId: string,
+    action: GuestDownloadAction,
+    options?: GuestDownloadOptions,
+  ): Promise<void>;
+};
+```
+
+| Method | Effect |
+| --- | --- |
+| `create(options)` | Opens a guest and resolves with its handle. |
+| `list()` | Every guest, bottom to top. |
+| `get(id)` | One guest's state. |
+| `destroy(id)` | Closes a guest. |
+| `navigate(id, target)` | Loads a URL, `{ url }` or `{ html }`. |
+| `setBounds(id, bounds)` | Moves and resizes a guest. |
+| `setVisible(id, visible)` | Shows or hides a guest. |
+| `setCovered(covered)` | Hides every guest while the page draws over them, and shows them again. |
+| `capturePreview(id)` | A PNG of the guest as a data URL. Rejects while the guest isn't on screen. |
+| `focus(id)` | Gives a guest keyboard focus and raises it. |
+| `reload(id, options)` | Reloads, bypassing the cache with `ignoreCache`. |
+| `goBack(id)`, `goForward(id)` | Moves through history. Rejects when there is nowhere to go. |
+| `setZoom(id, factor)` | Zooms, from 0.25 to 5. |
+| `executeJavaScript(id, code)` | Runs a script in the guest's main frame, without its result. |
+| `downloadAction(downloadId, action, options)` | Accepts, cancels, pauses or resumes a download. |
+
+### `Guest`
+
+```ts
+class Guest {
+  readonly id: string;
+  constructor(id: string);
+  static create(options: GuestCreateOptions): Promise<Guest>;
+  get(): Promise<GuestInfo>;
+  navigate(target: GuestNavigateTarget): Promise<void>;
+  setBounds(bounds: GuestBounds): Promise<GuestInfo>;
+  setVisible(visible: boolean): Promise<GuestInfo>;
+  focus(): Promise<void>;
+  reload(options?: { ignoreCache?: boolean }): Promise<void>;
+  goBack(): Promise<void>;
+  goForward(): Promise<void>;
+  setZoom(factor: number): Promise<GuestInfo>;
+  executeJavaScript(code: string): Promise<void>;
+  capturePreview(): Promise<GuestPreview>;
+  destroy(): Promise<GuestIdEvent>;
+}
+```
+
+A handle for one guest, with the `guest` methods bound to its id. `new Guest(id)` makes a handle
+for a guest that already exists, such as one the app created from Rust.
+
+```ts
+const tab = await Guest.create({
+  url: "https://example.com",
+  bounds: { x: 0, y: 48, width: 1024, height: 720 },
+  partition: "browser",
+  popupPolicy: "openGuest",
+});
+await tab.setZoom(1.25);
+```
+
+### Guest types
+
+```ts
+interface GuestBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type GuestPopupPolicy = "deny" | "allow" | "navigateSame" | "openGuest";
+
+interface GuestCreateOptions {
+  id?: string;
+  url?: string;
+  html?: string;
+  bounds: GuestBounds;
+  partition?: string;
+  allowBridge?: boolean; // default false
+  interceptedShortcuts?: string[]; // such as "Primary+K"
+  interceptHorizontalWheel?: boolean; // default false
+  visible?: boolean; // default true
+  popupPolicy?: GuestPopupPolicy; // default "deny"
+  allowDownloads?: boolean; // default true
+  backgroundColor?: string; // "#RRGGBB" or "#AARRGGBB"
+}
+
+type GuestNavigateTarget = string | { url: string } | { html: string };
+
+interface GuestInfo {
+  id: string;
+  url: string;
+  title: string;
+  bounds: GuestBounds;
+  visible: boolean;
+  loading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  partition: string;
+  allowBridge: boolean;
+  popupPolicy: GuestPopupPolicy;
+  zoomFactor: number;
+}
+
+interface GuestPreview {
+  dataUrl: string; // a PNG
+}
+
+interface GuestIdEvent {
+  id: string;
+}
+
+interface GuestLoadingEvent {
+  id: string;
+  loading: boolean;
+}
+
+interface GuestTitleEvent {
+  id: string;
+  title: string;
+}
+
+interface GuestNavigatedEvent {
+  id: string;
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+interface GuestNewWindowEvent {
+  id: string;
+  url: string;
+  disposition: string; // such as "newForegroundTab", "newBackgroundTab", "newPopup" or "newWindow"
+}
+
+interface GuestDownloadEvent {
+  guestId: string; // empty for downloads of the app's own page
+  downloadId: string;
+  url: string;
+  filename: string;
+  mimeType: string;
+  totalBytes: number;
+  receivedBytes: number;
+  state: "requested" | "progress" | "completed" | "cancelled" | "interrupted";
+  savePath?: string | null;
+  error?: string | null;
+}
+
+type GuestDownloadAction = "accept" | "cancel" | "pause" | "resume";
+
+interface GuestDownloadOptions {
+  savePath?: string;
+  showDialog?: boolean;
+}
+
+interface GuestShortcutEvent {
+  id: string;
+  accelerator: string; // as listed in interceptedShortcuts
+  key: string;
+  repeat: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+interface GuestWheelEvent {
+  id: string;
+  deltaX: number;
+  deltaY: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+interface GuestFaviconEvent {
+  id: string;
+  favicons: string[];
+}
+```
+
+## `activity`
+
+```ts
+const activity: {
+  begin(options?: ActivityOptions): Promise<ActivityHandle>;
+  list(): Promise<ActivityList>;
+};
+
+interface ActivityOptions {
+  name?: string; // up to 128 characters, default "activity"
+  keepRunning?: boolean; // default true
+}
+
+interface ActivityHandle {
+  id: string;
+  name: string;
+  keepRunning: boolean;
+  end(): Promise<{ id: string; ended: boolean }>;
+}
+
+interface ActivityList {
+  activities: { id: string; name: string; keepRunning: boolean }[];
+  keepingRunning: number;
+}
+```
+
+An activity keeps the page running while its window is out of sight, instead of letting Sabine
+freeze it, unless it is begun with `keepRunning: false`. It belongs to the page that began it and
+ends when that page reloads, navigates away, loses its renderer or its window closes. `end()`
+resolves with `ended: false` when the activity had already ended. `list()` returns the activities
+that apply to this window, the page's own and those the app began from Rust, and how many of them
+keep it running. See [Lifecycle](/docs/windows/lifecycle/).
+
+```ts
+import { activity } from "@lantharos/sabine";
+
+const busy = await activity.begin({ name: "Indexing" });
+try {
+  await indexLibrary();
+} finally {
+  await busy.end();
+}
+```
+
+## `NativeVideo`
+
+```ts
+class NativeVideo extends EventTarget {
+  static isSupported(): boolean;
+  static create(src: string, options?: NativeVideoOptions): Promise<NativeVideo>;
+  readonly src: string;
+  currentTime: number;
+  readonly duration: number;
+  readonly paused: boolean;
+  readonly ended: boolean;
+  readonly seeking: boolean;
+  readonly readyState: number;
+  readonly error: NativeVideoError | null;
+  readonly videoWidth: number;
+  readonly videoHeight: number;
+  playbackRate: number;
+  volume: number;
+  muted: boolean;
+  loop: boolean;
+  readonly audioTracks: NativeVideoTrack[];
+  readonly subtitleTracks: NativeVideoTrack[];
+  readonly activeCue: NativeVideoCue | null;
+  fastSeek(time: number): void;
+  play(): Promise<void>;
+  pause(): void;
+  selectAudioTrack(id: string): Promise<void>;
+  selectSubtitleTrack(id: string | null): Promise<void>;
+  attach(element: Element, options?: NativeVideoAttachOptions): void;
+  detach(): void;
+  updateRect(): void;
+  destroy(): void;
+}
+
+interface NativeVideoAttachOptions {
+  cutout?: HTMLElement;
+}
+
+interface NativeVideoOptions extends NativeVideoAttachOptions {
+  element?: Element;
+  autoplay?: boolean;
+  loop?: boolean;
+  volume?: number;
+  muted?: boolean;
+  playbackRate?: number;
+}
+
+interface NativeVideoTrack {
+  id: string;
+  language: string | null;
+  label: string | null;
+  codec: string | null;
+  selected: boolean;
+}
+
+interface NativeVideoCue {
+  text: string;
+  start: number;
+  end: number | null; // null when the cue lasts until the next one, as on macOS
+}
+
+interface NativeVideoError {
+  code: number;
+  message: string;
+}
+```
+
+Plays media Chromium can't decode on a native surface beneath the page. `isSupported()` is `false`
+in opaque windows. It dispatches `loadedmetadata`, `loadeddata`, `canplay`, `canplaythrough`,
+`durationchange`, `timeupdate`, `play`, `playing`, `pause`, `waiting`, `seeking`, `seeked`,
+`ended`, `error`, `ratechange`, `volumechange`, `resize`, `trackschange` and `cuechange`.
+[Native video](/docs/web/native-video/) explains layout, sources and each platform.
+
+```ts
+const native = await NativeVideo.create(fileUrl(path), { element: stage, autoplay: true });
+native.addEventListener("timeupdate", () => render(native.currentTime, native.duration));
+```
+
+## `clipboard`
+
+```ts
+const clipboard: {
+  read(options?: ClipboardReadOptions): Promise<ClipboardData>;
+  write(
+    data: Record<string, string | Uint8Array | Blob>,
+    options?: ClipboardWriteOptions,
+  ): Promise<void>;
+};
+
+type ClipboardSelection = "clipboard" | "primary";
+type ClipboardData = Record<string, string | Uint8Array>;
+
+interface ClipboardReadOptions {
+  selection?: ClipboardSelection; // default "clipboard"
+  types?: string[];
+}
+
+interface ClipboardWriteOptions {
+  selection?: ClipboardSelection; // default "clipboard"
+}
+```
+
+Reads and writes the desktop clipboard in any MIME type, for formats `navigator.clipboard`
+doesn't carry, such as a file manager's copied files. `read` resolves with the types that were
+there, text types as strings and others as `Uint8Array`s; without `types`, it reads plain text,
+HTML, file lists and one image. `write` replaces the clipboard with every type you pass. The
+`primary` selection, which middle-click pastes, is Linux only. Available to the app's own pages;
+elsewhere the methods throw. See [Clipboard and drag and drop](/docs/desktop/clipboard-and-drag/).
+
+```ts
+await clipboard.write({ "text/uri-list": "file:///home/ana/notes.txt\r\n" });
+const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
+```
+
+## `print`
+
+```ts
+const print: {
+  page(): Promise<void>;
+  element(element: Element): Promise<void>;
+  files(paths: Iterable<string>, options?: { title?: string }): Promise<boolean>;
+};
+```
+
+| Method | Effect |
+| --- | --- |
+| `page()` | Prints the page, like `window.print()`. |
+| `element(element)` | Prints one element on its own, with images, canvases and videos scaled to fit the paper. |
+| `files(paths, { title })` | Prints PDF, image and text files as one document. `title` names the print job and defaults to the first file's name. Resolves `false` when the person cancels on Linux, and rejects naming any file it can't print. |
+
+See [Printing](/docs/desktop/printing/).
+
+## `shell`
+
+```ts
+const shell: {
+  openLink(url: string): Promise<void>;
+  showFolder(path: string): Promise<void>;
+};
+```
+
+`openLink` opens an `http:`, `https:` or `mailto:` link in the person's default browser or mail
+app, and `showFolder` opens a folder in their file manager. Other schemes and files are refused.
+See [Appearance and shell](/docs/desktop/appearance-and-shell/).
+
+```ts
+await shell.openLink("https://example.com/help");
+```
+
+## `system`
+
+```ts
+const system: {
+  appearance(): Promise<SystemAppearance>;
+};
+
+interface SystemAppearance {
+  colorScheme: "light" | "dark";
+  accentColor: string | null; // "#rrggbb" where the desktop has one
+}
+```
+
+The desktop's light or dark preference and accent color. Pages also get the accent color as the
+`--sabine-accent-color` CSS property, and hear about changes through `events.appearanceChanged`.
+
+## `tray`
+
+```ts
+const tray: {
+  update(changes: TrayUpdate): Promise<void>;
+};
+
+interface TrayUpdate {
+  icon?: string | null; // a path to the image, or null for a plain dot
+  template?: boolean; // a macOS template image, tinted to match the menu bar
+  tooltip?: string | null;
+  menu?: TrayMenuItem[];
+}
+
+interface TrayMenuItem {
+  id?: string; // reported as itemId when chosen
+  label?: string;
+  action?: string;
+  enabled?: boolean;
+  type?: "normal" | "separator" | "checkbox" | "submenu";
+  checked?: boolean; // a checkbox item's state
+  items?: TrayMenuItem[]; // a submenu's items
+}
+```
+
+Changes the app's tray icon; fields left out stay as they are. It rejects when the app has no
+tray icon. See [Tray](/docs/desktop/tray/).
+
+```ts
+await tray.update({
+  tooltip: "Syncing",
+  menu: [
+    { id: "open", label: "Open" },
+    { id: "pause", label: "Pause sync", type: "checkbox", checked: false },
+    { type: "separator" },
+    { id: "quit", label: "Quit" },
+  ],
+});
+```
+
+## `window.sabine`
+
+The package's types also declare the global, so `window.sabine` is typed as
+`SabineApi | undefined` in pages that import the package. It has `bridge`, `window`, `guest`,
+`activity`, `popup`, `system`, `print` and, in the app's own pages, `clipboard`: the objects the
+exports above wrap.

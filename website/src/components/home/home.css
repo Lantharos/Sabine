@@ -1,0 +1,76 @@
+.home {
+  --edge: max(1.25rem, calc((100vw - 1440px) / 2));
+
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+@media (min-width: 640px) {
+  .home {
+    --edge: max(2.5rem, calc((100vw - 1440px) / 2));
+  }
+}
+
+.home .frame {
+  padding-inline: var(--edge);
+}
+
+.home .bleed {
+  margin-inline: calc(-1 * var(--edge));
+}
+
+@media (min-width: 1024px) {
+  .home .bleed {
+    margin-left: 0;
+  }
+}
+
+.home .display {
+  font-weight: 520;
+  letter-spacing: -0.045em;
+  line-height: 0.93;
+  text-wrap: balance;
+}
+
+.home .statement {
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.home .mono {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  letter-spacing: -0.01em;
+}
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.6em);
+  }
+}
+
+@keyframes home-unveil {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+.home .rise {
+  animation: home-rise 1s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: var(--delay, 0s);
+}
+
+.home .unveil {
+  animation: home-unveil 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+  animation-delay: var(--delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home .rise,
+  .home .unveil {
+    animation: none;
+  }
+}

@@ -1,0 +1,207 @@
+---
+title: Building Sabine
+description: How the Sabine repository is laid out, and how to build, test and check it on every platform.
+sidebar:
+  order: 1
+---
+import { FileTree, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine is a Cargo workspace with a C++ CEF host, a TypeScript package for pages, an example app and
+this website. This page covers working on Sabine itself; to build apps with it, start with the
+[introduction](/docs/start/introduction/).
+
+## Repository layout
+
+<FileTree>
+- crates/
+  - sabine/ the public window API apps use
+  - sabine-platform/ window and platform types and native primitives
+  - sabine-runtime/ CEF runtime discovery, downloads and files
+  - sabine-bridge/ the bridge protocol and the scripts pages get
+  - sabine-host/ the C++ CEF host and its build
+  - sabine-dialog/ Sabine's own setup, prompt and notice windows
+  - sabine-service/ app registration, maintenance and updates
+  - sabine-cli/ the `sabine` command
+- packages/
+  - sabine/ the `@lantharos/sabine` package for pages
+- examples/
+  - sabine-notes/ a small app that uses the recommended APIs
+- scripts/ release, icon and platform check scripts
+- assets/ Sabine's banner and icon masters
+- website/ this site
+</FileTree>
+
+### Crates
+
+**`sabine`** is the crate apps depend on. It launches the CEF host process, manages browser
+profiles, carries offscreen frames from Chromium, composes them on the GPU, embeds guest pages and
+provides the public window API. Inside `src/`:
+
+| Folder | Holds |
+| --- | --- |
+| `window/` | `SabineWindow`, its builder and configuration, `Sabine.toml` reading, glass |
+| `desktop/` | Tray icons, global shortcuts, autostart, single instance and other desktop services |
+| `launch/` | Host arguments, first-run setup and installer modes, the Linux app sandbox |
+| `host/` | Process handles and browser profile paths |
+| `bridge/` | The host side of the bridge |
+| `osr/` | The offscreen rendering protocol and the desktop host |
+| `render/` | GPU composition |
+| `media/`, `clipboard/` | Native video and the clipboard |
+
+Sabine renders offscreen on every desktop. It has no windowed CEF, WebView2 or other renderer
+fallback, and it targets Linux on Wayland, Windows, and Apple Silicon macOS only.
+
+**`sabine-platform`** holds lightweight window and platform types, compositor regions and native
+primitives such as tray icons, notifications, appearance, portals and Wayland protocols.
+
+**`sabine-runtime`** finds, downloads, validates, installs and prunes CEF runtimes, and owns the
+runtime paths, file locks, leases and atomic file replacement the other crates share.
+
+**`sabine-bridge`** defines the bridge: the command registry, its security model, TypeScript
+binding generation, guest pages and activities. The JavaScript the host evaluates in pages lives in
+`src/scripts`.
+
+**`sabine-host`** embeds the C++ sources of the CEF host from `shared/` and builds them with cmake
+against a runtime's CEF SDK. It also checks the host's protocol and runs the runtime health probe.
+
+**`sabine-dialog`** draws Sabine's own windows: the setup progress window, update and uninstall
+prompts, and notices about what went wrong, in the desktop's light or dark style.
+
+**`sabine-service`** registers apps, maintains the runtime and installs app and Sabine updates. It
+builds the `sabine-service` and `sabine-service-daemon` binaries.
+
+**`sabine-cli`** is the `sabine` command: `Sabine.toml` parsing in `src/project/`, `sabine dev`,
+bundling, installs, release tooling and the `sabine new` templates.
+
+### The host's sources
+
+The host's C++ sources live in `crates/sabine-host/shared`, and the crate embeds every file there, so
+a new source file needs no list kept in step. Sources in a folder named `linux`, `macos` or
+`windows` build only on that platform.
+
+| Folder | Holds |
+| --- | --- |
+| `app/` | The browser process's application, profiles, the app scheme and the runtime probe |
+| `renderer/` | What renderer processes install in pages |
+| `osr/` | The window's browser: its transport, input, guests, dialogs, printing and paint |
+| `linux/` | The private display and the shared runtime |
+| `macos/` | The host bundle's `Info.plist`, entry point and icon |
+| `common/` | Code both processes share |
+
+## Building
+
+Sabine needs Rust 1.98 or newer, and Bun for the TypeScript package and the example's page.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Install the Wayland, Fontconfig and xkbcommon development packages. On Debian and Ubuntu:
+
+    ```sh
+    sudo apt-get install libwayland-dev libfontconfig1-dev libxkbcommon-dev
+    ```
+
+    Building the CEF host also needs cmake and a C++ compiler, and uses Ninja when it's installed.
+  </TabItem>
+  <TabItem label="Windows">
+    Install Visual Studio 2019 or newer with the C++ workload (MSVC) and cmake. CEF's binaries don't
+    link with MinGW, so the host always builds with a Visual Studio generator for the machine's
+    architecture.
+  </TabItem>
+  <TabItem label="macOS">
+    Install the Xcode command line tools and cmake. Sabine builds for Apple Silicon only.
+  </TabItem>
+</Tabs>
+
+```sh
+cargo build --workspace
+cargo test --workspace
+bun install
+bun run check
+```
+
+`bun run check` type-checks `packages/sabine` and the example app.
+
+### How the CEF host is built in development
+
+Apps and the CLI find their host with `sabine_host::ensure_host`. It uses, in order:
+
+1. the host named by `SABINE_HOST_PATH`,
+2. a host next to the executable, as in an offline bundle,
+3. in release builds, the host of the newest installed Sabine,
+4. a host compiled from the runtime's CEF SDK,
+5. the installed Sabine's host, when compiling isn't possible or fails.
+
+Debug builds therefore compile their own host. The first time you run something that needs a
+host, such as `sabine runtime prepare` or the example app, Sabine writes the embedded sources out,
+configures them with cmake against the runtime's SDK, and builds into
+`<runtime>/.sabine-hosts/<fingerprint>/`. The fingerprint covers the sources, so changing any C++
+file builds a fresh host on the next run, and an unchanged one is reused. A file lock keeps two
+processes from building the same host at once.
+
+Every host has to speak the same host protocol as the app. Sabine runs a newly built or borrowed
+host once to confirm it, and refuses one that doesn't match. When neither building nor the installed
+host works, the error names what the build lacked, such as a runtime without an SDK or a missing
+cmake, and why the installed host can't stand in.
+
+```sh
+cargo run -p sabine-cli -- runtime prepare
+cargo run -p sabine-cli -- runtime doctor
+```
+
+`runtime prepare` prints the host's path; `runtime doctor` checks that it renders a page.
+
+### Running the example
+
+`examples/sabine-notes` is a workspace member, and its page builds with Bun:
+
+```sh
+cargo run -p sabine-cli -- dev examples/sabine-notes
+```
+
+This prepares the runtime and host, starts the page's Bun server on port 5173, regenerates
+`ui/bindings.ts` and runs the app against your working tree. The `notes` template of
+`sabine new` is made from this example, so keep the two in step.
+
+## Checks
+
+Run these before you send a change:
+
+```sh
+cargo fmt
+clang-format -i $(git ls-files '*.cc' '*.h' '*.mm')
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+C++ and Objective-C++ follow the repository's `.clang-format`, which is based on Chromium's style.
+CI checks formatting with clang-format 23.1.1; `pipx run clang-format==23.1.1` runs the same
+version.
+
+### Windows and macOS
+
+Most development happens on Linux, so check that Windows code still compiles from there:
+
+```sh
+cargo check --target x86_64-pc-windows-gnu --workspace
+```
+
+This catches `cfg` mistakes in Rust, but it doesn't build the host or prove anything about Windows
+composition, input or GPU behaviour, and neither do Linux tests for macOS. CI runs Clippy and the
+workspace tests natively on Windows and macOS for every push, and a change to platform code still
+needs a run on that platform's hardware.
+
+Manual workflows cover what tests can't:
+
+| Workflow | Checks |
+| --- | --- |
+| Native CEF host checks | Builds the host against the current CEF SDK on Linux, Windows and macOS, x86_64 and ARM64, and renders a frame with `runtime doctor` |
+| Paint check | Opens an animated page in a native window on macOS and Windows, and reports how Chromium painted, CPU use and screenshots |
+| Package smoke test | Builds each package format with signed update metadata, checks the macOS bundle, and installs, launches, repairs and uninstalls the Windows packages |
+| Published Windows runtime checks | Compares a published release on several CEF versions |
+
+On an Apple Silicon Mac or a Windows PC, `python3 scripts/paint-check.py` runs the paint check
+locally and writes its log, report and screenshots to `paint-check/`.
+
+Some files carry warning banners about Windows-specific Chromium, GPU and process behaviour. Keep
+them when you edit those files.

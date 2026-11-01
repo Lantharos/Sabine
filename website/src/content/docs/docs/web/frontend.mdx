@@ -1,0 +1,319 @@
+---
+title: Frontend
+description: Point Sabine at your web project, develop against its dev server, and ship it as app files or a hosted URL.
+sidebar:
+  order: 1
+---
+
+import { Aside, Code, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+import { tag } from "~/version";
+
+A Sabine window shows a web page. During development that page comes from your framework's dev
+server, with hot reloading as in a browser. In production it comes either from built files that
+ship inside the app, or from a URL you host. The `[web]` section of `Sabine.toml` tells the CLI,
+the bundler and the app where each of these is.
+
+## The `[web]` section
+
+A project made with `sabine new` starts with:
+
+```toml
+[web]
+root = "ui"
+dist = "ui/dist"
+entry = "ui/dist/index.html"
+dev_port = 5173
+build = "bun run build"
+```
+
+Paths are relative to `Sabine.toml`.
+
+| Key | Meaning | When it's left out |
+| --- | --- | --- |
+| `root` | The web project's folder. `sabine bundle` runs the build command in it, and `sabine dev` runs the dev server in it when it holds a `package.json`. | The first of `ui`, `frontend`, `web` and the project folder that holds a `package.json`. |
+| `dist` | The folder the build writes. `sabine bundle` copies all of it into the app. | `root/dist` when it exists or `root` holds a `package.json`, otherwise the entry's folder. |
+| `entry` | The HTML file the window opens in production. | The first of `ui/index.html`, `web/index.html`, `frontend/index.html` and `index.html` that exists, otherwise `root/index.html`. |
+| `build` | The command that builds the page for production. | `<package manager> run build` when `root/package.json` has a `build` script. |
+| `dev_port` | The port the dev server listens on. | The port in `dev_url`, then a `port:` line in a `vite.config.*` in `root` or the folder above it, then 5173. |
+| `dev_url` | The address the window opens during development. | `http://localhost:<dev_port>`. |
+| `dev_command` | The command that starts the dev server. | `<package manager> run dev -- --port <dev_port> --strictPort`, or the `start` script when there is no `dev` script. |
+| `url` | A hosted page the window opens in production, instead of `entry`. | The window opens `entry`. |
+| `allowed_origins` | More origins whose pages get the bridge. See [Bridge security](/docs/bridge/security/#allowing-other-origins). | Only the app's own pages, `url` and the dev server get it. |
+| `local_files` | Lets the app's pages load any file the user can read. See [Resources and files](/docs/web/resources-and-files/#local-files-in-pages). | `false` |
+
+The package manager is the one the web project's lockfile names (`bun.lock`, `pnpm-lock.yaml` or
+`yarn.lock`), then the `packageManager` field of its `package.json`, then Bun when it is
+installed, then npm.
+
+The [manifest reference](/docs/reference/manifest/) lists every section of `Sabine.toml`.
+
+## Developing with `sabine dev`
+
+```sh
+sabine dev
+```
+
+<Steps>
+
+1. Sabine makes sure the shared runtime is ready.
+
+2. It loads the [environment files](#environment-files) for development.
+
+3. It rewrites the app's [typed bindings](/docs/bridge/typed-bindings/) when `[bindings]` names a
+   file.
+
+4. When the web project has no `node_modules` yet, it installs the project's dependencies with its
+   package manager.
+
+5. It starts the dev server with `dev_command` in the web project's folder and waits up to 30
+   seconds for `dev_port` to accept connections. A server that already listens on that port is
+   reused instead, so you can keep one running between app restarts.
+
+6. It runs the app with `cargo run`, telling it to open `dev_url` with a development app id: the
+   app id with `.dev` appended, so development runs keep their own settings, storage and desktop
+   entries apart from the installed app.
+
+</Steps>
+
+The page's own origin on `localhost`, `127.0.0.1` and `[::1]` gets the bridge, and DevTools are
+one right click away under `Open DevTools`, or at `http://127.0.0.1:9222` from Chrome's
+`chrome://inspect`. Stopping `sabine dev` with Ctrl+C stops the app and the dev server it
+started; when the dev server exits on its own, the app stops too.
+
+A project without a `package.json` dev script, such as a page of plain HTML files, has no dev
+server: the window opens `entry` directly, and you reload it to see changes.
+
+| Option | Effect |
+| --- | --- |
+| `--release` | Builds the app with Cargo's release profile. |
+| `--no-install` | Skips installing the web project's dependencies. |
+| `--web-only` | Starts only the dev server, without the app. |
+| `--no-runtime-prepare` | Skips checking the shared runtime. |
+| `--command <command>` | Runs this command instead of `cargo run`, for example a prebuilt binary or a wrapper script. |
+| `-- <args>` | Passes the arguments after `--` to the app. |
+
+## Production files and the app scheme
+
+In production the window opens `entry` from the app's own files at `sabine://app/`. `sabine
+bundle` runs `build` in `root`, checks that `dist` exists, copies `dist` into the bundle, and
+points the bundle's manifest at the entry inside it. Running the app from the source tree with
+`cargo run`, without `sabine dev`, opens `entry` in place, so build the page first.
+
+`sabine://app/` is a secure origin, so secure-context APIs such as `crypto.subtle` work as they do
+on `https`. It serves the folder that holds `entry` and
+everything below it:
+
+- `sabine://app/` and other folder URLs serve that folder's `index.html`.
+- Files outside that folder can't be reached, and other origins can't embed or fetch these files.
+- Responses are revalidated on every load, so a rebuilt page shows up on the next reload.
+- Byte ranges are supported, so `<video>` and `<audio>` can seek in app files.
+- A path with no file behind it is a 404. There is no fallback to `index.html`, so client-side
+  routers use hash-based routing, or load every route from `index.html` and route in memory.
+
+Build the page with relative or root-relative asset URLs; both resolve inside `sabine://app/`.
+Pass `--no-web-build` to `sabine bundle` to package files you built yourself, and `--web-build`,
+`--web-root` or `--web-dist` to override the manifest for one bundle. See
+[Bundling](/docs/distribution/bundling/) for the rest of the bundle.
+
+## Frameworks
+
+Any tool that builds static files works. Sabine needs only a dev script it can start on a port and
+a folder of built files.
+
+<Tabs>
+<TabItem label="Vite">
+
+`sabine new` sets up Vite. The dev server takes the `--port` and `--strictPort` flags Sabine
+passes, so the default `dev_command` fits:
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  base: "./",
+  root: "ui",
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
+});
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build"
+  }
+}
+```
+
+Frameworks built on Vite work the same way when they build static files: point `dist` and `entry`
+at their output.
+
+</TabItem>
+<TabItem label="Bun">
+
+Bun serves and bundles HTML files on its own. Its dev server takes the port as `--port=`, so name
+the command:
+
+```toml title="Sabine.toml"
+[web]
+root = "ui"
+dist = "ui/dist"
+entry = "ui/dist/index.html"
+dev_port = 5173
+dev_command = "bun run dev"
+build = "bun run build"
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "bun --port=5173 ui/index.html",
+    "build": "tsc --noEmit && bun build ui/index.html --outdir ui/dist --minify"
+  }
+}
+```
+
+`sabine new --template notes` creates an app set up this way.
+
+</TabItem>
+<TabItem label="Other tools">
+
+Set `dev_command` to whatever starts your dev server, and `dev_port` or `dev_url` to where it
+listens:
+
+```toml title="Sabine.toml"
+[web]
+root = "frontend"
+dist = "frontend/build"
+entry = "frontend/build/index.html"
+dev_command = "npm run serve"
+dev_url = "http://localhost:4000"
+build = "npm run build"
+```
+
+`sabine dev` starts a dev server only for a web project whose `package.json` has a `dev` or
+`start` script, even when `dev_command` names another command. Projects without one open `entry`
+during development too.
+
+</TabItem>
+</Tabs>
+
+Add `@lantharos/sabine` to the web project to call the bridge:
+
+<Code code={`bun add github:Lantharos/Sabine#${tag}`} lang="sh" />
+
+## Loading a hosted page
+
+An app can open a page you host instead of shipping files:
+
+```toml
+[web]
+url = "https://app.example.com"
+```
+
+The window opens `url` in production, and `url`'s origin gets the bridge. Allow any other origin
+the page navigates to and still needs the bridge on with `allowed_origins`. Set either `entry` or
+`url`, not both; the app refuses to start with both.
+
+The page then updates whenever you deploy it, independently of app releases, and needs a network
+connection to load. Keep the commands it calls compatible with the app versions people still run.
+For development, keep the web project in the app's repository with a dev server, as for a page
+that ships inside the app.
+
+## Setting the page in Rust
+
+The builder sets the same things for one window, and its settings take precedence over the
+manifest:
+
+| Method | Effect |
+| --- | --- |
+| `.entry(path)` | Opens this HTML file from the app's files. |
+| `.url(url)` | Opens this hosted page, and lets its origin use the bridge. |
+| `.dev_url(url)` | Opens this address instead of `entry` or `url`, and lets it use the bridge on every loopback name. `sabine dev` sets it from `dev_url`; a window with a development URL runs as a development build, with the `.dev` app id and DevTools. |
+| `.content_suffix(suffix)` | Appends a query string or fragment to whichever of these the window opens, such as `"#/settings"`. |
+
+`content_suffix` is how a [second window](/docs/windows/multiple-windows/) opens the same page at
+another view.
+
+## Splash and reveal
+
+A window appears with the first frame its page paints, so it never opens empty. Sabine's own
+surfaces, such as the loading screen, use the window's `.background_color(..)`.
+
+A page that fetches what its first view shows after it loads can hold the window back until that
+view is in the document, with `appWindow.revealWhen`:
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+appWindow.revealWhen(loadSettings().then(render));
+```
+
+Call it while the page starts. The window then appears with the next frame painted after the
+promise settles, whether it resolves or rejects. A page that holds it back for more than five
+seconds is shown anyway, and the delay is recorded in the app's diagnostics.
+
+For launches that can take a while, such as a hosted page on a slow network, turn on Sabine's
+loading screen:
+
+```toml
+[window]
+splash = true
+splash_delay_ms = 1500
+```
+
+The loading screen appears when the page hasn't shown after `splash_delay_ms` (1500 when left out)
+and fades into the page once it has. When the page reloads, the screen appears after 120
+milliseconds instead. Without a loading screen, a reloading window keeps showing its last frame
+until the new page paints. In Rust, `.splash(true)` and `.splash_after(Duration)` do the same.
+
+## Environment files
+
+`sabine dev` and `sabine bundle` read environment files from the project folder and, when it is
+another folder, the web project's `root`:
+
+| Command | Files, later ones overriding earlier ones |
+| --- | --- |
+| `sabine dev` | `.env`, `.env.local`, `.env.development`, `.env.development.local` |
+| `sabine bundle` | `.env`, `.env.local`, `.env.production`, `.env.production.local`, then each `--env-file` |
+
+The web project's files override the project folder's, and variables already set in your shell
+override every file. Both commands also set `NODE_ENV` and `SABINE_ENV` to `development` or
+`production`.
+
+<Tabs>
+<TabItem label="sabine dev">
+
+The variables reach the dev server and the running app, which reads them with
+`std::env::var`.
+
+</TabItem>
+<TabItem label="sabine bundle">
+
+The variables reach the web build and `cargo build`; the web build also sees the web project's
+files, and `cargo build` only the project folder's. Read them at compile time with `env!` or
+`option_env!`, and in the page through your bundler, for example Vite's `import.meta.env`. The
+bundle doesn't carry the files, so the installed app doesn't see them at run time.
+`sabine install --bundle` takes `--env-file` too.
+
+</TabItem>
+</Tabs>
+
+```rust
+const API_URL: &str = match option_env!("NOTES_API_URL") {
+    Some(url) => url,
+    None => "https://api.example.com",
+};
+```
+
+<Aside>
+Keep secrets out of these files when they end up in the page or the binary: anything the build
+bakes in can be read by whoever has the app.
+</Aside>

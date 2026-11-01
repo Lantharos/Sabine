@@ -1,0 +1,196 @@
+---
+title: Keyboard shortcuts
+description: Register global shortcuts that work while the app is in the background, and let a focused window receive the desktop's own shortcuts.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine handles two kinds of keyboard shortcuts beyond the ones a page listens for itself:
+
+- **Global shortcuts** reach the app wherever the keyboard focus is, for example to summon a
+  palette from any app.
+- **Shortcut inhibiting** lets a focused window receive keys the desktop would otherwise keep for
+  itself, such as Alt+Tab or Super, which remote desktop clients, terminals and games need.
+
+## Global shortcuts
+
+Register global shortcuts on the window with `.global_shortcut(...)`, once for each shortcut:
+
+```rust
+use sabine::prelude::*;
+use sabine::{GlobalShortcutRegistration, Shortcut, ShortcutModifiers};
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .palette()
+            .title("Launcher")
+            .size(640, 420)
+            .global_shortcut(GlobalShortcutRegistration {
+                id: "toggle".into(),
+                shortcut: Shortcut {
+                    modifiers: ShortcutModifiers {
+                        ctrl: true,
+                        shift: true,
+                        ..ShortcutModifiers::default()
+                    },
+                    key: "Space".into(),
+                },
+                action: "toggle-launcher".into(),
+                description: Some("Show or hide the launcher".into()),
+            }))
+    });
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Identifies the shortcut in events, and in the desktop's shortcut settings on Linux. |
+| `shortcut` | The keys: `modifiers` plus one `key`. |
+| `action` | Any string you want back when the shortcut fires. |
+| `description` | What the shortcut does, shown in the desktop's settings on Linux. Defaults to `action`. |
+
+`ShortcutModifiers` has `ctrl`, `alt`, `shift` and `meta`. `meta` is the Super key on Linux, the
+Windows key on Windows and Command on macOS. `Shortcut::new(key)` makes a shortcut with no
+modifiers.
+
+### Naming keys
+
+Keys are named the same way on every desktop:
+
+- a single character: `K`, `5`, `/`, `-`, `[`
+- a common key name: `Space`, `Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`,
+  `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, `PrintScreen`, `Pause`, `CapsLock`,
+  `NumLock`, `ScrollLock`, or `F1` to `F24`
+- a [`KeyboardEvent.code`](https://developer.mozilla.org/docs/Web/API/UI_Events/Keyboard_event_code_values)
+  value: `KeyK`, `Digit5`, `NumpadAdd`, `MediaPlayPause`, `AudioVolumeUp`
+
+Common names ignore case, and a few short forms work too, such as `Esc`, `Return`, `PgUp` and
+`PgDn`. On Linux you can also use any XKB key name, such as `XF86Calculator`.
+
+### Reacting to a shortcut
+
+Each press reaches the app's pages as `events.globalShortcut`:
+
+```ts
+import { appWindow, events } from "@lantharos/sabine";
+
+events.globalShortcut(({ action, activationToken }) => {
+  if (action !== "toggle-launcher") return;
+  if (appWindow.visible) {
+    appWindow.hide();
+  } else {
+    appWindow.show();
+    appWindow.focus(activationToken ?? undefined);
+  }
+});
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `string` | The shortcut's `id`. |
+| `action` | `string` | The shortcut's `action`. |
+| `activationToken` | `string \| null` | Pass to `appWindow.focus` so the desktop lets the window take focus. |
+
+Wayland compositors only let a window take focus with an activation token, which the desktop hands
+over with the shortcut. Pass it to `appWindow.focus`; on other desktops it is `null` and focusing
+works without it.
+
+### When a shortcut can't be registered
+
+A shortcut the desktop refuses, for example because another app already holds it, is recorded in
+the app's diagnostics and reported to its pages as `events.globalShortcutFailed`. The app and its
+other shortcuts keep working.
+
+```ts
+import { events } from "@lantharos/sabine";
+
+events.globalShortcutFailed(({ id, message }) => {
+  showHint(`The shortcut ${id} is not available: ${message}`);
+});
+```
+
+The event carries the shortcut's `id`, its `action` and a `message`.
+
+### On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sabine binds global shortcuts through the XDG desktop portal's GlobalShortcuts interface. All
+    of an app's shortcuts go into one portal session, so the desktop asks about them together, and
+    people can change the keys in their desktop's settings; the `id` and `action` stay the same.
+    The keys you register are the preferred trigger the desktop starts from. A shortcut the
+    desktop leaves out of the session is reported as failed.
+
+    The portal identifies an app by the desktop entry named after its app id, such as
+    `com.example.launcher.desktop`. An installed entry is left alone. Until the app is installed,
+    Sabine writes a hidden stand-in entry in `~/.local/share/applications` that starts the running
+    executable and carries the window's title as its name, and removes it once a real entry
+    exists. Development runs use the `.dev` app id, so their shortcuts are listed separately from
+    the installed app's.
+  </TabItem>
+  <TabItem label="Windows">
+    Shortcuts are system-wide hotkeys. A hotkey another app has registered can't be taken, and is
+    reported as failed. A key name Windows has no key for is reported the same way.
+  </TabItem>
+  <TabItem label="macOS">
+    Shortcuts are system-wide hotkeys and need no permission. A key name macOS has no key for is
+    reported as failed.
+  </TabItem>
+</Tabs>
+
+## Receiving the desktop's own shortcuts
+
+Desktops act on some keys before any app sees them: Alt+Tab, the Super or Windows key, Command+Tab
+or Command+Space. A window that needs those keys, such as a remote desktop or virtual machine
+viewer, can ask for them while it has focus:
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+try {
+  await appWindow.inhibitShortcuts(true);
+} catch (error) {
+  showHint(String(error));
+}
+
+// Give the desktop its shortcuts back.
+await appWindow.inhibitShortcuts(false);
+```
+
+While inhibiting is on and the window has focus, those keys arrive in the page as ordinary
+`keydown` and `keyup` events. When the window loses focus, the desktop's shortcuts work again, and
+they stop reaching the desktop once the window is focused again. Calling `inhibitShortcuts(false)`
+ends it.
+
+`inhibitShortcuts(true)` rejects with a message when the desktop doesn't allow it.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    The window asks the Wayland compositor through the keyboard shortcuts inhibit protocol, which
+    the compositor applies whenever the window has keyboard focus. Some compositors ask the person
+    to allow it first. On compositors without the protocol, `inhibitShortcuts(true)` rejects.
+  </TabItem>
+  <TabItem label="Windows">
+    The window installs a low-level keyboard hook. While the window is in the foreground, the hook
+    keeps Ctrl, Alt and the Windows keys from the system and hands them to the page, so
+    combinations such as Alt+Tab and the Start menu reach the page instead. Shift always passes
+    through normally, so typed characters stay correct. Ctrl+Alt+Delete always reaches Windows.
+  </TabItem>
+  <TabItem label="macOS">
+    The window watches the session's keyboard events. While it is the key window of the active
+    app, every key pressed with Command, Control or Option goes to the page, including Command+Tab,
+    Command+Space and Command+`.
+
+    This needs the Accessibility permission. Without it, `inhibitShortcuts(true)` rejects and
+    macOS offers to open System Settings › Privacy & Security › Accessibility. Once people allow
+    the app there, call `inhibitShortcuts(true)` again.
+  </TabItem>
+</Tabs>
+
+## Related pages
+
+- [Creating windows](/docs/windows/creating-windows/) covers the `.palette()` recipe used above.
+- [Bridge events](/docs/bridge/events/) explains how events reach pages.

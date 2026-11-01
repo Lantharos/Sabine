@@ -1,0 +1,216 @@
+---
+title: Events
+description: Send events from Rust to the app's pages, stream bytes, and listen for the events Sabine sends on its own.
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Commands answer the page when it asks. Events go the other way: the app sends them whenever it
+has something to say, such as progress on a sync, a file that changed on disk or terminal output,
+and every page listening for that name receives them.
+
+## Sending events from Rust
+
+Events go out through the app's `BridgeEventEmitter`. The launched `SabineProcess` hands it out
+with `bridge_event_emitter()`; `SabineWindow::main_with_process` passes you the process before it
+starts waiting on the window:
+
+```rust
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
+use std::time::Duration;
+
+use sabine::prelude::*;
+use sabine::BridgeEvent;
+use serde::Serialize;
+use specta::Type;
+
+#[derive(Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+struct SyncProgress {
+    done: u32,
+    total: u32,
+}
+
+const SYNC_PROGRESS: BridgeEvent<SyncProgress> = BridgeEvent::new("sync.progress");
+
+fn main() {
+    SabineWindow::main_with_process(
+        |window| Ok(window.app().bridge_event(&SYNC_PROGRESS)),
+        |process| {
+            let events = process.bridge_event_emitter();
+            std::thread::spawn(move || {
+                let total = 20;
+                for done in 1..=total {
+                    std::thread::sleep(Duration::from_millis(250));
+                    events.send(&SYNC_PROGRESS, &SyncProgress { done, total });
+                }
+            });
+        },
+    );
+}
+```
+
+The emitter is cheap to clone and every clone sends to the same windows, so hand one to each
+thread or task that sends events. To send from inside a command handler, keep a clone where the
+handler can reach it, such as a `OnceLock<BridgeEventEmitter>` that the launch callback fills.
+
+| Method | Sends |
+| --- | --- |
+| `send(&event, &payload)` | A typed event declared as a `BridgeEvent<T>`, to every window. |
+| `send_bytes(&event, &bytes)` | A typed bytes event declared as a `BridgeEvent<Bytes>`, to every window. |
+| `emit(name, payload)` | An event by name with a `serde_json::Value` payload, to every window. |
+| `emit_to(window, name, payload)` | The same, to one window. |
+| `emit_bytes(name, &bytes)` | Bytes by name, to every window. |
+| `emit_bytes_to(window, name, &bytes)` | Bytes by name, to one window. |
+
+Each returns `true` when at least one window took the event, and `false` when no window is open
+or a typed payload did not serialize. Declare typed events on the builder with `bridge_event` so
+they appear in the [typed bindings](/docs/bridge/typed-bindings/); events sent by name don't.
+
+The emitter also drives windows from Rust: it shows, hides and focuses them, changes their
+[regions](/docs/windows/glass-and-effects/), shows [notifications](/docs/desktop/notifications/),
+prints files and controls [guests](/docs/web/guests/#driving-guests-from-rust). The
+[Rust API reference](/docs/reference/rust-api/) lists every method.
+
+### Answering one window
+
+A window id names one window: `SabineProcess::id()` is the first window's, `open_window` returns
+the id of each window it opens, and a raw command's `command.window` names the window whose page
+made the call. A handler can start work that reports back to that window alone:
+
+```rust
+use std::sync::{Arc, OnceLock};
+
+use sabine::prelude::*;
+use sabine::BridgeEventEmitter;
+
+fn main() {
+    let emitter = Arc::new(OnceLock::<BridgeEventEmitter>::new());
+    let events = Arc::clone(&emitter);
+    SabineWindow::main_with_process(
+        move |window| {
+            Ok(window.app().bridge_handler("export.start", move |command| {
+                let events = events.get().cloned().ok_or_else(|| BridgeError::new("starting"))?;
+                let window = command.window.ok_or_else(|| BridgeError::new("no calling window"))?;
+                std::thread::spawn(move || {
+                    let path = run_export();
+                    events.emit_to(window, "export.finished", serde_json::json!({ "path": path }));
+                });
+                Ok(BridgeResponse::json(serde_json::Value::Null))
+            }))
+        },
+        move |process| {
+            let _ = emitter.set(process.bridge_event_emitter());
+        },
+    );
+}
+
+fn run_export() -> String {
+    String::from("/home/ana/Documents/notes.zip")
+}
+```
+
+### Pace
+
+Sending waits while a window's pages have not yet taken earlier events, up to 512 queued messages
+per window. A fast producer, such as a process writing output, therefore runs at the pace the
+page keeps up with instead of losing events or growing memory. Send from a thread of your own, as
+above, rather than from inside a handler or an async task that other work shares.
+
+## Listening in the page
+
+`listen(name, callback)` from `@lantharos/sabine` registers a listener and returns a function that
+removes it. Typed events have a function of their own in the generated bindings:
+
+```ts
+import { listen } from "@lantharos/sabine";
+import { events as appEvents } from "./bindings";
+
+const stopProgress = appEvents.syncProgress(({ done, total }) => {
+  progress.value = done / total;
+});
+
+const stopExport = listen<{ path: string }>("export.finished", ({ path }) => {
+  toast(`Exported to ${path}`);
+});
+```
+
+Listeners run in microtasks, in the order they were added. Events reach the main frame of every
+window's page, as long as the page is one of the app's own pages or comes from an
+[allowed origin](/docs/bridge/security/). Guests created with `allowBridge` receive them too, on
+the same terms. Events sent while no page listens are not kept.
+
+## Bytes
+
+Bytes travel as they are, without JSON or base64. Send them with `emit_bytes`, `emit_bytes_to` or,
+for a typed event, `send_bytes` on a `BridgeEvent<Bytes>`; listeners receive a `Uint8Array`:
+
+```rust
+use std::io::Read;
+
+use sabine::{BridgeEvent, Bytes};
+
+const OUTPUT: BridgeEvent<Bytes> = BridgeEvent::new("terminal.output");
+
+fn stream_output(events: sabine::BridgeEventEmitter, mut output: impl Read + Send + 'static) {
+    std::thread::spawn(move || {
+        let mut buffer = vec![0; 64 * 1024];
+        while let Ok(read @ 1..) = output.read(&mut buffer) {
+            events.send_bytes(&OUTPUT, &buffer[..read]);
+        }
+    });
+}
+```
+
+```ts
+import { events as appEvents } from "./bindings";
+
+appEvents.terminalOutput((bytes) => terminal.write(bytes));
+```
+
+Between the app, its window hosts and the browser, a message announces its length and the bytes
+follow it; between Chromium's browser and renderer processes they travel in shared memory. Each
+message carries up to 32 MiB. The same path carries bytes the page sends with a call and bytes a
+handler answers with, as [Commands](/docs/bridge/commands/#raw-commands) shows.
+
+## Events Sabine sends
+
+Pages receive these events without the app sending anything. The `events` object in
+`@lantharos/sabine` has a typed listener for each:
+
+| Listener | Event name | Payload | Sent when |
+| --- | --- | --- | --- |
+| `events.appearanceChanged` | `system.appearance` | `{ colorScheme, accentColor }` | The desktop switches between light and dark or changes its accent color. |
+| `events.trayActivate` | `tray.activate` | `{ trayId, itemId, action, checked }` | The tray icon or one of its menu items is activated. `itemId` is `null` for the icon itself. |
+| `events.globalShortcut` | `globalShortcut.activate` | `{ id, action, activationToken }` | A registered global shortcut is pressed. |
+| `events.globalShortcutFailed` | `globalShortcut.failed` | `{ id, action, message }` | The desktop refused a global shortcut, for example because another app holds it. |
+| `events.singleInstance` | `singleInstance.activate` | `{ policy, arguments, workingDirectory, activationToken }` | The app is launched again while it runs. `arguments` is the second launch's command line, starting with the program. |
+| `events.openUrlsAvailable` | `app.openUrlsAvailable` | `null` | URLs or documents arrived for the app; take them with `app.takeOpenUrls()`. |
+| `events.rendererCrashed` | `runtime.renderer-crashed` | `{ guestId, code, recovering }` | A renderer stopped. `guestId` is empty for the app's own page. Sabine reloads it unless it stopped three times within a minute. |
+| `events.guestCreated` | `guest.created` | `GuestInfo` | A guest finished opening. |
+| `events.guestDestroyed` | `guest.destroyed` | `{ id }` | A guest closed. |
+| `events.guestLoading` | `guest.loading` | `{ id, loading }` | A guest started or finished loading. |
+| `events.guestTitle` | `guest.title` | `{ id, title }` | A guest's document title changed. |
+| `events.guestNavigated` | `guest.navigated` | `{ id, url, title, canGoBack, canGoForward }` | A guest navigated or its address changed. |
+| `events.guestNewWindow` | `guest.newWindow` | `{ id, url, disposition }` | A guest with the `deny` popup policy tried to open a window. |
+| `events.guestDownload` | `guest.download` | `GuestDownloadEvent` | A download was requested, progressed or ended. |
+| `events.guestShortcut` | `guest.shortcut` | `GuestShortcutEvent` | A focused guest received one of its intercepted shortcuts. |
+| `events.guestWheel` | `guest.wheel` | `GuestWheelEvent` | A guest that intercepts horizontal scrolling received a horizontal wheel or trackpad scroll. |
+| `events.guestFavicon` | `guest.favicon` | `{ id, favicons }` | A guest's favicon URLs changed. |
+
+Guest events go to the page that shows the guests, never to the guests themselves. The
+[JavaScript API reference](/docs/reference/javascript-api/#events) describes each payload, and
+[Guests](/docs/web/guests/#events) shows them in use.
+
+`appWindow` and `NativeVideo` follow further events for you: `appWindow.onVisibilityChanged`,
+`appWindow.onStateChanged` and `appWindow.onControlsOverlayChanged` report changes to the window,
+and a `NativeVideo` dispatches media events on itself. Pages also receive `popup.open` and
+`popup.close` when the [popup](/docs/reference/javascript-api/#popup) surface opens and closes.
+
+<Aside>
+Don't name your own events after Sabine's. Names such as `system.appearance`, `guest.created` or
+`window.state` reach the listeners Sabine installs in every page.
+</Aside>

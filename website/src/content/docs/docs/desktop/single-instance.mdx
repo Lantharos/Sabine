@@ -1,0 +1,170 @@
+---
+title: Single instance
+description: Keep an app to one running copy, and hand later launches, with their arguments and links, to the copy that is already running.
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+By default every launch of an app starts another copy of it. With a single-instance policy, the
+first launch becomes the app's instance, and later launches hand their arguments to it and exit.
+That is what you want for most desktop apps, and for any app that opens
+[links or documents](/docs/desktop/links-and-documents/), since the desktop starts the app again
+for each one.
+
+## Choosing a policy
+
+Set the policy on the window with `.single_instance(...)`:
+
+```rust
+use sabine::prelude::*;
+use sabine::SingleInstancePolicy;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .single_instance(SingleInstancePolicy::FocusExisting))
+    });
+}
+```
+
+| Policy | What a later launch does |
+| --- | --- |
+| `SingleInstancePolicy::AllowMultiple` | Starts another copy. This is the default. |
+| `SingleInstancePolicy::ReuseExisting` | Hands its arguments to the running app and exits. The running app's window stays as it is. |
+| `SingleInstancePolicy::FocusExisting` | Hands its arguments to the running app and exits, and the running app shows and focuses its window. |
+
+`ReuseExisting` suits apps that decide for themselves whether to come forward, such as a tray app
+that handles a link in the background. `FocusExisting` is the usual choice for apps with a main
+window, and for [tray apps](/docs/desktop/tray/) whose second launch should bring the hidden
+window back. With `FocusExisting`, an app built with `.background()` that has no window open
+opens it.
+
+The hand-off is the first thing a launch does, before Sabine prepares its runtime, checks for
+updates or opens a window. A link someone clicks reaches the running app at once, even while the
+first launch is still setting up.
+
+## Which launches count as the same app
+
+Launches share an instance when they have the same instance id. It is the app id unless you name
+another one:
+
+```rust
+window
+    .app_id("com.example.notes")
+    .single_instance(SingleInstancePolicy::FocusExisting)
+    .single_instance_id("com.example.notes.main")
+```
+
+Development runs, such as `sabine dev`, add `.dev` to the app id and to the instance id, so a
+development copy and the installed app run side by side without handing launches to each other.
+
+`.single_instance_id` only names the instance; set a policy with `.single_instance` to turn it on.
+
+## Hearing about later launches
+
+Each later launch reaches the running app's pages as `events.singleInstance`:
+
+```ts
+import { appWindow, events } from "@lantharos/sabine";
+
+events.singleInstance(({ policy, arguments: args, workingDirectory, activationToken }) => {
+  if (args.includes("--new-window")) {
+    openNewDocumentWindow(workingDirectory);
+  }
+  if (policy === "reuseExisting" && args.includes("--show")) {
+    appWindow.show();
+    appWindow.focus(activationToken ?? undefined);
+  }
+});
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `policy` | `"allowMultiple" \| "reuseExisting" \| "focusExisting"` | The app's policy. |
+| `arguments` | `string[]` | The later launch's command line, starting with the program itself. |
+| `workingDirectory` | `string \| null` | The directory the later launch ran in. |
+| `activationToken` | `string \| null` | Pass to `appWindow.focus` so the desktop lets the window take focus. |
+
+Links and documents among the arguments also go into the app's open queue, and
+`events.openUrlsAvailable` fires before `singleInstance`, so an app that reads its links through
+`app.takeOpenUrls()` handles them in one place whether they came with the first launch or a later
+one. Relative file paths are resolved against the later launch's working directory.
+
+A later launch sends at most 1 MiB of arguments. If the running app doesn't answer within a short
+moment, for example because it is still starting to listen, the later launch retries for up to
+three quarters of a second before it gives up with an error.
+
+## Coming to the front
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Wayland compositors only let a window take focus with an activation token from the launch
+    people started. A later launch passes on the token the desktop gave it, from
+    `XDG_ACTIVATION_TOKEN` or `DESKTOP_STARTUP_ID`, and `FocusExisting` focuses the window with it.
+    With `ReuseExisting`, the same token arrives in `activationToken` for the page to pass to
+    `appWindow.focus`.
+
+    The instance listens on a socket in `$XDG_RUNTIME_DIR/sabine`, and only accepts launches from
+    the same user.
+  </TabItem>
+  <TabItem label="Windows">
+    Windows only lets an app take the foreground in some situations. The later launch, which the
+    person just started, allows the running app to take the foreground before it hands over, so
+    the window comes forward instead of only flashing on the taskbar.
+
+    The instance listens on a local connection that only launches in the same user session can
+    reach.
+  </TabItem>
+  <TabItem label="macOS">
+    Opening an app bundle that is already running doesn't start a second copy on macOS: Launch
+    Services hands the request to the running app. Links and documents arrive through the app's
+    delegate and bring the window forward. Clicking the Dock icon, or opening the app from Finder
+    while it runs, reaches the app as a `singleInstance` event with the `focusExisting` policy,
+    which shows and focuses its window, also for a hidden tray app.
+
+    Starting the app's executable directly, for example from a terminal, does start another
+    process, and the policy handles it like on the other desktops. The instance listens on a socket
+    in `~/Library/Caches/sabine`, and only accepts launches from the same user.
+  </TabItem>
+</Tabs>
+
+## Custom entry points
+
+`SabineWindow::main` exits quietly when a launch was handed to the running instance. When you call
+`SabineWindow::launch` yourself, it returns `Err(SabineError::InstanceAlreadyRunning)` instead;
+exit with a success status when you see it.
+
+```rust
+use sabine::{SabineError, SabineWindow, SingleInstancePolicy};
+
+fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
+    if sabine::dispatch_host_mode_from_args(&args) {
+        return;
+    }
+    let window = SabineWindow::for_current_app()
+        .expect("the app's Sabine.toml is readable")
+        .app()
+        .single_instance(SingleInstancePolicy::FocusExisting);
+    match window.launch() {
+        Ok(process) => {
+            let status = process.wait().expect("the app's windows can be waited for");
+            std::process::exit(status.code().unwrap_or(1));
+        }
+        Err(SabineError::InstanceAlreadyRunning) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    }
+}
+```
+
+## Related pages
+
+- [Links and documents](/docs/desktop/links-and-documents/) covers the open queue.
+- [Multiple windows](/docs/windows/multiple-windows/) covers opening more windows from one
+  instance.

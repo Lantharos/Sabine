@@ -1,0 +1,301 @@
+---
+title: CLI
+description: Every command, subcommand and flag of the sabine command-line tool.
+sidebar:
+  order: 2
+---
+import { Code } from "@astrojs/starlight/components";
+import { tag } from "~/version";
+
+The `sabine` command creates, runs, packages, installs and releases Sabine apps, and maintains the
+shared runtime on your machine. Install it with Cargo:
+
+<Code code={`cargo install --git https://github.com/Lantharos/Sabine --tag ${tag} sabine-cli`} lang="sh" />
+
+Commands that take a project accept its folder as the first argument and default to the current
+one. `sabine help <command>` and `sabine <command> --help` print the flags of a command.
+
+| Command | Does |
+| --- | --- |
+| [`sabine new`](#sabine-new) | Creates a project |
+| [`sabine dev`](#sabine-dev) | Runs the app in development |
+| [`sabine bindings`](#sabine-bindings) | Writes or checks the TypeScript bindings |
+| [`sabine bundle`](#sabine-bundle) | Builds a package |
+| [`sabine install`](#sabine-install) | Installs the app on this machine |
+| [`sabine uninstall`](#sabine-uninstall) | Removes an installed app, or Sabine |
+| [`sabine update`](#sabine-update) | Updates Sabine, the CEF runtime or an app |
+| [`sabine runtime`](#sabine-runtime) | Manages the CEF runtime |
+| [`sabine release-init`](#sabine-release-init) | Sets up signed GitHub releases |
+| [`sabine release-manifest`](#sabine-release-manifest) | Writes a signed update manifest |
+| [`sabine release-keygen`](#sabine-release-keygen) | Creates an update signing key |
+| [`sabine release-public-key`](#sabine-release-public-key) | Prints the public key of the signing key |
+| [`sabine system-release-manifest`](#sabine-system-release-manifest) | Writes Sabine's own release manifest |
+
+## sabine --version
+
+```sh
+sabine --version
+```
+
+`-V` and `--version` print the version of the CLI, of the installed Sabine service and of the
+running daemon, or say that the service isn't installed or the daemon isn't running.
+
+## sabine new
+
+```sh
+sabine new my-app
+sabine new my-notes --template notes
+```
+
+Creates a folder named after the app with a Rust executable, a TypeScript page, a
+`Sabine.toml`, a default icon in `assets/icon.svg` and a release workflow in
+`.github/workflows/release.yml`. The Rust crate and the `@lantharos/sabine` package are pinned to
+the CLI's own Sabine release.
+
+| Argument or flag | Default | Meaning |
+| --- | --- | --- |
+| `<name>` | required | The folder and package name: letters, digits, `-` and `_`. The folder must not exist |
+| `--template <name>` | `app` | `app` for the default app, or `notes` for a small notes app with a glass window that draws its own titlebar and calls a typed command |
+
+## sabine dev
+
+```sh
+sabine dev
+sabine dev examples/notes --release
+sabine dev -- --open-file notes.md
+```
+
+Runs the app from its project:
+
+1. prepares the CEF runtime and host if this machine has none
+2. loads the development environment files
+3. rewrites the TypeScript bindings when `Sabine.toml` has `[bindings]`
+4. installs the web project's dependencies when it has no `node_modules`
+5. starts the web development server, or reuses one already listening on its port
+6. runs `cargo run`, with the app id suffixed `.dev`, `SABINE_DEV_URL` pointing at the server and
+   `SABINE_MANIFEST_PATH` at the project's `Sabine.toml`
+
+`Ctrl+C` stops the app and any server `sabine dev` started. If the server exits while the app runs,
+`sabine dev` stops the app too.
+
+| Argument or flag | Meaning |
+| --- | --- |
+| `[source]` | The project folder; `.` by default |
+| `--release` | Builds and runs Cargo's release profile, still in development mode |
+| `--no-install` | Doesn't install missing web dependencies |
+| `--web-only` | Runs only the web development server, without the runtime or the app |
+| `--no-runtime-prepare` | Skips preparing the CEF runtime and host |
+| `--command <command>` | Runs this shell command instead of `cargo run`; trailing arguments are passed to it. Bindings aren't rewritten |
+| `-- <args>` | Arguments passed on to the app |
+
+The development environment files are `.env`, `.env.local`, `.env.development` and
+`.env.development.local` in the project and the web root, with `NODE_ENV` and `SABINE_ENV` set to
+`development`; variables already set in your shell win. The web server's port, URL and command come
+from [`[web]`](/docs/reference/manifest/#web).
+
+## sabine bindings
+
+```sh
+sabine bindings
+sabine bindings --check
+```
+
+Builds and runs the app so it writes its [TypeScript bindings](/docs/bridge/typed-bindings/) to
+`[bindings] path`, then exits without opening a window. `Sabine.toml` must have a `[bindings]`
+table.
+
+| Argument or flag | Meaning |
+| --- | --- |
+| `[source]` | The project folder; `.` by default |
+| `--check` | Fails instead of writing when the file on disk is out of date, for CI |
+
+## sabine bundle
+
+```sh
+sabine bundle . --target portable --release
+sabine bundle . --target msi --release --offline
+sabine bundle . --target deb --release --no-web-build --json
+```
+
+Builds the app into a package. [Bundling](/docs/distribution/bundling/) explains each target and
+what goes into it.
+
+| Argument or flag | Default | Meaning |
+| --- | --- | --- |
+| `[source]` | `.` | The project folder |
+| `--target <target>` | `linux` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos` |
+| `--out <path>` | `dist` | Where staged bundles and packages go |
+| `--release` | off | Builds Cargo's release profile |
+| `--no-build` | off | Packages the executable already in Cargo's default output folder |
+| `--binary <path>` | | Packages this executable instead of building one |
+| `--no-web-build` | off | Skips the web build and packages the existing output |
+| `--web-build <command>` | `[web] build` | The web build command |
+| `--web-root <path>` | `[web] root` | The web project's folder |
+| `--web-dist <path>` | `[web] dist` | The folder of built web assets |
+| `--id <id>` | `[app] id` | The app id for this build |
+| `--name <name>` | `[app] name` | The app name for this build |
+| `--version <version>` | `[app] version` | The app version for this build |
+| `--env-file <path>` | | Another environment file for the build; repeat it for several |
+| `--offline` | off | Ships this machine's Sabine service, host and CEF runtime in the bundle |
+| `--json` | off | Prints the result as one line of JSON |
+
+## sabine install
+
+```sh
+sabine install .
+sabine install --bundle .
+sabine install --bundle --system-wide --root /image .
+```
+
+Installs the app on this machine. Without `--bundle` it installs a development launcher that runs
+`sabine dev` on the checkout; with it, a production build. See [Installing](/docs/distribution/installing/).
+
+| Argument or flag | Meaning |
+| --- | --- |
+| `[source]` | The project folder; `.` by default |
+| `--bundle` | Builds a release bundle and installs it, independent of the checkout |
+| `--env-file <path>` | Another environment file for the build; repeat it for several. Only with `--bundle` |
+| `--id <id>` | The app id to install as |
+| `--name <name>` | The name to install as |
+| `--command <command>` | The native command a development launcher runs instead of `cargo run`. Not with `--bundle` |
+| `--autostart` | Starts the app when you log in |
+| `--no-desktop` | Leaves out the launcher entry or shortcut |
+| `--system-wide` | Installs the bundle for every user of the machine. Needs `--bundle`, and not with `--autostart` or `--no-desktop` |
+| `--root <path>` | Stages a system-wide install under this folder, such as an OS image. Needs `--system-wide` |
+
+## sabine uninstall
+
+```sh
+sabine uninstall .
+sabine uninstall com.example.tern --purge
+sabine uninstall --system
+```
+
+Removes an app installed with `sabine install`, keeping its data. Apps installed from packages are
+removed with their package manager or uninstaller instead.
+
+| Argument or flag | Meaning |
+| --- | --- |
+| `[target]` | An app id or project folder; `.` by default. For a project, the development launcher goes first |
+| `--purge` | Also removes Sabine's data for the installation: the install folder and browser profiles |
+| `--system` | Removes Sabine itself, with its runtimes and this CLI, once no apps are registered. Not with a target. With `--purge`, Sabine's whole data folder and every browser profile go too |
+
+## sabine update
+
+```sh
+sabine update
+sabine update cef
+sabine update com.example.tern --force
+sabine update .
+sabine update --all
+```
+
+| Argument or flag | Meaning |
+| --- | --- |
+| `[target]` | What to update; everything Sabine provides when absent. See below |
+| `--all` | Also updates every registered app. Not with a target |
+| `--force` | Installs releases before their soak period ends; signature, checksum and version checks still apply |
+
+| Target | Updates |
+| --- | --- |
+| none | The CLI, Sabine's service, daemon and host, then the CEF runtime |
+| `sabine` or `system` | The CLI and Sabine's service, daemon and host |
+| `cef` or `runtime` | The CEF runtime, after checking that Chromium starts on it |
+| a project folder | Rebuilds a `sabine install --bundle` install from the checkout, or rewrites a development launcher |
+| an app id | Checks the app's update source and installs a release, rebuilds a `sabine install --bundle` install without one from its checkout, or rewrites a development launcher |
+
+`sabine update` reports a Sabine release that is still soaking, or one it holds back because it would
+stop an installed app, naming the apps it waits for. For an app whose release comes as a package,
+it downloads the package and leaves the installation to the app's next launch.
+
+## sabine runtime
+
+Manages the CEF runtime apps share.
+
+| Subcommand | Does |
+| --- | --- |
+| `sabine runtime prepare` | Makes sure this machine has a runtime and a host for it, downloading and building what's missing, and prints the host's path |
+| `sabine runtime install` | Installs the newest CEF runtime and checks that Chromium starts on it |
+| `sabine runtime install --system-wide` | Installs Sabine's service, daemon, host and a CEF runtime for every user. Needs administrator rights |
+| `sabine runtime install --system-wide --root <path>` | Stages that machine-wide installation under a folder, such as an OS image |
+| `sabine runtime list` | Lists the runtimes found, with their version, where they are (`system`, `user` or `bundled`), and whether they are quarantined |
+| `sabine runtime list --json` | The same as JSON: `{"runtimes": [{"version", "location_type", "path", "verified"}]}` |
+| `sabine runtime remove <version>` | Removes one of your own runtimes, by the version `list` shows |
+| `sabine runtime prune` | Removes all but the newest two of your own runtimes; `--keep <n>` keeps another number |
+| `sabine runtime doctor` | Checks that a compatible runtime is installed and that the host renders a page on it |
+| `sabine runtime doctor --json` | The same as JSON, with `status`, `host_ready`, `probe_error` and `runtimes` |
+| `sabine runtime sandbox-profile` | Linux only: prints an AppArmor profile that lets the host create Chromium's sandbox; see [AppArmor](/docs/distribution/app-sandbox/#apparmor) |
+
+`doctor` exits with an error unless everything works. Its status is one of:
+
+| Status | Means |
+| --- | --- |
+| `ok` | A compatible runtime is installed and the host renders on it |
+| `host-missing` | The runtime is there but its host isn't; run `sabine runtime prepare` |
+| `host-unhealthy` | The host failed its launch check; the error says why |
+| `quarantined` | No compatible runtime passed its health check; the reason is shown for each quarantined one |
+| `missing` | No runtime is installed; run `sabine runtime install` |
+| `outdated` | Only runtimes older than the oldest CEF version Sabine supports are installed |
+
+## sabine release-init
+
+```sh
+sabine release-init --repository example/tern
+```
+
+Creates a new update signing key, stores it as the repository's `SABINE_UPDATE_SIGNING_KEY` Actions
+secret, turns on immutable releases, and writes the `[updates]` table of the `Sabine.toml` in the
+current folder. Needs the GitHub CLI, signed in. See
+[Publishing from GitHub](/docs/distribution/releases-and-updates/#sabine-release-init).
+
+| Flag | Meaning |
+| --- | --- |
+| `--repository <owner/name>` | The repository; otherwise `GITHUB_REPOSITORY`, then the repository `gh` sees in the current folder |
+
+## sabine release-manifest
+
+```sh
+sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.tern-1.0.0-portable.tar.gz \
+  --executable linux-x86_64=com.example.tern/root/usr/lib/sabine/com.example.tern/tern
+```
+
+Writes the signed update manifest for one release, signed with `SABINE_UPDATE_SIGNING_KEY`. The app
+needs a GitHub update source with an enabled policy. See
+[Release manifests](/docs/distribution/releases-and-updates/#release-manifests).
+
+| Argument or flag | Default | Meaning |
+| --- | --- | --- |
+| `[source]` | `.` | The project folder |
+| `--artifact <target>=<path>` | required | A package for an update target, such as `linux-x86_64-deb=dist/artifacts/app.deb`; repeat it for each |
+| `--executable <target>=<path>` | | The program's path inside an archive artifact |
+| `--channel <channel>` | `stable` | The release channel; must match `[updates]` |
+| `--output <path>` | `dist/sabine-update.json` | Where the manifest goes |
+
+## sabine release-keygen
+
+```sh
+sabine release-keygen --public-output update-key.pub > update-key.private
+```
+
+Creates an Ed25519 update signing key, prints the private key and writes the public key to
+`--public-output`, which is required.
+
+## sabine release-public-key
+
+```sh
+sabine release-public-key
+```
+
+Prints the public key of the private key in `SABINE_UPDATE_SIGNING_KEY`, for the `public_key` of
+`[updates]`.
+
+## sabine system-release-manifest
+
+Sabine's own release workflow uses this to write the signed manifest of a Sabine release from its
+system and CLI archives. Apps don't need it.
+
+| Flag | Meaning |
+| --- | --- |
+| `--version <version>` | The Sabine version, which must be the CLI's own |
+| `--directory <path>` | The folder of release archives |
+| `--output <path>` | Where the manifest goes |

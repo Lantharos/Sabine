@@ -1,0 +1,236 @@
+---
+title: Installing
+description: Install your app from its project as a development launcher or a production build, install it for every user, and remove it again.
+sidebar:
+  order: 4
+---
+import { Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+People usually install your app from one of its [bundles](/docs/distribution/bundling/). While you
+work on it, `sabine install` puts it on your own machine the same way, either as a launcher that
+runs the checkout or as a production build that no longer needs it.
+
+| Command | Installs |
+| --- | --- |
+| `sabine install .` | A development launcher that runs `sabine dev` on the checkout |
+| `sabine install --bundle .` | A production build, independent of the checkout |
+| `sabine install --bundle --system-wide .` | A production build for every user of the machine |
+
+## Development launcher
+
+```sh
+sabine install .
+```
+
+This adds the project to your launcher as a development app. Opening it runs `sabine dev` on the
+checkout, with the same web server handling, environment files and `.dev` identity as running
+`sabine dev` yourself, so its browser storage and data stay apart from a production install.
+
+- The app is registered as `<app id>.dev` and named `<name> (Development)`.
+- It is always listed in launchers, and registers no URL schemes or document types.
+- The checkout and the `sabine` CLI have to stay where they are.
+
+| Option | Effect |
+| --- | --- |
+| `--id <id>` | Uses this app id instead of the one in `Sabine.toml` |
+| `--name <name>` | Uses this name instead of the one in `Sabine.toml` |
+| `--command <command>` | Runs this native command instead of `cargo run`, like `sabine dev --command` |
+| `--autostart` | Starts the app when you log in |
+| `--no-desktop` | Registers the app without a launcher entry or shortcut |
+
+Without `--command`, the launcher uses `[install] command`, then `[app] command`, from
+`Sabine.toml`, and otherwise `cargo run`.
+
+`sabine update .` rewrites the launcher from the project's current `Sabine.toml`.
+
+## Production install
+
+```sh
+sabine install --bundle .
+```
+
+This builds a release [portable bundle](/docs/distribution/bundling/#portable) with your production
+environment files, installs it into Sabine's data folder, registers it with Sabine's service, and
+adds it to your desktop like a downloaded package would: a launcher entry with its icon, URL schemes
+and document types. It runs from the installed files and never invokes Cargo or reads the checkout.
+
+| Option | Effect |
+| --- | --- |
+| `--id <id>`, `--name <name>` | Overrides the app id or name for this install |
+| `--env-file <path>` | Loads another environment file for the build; repeat it for several |
+| `--autostart` | Starts the app when you log in |
+| `--no-desktop` | Installs the app without a launcher entry or shortcut |
+
+An app with an update source updates like any archive installation; see
+[How installed apps update](/docs/distribution/releases-and-updates/#how-installed-apps-update).
+Sabine remembers the checkout and environment files an install came from, so `sabine update .`
+in the project, or `sabine update <app id>` for an app without an update source, rebuilds and
+reinstalls it from there.
+
+## Installing for every user
+
+An operating system image or an administrator can install Sabine and apps once for every user, so
+no app ever prepares a runtime on first launch:
+
+```sh
+sabine runtime install --system-wide --root /image
+sabine install --bundle --system-wide --root /image .
+```
+
+The first command installs Sabine's service, daemon, CEF host and a CEF runtime; the second installs
+the app. `--root` stages either one under a folder, such as an image being built. Without `--root`
+they write to the running system and need administrator rights.
+
+The runtime install takes its pieces from your own Sabine: the service next to the CLI or already
+installed, the host built for the runtime, and the newest runtime, which it downloads when you have
+none. The machine-wide Sabine folder mirrors a user's own, read-only: `bin/current.json` names the
+active version under `bin/versions/<version>`, and `runtimes/cef` holds one runtime.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sabine goes to `/usr/lib/sabine`, with a systemd user unit at
+    `/usr/lib/systemd/user/sabine.service` that starts the daemon for every user at login. When a
+    user's own Sabine is newer, that daemon hands over to it.
+
+    The app goes where packages put it: `/usr/lib/sabine/<app id>`, a launcher in `/usr/bin`, and
+    its desktop entry, icons, AppStream metadata and file types under `/usr/share`.
+  </TabItem>
+  <TabItem label="Windows">
+    Sabine goes to `%ProgramFiles%\Sabine`. The app goes to a folder under `%ProgramFiles%` named
+    after it, with a Start menu shortcut for all users.
+  </TabItem>
+  <TabItem label="macOS">
+    Sabine goes to `/Library/Application Support/Sabine`. The app goes to `/Applications`.
+  </TabItem>
+</Tabs>
+
+A system-wide app carries no update source: whoever installed it updates it. An image build can run
+`sabine-service check-apps` from the machine-wide installation, which fails when that Sabine would
+not run one of the apps installed for every user.
+
+Apps prefer the machine-wide Sabine unless it is older than they need, or older than a user's own
+Sabine, which a newer app or `sabine update` may bring. Each user still registers apps, runs their
+own daemon, and keeps logs, browser profiles and app data in their own folders. While the machine
+provides a runtime, a user's daemon checks it instead of downloading one of its own.
+
+## Uninstalling
+
+```sh
+sabine uninstall .
+sabine uninstall com.example.tern --purge
+sabine uninstall --system
+```
+
+`sabine uninstall` takes an app id, or a project folder (the current one by default). For a
+project it removes the development launcher when there is one, and the production install
+otherwise. It removes the app's launcher entry, shortcuts, file types, autostart entry and
+registration, and the files the install put there; files the app or you added to the install folder
+stay, and so does the folder until it's empty. App data and browser profiles are kept.
+
+| Option | Effect |
+| --- | --- |
+| `--purge` | Also removes the whole install folder and the app's browser profiles |
+| `--system` | Removes Sabine itself: its service, daemon, runtimes and the CLI. Uninstall every app first |
+
+`--system` stops the daemon and turns off starting at login before deleting anything, and keeps app
+data unless you add `--purge`, which also removes Sabine's data folder and every browser profile.
+
+`sabine uninstall` only removes apps that `sabine install` installed. For one installed from a
+package, it says so; remove it with the package manager or the system's own uninstaller instead.
+
+## Packages
+
+A package built with `sabine bundle` installs the way its format does: a deb or rpm through the
+package manager, an AppImage or portable bundle wherever it's unpacked, a disk image by dragging the
+app to Applications. On first launch the app checks for Sabine's service and runtime and, when they
+are missing, shows a **Preparing Sabine** window that downloads and sets them up before the app
+opens. Offline bundles carry them and only move them into place.
+
+### Windows setup programs
+
+The `exe` target builds a setup wizard and `msi` a Windows Installer package. Both install for the
+current user, without administrator rights, into `%LOCALAPPDATA%\Programs\<app id>`, and run the app
+once in setup mode from the installer to prepare Sabine and register the app before setup finishes.
+
+<Steps>
+
+1. The welcome page explains that setup installs the app and prepares its shared Sabine runtime,
+   downloading it when it isn't there yet. The next page picks the folder.
+
+2. While Sabine is prepared, the app moves the progress bar itself and the details list each step.
+   Cancel stops preparation and rolls back; a failure offers Retry, for example after closing the
+   app or reconnecting. Running the installer again repairs the installation.
+
+3. Apps listed in launchers get a Start menu folder with the app and its uninstaller. The finish
+   page offers to start the app and to add a desktop shortcut, both unticked.
+
+</Steps>
+
+Setup registers the app's URL schemes, and a `<app id>.document` ProgID added to each document
+extension's **Open with** list, all for the current user. It records the files it installed, so
+upgrades and repairs replace only those, keep files the app or you created, and recover an
+interrupted replacement on the next attempt. Choose an empty folder when replacing an app installed
+by something else.
+
+Uninstalling removes the app's registration first, then the files setup installed, its shortcuts and
+registrations. The setup program then asks whether to delete the files the app keeps for you in
+`%APPDATA%\<app id>`, when there are any, and keeps them unless you say yes or the uninstaller runs
+silently (`/S`). Sabine's runtime and service stay for other apps.
+
+The MSI package follows the same steps with the standard Windows Installer dialogs: Sabine's
+preparation reports its progress on the installer's own bar and in its log, cancelling returns
+Windows Installer's cancellation code 1602, a failed install rolls back the registration with the
+files, and a newer installed version blocks a downgrade.
+
+Sabine itself appears in **Settings › Apps**. Uninstalling it there first lists the apps that still
+run on it and asks whether to uninstall them too, with Cancel as the default. Confirming runs each
+app's own uninstaller, forgets apps installed without one, such as development launchers, and then
+removes Sabine. App data stays on the computer.
+
+## Where things are installed
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    | What | Where |
+    | --- | --- |
+    | Sabine's data: service, host, runtimes, registry, downloads, logs | `$XDG_DATA_HOME/sabine`, by default `~/.local/share/sabine` |
+    | `sabine install` apps | `~/.local/share/sabine/apps/<app id>/install` |
+    | Development launchers | `~/.local/share/sabine/apps/<app id>.dev/launch.sh` |
+    | Launcher entries | `~/.local/share/applications/<app id>.desktop` |
+    | Icons and file types | `~/.local/share/icons/hicolor`, `~/.local/share/mime/packages/<app id>.xml` |
+    | Start at login | `~/.config/autostart/<app id>.desktop` |
+    | Packages and system-wide apps | `/usr/lib/sabine/<app id>`, `/usr/bin`, `/usr/share` |
+    | Machine-wide Sabine | `/usr/lib/sabine` |
+    | Browser profiles | `~/.cache/sabine/profiles` |
+    | The app's own data | `~/.local/share/<app id>` |
+  </TabItem>
+  <TabItem label="Windows">
+    | What | Where |
+    | --- | --- |
+    | Sabine's data: service, host, runtimes, registry, downloads, logs | `%LOCALAPPDATA%\Sabine` |
+    | `sabine install` apps | `%LOCALAPPDATA%\Sabine\apps\<app id>\install` |
+    | Development launchers | `%LOCALAPPDATA%\Sabine\apps\<app id>.dev\launch.cmd` |
+    | Start menu shortcuts of `sabine install` apps | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\<app id>.lnk` |
+    | Start at login | A value named after the app id under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
+    | MSI and setup installs | `%LOCALAPPDATA%\Programs\<app id>` |
+    | System-wide apps | `%ProgramFiles%\<app name>` |
+    | Machine-wide Sabine | `%ProgramFiles%\Sabine` |
+    | Browser profiles | `%LOCALAPPDATA%\sabine\profiles` |
+    | The app's own data | `%APPDATA%\<app id>` |
+  </TabItem>
+  <TabItem label="macOS">
+    | What | Where |
+    | --- | --- |
+    | Sabine's data: service, host, runtimes, registry, downloads, logs | `~/Library/Application Support/Sabine` |
+    | `sabine install` apps | `~/Library/Application Support/Sabine/apps/<app id>/install/<app id>.app` |
+    | In Launchpad and Finder | `~/Applications/<app id>.app`, a link to the installed bundle |
+    | Start at login | `~/Library/LaunchAgents/dev.sabine.<app id>.plist` |
+    | System-wide apps | `/Applications/<app name>.app` |
+    | Machine-wide Sabine | `/Library/Application Support/Sabine` |
+    | Browser profiles | `~/Library/Caches/sabine/profiles` |
+    | The app's own data | `~/Library/Application Support/<app id>` |
+  </TabItem>
+</Tabs>
+
+Development runs keep their data under the `.dev` app id, so `~/.local/share/com.example.tern.dev`
+on Linux holds what `sabine dev` wrote.

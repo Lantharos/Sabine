@@ -1,0 +1,360 @@
+---
+title: Releases and updates
+description: Publish signed releases from GitHub Actions, configure how installed apps update, and understand how Sabine itself updates underneath them.
+sidebar:
+  order: 3
+---
+import { Aside, Code, Steps } from "@astrojs/starlight/components";
+import { tag } from "~/version";
+
+An app release is a set of packages plus a signed update manifest, `sabine-update.json`. Installed
+copies of your app read that manifest, check its signature against the public key they were built
+with, and update from the same kind of package they were installed from. App releases are separate
+from Sabine's own: your app updates without shipping Chromium again, and Sabine updates its shared
+runtime without you publishing anything.
+
+## Publishing from GitHub
+
+<Steps>
+
+1. Give the app its identity and version in `Sabine.toml`. The version is `[app] version`, or the
+   Cargo package's version when that is absent.
+
+   ```toml
+   [app]
+   id = "com.example.tern"
+   name = "Tern"
+   version = "1.0.0"
+   ```
+
+2. From the project folder, create the update signing key and point the app at its repository:
+
+   ```sh
+   sabine release-init --repository example/tern
+   ```
+
+3. Make sure the repository has the release workflow in `.github/workflows/release.yml`. Projects
+   created with `sabine new` already have it; otherwise add it as shown in
+   [The release workflow](#the-release-workflow).
+
+4. Commit, then push a tag named after the version:
+
+   ```sh
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+</Steps>
+
+The workflow builds and signs every package, writes the signed manifest, and publishes them all as
+the release for that tag. The tag has to match the version exactly; a `v1.0.1` tag on a project at
+`1.0.0` fails before anything is published.
+
+### sabine release-init
+
+`sabine release-init` sets up signed releases for a GitHub repository. It uses the
+[GitHub CLI](https://cli.github.com), which has to be signed in with permission to change the
+repository's secrets and settings.
+
+- It takes the repository from `--repository`, then `GITHUB_REPOSITORY`, then `gh repo view` in the
+  current folder.
+- It generates a new Ed25519 signing key and stores it as the repository's Actions secret
+  `SABINE_UPDATE_SIGNING_KEY`. The private key never touches the disk.
+- It turns on immutable releases for the repository, so a published release can't be changed.
+- If the current folder has a `Sabine.toml`, it writes the `[updates]` table: `provider = "github"`,
+  the repository, `channel = "stable"`, `policy = "automatic"` and the new `public_key`. Everything
+  else in the file stays as it was.
+
+It prints the public key when it's done.
+
+<Aside type="caution">
+Installed apps trust only the public key they were built with. Running `sabine release-init`
+again replaces the signing key, and copies built with the old key reject every later release. Run it
+once per app.
+</Aside>
+
+## The release workflow
+
+Sabine ships a reusable GitHub Actions workflow that does the whole release. Call it from a workflow
+that runs on version tags:
+
+<Code lang="yaml" title=".github/workflows/release.yml" code={`name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    uses: Lantharos/Sabine/.github/workflows/release-app.yml@${tag}
+    with:
+      sabine_version: ${tag}
+      accept_wix_eula: true
+    secrets: inherit
+`} />
+
+Keep `sabine_version` and the workflow's tag on the Sabine release your app builds against.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `sabine_version` | required | The Sabine tag to install the CLI from, such as <code>{tag}</code> |
+| `rust_toolchain` | `stable` | The Rust toolchain that builds the app; Sabine needs 1.98 or newer |
+| `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
+| `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
+
+The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, and takes the optional
+[signing secrets](/docs/distribution/code-signing/#the-release-workflows-secrets) for macOS and
+Windows. `secrets: inherit` passes them all on.
+
+### What it builds
+
+Each platform builds on a runner of its own, installs the matching Sabine CLI with
+`cargo install`, installs your web dependencies with `bun install --frozen-lockfile` at the
+repository root, and runs `sabine bundle --release` for each package:
+
+| Platform | Packages |
+| --- | --- |
+| Linux x86_64 and ARM64 (Ubuntu 24.04) | AppImage, deb, rpm, and a `portable` tarball |
+| Windows x86_64 and ARM64 | MSI, setup `.exe`, and a `windows` tarball |
+| macOS Apple Silicon | DMG, and a `macos` tarball |
+
+The tarballs serve installations that update from archives, such as `sabine install --bundle` and
+unpacked portable bundles.
+
+On Windows x86_64 the workflow then installs the MSI silently on a clean machine, launches the app,
+waits for Sabine's first-run setup to finish with a running service, and checks that the page
+renders, before uninstalling it again. It also checks that the executable needs no C runtime
+redistributable, runs as a GUI program, and carries its icon.
+
+Once every platform succeeds, the workflow writes and signs `sabine-update.json` with
+`sabine release-manifest`, records build provenance attestations for every file, and publishes them
+as the GitHub release for the tag with generated release notes.
+
+## Update settings
+
+`[updates]` in `Sabine.toml` says where installed copies look for releases:
+
+```toml
+[updates]
+provider = "github"
+repository = "example/tern"
+channel = "stable"
+policy = "automatic"
+public_key = "4Zc2Y0v2pZ8m0nq3w6m2b1V8x0o0Yk1o8f6lV0Gq1yE="
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `provider` | required | `"github"` for GitHub Releases, or `"http"` for a manifest you host |
+| `repository` | | `owner/name` of the GitHub repository; required with `provider = "github"` |
+| `url` | | The HTTPS URL of the release manifest; required with `provider = "http"` |
+| `channel` | `"stable"` | The channel releases must name. GitHub sources support `stable` only |
+| `policy` | `"automatic"` | `"automatic"`, `"notify"` or `"disabled"`; see below |
+| `public_key` | | The base64 Ed25519 public key releases are signed with. Filled in at bundle time from the signing key when empty |
+
+A GitHub source reads `https://github.com/<repository>/releases/latest/download/sabine-update.json`,
+so installed copies follow the repository's latest release. An HTTP source reads its `url`, which
+must use HTTPS and serve a manifest in the same format.
+
+| Policy | What installed copies do |
+| --- | --- |
+| `automatic` | Sabine's service checks for releases in the background and installs them, or downloads them and asks, depending on the package |
+| `notify` | The service leaves the app alone in the background; `sabine update <app id>` checks for and installs a release |
+| `disabled` | The app never updates itself |
+
+### Builds without an update source
+
+A bundle built in GitHub Actions updates from the repository's own releases even without an
+`[updates]` table: it uses `GITHUB_REPOSITORY` with the `stable` channel and the `automatic`
+policy. A bundle built anywhere else has no update source unless `[updates]` names one.
+
+An app that never updates itself, such as one people install through your own setup program or an
+app store, says so with only the policy:
+
+```toml
+[updates]
+policy = "disabled"
+```
+
+This form takes no other keys and needs no signing key. Bundles installed for every user with
+`sabine install --bundle --system-wide` never carry an update source; whoever installed them
+updates them.
+
+### Signing keys
+
+Update manifests are signed with Ed25519. The private key is a base64 32-byte seed in the
+`SABINE_UPDATE_SIGNING_KEY` environment variable; the app only ever ships the public key.
+
+When `SABINE_UPDATE_SIGNING_KEY` is set during `sabine bundle`, Sabine derives the public key from
+it and writes that into the bundle. If `[updates]` also names a `public_key`, the two must match.
+Inside GitHub Actions, bundling an app with enabled updates fails when it ends up without a public
+key, so a release can't ship copies that would never accept an update.
+
+To manage a key without `sabine release-init`, for example for an HTTP source:
+
+```sh
+sabine release-keygen --public-output update-key.pub > update-key.private
+export SABINE_UPDATE_SIGNING_KEY="$(cat update-key.private)"
+sabine release-public-key
+```
+
+`release-keygen` prints the new private key and writes the public key to the file you name.
+`release-public-key` prints the public key of `SABINE_UPDATE_SIGNING_KEY`. Keep the private key out
+of your repository; each app should have its own.
+
+## Release manifests
+
+`sabine release-manifest` writes the signed manifest for the packages of one release. It reads the
+app's id, version and `[updates]` from `Sabine.toml`, so it needs the GitHub provider, an enabled
+policy and `SABINE_UPDATE_SIGNING_KEY`:
+
+```sh
+sabine release-manifest . \
+  --artifact linux-x86_64=dist/artifacts/com.example.tern-1.0.0-portable.tar.gz \
+  --executable linux-x86_64=com.example.tern/root/usr/lib/sabine/com.example.tern/tern \
+  --artifact linux-x86_64-deb=dist/artifacts/com.example.tern-1.0.0-deb.deb
+```
+
+Each `--artifact` maps an update target to a package file, and `--executable` gives the program's
+path inside an archive, as `sabine bundle --json` reports it. The manifest goes to
+`dist/sabine-update.json` unless you pass `--output`, and `--channel` must match `[updates]`. Inside
+GitHub Actions the version must match the tag being built.
+
+```json
+{
+  "schema": 1,
+  "app_id": "com.example.tern",
+  "version": "1.0.0",
+  "channel": "stable",
+  "published_at": "1793491200",
+  "requires_sabine": { "major": 0, "build": 65 },
+  "artifacts": {
+    "linux-x86_64": {
+      "url": "https://github.com/example/tern/releases/download/v1.0.0/com.example.tern-1.0.0-portable-linux-x86_64.tar.gz",
+      "sha256": "9f2c…",
+      "kind": "archive",
+      "executable": "com.example.tern/root/usr/lib/sabine/com.example.tern/tern"
+    }
+  },
+  "signature": "base64 Ed25519 signature"
+}
+```
+
+`published_at` is in Unix seconds, `requires_sabine` is the Sabine build the app was made with, and
+`kind` is inferred from the file name: `archive` for `.tar.gz` and `.zip`, or `deb`, `rpm`, `msi`,
+`exe`, `dmg` or `app-image`. The signature covers the whole manifest.
+
+Update targets name the platform, followed by the package kind for installations from a package:
+
+| Target | Installed from |
+| --- | --- |
+| `linux-x86_64`, `linux-aarch64` | Archives: `sabine install --bundle`, `portable` and `linux` tarballs |
+| `linux-x86_64-deb`, `-rpm`, `-appimage` (and the `aarch64` ones) | deb, rpm or AppImage packages |
+| `windows-x86_64`, `windows-aarch64` | Archives: `sabine install --bundle`, `portable` and `windows` bundles |
+| `windows-x86_64-msi`, `-exe` (and the `aarch64` ones) | MSI or setup program |
+| `macos-aarch64` | Archives: `sabine install --bundle`, `portable` and `macos` bundles |
+| `macos-aarch64-dmg` | The disk image |
+
+## How installed apps update
+
+Sabine's service checks for updates when it starts and every six hours after, for every installed
+app whose policy is `automatic`. For each one it:
+
+<Steps>
+
+1. fetches the release manifest over HTTPS,
+2. checks its signature against the app's public key, and that it names this app, this channel and
+   manifest schema 1,
+3. continues only when the release is strictly newer than the installed version, by SemVer,
+4. waits for the release to soak (see below),
+5. makes sure the installed Sabine runs the release, installing a newer Sabine first when the
+   release needs one,
+6. picks the artifact for the installation's own target and downloads it over HTTPS, checking its
+   SHA-256.
+
+</Steps>
+
+What happens next depends on how the app was installed:
+
+| Installed from | How the update is applied |
+| --- | --- |
+| Archive (`sabine install --bundle`, a portable or `linux`/`windows`/`macos` bundle) | Extracted in the background next to the installed version and checked before use. The next launch of the original program forwards to the new one; nothing is shown |
+| deb | Downloaded, then offered at the next launch. Installs with `apt-get` through `pkexec` |
+| rpm | Downloaded, then offered at the next launch. Installs with `dnf`, `zypper` or `rpm`, whichever the system has, through `pkexec` |
+| AppImage | Downloaded, then offered at the next launch. Replaces the AppImage file in place |
+| MSI | Downloaded, then offered at the next launch. Runs `msiexec` with its progress window |
+| Setup `.exe` | Downloaded, then offered at the next launch. Runs the setup program silently |
+| DMG | Downloaded, then offered at the next launch. Replaces the `.app`, asking for an administrator password only when you can't replace it yourself |
+
+For deb and rpm updates, the elevated step copies the package somewhere only the administrator can
+write and checks its SHA-256 there, so the package manager installs exactly the file that matched
+the release. A downloaded package is checked against the installed version again before it's
+offered, and deleted once it's installed. Apps installed through an app store are left to the
+store.
+
+### What people see
+
+When a downloaded package is waiting, the app shows a prompt before it opens:
+
+> **Update Tern**
+>
+> Version 1.1.0 is ready to install. The app will close while the update is installed. You can choose Later to keep using this version.
+
+**Install update** closes the app, runs the installer, and opens the app again once it succeeds.
+**Later** opens the app as it is and doesn't ask again for a day. Development runs never show the
+prompt.
+
+### Soak and rollout
+
+A release becomes eligible 24 hours after it was published, plus a rollout offset between zero and
+six hours that each installation picks once at random and keeps. This spreads downloads out and
+leaves you a day to withdraw a bad release before most people get it.
+
+`sabine update <app id> --force` installs a release before it has soaked; signatures, checksums and
+version checks still apply. An app that the installed Sabine can no longer run skips the soak, so
+it gets a working version as soon as there is one.
+
+## Sabine updates
+
+Sabine's CLI, service, daemon and CEF host are released together as one `MAJOR.BUILD` release, such
+as <code>{tag}</code>. The daemon looks for a newer Sabine on every maintenance run and installs it
+after the same soak and per-installation rollout offset, then hands over to the new daemon. The
+previous version is kept for rollback, and a release that fails to start is rolled back and retried
+later. `sabine update` updates the CLI and shared components right away, and with `--force` skips the
+soak.
+
+The CEF runtime updates on its own schedule: Sabine downloads newer compatible runtimes, checks that
+Chromium starts and renders on them before using them, and keeps the newest two. See
+[Shared runtime](/docs/concepts/shared-runtime/).
+
+### Compatibility
+
+Every app records the Sabine build it was made with, `requires_sabine` in its release manifest and
+`sabine` in its bundled `Sabine.toml`. Every Sabine release records its own build and the oldest app
+build it still runs. An app runs on a Sabine with the same major version whose build is at least
+that oldest build and no newer than its own.
+
+- **An app needs a newer Sabine.** Installing or updating it fetches that exact Sabine release and
+  installs it first, without waiting for the soak.
+- **A Sabine release would stop an installed app.** Sabine holds that release and installs the
+  newest earlier release that runs every installed app instead, so fixes keep arriving. The held
+  release installs on the next check after those apps update or are removed. `sabine update` names
+  the apps it is waiting for. Apps run from `sabine dev` never hold Sabine back.
+- **An app is older than the oldest build Sabine runs.** It isn't registered again. Sabine fetches
+  its newest release right away, and offers a downloaded update before explaining the problem.
+
+The oldest accepted build moves up only when Sabine's host protocol changes, so most Sabine releases
+run every app built since the last such change.
+
+When an app can't run, it shows a notice instead of its window:
+
+> The developer of Tern has not updated it to work with this version of Sabine. The app was not added to Sabine.
+
+When the app needs a newer Sabine than this computer could update to, the notice names both
+versions instead.

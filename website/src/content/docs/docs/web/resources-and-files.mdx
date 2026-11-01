@@ -1,0 +1,161 @@
+---
+title: Resources and files
+description: Ship files beside the app, keep its data in the right folder, and let pages load local files.
+sidebar:
+  order: 2
+---
+
+import { Aside, FileTree, Tabs, TabItem } from "@astrojs/starlight/components";
+
+An app deals with three kinds of files: files it ships beside itself, such as a helper program or
+a model; files it writes while it runs, such as settings and documents; and files on the person's
+machine that the page shows, such as photos in a gallery. Sabine has a place for each.
+
+## Shipping files with the app
+
+List the files and folders the app ships under `[resources]` in `Sabine.toml`, each under a name,
+with its path from `Sabine.toml`:
+
+```toml
+[resources]
+server = "../build/server"
+models = "assets/models"
+```
+
+Names use lowercase letters, digits, hyphens and underscores. Each path must exist when you
+bundle: `sabine bundle` copies files and whole folders to `files/<name>` beside the bundle's
+`Sabine.toml`.
+
+<FileTree>
+
+- Sabine.toml
+- files/
+  - server
+  - models/
+    - small.bin
+- web/
+  - index.html
+
+</FileTree>
+
+`sabine::resource_path(name)` finds a resource wherever the app runs: in the source project during
+`sabine dev` and `cargo run`, and in the bundle once the app is packaged. It returns `None` when the
+name isn't listed or the file isn't there.
+
+```rust
+use std::io;
+use std::path::PathBuf;
+use std::process::{Child, Command};
+
+fn start_server() -> io::Result<Child> {
+    let server = sabine::resource_path("server")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "the bundled server is missing"))?;
+    Command::new(server).arg("--stdio").spawn()
+}
+
+fn model(name: &str) -> Option<PathBuf> {
+    sabine::resource_path("models").map(|models| models.join(name))
+}
+```
+
+Resources are for the app's Rust side. Pages never see them; the page's own files ship in `dist`
+and load from `sabine://app/`, as [Frontend](/docs/web/frontend/#production-files-and-the-app-scheme)
+describes.
+
+Sabine finds the manifest to read `[resources]` from in this order: the path in
+`SABINE_MANIFEST_PATH`, which `sabine dev` sets; `resources/Sabine.toml` beside the executable, or
+`../Resources/Sabine.toml` inside a macOS app; `Sabine.toml` in the working directory; and
+`Sabine.toml` in the Cargo package folder when the app runs under `cargo run`.
+
+## The app data folder
+
+Apps keep the files they write in their data folder:
+
+```rust
+use sabine::AppEnvironment;
+
+let folder = AppEnvironment::current().app_data_dir("com.example.notes");
+std::fs::create_dir_all(&folder)?;
+std::fs::write(folder.join("settings.json"), settings)?;
+```
+
+`app_data_dir` takes the app's id, as `Sabine.toml` names it, and returns the folder named after it
+in the desktop's data folder:
+
+<Tabs syncKey="platform">
+<TabItem label="Linux">
+
+`$XDG_DATA_HOME/<app id>`, which is `~/.local/share/<app id>` unless you set `XDG_DATA_HOME`.
+
+</TabItem>
+<TabItem label="Windows">
+
+`%APPDATA%\<app id>`, in the roaming application data folder.
+
+</TabItem>
+<TabItem label="macOS">
+
+`~/Library/Application Support/<app id>`.
+
+</TabItem>
+</Tabs>
+
+During development, `AppEnvironment::current()` is `AppEnvironment::Development` and the folder
+uses the development app id, with `.dev` appended, so `sabine dev` never touches the installed
+app's data. The method computes the path; it doesn't create the folder.
+
+This is the folder the [app sandbox](/docs/distribution/app-sandbox/) lets the app write. On
+Windows, uninstalling the app asks whether to delete it.
+
+The page's own storage, such as `localStorage`, IndexedDB and cookies, lives in the app's browser
+profile, which Sabine keeps separately for development and installed builds. Use the data folder
+for what the Rust side reads and writes, and for anything that must survive the page clearing its
+storage.
+
+## Local files in pages
+
+Pages load from the app's own files and can't read other files on the machine. An app that shows
+the person's files in its page, such as a photo browser drawing thumbnails, turns on local file
+access:
+
+```toml
+[web]
+local_files = true
+```
+
+or `.local_files(true)` on the builder. Pages then load any file the user can read through
+`sabine://file/<absolute path>` URLs, which `fileUrl` from `@lantharos/sabine` builds:
+
+```ts
+import { fileUrl } from "@lantharos/sabine";
+
+image.src = fileUrl("/home/ana/Pictures/beach.jpg");
+video.src = fileUrl("C:\\Users\\Ana\\Videos\\holiday.webm");
+```
+
+`fileUrl` turns backslashes into slashes and percent-encodes each part of the path, so Windows
+paths and names with spaces or `#` work. The URLs support byte ranges, so media can seek, and
+[native video](/docs/web/native-video/) plays them too.
+
+Only the app's own pages, served from `sabine://app/`, can use these URLs. Hosted pages and other
+origins can't, even with local file access on.
+
+<Aside>
+Local file access lets any script in the page read any file the user can. Turn it on only for an
+app that needs it, and keep content you didn't write, such as remote HTML, out of the app's own
+pages.
+</Aside>
+
+Pages that only need files the person picks don't need local file access:
+
+- File inputs open the desktop's own file dialog, and the page reads the chosen files as usual.
+- Files dropped on the page carry their paths, and pages can drag files out to other apps. See
+  [Clipboard and drag and drop](/docs/desktop/clipboard-and-drag/).
+- A command can read or write a file the app chose and pass its contents as
+  [bytes](/docs/bridge/commands/#raw-commands).
+
+## Opening documents
+
+Files and URLs other programs hand to the app, such as a document someone double-clicked, arrive
+through the app's file associations and URL schemes. See
+[Links and documents](/docs/desktop/links-and-documents/).

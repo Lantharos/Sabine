@@ -1,0 +1,146 @@
+---
+title: Installation
+description: Install the Sabine CLI, and learn what it sets up on your machine the first time you run an app.
+sidebar:
+  order: 2
+---
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import { release, tag } from "~/version";
+
+You build Sabine apps with the `sabine` command-line tool. It creates projects, runs them during
+development, writes the page's typed bindings, and packages apps for release.
+
+## Prerequisites
+
+- **Rust 1.98 or newer**, installed through [rustup](https://rustup.rs).
+- **[Bun](https://bun.sh)**, which the project templates use to install packages, run the
+  development server and build the page. Projects that use npm, pnpm or Yarn work too.
+
+People who install your app need neither. A packaged app brings everything it needs, or downloads
+it on first launch.
+
+Some platforms need a little more to build the CLI and the CEF host:
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Building the CLI needs `pkg-config` and the Fontconfig development package, which the CLI uses
+    to render app icons.
+
+    ```sh
+    # Debian and Ubuntu
+    sudo apt install pkg-config libfontconfig1-dev
+    # Fedora
+    sudo dnf install pkgconf-pkg-config fontconfig-devel
+    ```
+
+    Sabine runs only in Wayland sessions.
+  </TabItem>
+  <TabItem label="Windows">
+    Use Rust's MSVC toolchain, the default on Windows, with the Visual Studio C++ build tools.
+    Debug builds of your app compile Sabine's CEF host with MSVC when CMake is installed; CEF does
+    not link with MinGW.
+  </TabItem>
+  <TabItem label="macOS">
+    Install the Xcode Command Line Tools with `xcode-select --install`. Sabine runs on Apple
+    Silicon only.
+  </TabItem>
+</Tabs>
+
+## Install the CLI
+
+Install the CLI from the release tag:
+
+<Code code={`cargo install --git https://github.com/Lantharos/Sabine --tag ${tag} sabine-cli`} lang="sh" />
+
+Projects that `sabine new` creates pin the same release for their Rust crate and TypeScript
+package, so an app always builds against the Sabine it was created with.
+
+## What the first run sets up
+
+Nothing else needs installing by hand. The first time you run `sabine dev`, Sabine prepares the
+machine:
+
+1. **The CEF runtime.** If no Chromium runtime is installed, the CLI downloads the newest
+   compatible CEF build, verifies its checksum, and installs it into Sabine's data folder. It
+   prints its progress in the terminal.
+2. **The CEF host.** Sabine's host is the small program that embeds Chromium. Release builds use
+   the prebuilt host that ships with Sabine. Debug builds of your app compile it from the runtime's
+   CEF SDK, which needs CMake and a C++ compiler; without them, they use the prebuilt host.
+3. **The Sabine service.** When your app first starts, it installs the Sabine service if needed
+   and registers with it. The service's daemon keeps the runtime and Sabine itself up to date in
+   the background and starts at login: as a user systemd unit on Linux (an XDG autostart entry
+   where there is no user systemd), a LaunchAgent on macOS, and a hidden per-user scheduled task
+   on Windows.
+
+On a machine where nobody has developed with Sabine, such as the computer of someone who installs
+your app, the app does the same on its first launch, in a native setup window instead of the
+terminal. Every Sabine app after that starts right away.
+
+Everything Sabine shares between apps lives in one folder:
+
+| Platform | Folder |
+| --- | --- |
+| Linux | `$XDG_DATA_HOME/sabine`, by default `~/.local/share/sabine` |
+| Windows | `%LOCALAPPDATA%\Sabine` |
+| macOS | `~/Library/Application Support/Sabine` |
+
+Logs are kept in its `logs/` folder.
+
+## Platform notes
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Chromium sandboxes its renderers with user namespaces. Ubuntu and some other distributions
+    restrict those through AppArmor, which keeps Chromium from starting. `sabine runtime doctor`
+    reports it, and `sabine runtime sandbox-profile` writes an AppArmor profile an administrator
+    can install. See [Troubleshooting](/docs/reference/troubleshooting/) for the steps.
+
+    When the Sabine service starts, it adds Sabine's own desktop entry and icon for the current
+    user, so task managers can name the shared runtime.
+  </TabItem>
+  <TabItem label="Windows">
+    The service runs from a hidden scheduled task, so it never opens a console window. Sabine also
+    appears under **Settings › Apps**. Uninstalling it there lists the apps that still use it and
+    offers to remove them too.
+  </TabItem>
+  <TabItem label="macOS">
+    On first launch, Sabine assembles a private application bundle for the host and runtime inside
+    its data folder and signs it ad hoc, since Chromium's sandbox needs the framework inside the
+    app bundle. Unchanged files are cloned on APFS rather than copied.
+  </TabItem>
+</Tabs>
+
+## Check the installation
+
+`sabine -V` prints the versions of the CLI, the installed service and the running daemon:
+
+```sh
+sabine -V
+```
+
+<Code code={`Sabine CLI: ${release}\nSabine service (installed): ${release}\nSabine daemon (running): ${release}`} lang="text" />
+
+Before the first app has run, the service reads `not installed` and the daemon `not running`.
+
+`sabine runtime list` shows the installed CEF runtimes, and `sabine runtime doctor` starts Chromium
+with the installed host and checks that it renders a page.
+
+## Update
+
+`sabine update` updates the CLI, the Sabine service, daemon and host, and the CEF runtime:
+
+```sh
+sabine update            # the CLI, shared components and CEF
+sabine update sabine     # only the CLI and shared components
+sabine update cef        # only the CEF runtime
+sabine update --force    # skip the release soak period
+```
+
+New Sabine releases become available to `sabine update` about a day after they are published, so a bad
+release can be withdrawn before it reaches anyone. `--force` installs the newest release right
+away; signatures, checksums and version checks still apply. A release that would stop an installed
+app from running waits until that app updates, and `sabine update` names the apps it waits for.
+
+The daemon keeps the shared components and CEF current on its own; `sabine update` also updates
+the CLI, and gets you a release sooner. Updating the CLI does not change existing projects: each one pins its Sabine release in
+`Cargo.toml` and `package.json` until you change it.

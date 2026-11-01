@@ -1,0 +1,142 @@
+---
+import { Image } from "astro:assets";
+import banner from "../../../../assets/banner.png";
+import barometer from "../../assets/apps/barometer.png";
+import disks from "../../assets/apps/disks.png";
+import draft from "../../assets/apps/draft.png";
+import magpie from "../../assets/apps/magpie.png";
+
+const apps = [
+  { name: "Magpie", kind: "Photo browser", shot: magpie },
+  { name: "Barometer", kind: "System monitor", shot: barometer },
+  { name: "Draft", kind: "Markdown editor", shot: draft },
+  { name: "Disks", kind: "Disk manager", shot: disks },
+];
+
+const widest = Math.max(...apps.map((app) => app.shot.width));
+---
+
+<section class="apps frame grid grid-cols-12 gap-x-6 pb-24 sm:pb-32 lg:pb-40">
+  <div class="col-span-12 flex flex-col lg:col-span-4 lg:pr-10">
+    <h2 class="statement text-[clamp(2.1rem,4.2vw,3.6rem)]">Built with Sabine.</h2>
+    <p class="mt-5 max-w-[24rem] text-navy-700">
+      Each one is a web page in a native window, and all of them share the same Chromium.
+    </p>
+
+    <div class="mt-10 flex flex-wrap gap-x-6 gap-y-3 lg:mt-auto lg:flex-col lg:gap-1 lg:pt-16" role="group" aria-label="Apps">
+      {
+        apps.map((app, index) => (
+          <button
+            type="button"
+            class="app-name group flex cursor-pointer items-baseline gap-3 text-left"
+            aria-pressed={index === 0 ? "true" : "false"}
+            data-app={index}
+          >
+            <span class="statement text-[1.6rem] sm:text-[2rem]">{app.name}</span>
+            <span class="hidden text-[0.92rem] text-navy-300 sm:inline">{app.kind}</span>
+          </button>
+        ))
+      }
+    </div>
+  </div>
+
+  <div class="bleed relative col-span-12 mt-12 overflow-hidden bg-cream-200 lg:col-span-8 lg:mt-0 lg:rounded-l-[1.25rem]">
+    <Image src={banner} alt="" width={480} loading="lazy" class="wallpaper" />
+    <div class="stage aspect-[4/3] sm:aspect-[16/11]">
+      {
+        apps.map((app, index) => (
+          <Image
+            src={app.shot}
+            alt={`${app.name}, a ${app.kind.toLowerCase()} built with Sabine`}
+            widths={[640, 960, app.shot.width]}
+            sizes="(min-width: 1024px) 56vw, 90vw"
+            loading="lazy"
+            class="window"
+            style={`--share:${app.shot.width / widest}`}
+            data-shot={index}
+            data-active={index === 0 ? "" : undefined}
+          />
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .app-name {
+    color: var(--color-navy-300);
+    transition: color 0.3s ease;
+  }
+
+  .app-name:hover {
+    color: var(--color-navy-500);
+  }
+
+  .app-name[aria-pressed="true"] {
+    color: var(--color-navy-900);
+  }
+
+  .wallpaper {
+    position: absolute;
+    inset: -12%;
+    width: 124%;
+    height: 124%;
+    max-width: none;
+    object-fit: cover;
+    object-position: 70% 50%;
+    filter: blur(40px) saturate(1.15);
+  }
+
+  .stage {
+    --fill: 92%;
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  .window {
+    grid-area: 1 / 1;
+    width: calc(var(--fill) * var(--share));
+    height: auto;
+    border-radius: 0.7rem;
+    box-shadow:
+      0 0 0 1px rgb(18 26 44 / 0.08),
+      0 2px 6px rgb(18 26 44 / 0.08),
+      0 30px 70px -24px rgb(18 26 44 / 0.45);
+    opacity: 0;
+    transform: translateY(0.6rem) scale(0.985);
+    transition:
+      opacity 0.45s ease,
+      transform 0.6s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .window[data-active] {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (min-width: 640px) {
+    .stage {
+      --fill: 86%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .window {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  for (const section of document.querySelectorAll<HTMLElement>(".apps")) {
+    const buttons = section.querySelectorAll<HTMLButtonElement>("[data-app]");
+    const shots = section.querySelectorAll<HTMLElement>("[data-shot]");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+        for (const shot of shots) shot.toggleAttribute("data-active", shot.dataset.shot === button.dataset.app);
+      });
+    }
+  }
+</script>

@@ -1,0 +1,242 @@
+---
+title: Troubleshooting
+description: Where Sabine records what went wrong, how to inspect pages with DevTools, and what to do about the problems people run into most.
+sidebar:
+  order: 6
+---
+
+import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
+
+## Where to look first
+
+### Notices
+
+When an app can't start, Sabine doesn't fail silently. Before the app's window exists, a native notice explains what went wrong, shows where the logs are and lists what Sabine recorded in the last five minutes from setup, startup, the installer and the window host. **Open logs** opens the log folder in the file manager. If the setup window fails while preparing Sabine, it stays open with the error and the log location until you close it with Enter, Escape or its close button.
+
+These windows follow the desktop's light or dark style and show Sabine's icon rather than the app's, since they speak for Sabine.
+
+### Logs
+
+Every part of Sabine writes its errors to a log in Sabine's data folder:
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+
+`$XDG_DATA_HOME/sabine/logs`, by default `~/.local/share/sabine/logs`
+
+  </TabItem>
+  <TabItem label="Windows">
+
+`%LOCALAPPDATA%\Sabine\logs`
+
+  </TabItem>
+  <TabItem label="macOS">
+
+`~/Library/Application Support/Sabine/logs`
+
+  </TabItem>
+</Tabs>
+
+Each component has a file of its own, `<component>.jsonl`, with one JSON object per line holding `time` (Unix seconds), `pid`, `component` and `message`. When a file would grow past 4 MiB, it starts over.
+
+| File | What writes it |
+| --- | --- |
+| `startup.jsonl` | The app, while it launches |
+| `setup.jsonl` | The setup window that prepares Sabine and Chromium |
+| `installer.jsonl` | Setup steps run by the Windows installers |
+| `osr.jsonl` | Each window host's output, including Chromium's, which is recorded once here |
+| `window.jsonl` | Window problems, such as a page that never painted, or a window option the desktop doesn't support |
+| `gpu.jsonl` | Lost graphics devices and the switch to software painting |
+| `maintenance.jsonl`, `daemon.jsonl` | The Sabine daemon |
+
+Other parts, such as `desktop`, `input`, `clipboard`, `media` and `print`, write files named after themselves when something goes wrong. Every message also goes to standard error, and a window host's output is forwarded to the terminal that launched the app, so running the app from a terminal shows everything as it happens.
+
+<Aside type="caution">
+  Logs can contain your app's URLs and file paths. Review them before you share them.
+</Aside>
+
+### Versions
+
+`sabine -V` shows the version of the CLI, the installed Sabine service and the daemon that is running:
+
+```sh
+sabine -V
+```
+
+```text
+Sabine CLI: 0.66
+Sabine service (installed): 0.66
+Sabine daemon (running): 0.66
+```
+
+A service that says `not installed` means no app has prepared Sabine on this machine yet. A daemon that says `not running` is started again by the next Sabine app that launches.
+
+### Runtime health
+
+`sabine runtime doctor` checks that a usable Chromium runtime is installed and that the Sabine host can start it, by rendering a page off screen:
+
+```sh
+sabine runtime doctor
+sabine runtime doctor --json
+```
+
+| Result | Meaning | What to do |
+| --- | --- | --- |
+| `CEF runtime: ok` | Everything is ready | Nothing |
+| `not found` | No runtime is installed | `sabine runtime install` |
+| `outdated` | Only runtimes older than CEF 154 are installed | `sabine runtime install` |
+| `quarantined after a failed health probe` | The newest runtime failed its check; the reason follows | Wait for the next runtime, or report the reason |
+| `Sabine host is missing` | No host matches the runtime | `sabine runtime prepare` |
+| `Sabine host failed its launch probe` | The host couldn't start Chromium; the error follows | See the sandbox and GPU sections below |
+
+`sabine runtime doctor` exits with an error status unless the runtime and host are ready, so you can use it in scripts. `sabine runtime list` shows every installed runtime and whether it passed its check.
+
+### Tracing
+
+`SABINE_TRACE=1` prints what Sabine does as it does it: each launch stage with its time since launch, which runtime and service it found, the graphics adapter on Windows, and why shared GPU frames were dropped.
+
+```sh
+SABINE_TRACE=1 sabine dev
+SABINE_TRACE=1 ./target/release/my-app
+```
+
+```text
+sabine trace [com.example.notes.dev] +0ms launch.start
+sabine trace [com.example.notes.dev] +1ms config.ready
+sabine trace [com.example.notes.dev] +2ms single_instance.ready
+sabine trace [com.example.notes.dev] +41ms bootstrap.ready
+```
+
+The same stages are available from Rust through `SabineProcess::metrics()`. See [Architecture](/docs/concepts/architecture/#from-launch-to-first-frame) for what each stage means.
+
+### Chromium's own log
+
+Set `SABINE_CHROMIUM_LOG` to a file path to have Chromium's browser process write its log there at info level:
+
+```sh
+SABINE_CHROMIUM_LOG=/tmp/chromium.log sabine dev
+```
+
+Sandboxed Chromium processes, such as the GPU and renderer processes, can't open that file. Their warnings and errors still go to the window host's log, `osr.jsonl`.
+
+## DevTools
+
+### In development
+
+Right-click a page in a development run and choose **Open DevTools**. DevTools dock along the bottom of the window, rendered off screen like the page itself, and **Close DevTools** in the same menu closes them. Pages that cancel the `contextmenu` event get no menu; use remote debugging instead.
+
+Development runs also listen for remote debugging on port 9222. Open `chrome://inspect` in Chrome or Chromium, or `http://127.0.0.1:9222` in any browser, and pick the page. To debug several apps at once, give each its own port:
+
+```sh
+SABINE_DEVTOOLS_PORT=9333 sabine dev
+SABINE_DEVTOOLS_PORT=0 sabine dev
+```
+
+With `0`, Chromium picks a free port and prints it as `DevTools listening on ws://…`.
+
+### In production
+
+Production builds have no DevTools unless the app asks for a remote debugging port:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| Ok(window.app().debug(9222)));
+}
+```
+
+On Linux, an app with remote debugging always runs its own Chromium instead of the shared one. Remove `.debug(...)` before you ship: while it is on, other programs on the machine can connect to the port.
+
+## Common problems
+
+### The app opens nothing
+
+1. Look for a notice. If one appeared, its message and the recent entries under it usually name the problem.
+2. Run the app from a terminal with `SABINE_TRACE=1`. The last stage it reaches tells you where it stopped.
+3. Check `startup.jsonl` and `osr.jsonl`.
+
+If the app exits right away without a notice and the trace stops at `single_instance.ready` or before, another instance took the launch; see [Single instance](#a-second-launch-does-nothing).
+
+### Setup or the runtime download fails
+
+First launch downloads the Sabine system from GitHub and Chromium from `cef-builds.spotifycdn.com`. Both need to be reachable over HTTPS.
+
+- Interrupted downloads resume where they stopped, so run the app again, or `sabine runtime install`.
+- Transient network and server errors are retried up to four times within 30 minutes. A failure after that is shown in the setup window and recorded in `setup.jsonl`.
+- Check the result with `sabine runtime doctor`.
+
+### The app says its developer hasn't updated it
+
+> The developer of *App* has not updated it to work with this version of Sabine.
+
+The app was built against a Sabine build older than the oldest one the installed Sabine accepts. It stays registered, and Sabine fetches the app's newest release right away; if an update has downloaded, the app offers it before this notice. If no update exists, the app needs a new release built with a current Sabine. See [Shared runtime](/docs/concepts/shared-runtime/#compatibility-in-both-directions).
+
+### The app needs a newer Sabine
+
+> *App* needs Sabine *N*, but this computer could not update past Sabine *M*.
+
+The app pulled the Sabine release it needs, and installing it failed or was held. Run `sabine update` to see why: it names the installed apps a release waits for, and `maintenance.jsonl` records failed updates. A release that would stop another installed app installs once that app updates or is removed.
+
+### Chromium can't start on Linux
+
+If the host's launch probe fails with an error about namespaces or the sandbox, the system doesn't let Chromium create its sandbox. Sabine never runs Chromium without it.
+
+- On Ubuntu and similar distributions, install Sabine's AppArmor profile; see [Security model](/docs/concepts/security-model/#the-browser-sandbox).
+- If the kernel disables user namespaces entirely, an administrator has to enable them, or provide Chromium's setuid sandbox helper through `CHROME_DEVEL_SANDBOX`.
+- Don't run Sabine apps as root.
+
+### The window is blank, or paints in software
+
+When a page loaded but no frame could be shown within 10 seconds, `window.jsonl` says so, with the size and scale the window needs against what the browser painted, or that it painted nothing. The window keeps waiting, so a late frame still shows.
+
+When shared GPU frames don't work, the window switches to software painting and records `Painting without shared GPU frames:` with the reason in `gpu.jsonl`. Pages keep working, at a higher CPU cost. Common causes:
+
+- **An older runtime on Linux.** Runtimes before CEF 156.0.3 always paint in software. Check `sabine runtime list`; the daemon installs newer ones on its own.
+- **Chromium's GPU process failed.** Chromium falls back to software itself. Update the graphics driver, and look in `osr.jsonl` for Chromium's GPU errors.
+- **The window's device can't import the browser's frames,** such as a Linux driver without dma-buf import.
+- **Hybrid graphics on Windows.** Chromium renders on the adapter the window composites on. `SABINE_TRACE=1` prints both; if the window moves to another adapter, Sabine restarts the browser there.
+
+On AMD graphics under Linux, Sabine passes `AMD_DEBUG=nodcc` to Chromium, since frames with delta color compression can't be shared. Don't remove it.
+
+`The graphics device stopped repeatedly. Restart the application.` means the device was lost more than three times in a minute. Restart the app; if it keeps happening, the driver is resetting and should be updated. See [Rendering](/docs/concepts/rendering/#lost-graphics-devices).
+
+### Wayland quirks
+
+- **Not on Wayland.** Sabine needs a Wayland session; it doesn't run on X11.
+- **No blur behind a glass window.** The compositor doesn't offer `ext_background_effect_v1`, as GNOME's doesn't. The page shows over a clear window instead.
+- **No tray icon.** The desktop doesn't host StatusNotifierItems. On GNOME, that needs an extension.
+- **`skip_taskbar` or `always_on_top` has no effect.** Wayland has no standard protocol for them, and Sabine uses `kestrel_window_v1` where the compositor offers it. `window.jsonl` records why it was skipped.
+- **The window opens behind others.** Compositors give focus only to a window that carries the activation token of the launch, and only if the person hasn't used another window since. Launch the app from the desktop's launcher rather than a terminal to test focus.
+- **A global shortcut doesn't fire.** The desktop decides through its GlobalShortcuts portal and may have refused it, for example because another app holds it. Pages hear `globalShortcut.failed`, and `desktop.jsonl` records it.
+
+### A second launch does nothing
+
+With single-instance behavior on, a second launch hands its arguments to the running app and exits with status 0, before anything else. That is easy to mistake for a crash:
+
+- **The app may be hidden.** A tray app or palette receives the activation but stays hidden unless it uses the `FocusExisting` policy or shows its window itself.
+- **Development and installed apps are separate.** Development runs use the `.dev` app id, and so the `.dev` single-instance id, so `sabine dev` never hands over to the installed app, and the other way round.
+- **`.single_instance_id(...)` only names the instance.** Single-instance behavior starts with `.single_instance(SingleInstancePolicy::FocusExisting)` or `ReuseExisting`.
+
+Without single-instance behavior, each launch is a process of its own, and its window joins the running app's browser process. See [Single instance](/docs/desktop/single-instance/).
+
+### A development build can't build its host
+
+Development builds compile the Sabine host from the runtime's CEF SDK. When the runtime has no SDK, cmake isn't installed, or the build fails, they use the installed Sabine's host instead, as long as its protocol matches. When neither works, the error names what the build lacked and why the installed host can't stand in. Installing cmake, or updating Sabine with `sabine update`, fixes most cases.
+
+A window whose host speaks a different protocol than the app shows a repair or update error instead of the page. Run `sabine update`, or rebuild the app against the installed Sabine.
+
+### A page keeps reloading
+
+A renderer that crashes reloads its page, up to three times in a minute; after that the browser closes, and a crash on the main page becomes an error notice. Pages hear each crash through the `runtime.renderer-crashed` event, with `guestId`, `code` and `recovering`. Check `osr.jsonl` for Chromium's crash output.
+
+### Things that only work in a packaged app
+
+Development runs leave out persistent desktop registrations so they never affect the installed app:
+
+- URL schemes, document types, native messaging hosts and autostart entries aren't registered in development.
+- On macOS, notifications and URL schemes need a bundled app. Test them with `sabine bundle` or `sabine install --bundle`.
+
+### Native video isn't available
+
+`NativeVideo.isSupported()` is false in opaque windows, since the video plays on a surface beneath the page. Make the window transparent. On Linux, GStreamer has to be installed; a surface that can't show its video reports an `error` event and is recorded in `media.jsonl`. See [Native video](/docs/web/native-video/).

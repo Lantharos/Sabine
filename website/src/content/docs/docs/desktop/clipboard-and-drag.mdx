@@ -1,0 +1,159 @@
+---
+title: Clipboard and drag and drop
+description: Copy and paste with the desktop clipboard in any format, use the primary selection on Linux, and drag files and content in and out of the window.
+sidebar:
+  order: 7
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Copy, cut, paste and drag and drop work in Sabine pages as they do in a browser, connected to the
+desktop. On top of that, the app's own pages can read and write any clipboard format, and drops
+carry the paths of the files people drop.
+
+## Copy and paste
+
+Keyboard shortcuts, context menu entries, `copy`, `cut` and `paste` events and `navigator.clipboard`
+all work with the desktop clipboard. The app's own pages may read the clipboard at any time, for
+example with `navigator.clipboard.readText()`, without a permission prompt.
+
+[Guests](/docs/web/guests/) and other pages that aren't the app's own keep a browser's rules. On
+Linux they only read the clipboard while someone pastes into them with Ctrl+V, Shift+Insert or a
+middle click.
+
+## Any clipboard format
+
+For formats `navigator.clipboard` doesn't carry, such as a file manager's copied files or your own
+types, use the package's `clipboard`:
+
+```ts
+import { clipboard } from "@lantharos/sabine";
+
+await clipboard.write({
+  "text/plain": "Notes.txt",
+  "text/uri-list": "file:///home/ana/Notes.txt\r\n",
+  "application/vnd.example.card+json": JSON.stringify({ id: 42 }),
+});
+
+const { "text/plain": text, "image/png": png } = await clipboard.read();
+const { "text/uri-list": files } = await clipboard.read({ types: ["text/uri-list"] });
+```
+
+`clipboard.write(data, options)` replaces the clipboard with every type in `data`. Values can be
+strings, `Uint8Array`s or `Blob`s. Types starting with `text/` are stored as text.
+
+`clipboard.read(options)` returns an object keyed by MIME type, with text types as strings and
+other types as `Uint8Array`s. Types the clipboard doesn't hold are left out.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `types` | plain text, HTML, file lists and one image | The MIME types to read. |
+| `selection` | `"clipboard"` | `"clipboard"`, or `"primary"` for the primary selection on Linux. |
+
+Without `types`, `read` returns `text/plain`, `text/html` and `text/uri-list` when the clipboard has
+them, plus one image: PNG when it is offered, otherwise the first image type. `write` takes the same
+`selection` option.
+
+Files travel as a `text/uri-list` of `file://` URIs on every desktop, which Windows and macOS
+exchange as their own file lists, so other apps paste them as files.
+
+`clipboard` is only available to the app's own pages; calling it elsewhere throws. A request that
+gets no answer within 30 seconds rejects with a `TimeoutError`, and pending requests reject when
+the page goes away.
+
+## The primary selection
+
+On Linux, selecting text puts it in the primary selection, and a middle click in an editable field
+pastes it, as in other Linux apps. Pages read and write the primary selection directly with
+`selection: "primary"`:
+
+```ts
+import { clipboard } from "@lantharos/sabine";
+
+await clipboard.write({ "text/plain": selectedCommand }, { selection: "primary" });
+const { "text/plain": selected } = await clipboard.read({ selection: "primary" });
+```
+
+Windows and macOS have no primary selection, and requests for it reject there.
+
+## How each desktop carries the clipboard
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Chromium renders offscreen and has no focused window of its own, so it can't reach the
+    compositor's clipboard or primary selection. The window owns them instead and carries every
+    copy and paste for the page. On Wayland it uses the `ext-data-control` protocol when the
+    compositor offers it, and otherwise the window's own data device and primary selection
+    device.
+
+    Any MIME type travels as it is.
+  </TabItem>
+  <TabItem label="Windows">
+    Chromium keeps its own copy and paste, and the window adds the other formats for
+    `clipboard`, reading and writing on a thread of its own.
+
+    `text/plain` maps to Unicode text, `text/html` to the HTML clipboard format, and `image/png` to
+    PNG together with a bitmap for apps that don't read PNG; reading falls back to a bitmap when no
+    app put a PNG on the clipboard. `text/uri-list` maps to the shell's file list. Any other MIME
+    type is a clipboard format registered under its name.
+  </TabItem>
+  <TabItem label="macOS">
+    Chromium keeps its own copy and paste, and the window adds the other formats for
+    `clipboard`, reading and writing on a thread of its own.
+
+    Common types map to their pasteboard types, file URIs become one pasteboard item per file, and
+    any other MIME type is kept under its own name.
+  </TabItem>
+</Tabs>
+
+## Dropping files and content on the window
+
+Drops from other apps carry files, plain text, HTML and links. Dropped files carry their paths in
+the app's own pages, as `file.path` and as `file://` URIs in the drop's `text/uri-list`:
+
+```ts
+zone.addEventListener("dragover", (event) => event.preventDefault());
+
+zone.addEventListener("drop", (event) => {
+  event.preventDefault();
+  const files = [...(event.dataTransfer?.files ?? [])];
+  const paths = files.map((file) => (file as File & { path: string }).path);
+  importFiles(paths);
+});
+```
+
+The page sees a drag from another app once all of its content has arrived, the way browsers
+announce drags only together with their data. Other pages, such as guests, receive dropped files
+without their paths.
+
+On GNOME and other Wayland compositors without data control, compositors deliver drops only to an
+app's newest data device, so the window's clipboard device receives files dropped on the window
+too. This makes no difference to the page.
+
+## Dragging out of the window
+
+A drag the page starts stays inside the window until the pointer leaves it, and then continues as
+a drag the desktop carries to other apps. Escape cancels it while it is still inside the window.
+
+Text, HTML and links travel as they would from a browser. To drag files out, put their `file://`
+URIs in the drag's `text/uri-list`; other apps receive them as files:
+
+```ts
+item.addEventListener("dragstart", (event) => {
+  event.dataTransfer?.setData("text/uri-list", "file:///home/ana/Notes.txt");
+  event.dataTransfer?.setData("text/plain", "Notes.txt");
+});
+```
+
+Only the `file:` URIs in the list become files.
+
+### Drag images
+
+The picture Chromium draws for the drag, the dragged element or the image you set with
+`dataTransfer.setDragImage`, follows the pointer with the point you grabbed it at under the
+pointer, inside the window and outside it.
+
+## Related pages
+
+- [Guests](/docs/web/guests/) covers what embedded pages may do.
+- [Security model](/docs/concepts/security-model/) explains which pages count as the app's own.

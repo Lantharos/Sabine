@@ -1,0 +1,215 @@
+---
+title: Native video
+description: Play H.264, HEVC and AAC media that Chromium can't decode, with the platform's own player beneath the page.
+sidebar:
+  order: 4
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine's Chromium has no H.264, HEVC or AAC decoders, so a `<video>` can't play most MP4 and MKV
+files from cameras, phones and streaming services. `NativeVideo` plays them with the platform's
+own media framework instead, on a native surface beneath the page, while the page keeps drawing
+its own controls on top.
+
+It mirrors the parts of `HTMLVideoElement` a custom player uses, so a player can switch to it when
+a `<video>` reports that it can't play a source:
+
+```ts
+import { fileUrl, NativeVideo } from "@lantharos/sabine";
+
+const video = document.querySelector("video")!;
+const stage = document.querySelector<HTMLElement>("#stage")!;
+
+video.addEventListener("error", async () => {
+  if (!NativeVideo.isSupported()) return showError("This video can't be played here.");
+  const native = await NativeVideo.create(fileUrl(path), { element: stage, autoplay: true });
+  native.addEventListener("timeupdate", () => render(native.currentTime, native.duration));
+  native.addEventListener("error", () => showError(native.error!.message));
+});
+```
+
+## Requirements
+
+The video shows through the page, so the window must be transparent, for example a
+[glass](/docs/windows/glass-and-effects/) window or one built with `.transparent(true)`.
+`NativeVideo.isSupported()` is `false` in opaque windows, where the window offers none of the
+`sabine.media.*` commands.
+
+## Layout
+
+`NativeVideo` draws under an element of the page, given as `element` to `create` or later with
+`attach(element)`. The video fills the element's box and letterboxes to its aspect ratio on black,
+clipped to the element's rounded corners and to any scrolling container around it. It follows the
+element as it moves, resizes and scrolls, and as transitions and animations finish.
+
+Everything the page paints beneath the element, the element's own background included, must be
+transparent where the video shows, since CSS can't erase what is already painted:
+
+```css
+#stage {
+  background: transparent;
+  border-radius: 12px;
+  aspect-ratio: 16 / 9;
+}
+```
+
+When opaque content lies beneath, such as a dialog over the rest of the app, pass that container
+as `cutout`. Sabine then clips the video's shape out of the container with a `clip-path`, and
+content inside the container can no longer draw over the video:
+
+```ts
+const native = await NativeVideo.create(url, { element: stage, cutout: dialog });
+```
+
+While you move the element with a transform, which changes nothing the layout observes, call
+`updateRect()` on each frame of the motion. `detach()` takes the video off the element without
+stopping it, and `destroy()` stops it and releases its player; call it when the player goes away.
+A page that reloads or navigates away stops its videos.
+
+## Playback
+
+`NativeVideo.create(src, options)` resolves once the platform player exists. Sources can be:
+
+- `http:` and `https:` URLs;
+- the app's own files, by a URL relative to the page or a `sabine://app/` URL;
+- local files through `fileUrl(path)` or `file:` URLs, in apps with
+  [local file access](/docs/web/resources-and-files/#local-files-in-pages).
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `element` | | The element to draw under. |
+| `cutout` | | A container to clip the video's shape out of. |
+| `autoplay` | `false` | Starts playing as soon as it can. |
+| `loop` | `false` | Starts again from the beginning at the end. |
+| `muted` | `false` | Starts muted. |
+| `volume` | `1` | The volume, from 0 to 1. |
+| `playbackRate` | `1` | The playback speed, above 0 and up to 16. |
+
+The player then works like a media element:
+
+| Member | Kind | Meaning |
+| --- | --- | --- |
+| `play()` | method | Starts or resumes playing; returns a promise. From the end, it starts again from the beginning. |
+| `pause()` | method | Pauses. |
+| `currentTime` | property | The position in seconds. Setting it seeks precisely. |
+| `fastSeek(time)` | method | Seeks to the nearest point the player can reach quickly, for scrubbing. |
+| `duration` | read-only | The length in seconds, `NaN` until it's known. |
+| `paused`, `ended`, `seeking` | read-only | The playback state. |
+| `readyState` | read-only | `0` until the media loaded, then `4`. |
+| `playbackRate`, `volume`, `muted`, `loop` | property | As on `<video>`. |
+| `videoWidth`, `videoHeight` | read-only | The video's size in pixels, `0` until known. |
+| `error` | read-only | `{ code, message }` after an error, otherwise `null`. |
+| `src` | read-only | The resolved source URL. |
+
+`currentTime` advances smoothly between the player's time updates, so a progress bar drawn on
+every animation frame moves without steps.
+
+### Audio and subtitle tracks
+
+`audioTracks` and `subtitleTracks` list the file's tracks, each with an `id`, `language`, `label`,
+`codec` and whether it is `selected`. Audio follows the file's default track until you choose one,
+and subtitles stay off until you choose a track:
+
+```ts
+native.addEventListener("trackschange", () => {
+  renderTrackMenu(native.audioTracks, native.subtitleTracks);
+});
+
+await native.selectAudioTrack(track.id);
+await native.selectSubtitleTrack(subtitle.id);
+await native.selectSubtitleTrack(null);
+```
+
+Subtitles arrive as text for the page to draw, so they match the rest of its design. `activeCue`
+holds the cue showing now, `{ text, start, end }`, or `null`, and changes with `cuechange`:
+
+```ts
+native.addEventListener("cuechange", () => {
+  caption.textContent = native.activeCue?.text ?? "";
+});
+```
+
+Audio plays through the system's default output.
+
+## Events
+
+A `NativeVideo` is an `EventTarget` and dispatches the media events a player listens for:
+
+| Event | Dispatched when |
+| --- | --- |
+| `loadedmetadata`, `loadeddata`, `canplay`, `canplaythrough`, `durationchange` | The media loaded. All five arrive together. |
+| `durationchange` | The duration changed later, as for a live stream. |
+| `resize` | `videoWidth` and `videoHeight` are known or changed. |
+| `play` | Playback was asked for, by `play()` or `autoplay`. |
+| `playing` | Frames are playing. |
+| `pause` | Playback paused, or stopped at the end. |
+| `waiting` | The player is buffering. |
+| `seeking`, `seeked` | A seek started and finished. |
+| `timeupdate` | The position changed: four times a second while playing, and after a seek. |
+| `ended` | Playback reached the end without `loop`. |
+| `ratechange`, `volumechange` | `playbackRate`, `volume` or `muted` changed. |
+| `trackschange` | The track lists changed. |
+| `cuechange` | `activeCue` changed. |
+| `error` | Playback failed; `error.message` says why. |
+
+Nothing runs while a video is paused, so paused videos cost nothing.
+
+## Errors
+
+`create` rejects when the source isn't allowed or can't be found, for example a `fileUrl` in an
+app without local file access, an app file outside the app's folder, or a file that doesn't exist.
+
+Problems while playing arrive as an `error` event, with `error.code` set to `4` and
+`error.message` describing the problem: a codec the platform can't decode, a network failure, or a
+surface that can't show video. A surface that can't show its video is also recorded in the app's
+diagnostics, once until it shows video again.
+
+## How each platform plays it
+
+<Tabs syncKey="platform">
+<TabItem label="Linux">
+
+Each video runs a GStreamer `playbin3` on its own thread and shows on a Wayland subsurface beneath
+the window. GStreamer loads the first time a page creates a video, so apps that never play native
+video don't need it installed; when it is missing, `create` rejects with an error naming the library
+or element that isn't installed.
+
+Decoding uses the hardware decoders GStreamer selects: VA-API on AMD and Intel, NVDEC on NVIDIA.
+Decoded pictures stay on the GPU and are drawn into the subsurface at the display's full
+resolution. The subsurface updates without redrawing the window. A video paused for five seconds
+releases its decoder and resumes from the same position.
+
+Playing a codec takes a GStreamer plugin that decodes it, such as the VA-API and NVDEC decoders
+in `gst-plugins-bad` or the software decoders in `gst-libav`.
+
+</TabItem>
+<TabItem label="Windows">
+
+Each video runs a Media Foundation Media Engine on its own thread, decoding in hardware on a D3D11
+device. It presents into a swap chain that is part of the window's DirectComposition tree, beneath
+the page, so frames reach the compositor without redrawing the window. Audio tracks are the
+engine's streams, and subtitles come from its timed-text tracks.
+
+Windows decodes H.264 and AAC out of the box. HEVC needs the HEVC Video Extensions from the
+Microsoft Store on machines that don't include them.
+
+</TabItem>
+<TabItem label="macOS">
+
+Each video is an AVFoundation `AVPlayer` shown by an `AVPlayerLayer` beneath the layer the window
+renders into. AVFoundation decodes in hardware and composites the video itself, so frames never
+redraw the window. Audio and subtitle choices use the file's media selection groups, with
+automatic selection by system preferences turned off.
+
+Subtitles arrive as cues that last until the next cue replaces or clears them, so a cue's `end`
+is `null` on macOS.
+
+</TabItem>
+</Tabs>
+
+<Aside>
+Prefer a `<video>` where it can play the source, such as WebM with VP9 or AV1 and Opus audio, and
+fall back to `NativeVideo` when it can't. The page then gets Chromium's media element, with
+picture-in-picture, Media Session and the rest of its APIs, wherever that works.
+</Aside>

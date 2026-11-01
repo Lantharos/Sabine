@@ -1,0 +1,254 @@
+---
+title: Lifecycle
+description: How Sabine slows, stops and freezes pages nobody is looking at, and how to keep a page running when it needs to.
+sidebar:
+  order: 5
+---
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+A desktop app spends most of its life in the background: behind other windows, minimized, or
+hidden in the tray. Sabine winds a page down as it goes out of sight, so an app nobody is looking
+at costs almost nothing, and brings it back instantly when it returns. Each window follows a
+lifecycle policy, which its recipe sets and builder calls refine.
+
+## Page states
+
+| State | The page | When |
+| --- | --- | --- |
+| Active | Renders at the window's active frame rate | The window is shown, and in sight or focused as its policy needs |
+| Suspended | Renders at the window's background frame rate, or not at all while it is out of sight | The window is hidden, out of sight, minimized, or lost focus, as its policy says |
+| Frozen | Runs no JavaScript and has released its caches, but keeps everything it holds | The window has been out of sight for the policy's `freeze_after` |
+
+Rust code in your app is never suspended or frozen. Work that has to continue whatever the windows
+do, such as syncing or a server connection, belongs there.
+
+## Suspension
+
+A window's page is suspended:
+
+- while the window is hidden, always;
+- while the desktop reports it out of sight, with `suspend_on_occluded` (on by default);
+- when it is minimized with `appWindow.minimize()` or Sabine's window controls, with
+  `suspend_on_minimize` (on by default);
+- while it doesn't have focus, with `suspend_on_blur` (off for `.app()`, on for palettes, tray
+  apps and hidden windows).
+
+Losing focus or going out of sight takes effect after 200 milliseconds, so a brief change, such as
+while the person drags the window, doesn't wind the page down.
+
+Suspension alone only lowers the frame rate, so a window that lost focus keeps painting, just less
+often. Once a window is out of sight, Chromium stops rendering it altogether. The document's
+`visibilityState` turns `hidden` and its timers are throttled, as in a background browser tab. The
+window keeps showing its last frame while it is away and while Chromium repaints on its return.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Wayland compositors report a window out of sight with the xdg-shell `suspended` state.
+    Mutter-based compositors, such as GNOME's and Kestrel, set it on windows that are minimized or
+    fully covered. A compositor that doesn't set it never reports a window out of sight; hidden
+    windows are still suspended.
+  </TabItem>
+  <TabItem label="Windows">
+    Windows doesn't report covered windows, so only a minimized window counts as out of sight,
+    until it is restored.
+  </TabItem>
+  <TabItem label="macOS">
+    macOS reports windows that are minimized or fully covered.
+  </TabItem>
+</Tabs>
+
+### Hidden windows
+
+A hidden window normally stops rendering like any window out of sight, and Sabine shows its last
+frame when it comes back while Chromium repaints. Palettes and tray windows come and go often, so
+they keep their frame instead: with `retain_hidden_frame`, the hidden page keeps its
+size and keeps painting at the background frame rate, and reappears with current content the moment
+it is shown. `.palette()`, `.tray_app()`, `.visible(false)` and `.hide_on_blur(true)` turn it on.
+
+## Freezing
+
+A window that stays out of sight is frozen after its policy's `freeze_after`: five minutes with
+`.app()`, one minute with `.palette()` and `.tray_app()`. Sabine moves the page to Chromium's frozen
+state, in which no JavaScript, timers or network callbacks run, and signals critical memory
+pressure, which releases caches, decoded images and GPU resources. Everything the page holds stays
+in memory, its DOM and its JavaScript state included. When the window is shown or uncovered again,
+the page thaws within milliseconds, without reloading.
+
+Pages hear the standard [Page Lifecycle](https://developer.chrome.com/docs/web-platform/page-lifecycle-api)
+events, so they can save a draft before freezing or refresh stale data after:
+
+```ts
+document.addEventListener("freeze", () => saveDraft());
+document.addEventListener("resume", () => refreshIfStale());
+```
+
+A page is never frozen while something in it needs to run, and a frozen page thaws as soon as it
+does:
+
+- audio or video plays in any of its frames,
+- an `AudioContext` is running,
+- it holds the camera or microphone,
+- a [native video](/docs/web/native-video/) plays,
+- an activity that keeps it running is in progress.
+
+Only actual playback counts, so a page can't keep itself awake by claiming to play.
+
+```rust
+use std::time::Duration;
+
+window.app().freeze_after(Duration::from_secs(30 * 60))
+// or never freeze this window:
+window.app().disable_freezing()
+```
+
+A window without a recipe has no `freeze_after`, and is never frozen.
+
+## Activities
+
+An activity tells Sabine that a page is doing something that has to finish, such as an upload, an
+export or a call, so its window keeps running while out of sight:
+
+```ts
+import { activity } from "@lantharos/sabine";
+
+const upload = await activity.begin({ name: "Uploading photos" });
+try {
+  await uploadAll(files);
+} finally {
+  await upload.end();
+}
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `name` | `"activity"` | Shown in diagnostics; up to 128 characters |
+| `keepRunning` | `true` | Keeps the page from freezing. With `false`, the activity is only recorded |
+
+An activity belongs to the document that began it. It keeps only its own window running, and ends
+by itself when the page reloads, navigates away, loses its renderer, or its window closes, so an
+activity never outlives the page that began it. Calling `end()` a second time resolves with
+`ended: false`.
+
+`activity.list()` returns the activities that keep the window's page running, its own and the
+app's, with how many keep it running:
+
+```ts
+const { activities, keepingRunning } = await activity.list();
+```
+
+A page lists and ends only its own window's activities.
+
+Rust starts activities on the process. They keep every window's page running until the lease is
+dropped or ended:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main_with_process(
+        |window| Ok(window.app()),
+        |process| {
+            let sync = process.begin_activity("Initial sync");
+            std::thread::spawn(move || {
+                run_initial_sync();
+                sync.end();
+            });
+        },
+    );
+}
+
+fn run_initial_sync() {
+    // ...
+}
+```
+
+`begin_activity_with(ActivityOptions::new("Indexing").keep_running(false))` sets the options, and
+`process.activities()` lists everything running.
+
+## Frame rates
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `.active_frame_rate(fps)` | `0` | The frame rate of an active page. `0` follows the display's refresh rate |
+| `.background_frame_rate(fps)` | `5`, `1` for palettes, tray apps and hidden windows | The frame rate of a suspended page that still renders. At least 1 |
+
+Following the display, Sabine picks up the refresh rate of the monitor the window is on, and picks
+it up again when the window moves to another monitor, changes scale or size, or regains focus.
+When the display reports no refresh rate, it uses 60. Chromium only paints what changes, so a still
+page costs little at any frame rate; the rate caps animations, video and scrolling.
+
+## Following the window's state
+
+Pages read the window's state and hear about changes:
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+appWindow.onVisibilityChanged(({ visible, suspended }) => {
+  if (visible) startLiveUpdates();
+  else stopLiveUpdates();
+});
+```
+
+`appWindow.visible` is false while the window is hidden or out of sight, and `appWindow.suspended`
+is true while the page runs at its background frame rate. A page that loads while its window is
+hidden or suspended hears its state as it loads.
+
+Rust code follows the same changes for every window:
+
+```rust
+window.on_visibility_changed(|state| {
+    eprintln!("window {} visible: {}, suspended: {}", state.window, state.visible, state.suspended);
+})
+```
+
+The listener hears the state the window opens with, every change, and a report of the window as
+hidden when it closes.
+
+## Lifecycle policies
+
+Each recipe applies one of these presets with `.lifecycle_policy(...)`. The individual builder calls
+change one setting each:
+
+| Setting | `SabineLifecyclePolicy::default()` | `browser_tab()`, used by `.app()` | `hidden_window()`, used by `.palette()` and `.tray_app()` |
+| --- | --- | --- | --- |
+| `active_frame_rate` | `0`, the display's | `0` | `0` |
+| `background_frame_rate` | `5` | `5` | `1` |
+| `suspend_on_minimize` | `true` | `true` | `true` |
+| `suspend_on_occluded` | `true` | `true` | `true` |
+| `suspend_on_blur` | `false` | `false` | `true` |
+| `freeze_after` | none | 5 minutes | 1 minute |
+| `retain_hidden_frame` | `false` | `false` | `true` |
+
+`.lifecycle_policy(policy)` replaces every setting at once, as recipes do, so call the individual
+options after it:
+
+```rust
+use std::time::Duration;
+
+window
+    .app()
+    .background_frame_rate(10)
+    .suspend_on_blur(true)
+    .freeze_after(Duration::from_secs(120))
+```
+
+## What costs resources
+
+| Part | Cost | How to reduce it |
+| --- | --- | --- |
+| A window | A window host process with its GPU renderer, and the page's renderer process | Open windows when they are needed and close those nobody uses. Hidden windows keep both |
+| A visible page | Rendering at the active frame rate while something animates | Stop animations nobody needs; lower `active_frame_rate` for pages that never need full rate |
+| A suspended page | Rendering at the background frame rate while in sight | Pause work in `onVisibilityChanged` |
+| A frozen page | Its memory, minus caches | Keep big data in Rust instead of the page |
+| An activity | Keeps its window's page from freezing | End it as soon as the work is done |
+
+Sabine itself does no work while nothing changes: a window host sleeps until its next input,
+paint or timer, and Chromium keeps no spare renderer process waiting.
+
+To keep something running while out of sight:
+
+- **For the duration of a task**, begin an activity, from the page or from Rust.
+- **For as long as a window exists**, call `.disable_freezing()`. Its page then keeps running out
+  of sight, with its timers throttled as in a background browser tab.
+- **Always**, do the work in Rust and send the page its results as [events](/docs/bridge/events/).

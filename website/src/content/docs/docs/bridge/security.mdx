@@ -1,0 +1,148 @@
+---
+title: Bridge security
+description: Which documents get the bridge, how to allow other origins, and how to handle what pages send.
+sidebar:
+  order: 4
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The bridge gives a page your app's commands, Sabine's window and guest controls, and the app's
+events. Sabine decides per document whether a page gets it, and checks again on every call. There
+is no separate permission layer on top: anything a trusted page can call is something your app
+chose to expose, so the rules below decide who can reach your Rust code.
+
+## Which documents get the bridge
+
+A document gets the bridge when all of these hold:
+
+- **It is the main frame.** Iframes never get the bridge, whatever their origin, including
+  iframes of the app's own pages.
+- **The app trusts its origin.** That is one of:
+  - the app's own files at `sabine://app/`, when the window loads its local entry;
+  - the origin of the window's production `url`;
+  - in development, the origin of the development server, on `localhost`, `127.0.0.1` and `[::1]`;
+  - an origin you allowed with `allowed_origins` or `.allowed_origin(..)`.
+- **Its security origin matches its URL.** A document from an allowed URL that runs with an opaque
+  origin, such as one sandboxed by a `Content-Security-Policy: sandbox` header, does not inherit
+  the URL's trust.
+
+`file:` URLs, `data:` URLs the app did not supply, `about:` pages and DevTools never get the
+bridge. When a trusted page navigates to an origin the app doesn't trust, the new document has no
+`window.sabine`, and `isAvailable()` from `@lantharos/sabine` returns `false`.
+
+The checks run in the renderer, before the bridge script is installed, and again in the browser
+process for every call and every event, against the document that is live at that moment. An
+answer is delivered only to the JavaScript context that made the call, so a navigation, a reload
+or a reused request id cannot redirect it into another document.
+
+## Allowing other origins
+
+An app whose page comes from the web, or navigates between its own sites, allows each origin in
+`Sabine.toml`:
+
+```toml
+[web]
+url = "https://app.example.com"
+allowed_origins = ["https://accounts.example.com"]
+```
+
+or in Rust:
+
+```rust
+window.allowed_origin("https://accounts.example.com")
+```
+
+An origin is a scheme, host and optional port, with no path, query or fragment:
+`https://example.com` or `http://localhost:8080`. Entries with a path are ignored. Only `http` and
+`https` origins can be allowed. An allowed origin gets the whole bridge, the same as the app's own
+pages.
+
+`.url(..)` allows its own URL's origin, and `.dev_url(..)` allows the development server's origin
+on every loopback name, so neither needs an `allowed_origins` entry. `sabine dev` hands the
+development server's URL to the app as it starts it; builds you ship carry none.
+
+<Aside type="caution">
+An entry of `"*"` allows every `http` and `https` origin. Any site the window ends up on, through a
+link, a redirect or an injected script, can then call every command. Name the origins you serve
+instead.
+</Aside>
+
+### Commands for one more origin
+
+A command that one more site should reach, without that site getting the rest of the bridge, is
+registered with a `BridgeCommandDescriptor`:
+
+```rust
+use sabine::prelude::*;
+use sabine::BridgeCommandDescriptor;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window.app().bridge_descriptor_handler(
+            BridgeCommandDescriptor::new("checkout.complete")
+                .allowed_origin("https://pay.example.com"),
+            |command| {
+                if command.origin.as_deref() == Some("https://pay.example.com") {
+                    record_payment(&command.params);
+                }
+                Ok(BridgeResponse::json(serde_json::Value::Null))
+            },
+        ))
+    });
+}
+
+fn record_payment(_receipt: &serde_json::Value) {}
+```
+
+A page from that origin gets `window.sabine` and can call `checkout.complete`, and nothing else:
+no other command, no window controls, no guests and no events. The app's own pages and allowed
+origins can call the command as usual. Calls from that page to other commands get no answer and
+time out.
+
+## Guests
+
+[Guests](/docs/web/guests/), the other web pages a window shows beside its own, have no bridge by
+default. A guest created with `allowBridge: true` gets it on the same terms as the window's page:
+only for documents from the app's own pages, its allowed origins, or HTML the app passed in as
+`html`. Such a guest can call the app's commands and receives its events, but cannot create,
+change or close guests or the popup; those calls fail with an error.
+
+HTML that the app passes to `guest.create` or `guest.navigate` as `html` stays trusted for that
+guest. Other `data:` URLs don't gain access, even when the guest navigates to them itself.
+
+The [popup](/docs/reference/javascript-api/#popup) surface never has the bridge.
+
+## Handling what pages send
+
+Treat every call as input from the page, and the page as code that may one day show content you
+did not write: a message, a document, a remote resource. The bridge checks who calls; your handler
+decides what a call may do.
+
+- **Let serde check the shape.** Typed commands reject params that don't deserialize before your
+  handler runs. Use specific types, such as an enum for a choice and `u64` for an id, instead of
+  strings that you parse.
+- **Bound sizes and counts.** Params can be up to 1 MiB of JSON and bytes up to 32 MiB per call.
+  Check lengths before you allocate or store, and reject what your app has no use for.
+- **Don't take paths from the page.** Resolve names or ids the page sends against a folder the
+  app owns, such as the [app data folder](/docs/web/resources-and-files/#the-app-data-folder), and
+  refuse names that contain separators or `..`. Let people pick files through the system's file
+  dialog when they choose them.
+- **Never run what the page sends.** Don't pass page strings to a shell, to `Command` arguments
+  that a program interprets, or to SQL without parameters.
+- **Check `command.origin` when it matters.** A raw handler sees the calling document's origin,
+  such as `sabine://app` or `https://app.example.com`, and `command.window` names the calling
+  window. A command that one more origin may call can branch on it.
+- **Treat URLs and documents from the desktop as input too.** URLs and files the app receives from
+  [links and documents](/docs/desktop/links-and-documents/) come from other programs. Validate
+  their scheme and contents before acting on them.
+
+## Development builds
+
+Development builds open Chromium's remote debugging port on `127.0.0.1`, 9222 unless
+`SABINE_DEVTOOLS_PORT` names another, and add `Open DevTools` to the page's context menu.
+Production builds open neither unless the app calls `.debug(port)`. Leave `.debug` out of builds
+you ship: anything on the machine that can reach the port can drive the page.
+
+The [security model](/docs/concepts/security-model/) covers the rest of Sabine's sandboxing:
+browser permission prompts, the Chromium sandbox and the app sandbox.

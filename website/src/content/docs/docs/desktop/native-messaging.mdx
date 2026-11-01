@@ -1,0 +1,144 @@
+---
+title: Native messaging
+description: Register a native messaging host so browser extensions can talk to a program that ships with your app.
+sidebar:
+  order: 10
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Browser extensions talk to programs on the computer through native messaging: the extension calls
+`connectNative` or `sendNativeMessage` with a host name, and the browser starts the program that
+name is registered for and exchanges messages with it over standard input and output. Sabine
+registers such a host for your app with every browser it knows about.
+
+## Registering a host
+
+Pass a `NativeMessagingHost` to `.native_messaging_host(...)`:
+
+```rust
+use sabine::prelude::*;
+use sabine::NativeMessagingHost;
+
+fn main() {
+    SabineWindow::main(|window| {
+        let executable = std::env::current_exe()
+            .map_err(|error| SabineError::CreationFailed { message: error.to_string() })?
+            .with_file_name(if cfg!(windows) { "notes-bridge.exe" } else { "notes-bridge" });
+        Ok(window.app().native_messaging_host(NativeMessagingHost {
+            id: "com.example.notes".into(),
+            name: "Notes browser bridge".into(),
+            executable,
+            allowed_origins: vec!["chrome-extension://abcdefghijklmnopabcdefghijklmnop/".into()],
+            allowed_extensions: vec!["notes@example.com".into()],
+        }))
+    });
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The host name extensions pass to `connectNative`, exactly as written. |
+| `name` | A human-readable description, written to the browser manifests. |
+| `executable` | The program the browser starts. It must exist; Sabine records its absolute path. |
+| `allowed_origins` | The Chromium-based extensions allowed to connect, as exact `chrome-extension://<id>/` origins. |
+| `allowed_extensions` | The Firefox add-on ids allowed to connect, such as `notes@example.com`. |
+
+Chromium-based browsers and Firefox-based browsers get separate manifests, each listing only its
+own extensions. An empty list grants no extensions of that kind access.
+
+Sabine checks the host before it writes anything, and a host it can't register stops the launch
+with an error naming the problem:
+
+- `id` contains lowercase letters, digits and underscores, with single dots between nonempty
+  parts, such as `com.example.notes`. Sabine rejects other ids instead of renaming them.
+- Every `allowed_origins` entry is `chrome-extension://`, a 32-character extension id and a
+  trailing `/`.
+- `allowed_extensions` entries are explicit add-on ids, without spaces or wildcards.
+- `executable` is a file, with a path that is valid Unicode.
+
+Sabine writes the registration each time the app launches, so it stays correct when the app moves
+or updates. Development runs, such as `sabine dev`, register no native messaging hosts.
+
+## The host program
+
+The host is a separate program you ship with the app. The browser starts it when an extension
+connects, and sends each message as a 32-bit length in native byte order followed by that many
+bytes of JSON; the host replies the same way on standard output. A minimal host that answers every
+message:
+
+```rust
+use std::io::{self, Read, Write};
+
+fn main() -> io::Result<()> {
+    let mut input = io::stdin().lock();
+    let mut output = io::stdout().lock();
+    let mut length = [0; 4];
+    while input.read_exact(&mut length).is_ok() {
+        let mut message = vec![0; u32::from_ne_bytes(length) as usize];
+        input.read_exact(&mut message)?;
+        let reply = br#"{"ok":true}"#;
+        output.write_all(&(reply.len() as u32).to_ne_bytes())?;
+        output.write_all(reply)?;
+        output.flush()?;
+    }
+    Ok(())
+}
+```
+
+## Browsers and where the manifests go
+
+Registrations are per user. Sabine writes manifests for Chrome and its beta, dev and canary
+channels, Chromium, Edge, Brave, Vivaldi, Opera, Helium, Firefox and LibreWolf. Zen reads Firefox's
+manifests, so it is covered too.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Chromium-based browsers read `<id>.json` from a `NativeMessagingHosts` folder in their
+    configuration folder, such as `~/.config/google-chrome/NativeMessagingHosts`. Firefox and
+    LibreWolf read it from `~/.mozilla/native-messaging-hosts` and
+    `~/.librewolf/native-messaging-hosts`.
+
+    Browsers installed from Flatpak or Snap keep their configuration inside their sandbox, in
+    `~/.var/app/<flatpak id>/` and `~/snap/<snap name>/common/`. Sabine writes manifests there too
+    for the browsers whose folders exist.
+
+    An app running from an AppImage exists at its mount point only while it runs, so a host
+    program inside the AppImage is registered through a small launcher in
+    `~/.local/share/sabine/native-messaging/<id>`. The launcher starts the AppImage file, which
+    hands the browser's arguments to the host program instead of starting the app.
+  </TabItem>
+  <TabItem label="Windows">
+    The manifests are written to `%LOCALAPPDATA%\Sabine\native-messaging\chromium\<id>.json` and
+    `...\firefox\<id>.json`, and each browser family's registry key under the current user points
+    to its manifest:
+
+    - `HKCU\Software\Google\Chrome\NativeMessagingHosts\<id>`, which Chrome's channels, Vivaldi,
+      Opera and Helium read
+    - `HKCU\Software\Chromium\NativeMessagingHosts\<id>`
+    - `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\<id>`
+    - `HKCU\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\<id>`
+    - `HKCU\Software\Mozilla\NativeMessagingHosts\<id>`, which Firefox forks read
+  </TabItem>
+  <TabItem label="macOS">
+    Each browser reads `<id>.json` from a `NativeMessagingHosts` folder in its folder under
+    `~/Library/Application Support`, such as `Google/Chrome/NativeMessagingHosts`,
+    `Microsoft Edge/NativeMessagingHosts` or `Mozilla/NativeMessagingHosts`.
+  </TabItem>
+</Tabs>
+
+## Removing hosts
+
+`sabine uninstall`, and the uninstallers of Windows `.exe` and MSI packages, remove the manifests
+whose program is inside the app's installation, along with the Windows registry keys that still
+point to them. A host name another installation has registered since keeps its manifest.
+
+Removing a deb, rpm or AppImage, or moving a macOS app to the Trash, leaves the manifests in each
+user's browser folders. Browsers report the host as missing until the app is installed and
+launched again.
+
+## Related pages
+
+- [Installing](/docs/distribution/installing/) covers `sabine install` and `sabine uninstall`.
+- [Security model](/docs/concepts/security-model/) covers what the app exposes to outside
+  programs.

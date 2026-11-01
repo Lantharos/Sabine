@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import "@fontsource-variable/hanken-grotesk";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+
+  --color-paper: #f9f4ea;
+  --color-cream-100: #f9f4ea;
+  --color-cream-200: #f3ead8;
+  --color-cream-300: #e7d9bf;
+  --color-navy-300: #8b97b3;
+  --color-navy-500: #47557a;
+  --color-navy-700: #2a3759;
+  --color-navy-900: #1d2a4a;
+  --color-navy-950: #121a2c;
+  --color-clay-600: #9a4a26;
+  --color-olive-600: #5f6b3c;
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-navy-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-navy-900);
+    color: var(--color-cream-100);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-clay-600);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}

@@ -1,0 +1,195 @@
+---
+title: Multiple windows
+description: Open more windows from Rust, address them individually, and understand how the windows of one app share a browser.
+sidebar:
+  order: 4
+---
+
+An app starts with one window, built by the closure you pass to `SabineWindow::main`. It can open
+more while it runs, such as a document per window, an inspector, or a preferences window. All of
+them belong to the same app process, share its bridge commands, and close independently.
+
+## Opening a window
+
+`SabineProcess::open_window` opens another window and returns its `WindowId`. Use
+`main_with_process_mut` to reach the process before Sabine starts waiting on it:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main_with_process_mut(
+        |window| Ok(window.app().title("Board").remember_size()),
+        |process| {
+            let inspector = SabineWindow::for_current_app().map(|window| {
+                window
+                    .app()
+                    .title("Inspector")
+                    .size(360, 640)
+                    .content_suffix("#inspector")
+            });
+            if let Err(error) = inspector.and_then(|window| process.open_window(window)) {
+                eprintln!("could not open the inspector: {error}");
+            }
+        },
+    );
+}
+```
+
+`SabineWindow::for_current_app()` starts a builder the way `main` does: from the app's manifest,
+with its identity and production page, and with the development server's page during
+`sabine dev`. Configure it like any window. `.content_suffix` adds a query string or fragment to
+the page's address, so one page can tell which view to show. A window can also show a different
+file with `.entry(path)` or another URL with `.url(url)`.
+
+A window opened this way takes over from the app's first window:
+
+- **Its app id and bridge commands** are the first window's. Commands registered on the new
+  builder are ignored; register every command on the first one.
+- **Desktop services** such as the tray icon, global shortcuts and single-instance handling belong
+  to the app and start with the first window. The new builder's are ignored.
+- **Everything else** is its own: size, chrome, glass, regions, lifecycle and visibility.
+
+The new window joins the first window's browser, so `open_window` waits until the first window is
+ready, for up to 20 seconds. Windows you open later never wait.
+
+## Opening windows from anywhere
+
+`open_window` needs `&mut SabineProcess`, which only the launch closure has. Everywhere else, use a
+`SabineProcessHandle`. It is cheap to clone, can be sent to other threads, and asks the running
+process to open the window:
+
+| Method | Effect |
+| --- | --- |
+| `handle.open_window(window)` | Opens a window and returns its id, waiting up to 20 seconds for the answer |
+| `handle.present(activation_token)` | Shows and focuses the app's window, opening it first in a background app without one |
+
+`process.handle()` returns one, and `.on_launched(...)` hands one to code that only builds the
+window, such as a command that opens a document in a window of its own:
+
+```rust
+use std::sync::{Arc, OnceLock};
+
+use sabine::prelude::*;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+#[derive(Deserialize, Type)]
+struct OpenDocument {
+    id: u32,
+    title: String,
+}
+
+#[derive(Serialize, Type)]
+struct OpenedWindow {
+    window: u32,
+}
+
+fn main() {
+    let process = Arc::new(OnceLock::<SabineProcessHandle>::new());
+    let launched = Arc::clone(&process);
+    SabineWindow::main(move |window| {
+        Ok(window
+            .app()
+            .on_launched(move |handle| {
+                let _ = launched.set(handle);
+            })
+            .bridge_typed("documents.open", move |request: OpenDocument| {
+                let process = process
+                    .get()
+                    .ok_or_else(|| BridgeError::new("The app is still starting"))?;
+                let window = SabineWindow::for_current_app()
+                    .map_err(|error| BridgeError::new(error.to_string()))?
+                    .app()
+                    .title(request.title)
+                    .content_suffix(format!("#document/{}", request.id));
+                let window = process
+                    .open_window(window)
+                    .map_err(|error| BridgeError::new(error.to_string()))?;
+                Ok(OpenedWindow { window })
+            }))
+    });
+}
+```
+
+Bridge handlers run on worker threads, so they can wait for the window to open without holding up
+the app.
+
+## Telling windows apart
+
+A `WindowId` names one window for as long as it is open. It is the process id of the window's host.
+`process.id()` returns the first window's id while it is open.
+
+A command handler registered with `bridge_handler` learns which window called it from
+`command.window`:
+
+```rust
+window.bridge_handler("window.id", |command| {
+    Ok(BridgeResponse::json(serde_json::json!({ "window": command.window })))
+})
+```
+
+The `BridgeEventEmitter` reaches every window or one:
+
+| Every window | One window |
+| --- | --- |
+| `emit(name, payload)` | `emit_to(window, name, payload)` |
+| `emit_bytes(name, bytes)` | `emit_bytes_to(window, name, bytes)` |
+| `send(&event, &payload)` | |
+| `set_regions(&regions)` | `set_regions_of(window, &regions)` |
+| `show()`, `hide()`, `focus_window()` | |
+
+`notify(window, &notification)` shows a notification from one window, and
+`on_visibility_changed` reports which window changed in `WindowVisibility::window`. Keep state that
+several windows show in Rust and send changes to every window as events, so the windows never
+disagree. See [Events](/docs/bridge/events/).
+
+## Closing windows
+
+A page closes its own window with `appWindow.close()`. Rust closes one with
+`process.close_window(window)`, which returns `false` when no such window is open.
+
+Closing a window closes only that window, including the first one. `SabineProcess::wait()`, and so
+`SabineWindow::main`, returns once every window has closed, and the app exits with its first
+window's status. If the app process exits or crashes, its windows close with it.
+
+## How an app's windows fit together
+
+Each window has a window host process of its own, started from the app's executable. It owns the
+native window, its input and its GPU renderer, and talks to the app over a private, authenticated
+connection, so commands and events reach the right window.
+
+The pages are rendered by Chromium, and every window of an app shares one browser process and one
+browser profile. Their pages see the same cookies, local storage, IndexedDB and cache, just as tabs
+of one browser do. A second launch of an app that isn't single-instance also joins the browser of
+the copy already running, while getting an app process of its own.
+
+Different apps never share a profile, so they never see each other's storage. Whether they share a
+Chromium process depends on the platform:
+
+- **Windows and macOS.** Each app runs its own Chromium, shared by all of its windows.
+- **Linux.** Apps installed for every user share one Chromium: one browser, GPU and network
+  process serve all of them, while each keeps its own profile and renderers. Other apps get a
+  runtime of their own. See [Shared runtime](/docs/concepts/shared-runtime/).
+
+Opening another window costs a window host process and, usually, a renderer process for its page;
+it starts no other browser. [Lifecycle](/docs/windows/lifecycle/) covers what windows cost while nobody is
+looking at them.
+
+## Apps that run without a window
+
+`.background()` launches the app without opening its window. The app runs, along with its tray icon
+and shortcuts, until something activates it: another launch of a single-instance app, one of its links, or a
+call to `handle.present(None)` from your own code. The window then opens, and closing it ends its
+window host and browser again while the app keeps running.
+
+```rust
+use sabine::SingleInstancePolicy;
+
+SabineWindow::main(|window| {
+    Ok(window
+        .app()
+        .background()
+        .single_instance(SingleInstancePolicy::FocusExisting))
+});
+```

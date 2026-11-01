@@ -1,0 +1,307 @@
+---
+title: Guests
+description: Embed other web pages in a window as guest views, position and navigate them, and handle their popups, downloads and events.
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A guest is another web page shown inside the window, beside the app's own page: a site in a
+browser app, a document preview, a sign-in page or a help center. Each guest is a browser of its
+own, rendered off screen like the app's page and drawn by Sabine at the place the page gives it.
+
+Use a guest instead of an `<iframe>` when the content isn't yours. A guest has its own renderer
+and its own storage partition, works with sites that refuse to be framed, has no access to the
+bridge unless you grant it, and reports its navigation, title, favicon and downloads to the page.
+
+## Creating a guest
+
+```ts
+import { Guest } from "@lantharos/sabine";
+
+const tab = await Guest.create({
+  url: "https://example.com",
+  bounds: { x: 0, y: 48, width: 1024, height: 720 },
+  partition: "browser",
+});
+
+await tab.navigate("https://example.com/docs");
+await tab.destroy();
+```
+
+`Guest.create` resolves once the guest exists, with a `Guest` handle whose methods act on it.
+The `guest` object exports the same operations by id, for code that keeps ids rather than
+handles: `guest.create` also resolves with a `Guest`, and `guest.navigate(id, url)`,
+`guest.setBounds(id, bounds)` and the rest take the id first.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `url` | | The page to open. |
+| `html` | | An HTML document to show instead of `url`. |
+| `bounds` | | `{ x, y, width, height }` in CSS pixels from the window's top left corner. |
+| `id` | `guest-1`, `guest-2`, … | A stable id: ASCII letters, digits, `-`, `_` and `.`, up to 128 characters. Creating a guest with the id of an existing one replaces it. |
+| `partition` | `guest:<id>` | The storage partition: guests with the same partition share cookies, storage and cache. |
+| `visible` | `true` | Whether the guest is shown. |
+| `popupPolicy` | `"deny"` | What happens when the guest opens a window. See [Popups](#popups). |
+| `allowDownloads` | `true` | Whether the guest may start downloads. See [Downloads](#downloads). |
+| `allowBridge` | `false` | Whether the guest's pages get the bridge. See [Bridge access](#bridge-access). |
+| `interceptedShortcuts` | `[]` | Keyboard shortcuts the page handles while the guest has focus. See [Keyboard and wheel](#keyboard-and-wheel). |
+| `interceptHorizontalWheel` | `false` | Whether horizontal scrolling over the guest goes to the page instead. |
+| `backgroundColor` | transparent | `#RRGGBB` or `#AARRGGBB`, drawn before and behind the guest's page. |
+
+Each guest needs `url` or `html`; creating one with neither fails.
+
+## Positioning
+
+A guest sits at its `bounds`, in the same CSS pixels `getBoundingClientRect()` returns, measured
+from the window's content area. Sabine scales them to the display. A page usually keeps a
+placeholder element where the guest goes and follows it:
+
+```ts
+import { Guest } from "@lantharos/sabine";
+
+const viewport = document.querySelector<HTMLElement>("#viewport")!;
+
+function boundsOf(element: HTMLElement) {
+  const { x, y, width, height } = element.getBoundingClientRect();
+  return { x, y, width, height };
+}
+
+const tab = await Guest.create({ url: "https://example.com", bounds: boundsOf(viewport) });
+
+new ResizeObserver(() => tab.setBounds(boundsOf(viewport))).observe(viewport);
+```
+
+Sabine rounds bounds to whole pixels and keeps width and height at one pixel or more.
+
+Guests are drawn above the page, so the page can't draw over them. While it shows something that
+should cover them, such as a dialog or a menu, hide them all with `guest.setCovered(true)`, and
+show them again with `guest.setCovered(false)`:
+
+```ts
+import { guest } from "@lantharos/sabine";
+
+dialog.addEventListener("toggle", () => guest.setCovered(dialog.open));
+```
+
+`setVisible(false)` hides one guest; a hidden guest that had focus hands it back to the page.
+Guests are also hidden while the window is.
+
+### Stacking order
+
+Guests stack in the order they were created or last focused: the newest or most recently focused
+guest is on top. They are drawn in that order, and a click reaches the topmost guest under the
+pointer. Clicking a guest focuses it and raises it; clicking the page outside every guest gives the
+page focus back. `focus()` focuses and raises a guest from code.
+
+## Navigating
+
+| Method | Effect |
+| --- | --- |
+| `navigate(target)` | Loads a URL, `{ url }`, or `{ html }`, an HTML document of your own. |
+| `goBack()`, `goForward()` | Moves through the guest's history. Rejects when there is nowhere to go. |
+| `reload(options)` | Reloads; `{ ignoreCache: true }` bypasses the cache. |
+| `setZoom(factor)` | Zooms the guest's page, from 0.25 to 5, and resolves with its `GuestInfo`. |
+| `executeJavaScript(code)` | Runs a script in the guest's main frame. It resolves once the script was sent, without its result. |
+| `capturePreview()` | Resolves with `{ dataUrl }`, a PNG of the guest as it is drawn now, for example for a tab switcher. |
+
+`navigate` resolves once the guest starts loading. Follow the load with the
+[events](#events) below: `guestLoading` while it loads, and `guestNavigated` with the new URL,
+title and whether the guest can go back or forward.
+
+`capturePreview` needs the guest to be on screen: it rejects while the guest or the window is
+hidden, or while guests are covered.
+
+```ts
+import { events, Guest } from "@lantharos/sabine";
+
+const tab = await Guest.create({ url: "https://example.com", bounds: boundsOf(viewport) });
+
+events.guestNavigated(({ id, url, canGoBack, canGoForward }) => {
+  if (id !== tab.id) return;
+  address.value = url;
+  back.disabled = !canGoBack;
+  forward.disabled = !canGoForward;
+});
+
+back.onclick = () => tab.goBack();
+forward.onclick = () => tab.goForward();
+zoomIn.onclick = async () => {
+  const { zoomFactor } = await tab.get();
+  await tab.setZoom(zoomFactor + 0.1);
+};
+```
+
+`get()` resolves with the guest's `GuestInfo`, and `guest.list()` with every guest's, in stacking
+order from the bottom:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The guest's id. |
+| `url`, `title` | The page it shows. |
+| `bounds` | Where it sits. |
+| `visible` | Whether it is shown. |
+| `loading` | Whether it is loading. |
+| `canGoBack`, `canGoForward` | Whether it has history in either direction. |
+| `partition` | Its storage partition. |
+| `allowBridge` | Whether its pages get the bridge. |
+| `popupPolicy` | What it does with new windows. |
+| `zoomFactor` | The zoom last set with `setZoom`. |
+
+## Storage partitions
+
+Each partition is a separate browser profile, kept on disk with the app's own browser data, so
+sign-ins and site data survive restarts. Without a `partition`, a guest gets one of its own named
+after its id, `guest:<id>`; a guest created with the same id in a later run finds its data again.
+
+Guests that share a partition share cookies, storage and cache, like tabs of one browser profile.
+Partition names can be any string, such as `"browser"` or `"account:work"`.
+
+## Popups
+
+`popupPolicy` decides what happens when a guest's page calls `window.open` or follows a link that
+opens a new window:
+
+| Policy | Effect |
+| --- | --- |
+| `"deny"` | Nothing opens, and the page receives `guestNewWindow` with the URL and how the page asked to open it, for example to open the link in a new tab of its own or with `shell.openLink`. |
+| `"navigateSame"` | The guest loads the URL itself. |
+| `"openGuest"` | Sabine opens the URL in a new guest with the same partition, bounds, popup policy and download setting. The page learns about it from `guestCreated`. |
+| `"allow"` | The same as `"openGuest"`: a popup opens as another guest. |
+
+```ts
+import { events, shell } from "@lantharos/sabine";
+
+events.guestNewWindow(({ url }) => shell.openLink(url));
+```
+
+The app's own page can't open windows with `window.open`. A page that wants another view opens a
+guest, the [popup](/docs/reference/javascript-api/#popup) surface, or asks the app for
+[another window](/docs/windows/multiple-windows/).
+
+## Downloads
+
+A download a guest starts waits for the page to decide. The page receives `guestDownload` with
+`state: "requested"` and answers with `guest.downloadAction`:
+
+```ts
+import { events, guest } from "@lantharos/sabine";
+
+events.guestDownload(async (download) => {
+  if (download.state === "requested") {
+    await guest.downloadAction(download.downloadId, "accept", { showDialog: true });
+  } else if (download.state === "progress") {
+    progress.value = download.receivedBytes / download.totalBytes;
+  }
+});
+```
+
+| Action | Effect |
+| --- | --- |
+| `"accept"` | Starts the download. `{ savePath }` saves it at that path, and `{ showDialog: true }` opens the system's Save dialog instead. |
+| `"cancel"` | Stops the download. |
+| `"pause"`, `"resume"` | Pauses or resumes it. |
+
+Later events report `progress`, then `completed`, `cancelled` or `interrupted`, with
+`receivedBytes`, `totalBytes`, the `filename` the site suggested and the `savePath`. A guest
+created with `allowDownloads: false` can't download at all. A window keeps up to 256 pending or
+running downloads and cancels further ones.
+
+Downloads the app's own page starts open the Save dialog without waiting, and are reported as
+`guestDownload` events with an empty `guestId`.
+
+## Keyboard and wheel
+
+While a guest has focus, keys go to its page. An app that keeps its own shortcuts working over a
+guest, such as Ctrl+T for a new tab, lists them in `interceptedShortcuts`:
+
+```ts
+import { events, Guest } from "@lantharos/sabine";
+
+const tab = await Guest.create({
+  url: "https://example.com",
+  bounds: boundsOf(viewport),
+  interceptedShortcuts: ["Primary+T", "Primary+W", "Primary+Shift+T"],
+  interceptHorizontalWheel: true,
+});
+
+events.guestShortcut(({ accelerator }) => {
+  if (accelerator === "Primary+T") openTab();
+  if (accelerator === "Primary+W") closeTab();
+});
+```
+
+A shortcut is modifiers and one key joined with `+`. `Primary` is Command on macOS and Control
+elsewhere; `Control` (or `Ctrl`), `Meta` (or `Command`, `Cmd`), `Alt` (or `Option`) and `Shift` name
+one key each. A matching key press goes to the page as `guestShortcut`, with the `accelerator` as
+you listed it, and neither its key down nor key up reaches the guest.
+
+With `interceptHorizontalWheel`, wheel and trackpad scrolling that is mostly horizontal goes to
+the page as `guestWheel` instead of scrolling the guest, for example to switch tabs with a swipe.
+
+## Bridge access
+
+Guests have no bridge. A guest created with `allowBridge: true` gets it on the same terms as the
+window's page: only for documents from the app's own pages, its allowed origins, or the `html` you
+passed to `create` or `navigate`. Such a guest can call the app's commands and receives its events,
+but can't create, change or close guests or the popup. See
+[Bridge security](/docs/bridge/security/#guests).
+
+## Events
+
+Guest events go to the window's page, never to guests. Each carries the guest's `id` (a download
+carries `guestId`):
+
+| Listener | Payload | Sent when |
+| --- | --- | --- |
+| `events.guestCreated` | `GuestInfo` | A guest finished opening. |
+| `events.guestDestroyed` | `{ id }` | A guest closed. |
+| `events.guestLoading` | `{ id, loading }` | Loading started or finished. |
+| `events.guestTitle` | `{ id, title }` | The document title changed. |
+| `events.guestNavigated` | `{ id, url, title, canGoBack, canGoForward }` | The guest navigated or its address changed. |
+| `events.guestFavicon` | `{ id, favicons }` | The page's favicon URLs changed. |
+| `events.guestNewWindow` | `{ id, url, disposition }` | The guest tried to open a window under the `deny` policy. |
+| `events.guestDownload` | `GuestDownloadEvent` | A download was requested, progressed or ended. |
+| `events.guestShortcut` | `{ id, accelerator, key, repeat, ctrlKey, metaKey, altKey, shiftKey }` | An intercepted shortcut was pressed. |
+| `events.guestWheel` | `{ id, deltaX, deltaY, ctrlKey, metaKey, altKey, shiftKey }` | Horizontal scrolling was intercepted. |
+| `events.rendererCrashed` | `{ guestId, code, recovering }` | A guest's renderer stopped. Sabine reloads it unless it stopped three times within a minute. |
+
+## Driving guests from Rust
+
+The app can manage guests itself, for example to restore a session's tabs before its page loads,
+with `GuestHostControl` through `SabineProcess::guest_control` or the
+[`BridgeEventEmitter`](/docs/bridge/events/):
+
+```rust
+use sabine::prelude::*;
+use sabine::{GuestBounds, GuestCreateOptions, GuestHostControl, GuestPopupPolicy};
+
+fn main() {
+    SabineWindow::main_with_process(
+        |window| Ok(window.app()),
+        |process| {
+            process.guest_control(&GuestHostControl::Create(GuestCreateOptions {
+                id: Some("docs".into()),
+                url: Some("https://docs.example.com".into()),
+                bounds: GuestBounds::new(0, 48, 1024, 720),
+                partition: Some("docs".into()),
+                popup_policy: GuestPopupPolicy::OpenGuest,
+                ..GuestCreateOptions::default()
+            }));
+        },
+    );
+}
+```
+
+`GuestHostControl` has a variant for each operation: `Create`, `Destroy`, `Navigate`, `SetBounds`,
+`SetVisible`, `SetCovered`, `Focus`, `Reload`, `GoBack`, `GoForward`, `SetZoom`,
+`ExecuteJavaScript` and `DownloadAction`. Controls go to every window and take effect without an
+answer; the page sees the results through the guest events above, and `guest.list()` lists guests
+the app created alongside its own.
+
+<Aside>
+Guest pages are other people's code. Keep `allowBridge` off for anything you don't serve
+yourself, and treat what a guest reports, such as its title or a download's file name, as text
+from the web.
+</Aside>

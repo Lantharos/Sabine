@@ -1,0 +1,336 @@
+---
+title: Commands
+description: Register Rust functions the page can call, answer them synchronously or asynchronously, and call them from the page.
+sidebar:
+  order: 1
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A command is a named Rust function that the app's pages can call. You register commands on the
+`SabineWindow` builder before the window launches; the page calls them by name and gets a promise
+for the answer. Commands are the only way a page reaches your Rust code, and a page can call only
+the commands you registered.
+
+## A first command
+
+Typed commands deserialize the page's params into a Rust type and serialize your return value as
+JSON. Both types also derive `specta::Type`, which lets Sabine write a
+[TypeScript client](/docs/bridge/typed-bindings/) for them. Add the dependencies next to `sabine`:
+
+```toml
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+specta = { version = "=2.0.0-rc.27", features = ["derive"] }
+```
+
+Then register the command:
+
+```rust
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
+use sabine::prelude::*;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+#[derive(Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+struct RenameNote {
+    id: u64,
+    new_title: String,
+}
+
+#[derive(Serialize, Type)]
+struct RenamedNote {
+    id: u64,
+    title: String,
+}
+
+fn main() {
+    SabineWindow::main(|window| Ok(window.app().bridge_typed("notes.rename", rename_note)));
+}
+
+fn rename_note(request: RenameNote) -> Result<RenamedNote, BridgeError> {
+    let title = request.new_title.trim();
+    if title.is_empty() {
+        return Err(BridgeError::new("A note needs a title"));
+    }
+    Ok(RenamedNote {
+        id: request.id,
+        title: title.to_string(),
+    })
+}
+```
+
+The page calls it through the generated bindings:
+
+```ts
+import { commands } from "./bindings";
+
+const { title } = await commands.notesRename({ id: 7, newTitle: "Groceries" });
+```
+
+## Ways to register a command
+
+| Builder method | Handler | Use it for |
+| --- | --- | --- |
+| `bridge_typed(name, handler)` | `Fn(Req) -> Result<Res, BridgeError>` | Most commands: typed params in, JSON out, included in the bindings. |
+| `bridge_typed_async(name, handler)` | `Fn(Req) -> impl Future<Output = Result<Res, BridgeError>>` | Typed commands that wait on I/O, timers or other tasks. |
+| `bridge_handler(name, handler)` | `Fn(BridgeCommand) -> BridgeResult` | Commands that read the raw call: bytes the page sent, the calling window or origin, or that answer with bytes. |
+| `bridge_handler_async(name, handler)` | `Fn(BridgeCommand) -> impl Future<Output = BridgeResult>` | The same, asynchronously. |
+| `bridge_descriptor_handler(descriptor, handler)` | `Fn(BridgeCommand) -> BridgeResult` | A raw command that one more origin may call. See [Security](/docs/bridge/security/#commands-for-one-more-origin). |
+| `bridge_descriptor_handler_async(descriptor, handler)` | `Fn(BridgeCommand) -> impl Future<Output = BridgeResult>` | The same, asynchronously. |
+
+Every handler is `Send + Sync + 'static`, since calls run on other threads, and every future is
+`Send + 'static`. Registering a name twice keeps the last handler.
+
+Only commands registered with `bridge_typed` and `bridge_typed_async` appear in the generated
+bindings. Commands registered with the raw methods are called with `invoke` by name.
+
+### Raw commands
+
+A raw handler receives a `BridgeCommand`:
+
+| Field | Type | Contents |
+| --- | --- | --- |
+| `name` | `String` | The command's name. |
+| `params` | `serde_json::Value` | The params the page passed, `{}` when it passed none. |
+| `body` | `Option<Vec<u8>>` | Bytes the page sent with the call, if any. |
+| `window` | `Option<WindowId>` | The window whose page made the call. |
+| `origin` | `Option<String>` | The calling document's origin, such as `sabine://app` or `https://app.example.com`. |
+
+It answers with a `BridgeResponse`: `BridgeResponse::json(value)` resolves the page's promise with
+that value, and `BridgeResponse::bytes(bytes)` resolves it with a `Uint8Array`.
+
+This app keeps attachments in its data folder. The page sends a file's contents as bytes and reads
+them back as bytes, without JSON or base64 in between:
+
+```rust
+use std::path::PathBuf;
+
+use sabine::prelude::*;
+
+const APP_ID: &str = "com.example.notes";
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .bridge_handler("attachments.save", save_attachment)
+            .bridge_handler("attachments.read", read_attachment))
+    });
+}
+
+fn attachment_path(command: &BridgeCommand) -> Result<PathBuf, BridgeError> {
+    let name = command.params["name"]
+        .as_str()
+        .filter(|name| !name.is_empty() && !name.contains(['/', '\\']) && *name != "..")
+        .ok_or_else(|| BridgeError::new("`name` must be a plain file name"))?;
+    Ok(AppEnvironment::current()
+        .app_data_dir(APP_ID)
+        .join("attachments")
+        .join(name))
+}
+
+fn save_attachment(command: BridgeCommand) -> BridgeResult {
+    let path = attachment_path(&command)?;
+    let contents = command
+        .body
+        .ok_or_else(|| BridgeError::new("the call carries no file"))?;
+    std::fs::create_dir_all(path.parent().expect("attachments live in a folder"))
+        .and_then(|()| std::fs::write(&path, contents))
+        .map_err(|error| BridgeError::new(format!("could not save the attachment: {error}")))?;
+    Ok(BridgeResponse::json(serde_json::Value::Null))
+}
+
+fn read_attachment(command: BridgeCommand) -> BridgeResult {
+    let path = attachment_path(&command)?;
+    let contents = std::fs::read(path)
+        .map_err(|error| BridgeError::new(format!("could not read the attachment: {error}")))?;
+    Ok(BridgeResponse::bytes(contents))
+}
+```
+
+```ts
+import { invoke } from "@lantharos/sabine";
+
+await invoke("attachments.save", { name: file.name }, { body: file });
+const bytes = await invoke<Uint8Array>("attachments.read", { name: file.name });
+```
+
+## Async handlers
+
+Synchronous handlers run on a pool of four worker threads per window. A handler that waits on
+slow work holds one of them for as long as it waits, and calls queue behind it. Register commands
+that wait on I/O, timers or other tasks with `bridge_typed_async` or `bridge_handler_async`
+instead: their futures are awaited on `sabine::async_runtime()`, so waiting holds no thread.
+
+`sabine::async_runtime()` returns a handle to the process's Tokio runtime, which has two worker
+threads and starts the first time it is used. Sabine runs its own desktop work on it too, such as
+notifications, the tray icon and portal requests. Tokio's timers, file system and network APIs
+work inside handlers; add `tokio` to your dependencies with the features you use:
+
+```toml
+[dependencies]
+tokio = { version = "1", features = ["fs", "time"] }
+```
+
+```rust
+use std::path::PathBuf;
+
+use sabine::prelude::*;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+#[derive(Deserialize, Type)]
+struct LoadNote {
+    id: u64,
+}
+
+#[derive(Serialize, Type)]
+struct Note {
+    id: u64,
+    body: String,
+}
+
+fn main() {
+    SabineWindow::main(|window| Ok(window.app().bridge_typed_async("notes.load", load_note)));
+}
+
+async fn load_note(request: LoadNote) -> Result<Note, BridgeError> {
+    let body = tokio::fs::read_to_string(note_path(request.id))
+        .await
+        .map_err(|error| BridgeError::new(format!("could not read the note: {error}")))?;
+    Ok(Note { id: request.id, body })
+}
+
+fn note_path(id: u64) -> PathBuf {
+    AppEnvironment::current()
+        .app_data_dir("com.example.notes")
+        .join("notes")
+        .join(format!("{id}.md"))
+}
+```
+
+Spawn your own background tasks on the same runtime with `sabine::async_runtime().spawn(..)`, so
+the process keeps one small pool of async threads. Code that cannot be async, such as a
+synchronous handler, can wait on a future with `sabine::async_runtime().block_on(..)`. Async code
+never calls `block_on`; it awaits.
+
+## Errors
+
+A handler fails by returning a `BridgeError`. `BridgeError::new(message)` takes any string, and
+the page's promise rejects with an `Error` whose `message` is that string. Only the message
+crosses the bridge, so write it for the person reading it, or for the page code that shows it.
+
+Other error types convert with `map_err`:
+
+```rust
+let text = std::fs::read_to_string(&path)
+    .map_err(|error| BridgeError::new(format!("could not open {}: {error}", path.display())))?;
+```
+
+The page sees these rejections:
+
+| What happened | The promise rejects with |
+| --- | --- |
+| The handler returned `Err(BridgeError::new(message))` | `Error` with `message` |
+| A typed command's params did not deserialize | `Error`: `invalid bridge params: …` |
+| A typed command's result did not serialize | `Error`: `failed to encode bridge result: …` |
+| The handler panicked | `Error`: `Bridge handler panicked` |
+| No command of that name is registered | `Error`: `Sabine bridge command not registered: <name>` |
+| No answer arrived within `timeoutMs` | `DOMException` named `TimeoutError` |
+| The call's `signal` was aborted | The signal's `reason` |
+| The page reloaded or navigated away | `DOMException` named `AbortError` |
+| The page already waits on 128 calls | `Error`: `Sabine bridge request capacity is exhausted` |
+| The window's queue of 128 calls is full | `Error`: `Bridge request capacity is exhausted; retry later` |
+
+A panic in one handler fails only that call; the other commands keep working.
+
+## Calling commands from the page
+
+The `@lantharos/sabine` package calls commands for the page. Typed commands are easiest to call
+through the [generated bindings](/docs/bridge/typed-bindings/); every command can also be called
+by name with `invoke`:
+
+```ts
+import { invoke } from "@lantharos/sabine";
+
+const notes = await invoke<{ id: number; title: string }[]>("notes.list");
+```
+
+`invoke(name, params, options)` sends `params` as JSON (`{}` when left out) and resolves with the
+handler's answer: the JSON value it returned, or a `Uint8Array` when it answered with bytes. The
+options are:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `signal` | none | An `AbortSignal` that rejects the call when aborted. |
+| `timeoutMs` | `60000` | Rejects the call when no answer arrives in time. Between 1 and 2147483647. |
+| `body` | none | Bytes sent with the call: an `ArrayBuffer`, a typed array or `DataView`, or a `Blob`. The handler reads them as `command.body`. |
+
+```ts
+const controller = new AbortController();
+const results = invoke("search.run", { query }, { signal: controller.signal, timeoutMs: 10_000 });
+cancelButton.onclick = () => controller.abort();
+```
+
+Aborting, timing out and leaving the page release the call in the page and ignore any answer
+that arrives later. They do not stop a Rust handler that is already running, so handlers that can
+run long bound their own work.
+
+`bridge.commands()` lists every command the page may call: the app's own and Sabine's built-in
+ones.
+
+### Updates that need no answer
+
+Updates sent many times a second whose answers the page doesn't need, such as a position while
+something is dragged, go out with `bridge.send`:
+
+```ts
+import { bridge } from "@lantharos/sabine";
+
+canvas.addEventListener("pointermove", (event) => {
+  bridge.send("canvas.cursor", { x: event.offsetX, y: event.offsetY });
+});
+```
+
+`send` returns nothing and holds no slot among the page's 128 pending calls. The handler runs as
+for any other call, and its answer or error is dropped. It throws right away when the command is
+not registered. When the window's queue is full, the update is dropped.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| JSON params of one call | 1 MiB |
+| Bytes sent with one call, or answered by one handler | 32 MiB |
+| Calls one page waits on at once | 128 |
+| Calls queued for the app's handlers, per window | 128 |
+| Synchronous handlers running at once, per window | 4 |
+| Default timeout | 60 seconds |
+
+Send larger data in parts, or keep it in Rust and hand the page what it shows.
+
+## Naming commands
+
+Name commands with dots, such as `notes.rename` or `sync.status`. The bindings turn each name into
+a camelCase function, `notesRename` and `syncStatus`. Names that start with `sabine.` belong to
+Sabine's built-in commands, and `app.takeOpenUrls` is Sabine's too; don't register them.
+
+A command that exists on one desktop only is registered under `#[cfg(target_os = "...")]`, so
+pages on other desktops don't find it in `bridge.commands()`:
+
+```rust
+let window = window.app();
+#[cfg(target_os = "macos")]
+let window = window.bridge_typed("dock.setBadge", set_dock_badge);
+Ok(window)
+```
+
+<Aside>
+Commands are registered before the window launches. Windows opened later with
+`SabineProcess::open_window` share the first window's commands; handlers registered on those
+windows' builders are ignored.
+</Aside>

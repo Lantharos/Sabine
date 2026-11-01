@@ -1,0 +1,71 @@
+---
+const principles = [
+  {
+    title: "One Chromium for every app",
+    body: "Sabine apps share a single managed Chromium that is installed once, verified, and kept up to date. Yours never carries a browser of its own, so it installs small.",
+  },
+  {
+    title: "Real windows, real glass",
+    body: "Chromium renders offscreen and Sabine composes each frame on the GPU into a native window, with the compositor’s own glass: Mica and Acrylic on Windows, vibrancy on macOS, background blur on Wayland.",
+  },
+  {
+    title: "A typed bridge",
+    body: "Register a Rust function with <code>bridge_typed</code> and the page calls it through TypeScript bindings Sabine writes for you, so a misspelled field fails before the app runs.",
+    bridge: true,
+  },
+  {
+    title: "The rest of the desktop",
+    body: "Tray icons, global shortcuts, notifications, deep links and file types, single instance, autostart, clipboard and drag and drop, printing, embedded guest pages and native video.",
+  },
+  {
+    title: "Ready to ship",
+    body: "<code>sabine bundle</code> builds AppImage, deb and rpm, MSI and setup executables, dmg and .app. Signed updates wait a day, then roll out gradually.",
+  },
+];
+---
+
+<section class="frame grid grid-cols-12 gap-x-6 py-24 sm:py-32 lg:py-40">
+  <h2
+    class="statement col-span-12 self-start text-[clamp(2.1rem,4.2vw,3.6rem)] lg:sticky lg:top-16 lg:col-span-5"
+  >
+    Everything a desktop app needs, and no browser in the box.
+  </h2>
+
+  <dl class="col-span-12 mt-16 lg:col-span-6 lg:col-start-7 lg:mt-3">
+    {
+      principles.map((principle) => (
+        <div class="principle grid gap-2 py-8 first:pt-0 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:gap-8">
+          <dt class="text-[1.12rem] leading-snug font-semibold tracking-[-0.015em]">{principle.title}</dt>
+          <dd class="text-navy-700">
+            <p class="leading-[1.65]" set:html={principle.body} />
+            {principle.bridge && (
+              <div class="mono mt-5 grid gap-3 text-navy-700">
+                <p>
+                  <span class="block text-navy-300">src/main.rs</span>
+                  .<span class="text-clay-600">bridge_typed</span>(<span class="text-olive-600">"app.greet"</span>,
+                  greet)
+                </p>
+                <p>
+                  <span class="block text-navy-300">ui/src/main.ts</span>
+                  await commands.<span class="text-clay-600">appGreet</span>({"{ name }"})
+                </p>
+              </div>
+            )}
+          </dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>
+
+<style>
+  .principle :global(code) {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    color: #2a3759;
+  }
+
+  .principle + .principle {
+    border-top: 1px solid rgb(29 42 74 / 0.12);
+  }
+</style>

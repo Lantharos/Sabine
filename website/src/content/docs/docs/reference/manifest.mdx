@@ -1,0 +1,262 @@
+---
+title: Sabine.toml
+description: Every table and key of the Sabine.toml manifest, with its type, default and meaning.
+sidebar:
+  order: 1
+---
+
+`Sabine.toml` sits next to your app's `Cargo.toml` and describes the app to the `sabine` CLI and to
+the app itself at runtime: its identity, its web content, how it's packaged and updated, and what it
+needs from a sandbox. Bridge handlers, window chrome and sizes stay in Rust.
+
+```toml
+[app]
+id = "com.example.tern"
+name = "Tern"
+version = "1.0.0"
+icon = "assets/icon.svg"
+mime_types = ["text/markdown", "x-scheme-handler/tern"]
+
+[app.extensions]
+"text/markdown" = ["md", "markdown"]
+
+[web]
+root = "ui"
+dist = "ui/dist"
+entry = "ui/dist/index.html"
+dev_port = 5173
+build = "bun run build"
+
+[window]
+splash = true
+
+[bindings]
+path = "ui/src/bindings.ts"
+
+[resources]
+helper = "tools/helper"
+
+[updates]
+provider = "github"
+repository = "example/tern"
+public_key = "4Zc2Y0v2pZ8m0nq3w6m2b1V8x0o0Yk1o8f6lV0Gq1yE="
+
+[sandbox]
+filesystems = ["xdg-documents"]
+```
+
+Every table is optional, and a project without a `Sabine.toml` uses the defaults. Paths are relative
+to the folder that holds `Sabine.toml`. Keys Sabine doesn't know are ignored, except in `[sandbox]`,
+where they're an error, so check the spelling of keys that seem to have no effect.
+
+## How the app reads it
+
+`SabineWindow::main` and `SabineWindow::for_current_app` apply the app's manifest before your
+builder runs, so values you set in Rust win. Sabine looks for the manifest in this order:
+
+1. the file named by `SABINE_MANIFEST_PATH`, which `sabine dev` sets to the project's manifest
+2. `resources/Sabine.toml` next to the executable, where bundles put their production manifest
+3. `../Resources/Sabine.toml` from the executable, inside a macOS bundle
+4. `Sabine.toml` in the current folder, then in `CARGO_MANIFEST_DIR`
+
+`SabineWindow::with_manifest(path)` applies a particular file instead. At runtime the app uses
+`[app]` `id`, `name`, `version`, `mime_types`, `extensions` and `shared_runtime`, the production
+keys of `[web]`, `[window]`, `[updates]`, `[resources]` and, on Linux, `[sandbox]`. The other keys
+are for the CLI.
+
+Bundles don't ship your `Sabine.toml`. `sabine bundle` writes a production manifest with only what
+the app needs at runtime; see [The production manifest](#the-production-manifest).
+
+## `[app]`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `id` | string | `dev.sabine.<name>` | The app id: lowercase letters, digits, dots and hyphens, such as `com.example.tern`. Names the app's data folders, browser profile, single-instance lock, desktop entries and packages |
+| `name` | string | The Cargo package name, underscores as spaces | The display name, and the window title unless Rust sets one |
+| `version` | string | The Cargo package version | The app version, in SemVer. Updates compare it |
+| `publisher` | string | The first Cargo author's name, then `name` | Who publishes the app, for the MSI manufacturer and AppStream developer |
+| `maintainer` | string | The first Cargo author with an email | `Name <email>`; required for deb packages |
+| `license` | string | The Cargo `license` | A license identifier such as `"MIT"`; required for rpm packages |
+| `homepage` | string | The Cargo `homepage`, then `repository` | The app's website; AppStream metadata is written only with one |
+| `description` | string | | A longer description for software centers and deb and rpm packages, in paragraphs separated by blank lines |
+| `icon` | string | Found in the project | Path to an SVG, PNG, JPEG, WebP, BMP or ICO image every icon is made from |
+| `installer_image` | string | | Path to a PNG, JPEG or WebP image shown on the Windows setup pages |
+| `generic_name` | string | | What kind of app this is, such as `"Terminal"`, for launchers and the AppStream summary |
+| `categories` | array of strings | `["Utility"]` | [freedesktop menu categories](https://specifications.freedesktop.org/menu-spec/latest/category-registry.html); at least one main category |
+| `keywords` | array of strings | `[]` | Extra words launchers find the app by |
+| `listed` | boolean | `true` | Whether the app appears in launchers. An unlisted app still handles its URL schemes and documents |
+| `autostart_arguments` | string | | Arguments desktops add to the command when someone turns on starting at login, such as `"--background"` |
+| `mime_types` | array of strings | `[]` | Document MIME types the app opens, and `x-scheme-handler/<scheme>` entries for URL schemes it handles |
+| `shared_runtime` | boolean | `true` | Linux only: whether the app's pages run in the Chromium Sabine apps share. `false` starts a Chromium of the app's own |
+| `cargo_manifest` | string | `"Cargo.toml"` | The Cargo manifest of the app's executable, for projects whose app lives in another crate |
+| `command` | string | | A native command that development launchers run instead of `cargo run`; `[install] command` wins over it |
+
+The defaults that come from Cargo read the package of `cargo_manifest`, including values it inherits
+from its workspace. The icon is found at the first of `static/icon.svg`, `static/favicon.svg`,
+`src/lib/assets/favicon.svg`, `favicon.svg`, `icon.svg`, `icon.png`, `icons/icon.svg`,
+`icons/icon.png`, `desktop/icons/icon.svg`, `static/icon.png` and `desktop/icons/icon.png`.
+
+`id` must not be `.` or `..`. `name`, `version`, `publisher`, `maintainer`, `license`, `homepage`,
+`generic_name`, each keyword and `autostart_arguments` must be nonempty and contain no control
+characters. `categories` entries contain ASCII letters, digits, `-` and `_`, and one of them must
+be a main category: `AudioVideo`, `Audio`, `Video`, `Development`, `Education`, `Game`, `Graphics`,
+`Network`, `Office`, `Science`, `Settings`, `System` or `Utility`. The first main category also picks
+the macOS application category.
+
+### URL schemes and documents
+
+Each `mime_types` entry is a `type/subtype` made of letters, digits and `/-._+`. An entry of the
+form `x-scheme-handler/<scheme>` registers a URL scheme instead of a document type; the scheme must
+start with a letter and use lowercase letters, digits, `+`, `.` and `-`. URL schemes need an app
+id. [Links and documents](/docs/desktop/links-and-documents/) explains how they reach the app.
+
+### `[app.extensions]`
+
+Maps a document type from `mime_types` to the file extensions it uses:
+
+```toml
+[app]
+mime_types = ["text/markdown"]
+
+[app.extensions]
+"text/markdown" = ["md", "markdown"]
+```
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| a MIME type | array of strings | Extensions without the leading dot, in lowercase letters, digits, `+`, `-` and `_`, starting with a letter or digit |
+
+Every key must be a document type listed in `mime_types`, not a URL scheme. Extensions register the
+app under **Open with** on Windows, as shared MIME globs on Linux and as document types on macOS,
+and command-line arguments open as documents only when they name a file with one of these
+extensions.
+
+## `[web]`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `root` | string | Detected | The web project's folder, where its `package.json` is and build and dev commands run |
+| `dist` | string | `<root>/dist` | The folder of built assets that bundles ship |
+| `entry` | string | Detected | The page the app opens, inside `dist` once built |
+| `build` | string | `<package manager> run build` | The command that builds the web assets for a bundle |
+| `url` | string | | A production URL the app opens instead of packaged assets. Its origin may use the bridge |
+| `dev_url` | string | `http://localhost:<dev_port>` | The development server's URL in `sabine dev` |
+| `dev_port` | integer | Detected, then `5173` | The development server's port |
+| `dev_command` | string | `<package manager> run dev -- --port <port> --strictPort` | The command that starts the development server |
+| `allowed_origins` | array of strings | `[]` | More origins whose pages may use the bridge, such as `"https://api.example.com"` |
+| `local_files` | boolean | `false` | Lets pages load any file the user can read through `sabine://file/<absolute path>` |
+
+### Detection
+
+When `root` is unset, Sabine uses the first of `ui`, `frontend`, `web` and the project folder that
+has a `package.json`. When `entry` is unset, it uses the first of `ui/index.html`,
+`web/index.html`, `frontend/index.html` and `index.html` that exists, then `<root>/index.html`.
+`dist` defaults to `<root>/dist` when that exists or the root has a `package.json`, and to the
+entry's folder otherwise, for plain HTML apps without a build.
+
+An app with `url`, `dev_url` or `allowed_origins` and none of `root`, `entry` and `dist` is a
+remote app: Sabine looks for no local assets and runs no build. Set `root`, `dist` and `entry` too
+to ship local assets beside a site; a bundle then opens the packaged entry.
+
+The package manager is Bun when the web root has `bun.lock` or `bun.lockb`, pnpm with
+`pnpm-lock.yaml`, Yarn with `yarn.lock`, Bun when `package.json` names `bun@` as its
+`packageManager`, then Bun if it's installed and npm otherwise. `build` defaults to running the
+`build` script when `package.json` has one. The development server defaults to the `dev` script, or
+`start` without one, and `sabine dev` only starts a server when there is such a script or a
+`dev_command`.
+
+`dev_port` defaults to the port in a localhost `dev_url`, then to a `port:` setting in
+`vite.config.ts`, `vite.config.js`, `vite.config.mjs` or `vite.config.cjs` in the web root or its
+parent, then to 5173. `sabine dev` reuses a server already listening on that port, waits up to 30
+seconds for a new one to start, and stops only servers it started. `dev_url`, `dev_port` and
+`dev_command` never reach a bundle.
+
+## `[window]`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `splash` | boolean | `false` | Shows Sabine's loading screen when the page takes longer than 1.5 seconds to appear, and 120 milliseconds into a reload. Without it, a window appears with its page's first frame |
+| `splash_delay_ms` | integer | `1500` | How long a launch takes before the loading screen shows, in milliseconds. Only with `splash = true` |
+
+## `[bindings]`
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `path` | string | The TypeScript file the app's [generated bindings](/docs/bridge/typed-bindings/) are written to |
+
+With `[bindings]`, `sabine dev` rewrites the file before it starts the page, and `sabine bindings`
+writes it or, with `--check`, fails when it's out of date.
+
+## `[resources]`
+
+Files and folders shipped beside the app, by the name the app looks them up with:
+
+```toml
+[resources]
+helper = "tools/helper"
+models = "assets/models"
+```
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| a name | string | The path of a file or folder, which must exist. Names use lowercase letters, digits, `-` and `_` |
+
+`sabine::resource_path("helper")` returns the path in the project during `sabine dev` and
+`cargo run`, and in the bundle once the app is packaged, where resources go in a `files` folder
+next to the production manifest. See [Resources and files](/docs/web/resources-and-files/).
+
+## `[install]`
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `command` | string | A native command that development launchers from `sabine install .` run instead of `cargo run`. `--command` wins over it |
+
+## `[updates]`
+
+Where installed copies look for releases. [Releases and updates](/docs/distribution/releases-and-updates/#update-settings)
+explains each setting.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `provider` | string | required | `"github"` or `"http"` |
+| `repository` | string | | `owner/name` of the GitHub repository; required with `provider = "github"` |
+| `url` | string | | The HTTPS URL of the release manifest; required with `provider = "http"` |
+| `channel` | string | `"stable"` | The channel releases must name; GitHub sources support only `stable` |
+| `policy` | string | `"automatic"` | `"automatic"`, `"notify"` or `"disabled"` |
+| `public_key` | string | Derived from `SABINE_UPDATE_SIGNING_KEY` at bundle time | The base64 Ed25519 public key releases are signed with |
+
+A table with only `policy = "disabled"` needs no provider and turns updates off; any other table
+without `provider` is an error. Without `[updates]`, bundles built in GitHub Actions update from
+their repository's releases, and others don't update.
+
+## `[sandbox]`
+
+What the app needs from a sandbox. [App sandbox](/docs/distribution/app-sandbox/) explains how each
+platform applies it.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `network` | boolean | `true` | Whether the app goes online |
+| `filesystems` | array of strings | `[]` | `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`, optionally ending in `:ro` |
+| `devices` | array of strings | `[]` | `usb`, `serial` or `all` |
+| `talk` | array of strings | `[]` | Session bus names the app calls; a trailing `.*` covers the names below it |
+| `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox; takes only `reason` beside it |
+| `reason` | string | | Why the app can't run in a sandbox, in one line. Required with `unsandboxed = true` |
+
+## The production manifest
+
+`sabine bundle` writes its own `Sabine.toml` into the bundle, next to the executable in
+`resources/` (`Contents/Resources/` on macOS). It holds:
+
+- `[app]` with `id`, `name`, `version`, `sabine` (the Sabine build the app was made with, such as
+  `"0.65"`), `shared_runtime = false` when you set it, `mime_types` and `[app.extensions]`
+- `[web]` with `entry` pointing at the packaged assets in `web/`, or `url` for a remote app, plus
+  `allowed_origins` and `local_files`
+- `[resources]` pointing at the copies in `files/`
+- `[sandbox]`, normalized, and `[window]` when `splash` is on
+- `[updates]` with the source, channel, policy and public key, plus two keys the bundle sets for
+  its package kind: `install_mode` (`"managed"` for archives, `"package"` for installers and
+  packages) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`, `"exe"` or `"dmg"`)
+
+Development keys and everything only the CLI uses stay out of it. Stores and systems read this file
+to learn about an app without starting it.

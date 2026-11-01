@@ -1,0 +1,114 @@
+@layer base, starlight, theme, components, utilities;
+
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@fontsource-variable/hanken-grotesk";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+}
+
+:root {
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+
+  --sl-color-white: #f9f4ea;
+  --sl-color-gray-1: #ece4d4;
+  --sl-color-gray-2: #c9c4b8;
+  --sl-color-gray-3: #949cb0;
+  --sl-color-gray-4: #5d6782;
+  --sl-color-gray-5: #34405e;
+  --sl-color-gray-6: #1f2a46;
+  --sl-color-black: #141d33;
+  --sl-color-accent-low: #2a3759;
+  --sl-color-accent: #c9d3ea;
+  --sl-color-accent-high: #f3ead8;
+
+  --sl-color-bg-nav: #141d33;
+  --sl-color-bg-sidebar: #141d33;
+  --sl-color-hairline-light: #26324f;
+  --sl-color-hairline: #1f2a46;
+  --sl-text-h1: 2.9rem;
+  --sl-text-h2: 1.85rem;
+  --sl-text-h3: 1.35rem;
+  --sl-text-h4: 1.1rem;
+  --sl-content-width: 46rem;
+  --sl-line-height: 1.7;
+  --sabine-code: #0f1729;
+}
+
+:root[data-theme="light"] {
+  --sl-color-white: #1d2a4a;
+  --sl-color-gray-1: #2a3759;
+  --sl-color-gray-2: #3c4866;
+  --sl-color-gray-3: #66708a;
+  --sl-color-gray-4: #9aa0ae;
+  --sl-color-gray-5: #e2d9c7;
+  --sl-color-gray-6: #f0e8d8;
+  --sl-color-gray-7: #f5eee1;
+  --sl-color-black: #f9f4ea;
+  --sl-color-accent-low: #ece3d1;
+  --sl-color-accent: #1d2a4a;
+  --sl-color-accent-high: #121a2c;
+
+  --sl-color-bg-nav: #f9f4ea;
+  --sl-color-bg-sidebar: #f9f4ea;
+  --sl-color-hairline-light: #ebe2d1;
+  --sl-color-hairline: #e2d8c5;
+  --sabine-code: #f3ecdd;
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4),
+h1#_top {
+  font-weight: 560;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+h1#_top {
+  font-weight: 520;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.sl-markdown-content :not(pre) > code {
+  font-size: 0.86em;
+  padding: 0.12em 0.36em;
+  border-radius: 0.35rem;
+  background: var(--sl-color-gray-6);
+  border: none;
+}
+
+.sl-markdown-content a {
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+
+.sl-markdown-content a:hover {
+  text-decoration-color: currentColor;
+}
+
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+}
+
+.sidebar-content .large {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--sl-color-white);
+}
+
+nav.sidebar a[aria-current="page"] {
+  font-weight: 600;
+}
+
+.sidebar-pane,
+.right-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sl-color-gray-5) transparent;
+}

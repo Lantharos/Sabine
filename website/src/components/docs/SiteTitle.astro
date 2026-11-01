@@ -1,0 +1,26 @@
+---
+import Swallow from "../home/Swallow.astro";
+---
+
+<a href="/" class="site-title">
+  <Swallow class="mark" />
+  <span>Sabine</span>
+</a>
+
+<style>
+  .site-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .mark {
+    height: 1.35rem;
+    width: auto;
+  }
+</style>

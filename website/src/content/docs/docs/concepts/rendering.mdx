@@ -1,0 +1,198 @@
+---
+title: Rendering
+description: How Chromium's off-screen frames reach a native window on each platform, what happens when the GPU path fails, and how Sabine recovers from lost devices and compositors.
+sidebar:
+  order: 2
+---
+
+import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
+
+Chromium never draws into a Sabine window directly. It renders every page off screen, and the window host composes those frames into the native window with its own GPU renderer. This is the same on every platform: there is no windowed mode and no other web engine. What differs is how a frame moves from Chromium's GPU process into the window's GPU device without being copied through the CPU.
+
+Each platform has exactly one paint policy. Apps don't choose a renderer, a transport or Chromium's graphics flags.
+
+## The pieces
+
+- **Chromium** draws each page on the GPU and hands every frame to the browser process, the Sabine host, through CEF's accelerated paint callback.
+- **The Sabine host** copies the part of the frame that changed into a texture Sabine owns, and tells the window which texture holds the new frame.
+- **The window host** samples that texture directly in its renderer, built on wgpu: Vulkan on Linux, D3D12 on Windows and Metal on macOS. On Linux it uses OpenGL only when no Vulkan adapter can present to the window.
+
+The GPU instance is shared by every window in a process and survives window recreation, so a recreated window reuses the driver connection instead of initializing the driver again. A new instance replaces it only after a lost device, or when it no longer finds an adapter.
+
+## Why Sabine copies each frame
+
+CEF lends its frame to the callback and gives it back to Chromium's pool as soon as the callback returns, and Chromium starts drawing the next frame into it right away. A window that sampled Chromium's texture later could show a half-drawn frame. So the host copies each frame, on the GPU, into one of four slots Sabine owns for each surface, and the window samples the slot:
+
+1. Chromium paints. The host picks a free slot and copies into it only the area that changed since that slot last received a frame.
+2. The slot's texture travels to the window once, the first time it is used. Later frames only name the slot.
+3. The window imports the texture once, samples it without copying, and acknowledges the slot only after the GPU work that read it has finished.
+4. The host never reuses a slot before its acknowledgement.
+
+When the window falls behind, a newer frame for the same surface replaces the queued one and its slot is released at once. When every slot is in use, the host drops the intermediate frame and asks for the newest paint once a slot frees up. It never falls back to reading pixels back to the CPU.
+
+Slots belong to one browser and are released when it closes, or replaced when the surface is resized. Popups and guests have slots of their own, and the window evicts their textures once they are retired.
+
+## Per platform
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+
+Chromium renders into dma-bufs. The host imports each one into Vulkan with its DRM format modifier and copies it into one of four Sabine-owned dma-bufs per surface. The copy runs on the GPU the desktop composites on, which Chromium renders on too, matched by its DRM device node, so laptops whose page renders on one GPU never copy every frame across to another. Chromium's pooled buffers are imported once and reused.
+
+Each owned dma-buf reaches the window once, as a file descriptor on the socket with its modifier, stride and offset. The window samples it through wgpu's Vulkan device.
+
+Synchronization depends on the driver:
+
+- **Mesa.** The host does not wait for its copy. It attaches the copy's completion as a sync file to Chromium's buffer, which Chromium's next draw waits for, and to the owned dma-buf, which the window's next GPU submission waits for. The host waits on the CPU only before copying into a slot again.
+- **NVIDIA, or where a sync file can't be exported or attached.** The host waits until each copy has finished before the callback returns.
+- **Chromium older than 158** hands over a frame once its draw is submitted rather than finished, and passes no fence with it, so the host waits for Chromium's drawing through the fences on the dma-buf. NVIDIA's driver puts none there, so a slot also copies again the area its previous frame changed. Chromium 158 and newer deliver finished frames, and neither step is needed.
+
+A copy that takes longer than a second makes the device finish all its work before anything is reused, and counts as a lost device if it never does.
+
+The accelerated path needs a runtime from CEF 156.0.3 on. Older runtimes hand NVIDIA drivers empty shared textures, so on them every page paints in software from the start.
+
+Sabine runs only in Wayland sessions, and Chromium uses its Wayland platform. Chromium's Wayland fractional-scale support is turned off, since it reads each page's scale from a native window that off-screen pages don't have; pages paint at the scale the window reports instead.
+
+  </TabItem>
+  <TabItem label="Windows">
+
+Chromium renders with ANGLE on D3D11, on the adapter the window composites on: the window passes its DXGI adapter LUID to Chromium. The host opens each of Chromium's pooled textures once on D3D11, keeps it while it stays in the pool, and copies the changed area into one of four Sabine-owned D3D12 shared textures per surface. A handle value Chromium reuses for a new texture is told apart by the kernel object it names. Chromium's frames may be BGRA or RGBA.
+
+Chromium creates its texture without a keyed mutex and fences only between its own devices, so nothing would make its next draw wait for Sabine's copy. The host therefore waits on a D3D11 fence until the copy has finished before it returns, checking the fence's value rather than trusting its event. A copy that doesn't finish within a second counts as a lost device.
+
+Each owned texture's handle is duplicated straight into the window's process, once, with the first frame that uses it. Windows of one app that share a browser process each receive their own handles. The window opens each texture on wgpu's D3D12 device and keeps it until the host retires it on resize or browser close. Acknowledgements are sent by a completion worker after submitted GPU work stops using a texture, so the last frame retires even while the window is idle or closing. A GPU wait that fails for five seconds starts device recovery without blocking the window.
+
+If the window's device lands on a different adapter than the browser's, Sabine restarts the browser on the window's adapter. `SABINE_TRACE=1` prints the compositor adapter and the LUID passed to Chromium.
+
+  </TabItem>
+  <TabItem label="macOS">
+
+Chromium renders into IOSurfaces. The host wraps each of Chromium's pooled surfaces as a Metal texture once, blits the changed area into one of four Sabine-owned IOSurfaces per surface, and waits for the blit to finish before it returns: Chromium reuses its surface without checking whether it is still in use, so a copy that was only scheduled could read the next frame.
+
+Each owned IOSurface reaches the window once, as a Mach port sent to a bootstrap service set up for that window's connection. Messages carry the window's socket token and anything else is discarded. Frames then refer to the surface by its id. A frame that names a surface whose announcement is still on its way waits for it briefly; every other frame goes straight through. The window wraps each surface as a Metal texture once and acknowledges it after GPU work stops sampling it.
+
+  </TabItem>
+</Tabs>
+
+| Platform | Frames | Window renderer |
+| --- | --- | --- |
+| Linux | Chromium dma-buf, copied into four acknowledged dma-buf slots per surface, fenced | wgpu on Vulkan |
+| Windows | Chromium D3D11 texture, copied into four acknowledged D3D12 shared textures per surface | wgpu on D3D12, presented through DirectComposition |
+| macOS | Chromium IOSurface, copied into four acknowledged IOSurface slots per surface | wgpu on Metal |
+
+## Damage
+
+Chromium reports which rectangle of a page changed, and that is all Sabine copies and uploads:
+
+- Every slot remembers the area that changed since it last received a frame, and a frame copies only that area into it.
+- On Linux, Chromium reports damage against the frame before, so a frame that follows one the host never copied is copied whole.
+- Chromium changes some pixels without reporting them, such as the edges of icons and rounded corners when an animated layer comes or goes. Once a page has painted nothing for 100 milliseconds, the Linux host copies its last frame again whole from the buffer Chromium drew it into, so the window settles on the page exactly as drawn.
+- Software paints upload only their dirty rectangles.
+
+Composing the window is cheap by comparison: a redraw draws a handful of textured quads for the page, its popups, its guests and Sabine's own chrome, and changed pixels only travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip or a menu changes. Its display list, vertex data and surface ids are reused between redraws, and GPU vertex buffers grow geometrically, so a redraw allocates nothing.
+
+Each window composes these surfaces:
+
+- the main page
+- the page's popup, such as an open `<select>`
+- one texture for each guest, and each guest's own popup
+
+Guests are drawn in the order they stack in the browser, which is also the order pointer input finds them in: a guest raised by focus is drawn above the others, each guest's popup right above its guest, and the page's popup above everything.
+
+## Software painting
+
+When shared GPU frames turn out not to work on the machine, the window falls back to software painting for that window:
+
+- Chromium paints the page in software because its GPU process is gone or unusable.
+- A loaded page has sent no shared frame the window could use within two seconds.
+- On Linux, the copy device fails for good.
+- The window can't import the browser's frames, such as a Linux window whose device can't import dma-bufs.
+- On Linux, the runtime is older than CEF 156.0.3.
+
+The browser logs why its frames were dropped, against the size and scale the window needs. The window records `Painting without shared GPU frames:` with the reason in its `gpu` log and starts the browser again with software painting, which reloads the page. Frames dropped along the way are only reported with `SABINE_TRACE=1`.
+
+### Shared-memory paint
+
+In software, Chromium hands over BGRA dirty rectangles. Sabine moves them without per-frame allocation, mapping or file writes:
+
+- A paint of 256 KiB or more is copied into one of at most four reusable shared-memory slots per window. The window maps each slot once and hands it back with a release message once its pixels are consumed.
+- On Linux and macOS a slot reaches the window as a file descriptor with its first paint. On Windows it is a file mapping whose handle the browser duplicates, read-only, into the window's process.
+- Smaller paints travel inline on the socket, and so does a paint that finds every slot still in use.
+- Every rectangle in a batch refers to the batch's single byte buffer. Rectangles outside the surface are left out; a paint is dropped only when its pixels are cut short.
+
+The window uploads each changed rectangle from those bytes into the surface's GPU texture. wgpu stages the upload once on its way to the GPU, with no other copy on the CPU.
+
+## Presenting
+
+Presenting never blocks the window's thread:
+
+| Platform | Present mode |
+| --- | --- |
+| Linux | Mailbox where the driver offers it, otherwise FIFO. Each frame asks the compositor for a frame callback, and further redraws wait for it. |
+| Windows | Mailbox, into a visual of the window's own DirectComposition tree |
+| macOS | Immediate while windowed, since the window server composites the layer at the display's pace anyway; FIFO in fullscreen, so a layer the display scans out directly doesn't tear |
+
+Frame pacing follows the monitor's current display mode, and updates when the window moves, changes scale or size, or regains focus. An explicit `active_frame_rate` overrides it.
+
+Page textures are placed on the window's pixel grid and drawn pixel for pixel, so pages stay sharp at fractional scales. Window and page positions use the display's scale factor down to a quarter, the precision Chromium renders at. Main paints must match the pixel size Chromium gives the page exactly, which Chromium rounds up in single precision: a 1180-point page at a scale of 4/3 is 1574 pixels wide, not 1573. A change of scale alone counts as a resize, so the page repaints at the new scale.
+
+### Resizing
+
+A Wayland window shows a new size from its next commit. After the desktop configures a new size, as for maximizing, snapping or fullscreen, the window keeps its last frame on screen and commits the new size together with the first page frame painted at it, or after 100 milliseconds if the page is slower. While an edge is being dragged, a resize that arrives before the page has caught up with the previous one is committed right away with the last frame the page painted, so the window follows the pointer at the desktop's pace.
+
+On Windows and macOS, the window resizes its surface and presents the last frame at its original logical size right away, while Chromium catches up.
+
+Resize messages coalesce to the newest size on Chromium's UI thread. Frames that Chromium painted for a size the page is moving away from are discarded, so the window never stretches a stale frame or shows a half laid-out one.
+
+## The first frame on Linux
+
+A Linux window without Sabine's own titlebar or a loading screen doesn't wait for its graphics device to show the page. The page's first frame goes to the desktop compositor as it is: a dma-buf shown in a subsurface of the window, over a buffer with the window's background color, and the window appears with it. The window's device starts once that frame is on screen, so it never competes with Chromium for the first frame. When the device has the page's latest frame, the subsurface comes down with the window's own first frame in one commit.
+
+A compositor without `linux-dmabuf`, subsurfaces or viewports, or one that can't import the frame's format, leaves the window to wait for its device instead.
+
+On every platform the window's graphics device starts on a thread of its own, so the browser's connection, bridge calls and page events keep flowing while drivers start. Only what the platform ties to the window's thread happens there: on macOS, AppKit lets only the main thread create the window's Metal surface, while the adapter, device and pipelines are made on the other thread.
+
+## Transparency
+
+Windows are opaque unless they are transparent: `.transparent(true)`, or a background effect such as `.glass()`, which turns transparency on. In a transparent window:
+
+- Sabine clears the page's own background as the document starts and finishes loading, by setting `background: transparent !important` on `html` and `body`. Whatever the page paints over that is what the window shows.
+- Chromium paints premultiplied alpha, and the window presents with a premultiplied surface where the platform offers one.
+- On Windows, transparent windows have no redirection bitmap, so the page's pixels reveal the native backdrop through DirectComposition.
+- On Wayland, the window's opaque region tells the compositor which parts need no blending. The Linux first-frame buffer is drawn only under the opaque region.
+
+The window's background color is used before the first frame, under the opaque region and by Sabine's loading screen. It is passed to Chromium too, so the page doesn't jump from a different surface color before the document paints. Set it with `.background_color(SabineColor::rgb8(r, g, b))`; the default is `#111113`.
+
+Native video plays on a surface beneath the page, so it needs a transparent window. See [Glass and effects](/docs/windows/glass-and-effects/) and [Native video](/docs/web/native-video/).
+
+## Lost graphics devices
+
+A graphics device can disappear, such as when the driver resets or is updated while the app runs. The window then recreates its renderer through a new graphics instance, since the old one keeps listing the adapters from before the reset. It releases the old instance first: NVIDIA's Vulkan driver crashes when an older instance is destroyed while a newer one has a window surface.
+
+While the driver is still restarting and no adapter is available, the window looks for one every 250 milliseconds for up to 20 seconds, each attempt on a thread of its own, so the window keeps handling input and the browser's messages in the meantime. Sabine then asks Chromium to repaint its main page, popups and guests. The page keeps its state and its bridge connection.
+
+On Linux, when a copy fails on a lost device, the browser's Vulkan copy device opens a new device through a new Vulkan instance, imports Chromium's dma-bufs again into new Sabine-owned slots, and repaints every page whole. While no device is available it retries every 250 milliseconds for up to 20 seconds, and only then does the page fall back to software painting. A window whose frames fail to import because its own device was lost waits for its renderer to come back instead.
+
+On Windows, when the browser's copy device finds itself removed, or finds Chromium's frames on another adapter, it opens a new device and replaces every shared texture. If the window comes back on a different adapter, Sabine restarts the browser on that adapter, which reloads the page.
+
+Recovery is limited to three losses per minute. After that, the window closes with a diagnostic asking you to restart the application.
+
+Before the window host exits, it waits for its renderer and any device still starting, so the graphics device is destroyed before the process ends: drivers such as NVIDIA's crash when a device is destroyed while they tear down their own state at exit.
+
+## Compositor restarts
+
+On Linux, a window outlives the Wayland compositor when the desktop starts a new one on the same socket after a crash, as Luft's Kestrel and KDE Plasma do. The window's event loop connects to the new compositor and drops everything it made on the old connection: its renderer, surfaces, clipboard, on-screen keyboard request and native video. It then opens again with the same size and state and shows the page's last frame until the next one arrives. The page, its bridge connections and the app keep running. Native video stops with an `error` event, since its decoder drew into the lost connection.
+
+Chromium needs a compositor connection even though it renders off screen, and its Wayland platform ends the browser when that connection breaks. So the browser gets a Wayland display of its own inside the Sabine host: a socket in `$XDG_RUNTIME_DIR/sabine/` that offers what Chromium binds, with the buffer formats, render device and keyboard layout the desktop's compositor had when the browser started. Frames still travel to the window as dma-bufs. When the desktop's compositor doesn't take dma-bufs, the browser connects to it directly instead.
+
+## Hidden and slow windows
+
+A window that is out of sight stops painting: Chromium stops rendering it, and the window ignores paints until it is visible again and keeps its last frame while Chromium repaints. A Linux window that is unmapped while hidden reads its textures back from the GPU once and uploads them again when it returns, so it reappears with its last frame. See [Lifecycle](/docs/windows/lifecycle/) for suspending and freezing.
+
+A page that never shows a frame is reported rather than left without a trace. When a page is still loading after 30 seconds, and when a page loaded 10 seconds ago without a frame the window could show, Sabine writes to standard error and to the window log with the size, scale and painting mode the window needs against what the browser painted. The window keeps its painting mode and stays open, so a frame that arrives later still shows.
+
+<Aside>
+  Sabine leaves Chromium's GPU features at their defaults. Overriding any of the Vulkan features
+  makes ANGLE probe every installed Vulkan driver before the GPU process can answer, which delays
+  the first frame.
+</Aside>

@@ -1,0 +1,115 @@
+---
+title: Environment variables
+description: Every environment variable Sabine reads or sets, what it does, and which part of Sabine it applies to.
+sidebar:
+  order: 5
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Sabine reads a small set of its own variables, all prefixed `SABINE_`, and a number of standard ones from the desktop. Each table says where a variable applies:
+
+- **App**: your app's executable, including its window hosts.
+- **Host**: the Sabine host, Chromium's browser process.
+- **CLI**: the `sabine` command.
+- **Service**: `sabine-service` and its daemon, and the setup an app runs on first launch.
+
+## Debugging and diagnostics
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `SABINE_TRACE` | App, host | Prints launch stages with their timings, host and GPU details, and frames dropped on the way to the window, to standard error. Accepts `1`, `true`, `yes`, `on` or `trace`, in any case. |
+| `SABINE_CHROMIUM_LOG` | App | A file path. Chromium's browser process writes its own log there at info level. Sandboxed Chromium processes, such as the GPU and renderer processes, can't open the file and keep writing their warnings and errors to the window host's log. |
+| `SABINE_DEVTOOLS_PORT` | App, in development | The remote debugging port for development runs, instead of 9222 or the port the app sets with `.debug(port)`. Use a different port for each app to debug several at once. `0` lets Chromium choose a free port, which it prints as `DevTools listening on ws://…`. Ignored in production. |
+
+```sh
+SABINE_TRACE=1 SABINE_CHROMIUM_LOG=/tmp/chromium.log sabine dev
+SABINE_DEVTOOLS_PORT=9333 sabine dev
+```
+
+See [Troubleshooting](/docs/reference/troubleshooting/) for what these show.
+
+## Development
+
+`sabine dev` sets these for the app it runs, and production builds clear them. You rarely set them yourself, but they explain how a development run finds its manifest and server.
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `SABINE_ENV` | App, CLI | `development` or `production`. Selects the environment: the `.dev` app identity, development environment files, and which desktop registrations happen. When it is unset, a non-empty `SABINE_DEV_URL` means development, and anything else production. The CLI sets it for app builds, web builds and `sabine dev`, including `sabine dev --release`. |
+| `SABINE_DEV_URL` | App | The development server's URL. The window loads it instead of the production entry, and its loopback origins are allowed to use the bridge. `SabineWindow::for_current_app` uses it too. |
+| `SABINE_MANIFEST_PATH` | App | The path to `Sabine.toml`. Without it, Sabine looks next to the executable, in the working directory, and in the Cargo package directory. |
+| `SABINE_APP_ID` | App, CLI | Replaces the app id from `Sabine.toml`, before your builder runs. `sabine dev` sets it to the app id with `.dev` appended, and development launchers from `sabine install` set it too. |
+| `SABINE_WEB_ENTRY` | App | A local HTML file to load instead of the manifest's entry or URL. |
+| `NODE_ENV` | Builds | `development` or `production`, set by the CLI for the builds it runs, matching `SABINE_ENV`. |
+
+The CLI also loads `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` from the project, and any files passed with `--env-file`, into the environment of the Rust and web builds. Variables already set in the process take precedence. These files are build inputs and never ship with the app.
+
+### Bindings
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `SABINE_BINDINGS` | App | Set by `sabine bindings` to the path of the TypeScript bindings file. The app writes its bindings there and exits instead of opening a window. |
+| `SABINE_BINDINGS_CHECK` | App | Set by `sabine bindings --check`. The app fails with an error instead of writing when the file is out of date. |
+
+## Packaging and releases
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `SABINE_BUILD_TARGET` | Cargo build | Set by `sabine bundle` for the app's Cargo build: `linux`, `windows` or `macos`. Build scripts can read it. |
+| `SABINE_UPDATE_SIGNING_KEY` | CLI | The app's private Ed25519 update signing key, base64. `sabine bundle` writes its public key into the bundle, and fails if `[updates]` names a different public key. `sabine release-manifest` signs the update manifest with it. Inside GitHub Actions, bundles with updates enabled require it. |
+| `SABINE_MACOS_SIGNING_IDENTITY` | CLI | Developer ID Application identity in the keychain. Signs every framework, helper and executable inside an `.app` before the bundle itself, with the hardened runtime, and signs disk images. |
+| `SABINE_NOTARY_APPLE_ID` | CLI | Apple ID for notarization. Set together with the next two. |
+| `SABINE_NOTARY_TEAM_ID` | CLI | Team ID for notarization. |
+| `SABINE_NOTARY_PASSWORD` | CLI | App-specific password for notarization. |
+| `SABINE_WINDOWS_CERTIFICATE` | CLI | Path to a `.pfx` Authenticode certificate. Signs every `.exe` and `.dll` the app ships, and the MSI or setup `.exe`. |
+| `SABINE_WINDOWS_CERTIFICATE_PASSWORD` | CLI | Password of that certificate. |
+| `SABINE_WINDOWS_CERTIFICATE_SHA1` | CLI | Thumbprint of a certificate in the Windows certificate store, instead of a `.pfx`, for certificates on a token or in a cloud signing service. Set this or `SABINE_WINDOWS_CERTIFICATE`, not both. |
+| `SABINE_WINDOWS_TIMESTAMP_URL` | CLI | RFC 3161 timestamp server. `http://timestamp.digicert.com` by default. |
+| `GITHUB_REPOSITORY` | CLI | In GitHub Actions, bundles without an `[updates]` table update from this repository's releases. `sabine release-init` uses it when no `--repository` is given. |
+| `GITHUB_REF_NAME` | CLI | `sabine release-manifest` checks that the release tag matches the app's version, such as `v1.0.0`. |
+| `GITHUB_ACTIONS` | CLI | When set, a bundle with updates enabled must have a signing key. |
+| `SOURCE_DATE_EPOCH` | CLI | The release date written into Linux AppStream metadata, for reproducible packages. The current time when unset. |
+| `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS` | CLI | Kept for Windows builds, with Sabine's flags for the static C runtime and the GUI subsystem added. |
+
+See [Code signing](/docs/distribution/code-signing/) and [Releases and updates](/docs/distribution/releases-and-updates/).
+
+## Sabine system
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `SABINE_FULL_ACCESS` | App, Linux | When set, the app runs without Sabine's app sandbox even if `Sabine.toml` declares one. A system sets it for an app the person gave full access. |
+| `SABINE_HOST_PATH` | App, CLI | Path to a Sabine host executable to use instead of the one beside the app or in the installed Sabine. |
+| `SABINE_SERVICE_PATH` | App, CLI, Service | Path to a `sabine-service` executable to use instead of the installed one. It is used only when the daemon sits beside it. |
+| `SABINE_RELEASE_MANIFEST_URL` | Service, CLI | An HTTPS URL of the Sabine release manifest to install from, instead of the published releases. The manifest's signature is still checked. |
+
+<Aside type="caution">
+  `SABINE_HOST_PATH`, `SABINE_SERVICE_PATH` and `SABINE_RELEASE_MANIFEST_URL` exist for building and
+  testing Sabine itself. Don't set them for apps you ship.
+</Aside>
+
+## Standard variables
+
+Sabine follows the platform's own variables for folders, sessions and launches.
+
+| Variable | Applies to | What it does |
+| --- | --- | --- |
+| `XDG_DATA_HOME` | App, CLI, Service, Linux | Sabine's data folder, `$XDG_DATA_HOME/sabine`, and the app's data folder. Default `~/.local/share`. |
+| `XDG_CACHE_HOME` | App, Service, Linux | Browser profiles, under `$XDG_CACHE_HOME/sabine/profiles`. Default `~/.cache`. |
+| `XDG_CONFIG_HOME` | App, Service, Linux | Autostart entries, `mimeapps.list` and the daemon's systemd unit. Default `~/.config`. |
+| `XDG_STATE_HOME` | App, Linux | Where `.remember_size()` keeps the window's size. |
+| `XDG_DATA_DIRS` | App, Linux | Searched for installed desktop entries. |
+| `XDG_RUNTIME_DIR` | App, host | Window sockets, the shared runtime's socket, and Chromium's private Wayland display. Without it, window sockets go in `~/.cache/sabine/run/`. |
+| `WAYLAND_DISPLAY` | App, host, Linux | The compositor to connect to, passed on to the shared runtime. |
+| `XDG_ACTIVATION_TOKEN`, `DESKTOP_STARTUP_ID` | App, Linux | The activation token a launcher handed the app. The first window uses it to take focus, and Sabine removes it from the environment of window hosts so later windows don't reuse it. |
+| `APPIMAGE`, `APPDIR` | App, Linux | Set by the AppImage runtime. Sabine registers URL handlers, native messaging hosts and updates against the AppImage file instead of its temporary mount. |
+| `ZYPAK_BIN` | App, Linux | Inside a Flatpak-style sandbox, where Zypak lives. Sabine starts Chromium through it. |
+| `CHROME_DEVEL_SANDBOX` | Host, Linux | Read by Chromium: a root-owned setuid sandbox helper, for kernels without user namespaces. |
+| `AMD_DEBUG` | App, Linux | Passed to Chromium with `nodcc` added: Chromium can't share the buffers Mesa's AMD driver gives it with delta color compression, and no frame would reach the window. Your other options are kept. |
+| `LD_LIBRARY_PATH` | App, Linux | Kept for Chromium, with the runtime's library folder in front. |
+| `HOME` | Everything, Linux and macOS | The base of the default folders above. |
+| `LOCALAPPDATA` | App, Service, Windows | Sabine's data folder, `%LOCALAPPDATA%\Sabine`, and browser profiles. |
+| `APPDATA` | App, CLI, Windows | The app's data folder, `%APPDATA%\<app id>`. |
+| `ProgramFiles` | Service, CLI, Windows | The system-wide Sabine folder, `%ProgramFiles%\Sabine`. |
+| `USERPROFILE` | Service, Windows | The home folder when `LOCALAPPDATA` is unset. |
+| `TMP`, `TEMP` | App, Windows | The temporary folder, which holds window sockets in `sabine`. |
+| `CARGO_MANIFEST_DIR` | App | Set by `cargo run`. Sabine looks for `Sabine.toml` in that folder, so `cargo run` works without `sabine dev`. |

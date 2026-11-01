@@ -1,0 +1,135 @@
+---
+title: Appearance and the shell
+description: Follow the desktop's light or dark style and accent color, and open links and folders in the person's own apps.
+sidebar:
+  order: 9
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+## Light, dark and the accent color
+
+Pages read the desktop's light or dark preference and the accent color people chose with the
+package's `system.appearance()`, and hear about changes through `events.appearanceChanged`:
+
+```ts
+import { events, system, type SystemAppearance } from "@lantharos/sabine";
+
+function applyAppearance({ colorScheme }: SystemAppearance) {
+  document.documentElement.dataset.theme = colorScheme;
+  document.documentElement.style.colorScheme = colorScheme;
+}
+
+applyAppearance(await system.appearance());
+events.appearanceChanged(applyAppearance);
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `colorScheme` | `"light" \| "dark"` | The desktop's preference. |
+| `accentColor` | `string \| null` | The accent color as `#rrggbb`, or `null` where the desktop has none. |
+
+Changes of the light or dark style and of the accent color arrive as they happen, on every
+desktop. Each window sends `appearanceChanged` only when something actually changed.
+
+### The accent color in CSS
+
+The accent color is also set on the page as the `--sabine-accent-color` CSS property, and kept
+current, so styles can use it without any script. Give it a fallback for desktops without an
+accent color:
+
+```css
+:root {
+  --accent: var(--sabine-accent-color, #3d7cf5);
+}
+
+button.primary {
+  background: var(--accent);
+}
+```
+
+### From Rust
+
+The app hears the same through `SabineWindow::on_appearance_changed`, called with the window's id
+and an `Appearance`, starting with the appearance the window opens with:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window.app().on_appearance_changed(|window, appearance| {
+            let scheme = if appearance.dark { "dark" } else { "light" };
+            let accent = appearance.accent_hex().unwrap_or_default();
+            eprintln!("window {window} is now {scheme} {accent}");
+        }))
+    });
+}
+```
+
+`Appearance` has `dark: bool` and `accent: Option<[u8; 3]>`, an sRGB color, and `accent_hex()`
+returns the accent as a CSS hex color.
+
+### On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sabine follows the `color-scheme` and `accent-color` settings of the XDG desktop portal, which
+    GNOME, KDE Plasma and other desktops provide. When the desktop states no light or dark
+    preference, the window's own theme decides. A desktop without an accent color setting reports
+    `null`.
+  </TabItem>
+  <TabItem label="Windows">
+    The light or dark style follows the window's theme, which follows the app mode in Windows'
+    color settings. The accent color is the one Windows uses for window frames, and Sabine reads
+    it again whenever Windows reports changed colors.
+  </TabItem>
+  <TabItem label="macOS">
+    The light or dark style follows the window's appearance. The accent color is the system's
+    control accent color, read again whenever macOS changes its system colors.
+  </TabItem>
+</Tabs>
+
+## Opening links and folders
+
+Hand web and mail links to the person's default browser or mail app, and folders to their file
+manager, with the package's `shell`:
+
+```ts
+import { shell } from "@lantharos/sabine";
+
+await shell.openLink("https://example.com/help");
+await shell.openLink("mailto:support@example.com");
+await shell.showFolder(exportFolder);
+```
+
+`openLink` accepts `http:`, `https:` and `mailto:` links. Other schemes, and links containing
+control characters, are refused, since opening them could start programs. `showFolder` accepts an
+existing folder and rejects with a message for anything else, including files.
+
+Both promises settle once the desktop has opened the link or folder, or once the person closed an
+app chooser the desktop showed. They reject when the desktop couldn't open it.
+
+Only the app's own pages can call them. A page that shows [guests](/docs/web/guests/) opens the
+links a guest asks for itself, from `events.guestNewWindow`.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Both go through the XDG desktop portal's OpenURI interface, so they also work inside a sandbox.
+    The window names itself as the parent of any app chooser the desktop shows, so the chooser
+    stays over it, and on Wayland it passes an activation token so the app that opens takes focus.
+  </TabItem>
+  <TabItem label="Windows">
+    Both use the shell's open action, the same as double-clicking in Explorer. `showFolder` opens
+    the folder by its plain path in File Explorer.
+  </TabItem>
+  <TabItem label="macOS">
+    `openLink` hands the link to Launch Services. `showFolder` opens a Finder window on the folder
+    itself, so an app bundle or other package shows its contents instead of launching.
+  </TabItem>
+</Tabs>
+
+## Related pages
+
+- [Window chrome](/docs/windows/window-chrome/) covers the window's own colors and controls.
+- [Guests](/docs/web/guests/) covers `events.guestNewWindow`.

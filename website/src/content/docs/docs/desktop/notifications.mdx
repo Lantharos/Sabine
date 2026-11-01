@@ -1,0 +1,183 @@
+---
+title: Notifications
+description: Show desktop notifications from the page or from Rust, replace them, and react when people click or dismiss them.
+sidebar:
+  order: 3
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine shows notifications through each desktop's own notification service. The app's pages use the
+standard `Notification` API, and Rust code shows the same notifications through the app's process.
+
+## From the page
+
+`new Notification(title, options)` shows a notification right away. The app's own pages never need
+to ask for permission: `Notification.permission` is `"granted"`, `Notification.requestPermission()`
+resolves `"granted"`, and the notifications permission query reports `granted`.
+
+```ts
+const notification = new Notification("Upload finished", {
+  body: "Holiday photos.zip is ready to share",
+  tag: "upload",
+  urgency: "low",
+  category: "transfer.complete",
+});
+
+notification.addEventListener("click", () => openUploads());
+notification.addEventListener("close", () => forgetUpload());
+notification.addEventListener("error", (event) => console.warn(event.message));
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `body` | `""` | The text below the title. |
+| `tag` | none | A notification shown with the tag of an earlier one replaces it. |
+| `silent` | `false` | Show it without a sound. |
+| `urgency` | `"normal"` | `"low"`, `"normal"` or `"critical"`. |
+| `category` | none | A [freedesktop category](https://specifications.freedesktop.org/notification-spec/latest/categories.html) such as `"email.arrived"` or `"im.received"`. Only Linux notification servers use it. |
+| `data` | `null` | Any value you want to keep on the notification object. |
+
+`urgency` and `category` are Sabine's additions to the standard options. TypeScript's DOM types
+don't list them, so pass them through an object typed as `NotificationOptions & { urgency?: string;
+category?: string }` if you use strict types.
+
+### Events
+
+A notification fires the standard events:
+
+| Event | When |
+| --- | --- |
+| `show` | Sabine handed the notification to the desktop. |
+| `click` | Someone clicked it. Sabine also brings its window forward. |
+| `close` | It was dismissed, closed with `notification.close()`, or replaced by one with the same tag. |
+| `error` | The desktop couldn't show it. The `ErrorEvent`'s `message` says why. |
+
+`onshow`, `onclick`, `onclose` and `onerror` work as well. Notifications have no action buttons, so
+`Notification.maxActions` is `0`.
+
+### Replacing and closing
+
+Show a notification with the same `tag` to update it in place, for example to count up a progress
+message. The earlier notification fires `close`, and the desktop replaces it instead of stacking a
+new one. Call `notification.close()` to take one down.
+
+```ts
+let progress: Notification | undefined;
+
+function reportProgress(done: number, total: number) {
+  progress = new Notification("Uploading", {
+    body: `${done} of ${total} files`,
+    tag: "upload-progress",
+    silent: true,
+  });
+}
+
+function finish() {
+  progress?.close();
+}
+```
+
+A notification without a tag gets an id of its own. The page keeps track of its latest 64
+notifications, so events for older ones are no longer delivered to their objects.
+
+## From Rust
+
+`SabineProcess::notify` shows a notification from the app's first window, and
+`BridgeEventEmitter::notify` from any window you name. Both return `false` when the window isn't
+open.
+
+```rust
+use sabine::prelude::*;
+use sabine::{Notification, Urgency};
+
+fn main() {
+    SabineWindow::main_with_process(
+        |window| Ok(window.app().title("Mail")),
+        |process| {
+            process.notify(
+                &Notification::new("new-mail", "New message from Ana")
+                    .body("Are we still on for Friday?")
+                    .urgency(Urgency::Normal)
+                    .category("email.arrived"),
+            );
+        },
+    );
+}
+```
+
+| Builder | Default | Meaning |
+| --- | --- | --- |
+| `Notification::new(id, title)` | | Showing a notification with the id of one on screen replaces it. |
+| `.body(text)` | empty | The text below the title. |
+| `.silent(bool)` | `false` | Show it without a sound. |
+| `.urgency(Urgency)` | `Urgency::Normal` | `Urgency::Low`, `Urgency::Normal` or `Urgency::Critical`. |
+| `.category(text)` | none | A freedesktop category, read only by Linux notification servers. |
+
+Clicks, closes and failures reach that window's pages as the bridge events `notification.click`,
+`notification.close` and `notification.error`, each carrying the notification's `id`, and a
+`message` for errors:
+
+```ts
+import { listen } from "@lantharos/sabine";
+
+listen<{ id: string }>("notification.click", ({ id }) => {
+  if (id === "new-mail") openInbox();
+});
+```
+
+A notification shown from the page has the id `tag:<tag>` when it has a tag, so pick Rust ids that
+don't start with `tag:`.
+
+## Urgency
+
+Urgency decides how much a notification interrupts, as far as the desktop allows:
+
+| Urgency | Linux | Windows | macOS |
+| --- | --- | --- | --- |
+| Low | Low | Goes straight to the notification center without a banner | Passive: listed without lighting up the screen or playing a sound |
+| Normal | Normal | Normal | Active |
+| Critical | Critical on notification servers, which keep it until it is dismissed, and urgent through the portal | High priority | Time sensitive |
+
+## On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    While a notification server runs on the session bus, as it does on KDE Plasma, XFCE and most
+    other desktops, Sabine talks to it directly through `org.freedesktop.Notifications`. The
+    notification carries the window's title as its app name and the app id as its desktop entry, and
+    uses `silent`, `urgency` and `category`. Clicks and dismissals are reported.
+
+    Otherwise Sabine uses the XDG desktop portal, which desktops such as GNOME route to their own
+    notification service. The portal names the app by its installed desktop entry; an app without
+    one still shows its notifications. The portal has no setting for sounds or categories, and
+    doesn't report notifications people dismiss, so `close` fires only when the app closes or
+    replaces a notification.
+
+    On Wayland, the desktop hands an activation token over with each click, which Sabine uses so
+    the window can take focus.
+  </TabItem>
+  <TabItem label="Windows">
+    Notifications are toasts. Windows ties toasts to an AppUserModelID, so the app takes its app id
+    as its AppUserModelID and registers its name for it under the current user. Toasts show the app
+    name without the app being installed or having a Start menu shortcut. Clicks and dismissals
+    are reported.
+  </TabItem>
+  <TabItem label="macOS">
+    Notifications go through the user notification center, which only serves bundled apps. The
+    first notification asks people whether the app may show notifications. Notifications show as
+    banners even while the app is in front, and clicks and dismissals are reported.
+
+    <Aside type="caution">
+      An app run outside its `.app` bundle, such as with `cargo run`, can't show notifications;
+      each one fires `error` with a message saying so. Test notifications with a bundled build.
+    </Aside>
+  </TabItem>
+</Tabs>
+
+Service worker notifications aren't supported.
+
+## Related pages
+
+- [Bridge events](/docs/bridge/events/) covers `listen` and events sent from Rust.
+- [Bundling](/docs/distribution/bundling/) builds the macOS bundle notifications need.

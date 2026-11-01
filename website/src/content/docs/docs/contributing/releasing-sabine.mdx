@@ -1,0 +1,149 @@
+---
+title: Releasing Sabine
+description: Publish a Sabine release with scripts/publish.sh, and how releases reach installed machines.
+sidebar:
+  order: 2
+---
+import { Steps } from "@astrojs/starlight/components";
+
+Sabine's CLI, service, daemon and prebuilt CEF host are released together as one release, tagged
+`vMAJOR.BUILD`. Cargo and npm need three version components, so the same release is
+`MAJOR.BUILD.0` in `Cargo.toml` and `package.json`. Ordinary releases advance the build; a
+fundamental break in Sabine's contract advances the major.
+
+## Publishing
+
+Release from a clean `main` branch that matches `origin/main`, with the GitHub CLI signed in:
+
+```sh
+scripts/publish.sh --dry-run
+scripts/publish.sh --prepare
+scripts/publish.sh
+```
+
+| Mode | Does |
+| --- | --- |
+| `--dry-run` | Prints the version change and the files it would edit, and changes nothing |
+| `--prepare` | Writes the version edits and runs the checks, without committing, tagging or pushing |
+| no flag | Prepares, commits, tags and publishes the release, and watches it through |
+
+The script takes an optional version, such as `0.66`, `v0.66` or `0.66.0`; it can't go below the
+current version. Without one it picks the next build, or, when the current version has no tag
+yet, the current version, so a release you prepared and committed is published as it is.
+
+### What publishing does
+
+<Steps>
+
+1. Checks that you're on `main` with no uncommitted changes and that the tag doesn't exist. When
+   publishing, it also fetches `origin`, requires local `main` to match `origin/main` exactly, and
+   checks that the repository has its `SABINE_UPDATE_SIGNING_KEY` secret and immutable releases.
+
+2. Writes the version edits: the workspace and internal dependency versions in `Cargo.toml` and
+   `Cargo.lock`, `package.json`, the version constants in `crates/sabine-service/src/types/mod.rs`,
+   the version in `README.md`, `packages/sabine/README.md` and the Windows runtime check workflow,
+   and the changelog heading.
+
+3. Runs `cargo fmt --all --check`, `cargo build`, `cargo test` and warning-free `cargo clippy` for
+   the workspace, `actionlint` when it's installed, extracts the release notes, and runs
+   `git diff --check`. `--prepare` stops here.
+
+4. Commits the edits as a signed `Prepare Sabine <version>` commit, pushes it, and waits for CI to
+   pass on that commit.
+
+5. Creates a signed `v<version>` tag, pushes it, and waits for the release workflow to finish.
+
+</Steps>
+
+The script never replaces an existing tag. If something fails after the tag is pushed, inspect its
+release workflow instead of tagging again.
+
+### The release workflow
+
+Pushing the tag runs `.github/workflows/release.yml`, which checks that the tag matches the
+workspace version and, on Linux x86_64 and ARM64, Windows x86_64 and ARM64, and macOS Apple
+Silicon:
+
+- builds the CLI and service in release mode, and on Windows checks that they need no C runtime
+  redistributable and that the daemon is a GUI program that stays up
+- builds the CEF host against the current runtime with `sabine runtime prepare`
+- lays out the service, daemon and host with `sabine system-release-stage`, and checks with
+  `sabine runtime doctor` that the staged host renders and shuts down
+- packs `sabine-system-<platform>` and `sabine-cli-<platform>` archives, zip on Windows and gzip
+  tarballs elsewhere
+
+It then writes `sabine-release.json` with `sabine system-release-manifest`, signed with Sabine's
+own `SABINE_UPDATE_SIGNING_KEY`, records build provenance attestations, and publishes the GitHub
+release with that version's changelog section as its notes. The release is published outside
+GitHub's `latest` channel.
+
+## Raising the oldest supported app build
+
+Every Sabine release declares the oldest app build it still runs, `MIN_SUPPORTED_APP_BUILD`.
+Preparation compares the host protocol version, `HOST_PROTOCOL_VERSION` in
+`crates/sabine-host/src/protocol.rs`, with the one in the last release. When it changed, the release
+raises the oldest supported app build to its own build, because apps built against the earlier host
+can't talk to the new one.
+
+That has consequences on every machine:
+
+- Installed Sabines hold the release while any installed app would stop running on it, and install
+  the newest earlier release meanwhile. The held release installs once those apps update or are
+  removed. Apps run from `sabine dev` don't hold it back.
+- An app built before the change shows an incompatibility notice once its machine runs the release,
+  until the app ships a build made with the new Sabine.
+
+So change the host protocol only when the host and apps really can't understand each other any more,
+and expect every app to need a new release afterwards.
+
+## Promotion to latest
+
+Installed daemons look for new Sabine releases through GitHub's `latest` release. A release stays
+outside `latest` when it's published, and the `Promote soaked Sabine release` workflow, which runs
+every hour, promotes it later. It only ever looks at the newest release, and promotes it once that
+release has been out for a day.
+
+The cooldown is intentional. While releases keep landing less than a day apart, `latest` stays
+where it is, because each new release restarts the wait. When the busy stretch ends, the newest
+release becomes `latest` a day later, and people get one update instead of one for every release.
+On top of that, each installation waits out the usual
+[24-hour soak and its rollout offset](/docs/distribution/releases-and-updates/#soak-and-rollout)
+before installing.
+
+`sabine update` doesn't wait for promotion: it looks at the newest published stable release
+directly, and applies the soak unless you pass `--force`.
+
+## The changelog
+
+`CHANGELOG.md` keeps the whole release history, newest first. Write changes under
+`# Unreleased` as you make them; preparation renames that heading to `# Sabine <version>`. If there
+is no `# Unreleased` section and no section for the version, preparation writes one from the commit
+subjects since the last tag.
+
+Each GitHub release shows only its own section. `scripts/release_notes.py <tag>` prints it, and fails
+when the section is missing or empty, which stops the release.
+
+Write entries about behaviour people notice, in the present tense: what an app, a page or the person
+using it can do, and what behaves differently.
+
+## Sabine's icon
+
+Sabine's icon masters live in `assets/icon`:
+
+| File | Is |
+| --- | --- |
+| `sabine.svg` | The light tile |
+| `sabine-small.svg` | A simplified drawing of it for 32 pixels and below |
+| `sabine-dark.svg`, `sabine-dark-small.svg` | The dark tile and its small drawing |
+| `sabine-macos.svg` | The macOS tile, drawn on Apple's icon grid |
+
+After changing one, run:
+
+```sh
+python3 scripts/icons.py
+```
+
+It needs ImageMagick 7 built with librsvg. It renders the hicolor PNGs from 16 to 512 pixels and the
+scalable SVG into `crates/sabine-service/icons/hicolor`, the Windows icon
+`crates/sabine-service/icons/sabine.ico`, and the macOS icon set from the macOS tile, all of which
+the crates embed. Sizes up to 32 pixels use the small drawing.

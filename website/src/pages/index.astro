@@ -1,0 +1,24 @@
+---
+import Apps from "../components/home/Apps.astro";
+import Header from "../components/home/Header.astro";
+import Hero from "../components/home/Hero.astro";
+import Principles from "../components/home/Principles.astro";
+import Start from "../components/home/Start.astro";
+import "../components/home/home.css";
+import Site from "../layouts/Site.astro";
+---
+
+<Site
+  title="Sabine"
+  description="Rust framework for native desktop apps powered by Chromium, on Linux, Windows and macOS."
+>
+  <div class="home">
+    <Header />
+    <main>
+      <Hero />
+      <Principles />
+      <Apps />
+    </main>
+    <Start />
+  </div>
+</Site>

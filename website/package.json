@@ -1,0 +1,28 @@
+{
+  "name": "sabine-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun astro dev",
+    "build": "bun --bun astro build",
+    "preview": "bun --bun astro preview",
+    "check": "bun --bun astro check",
+    "deploy": "bun --bun astro build && wrangler deploy"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.8",
+    "@astrojs/starlight-tailwind": "^5.0.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.4.4",
+    "sharp": "^0.35.5",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "starlight-links-validator": "^0.27.0",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.156.0"
+  }
+}

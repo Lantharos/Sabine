@@ -1,0 +1,82 @@
+---
+import { tag } from "~/version";
+import Swallow from "./Swallow.astro";
+
+const commands = [
+  `cargo install --git https://github.com/Lantharos/Sabine --tag ${tag} sabine-cli`,
+  "sabine new my-app",
+  "cd my-app",
+  "sabine dev",
+];
+---
+
+<footer class="start relative isolate overflow-hidden bg-navy-900 text-cream-100">
+  <Swallow class="giant pointer-events-none absolute -z-10" />
+
+  <div class="frame grid grid-cols-12 gap-x-6 pt-24 pb-10 sm:pt-32 lg:pt-44">
+    <div class="col-span-12 lg:col-span-5">
+      <h2 class="statement text-[clamp(2.1rem,4.2vw,3.6rem)]">Start your first Sabine app.</h2>
+      <a
+        href="/docs/start/quick-start/"
+        class="mt-8 inline-block text-cream-300 underline decoration-cream-100/30 underline-offset-[0.3em] transition hover:text-cream-100 hover:decoration-cream-100"
+        >Read the quick start</a
+      >
+    </div>
+
+    <div class="col-span-12 mt-14 lg:col-span-6 lg:col-start-7 lg:mt-3">
+      <ol class="mono grid gap-2.5 text-cream-200">
+        {
+          commands.map((command) => (
+            <li class="command">
+              <span class="text-navy-300 select-none">$ </span>
+              {command}
+            </li>
+          ))
+        }
+      </ol>
+      <button
+        type="button"
+        class="copy mt-8 cursor-pointer rounded-full bg-cream-100/10 px-4 py-2 text-[0.92rem] text-cream-100 transition hover:bg-cream-100/18"
+        data-commands={commands.join("\n")}
+      >
+        Copy commands
+      </button>
+    </div>
+
+    <div
+      class="col-span-12 mt-28 flex flex-col gap-4 text-[0.92rem] text-navy-300 sm:flex-row sm:items-end sm:justify-between lg:mt-48"
+    >
+      <p class="max-w-md">Sabine is made by Lantharos and released under the MIT or Apache-2.0 license.</p>
+      <nav class="flex gap-6">
+        <a href="/docs/start/introduction/" class="transition hover:text-cream-100">Docs</a>
+        <a href="https://github.com/Lantharos/Sabine" class="transition hover:text-cream-100">GitHub</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .command {
+    padding-left: 1.2em;
+    text-indent: -1.2em;
+    overflow-wrap: break-word;
+  }
+
+  .giant {
+    width: max(30rem, 62vw);
+    right: -14vw;
+    bottom: -9vw;
+    color: #24325a;
+  }
+</style>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".start .copy")) {
+    const label = button.textContent!.trim();
+    button.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(button.dataset.commands!);
+      button.textContent = "Copied";
+      setTimeout(() => (button.textContent = label), 1600);
+    });
+  }
+</script>

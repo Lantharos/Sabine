@@ -1,0 +1,40 @@
+---
+import { Image } from "astro:assets";
+import terrace from "./terrace.jpg";
+---
+
+<section class="frame grid grid-cols-12 gap-x-6 pt-8 sm:pt-14 lg:pt-12">
+  <h1 class="display rise col-span-12 text-[clamp(2.65rem,7.4vw,6.75rem)] lg:col-span-11">
+    Rust framework for native desktop apps powered by Chromium.
+  </h1>
+
+  <div
+    class="rise col-span-12 mt-8 flex flex-col gap-8 sm:mt-10 lg:col-span-4 lg:mt-12 lg:self-start lg:pr-6"
+    style="--delay:0.15s"
+  >
+    <p class="max-w-[26rem] text-[1.12rem] leading-[1.55] text-navy-700">
+      Write the interface with HTML, CSS and TypeScript and everything underneath in Rust, then ship it as a real
+      native app on Linux, Windows and macOS.
+    </p>
+    <div class="flex items-center gap-7 text-[0.98rem]">
+      <a
+        href="/docs/start/quick-start/"
+        class="rounded-full bg-navy-900 px-5 py-2.5 font-medium text-cream-100 transition hover:bg-navy-700"
+        >Get started</a
+      >
+      <a href="https://github.com/Lantharos/Sabine" class="text-navy-700 transition hover:text-clay-600">GitHub</a>
+    </div>
+  </div>
+
+  <figure class="bleed unveil col-span-12 mt-14 lg:col-span-8 lg:mt-12" style="--delay:0.25s">
+    <Image
+      src={terrace}
+      alt="A painted stone terrace with sheer curtains lifting in the wind and a swallow over the hills"
+      widths={[640, 1020]}
+      sizes="(min-width: 1024px) 66vw, 100vw"
+      loading="eager"
+      fetchpriority="high"
+      class="aspect-[4/5] w-full object-cover object-[58%_50%] sm:aspect-[16/11] lg:aspect-[16/10] lg:rounded-l-[1.25rem] lg:object-[50%_42%]"
+    />
+  </figure>
+</section>

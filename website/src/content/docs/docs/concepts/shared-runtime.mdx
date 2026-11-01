@@ -1,0 +1,254 @@
+---
+title: Shared runtime
+description: The Sabine system every app on a machine shares, how it downloads and validates Chromium, how apps and Sabine update independently, and where its files live.
+sidebar:
+  order: 3
+---
+
+import { Aside, FileTree, TabItem, Tabs } from "@astrojs/starlight/components";
+
+Sabine apps don't ship a browser. A machine has one Sabine system, installed by the first Sabine app that runs there, and every app uses it: the Sabine service, a maintenance daemon, the Sabine host, and one or two Chromium runtimes. Your app's installer only carries your app and a small bootstrap, and the Sabine system updates on its own schedule while your app updates on yours.
+
+## What the Sabine system is
+
+| Part | What it does |
+| --- | --- |
+| `sabine-service` | Registers apps, prepares and repairs the system, installs app updates, and runs maintenance on request |
+| `sabine-service-daemon` | Runs in the background for the user and does the maintenance: runtime updates, Sabine updates, app updates, cleanup |
+| Sabine host | The CEF embedder every app's windows run their pages in. See [Architecture](/docs/concepts/architecture/#the-browser) |
+| CEF runtimes | Chromium itself, in CEF's Minimal distribution, one folder per version |
+
+The service, daemon and host are released together as one Sabine release, versioned `MAJOR.BUILD`, such as `0.66`. Cargo and npm write the same release with a trailing `.0`. CEF runtimes are a separate stream that the daemon follows on its own.
+
+## First launch
+
+The first time a Sabine app starts on a machine without Sabine, it shows a native setup window while it prepares the system:
+
+1. It downloads the Sabine release for the platform, checks its Ed25519 signature against the key built into the app and the SHA-256 of every file, and installs it into a versioned folder.
+2. It downloads the newest compatible Chromium runtime and validates it.
+3. It registers the app and starts the daemon.
+
+Closing the setup window cancels it and keeps what was downloaded, so the next attempt resumes. A failure stays on screen with the error and the location of the logs until it is dismissed.
+
+Every later app on the machine finds the system ready and starts without a setup window. Offline bundles carry a real runtime and the complete Sabine system inside the app. On first launch they adopt those into the normal shared layout, so both keep updating like any other installation.
+
+## Chromium runtimes
+
+Runtimes come from the CEF build index at `cef-builds.spotifycdn.com`, which lists every archive with its size and SHA-1. Sabine downloads the Minimal distribution, which keeps the build SDK but leaves out debug libraries and sample applications. The Sabine host is compiled against CEF's stable API version 15400, so any runtime from CEF 154 on works with it, and the daemon can move to newer Chromium releases without a new Sabine release. Apps negotiate Sabine capabilities and never ask for a particular Chromium version.
+
+### Installing a runtime
+
+```text
+plan → lock → download → SHA-1 verify → extract → install the version folder → ready
+```
+
+- Downloads resume with HTTP byte ranges after an interruption, and restart when the server doesn't support ranges. Sizes are checked against the index before the checksum. Transient failures get up to four attempts within a 30-minute deadline.
+- Extraction runs inside the process and rejects unsafe paths, links that leave the version folder, and device entries.
+- A runtime needs the CEF library, `icudtl.dat`, `resources.pak` and at least one locale pack to count as installed. Headers and CMake files matter only for building the host.
+- Each version installs into its own immutable folder, so apps keep running on an older version while a newer one installs.
+
+### Validation and quarantine
+
+The daemon downloads a new runtime into a folder beside the current one and starts it once with the installed host in a headless health probe: Chromium has to start, render a page off screen with the expected pixels within 25 seconds, and shut down normally. The probe uses a throwaway profile, with Chromium's mock keychain on macOS and its basic password store on Linux, so validating a runtime never asks for your keychain or keyring.
+
+A runtime that fails gets an unusable marker with the reason and is quarantined. Apps keep resolving to the previous runtime, and maintenance stays on it. Markers are tied to the probe's version, so a later Sabine with a fixed probe tries that runtime again automatically. `sabine runtime doctor` shows a quarantined runtime with its reason.
+
+### Leases and pruning
+
+Every running app holds a lease on the runtime it uses, recording its process id and start time, so a later process that happens to reuse the id doesn't hold the runtime. Creating a lease shares a short lock with replacing and pruning runtimes, so an app can't start using a runtime while it is being removed. Downloads don't hold that lock.
+
+The daemon keeps the newest two runtimes and removes older ones, but never one that is leased. You can do the same by hand:
+
+```sh
+sabine runtime list
+sabine runtime prune --keep 2
+sabine runtime remove 156.0.15+gcf671c0+chromium-156.0.8078.80
+```
+
+### Which runtime an app uses
+
+Apps resolve a runtime at launch from the validated runtimes on the machine, newest first, among those from CEF 154 on. By default the user's own runtimes come first, then a system-wide one, then one bundled with the app. `RuntimeConfig` in Rust can change that order; see [Rust API](/docs/reference/rust-api/#runtime-and-environment).
+
+## The daemon
+
+The daemon holds an operating-system file lock for as long as it runs, so two daemons can never both own the system, and a daemon that is killed releases the lock at once. It runs a maintenance pass at start and then every six hours:
+
+- Updates Chromium to the newest compatible runtime, validates it and prunes old ones.
+- Installs Sabine updates, holding back any that would stop an installed app.
+- Downloads and stages app updates.
+- Removes apps that are gone: an app whose program has been missing for a week, and a development registration from `sabine dev` that hasn't been launched for 30 days, lose their registration and everything Sabine keeps for them: login item, browser extension hosts, staged updates and downloads, Sabine's folder for the app, the desktop entries and URL handler Sabine wrote on Linux, and the app's browser profile. Installed apps whose program is still there are never removed for being unused, and an app that comes back registers again.
+
+Runtime failures are reported separately from app updates, and each failure stays in the maintenance report.
+
+| Platform | How the daemon starts |
+| --- | --- |
+| Linux | A user systemd unit, `sabine.service`, or an XDG autostart entry in sessions without a user systemd instance |
+| macOS | A LaunchAgent |
+| Windows | A hidden per-user scheduled task |
+
+Each of these restarts a daemon that crashes. The Linux unit runs the daemon through `bin/current`, a link to the active version that every update and rollback moves atomically, so removing an old version never leaves the unit pointing at a missing program. The unit follows `XDG_CONFIG_HOME` and keeps custom data, config and cache paths.
+
+## How Sabine updates
+
+Sabine releases are signed with Ed25519. The service verifies the release metadata against its built-in key and every artifact against its SHA-256, installs the new version beside the current one, and switches the active pointer atomically. The previous version stays installed as the rollback until the next successful update.
+
+The old daemon hands over to the new one from outside the service manager's job, in a systemd unit or launchd job of its own, so the handover survives the old daemon exiting. If the new version fails to start, the previous pointer and daemon are restored, the failed release is recorded, and retries back off exponentially. A daemon that can't download or stage an update reports it and keeps maintaining the installed version. A damaged installation is replaced from the signed release metadata without asking.
+
+### Rollout
+
+Routine releases, of Sabine and of apps, become eligible 24 hours after they are published, plus a rollout offset between zero and six hours that is fixed for each installation. That spreads the load and leaves time to withdraw a bad release before most machines see it.
+
+An app that needs a newer Sabine than the machine has doesn't wait. Its bundled bootstrap fetches the signed manifest of that exact Sabine build, installs it, hands the daemon over, and only then registers the app.
+
+### Compatibility in both directions
+
+Each Sabine release states its own build and the oldest app build it still runs. An app records the Sabine build it was made with in its bundled `Sabine.toml`.
+
+- **An app older than the oldest build Sabine accepts** isn't registered again and shows a notice explaining that its developer hasn't updated it for this version of Sabine. It stays registered so its update source can still deliver a compatible build: the service fetches the app's newest release right away instead of waiting for the rollout, and the app offers a downloaded update before showing the notice.
+- **An app newer than the installed Sabine** pulls the Sabine release it needs, as above.
+- **A Sabine release that would stop an installed app** is held. Before installing a release, the service checks its oldest accepted build against every installed app, both those the user installed and those installed for every user. Development builds registered by `sabine dev` never hold a release back. While a release is held, the service installs the newest earlier release that still runs every app, so fixes keep arriving. The held release and the apps it waits for are recorded in `bin/held-update.json`, and it installs on the first check after those apps update or are removed.
+
+`sabine update` does the same from the command line: it checks published releases, verifies them, applies the rollout delay, updates the CLI, service and runtime, and holds a release that would stop an installed app, naming the apps it waits for. `sabine update --force` skips only the rollout delay; signatures, checksums, version ordering and the backoff after a failed release still apply.
+
+### App updates
+
+App releases are separate from Sabine releases, so an app updates without carrying Chromium. The app's update source, signed release manifest and installers are described in [Releases and updates](/docs/distribution/releases-and-updates/).
+
+## Locks and atomic writes
+
+Registry writes, runtime installs and Sabine installs take operating-system file locks. A crashed owner releases its lock immediately, and an active operation's lock is never taken away because of its age.
+
+- The app registry is written to a temporary file, synced and renamed into place. Registering an app again keeps its original registration time.
+- File replacements keep the previous file until the rename succeeds, on Windows too.
+- Folder replacements keep the previous folder until the validated new one is in place. The next install lock restores an interrupted replacement or cleans up its backup, and the service recovers a missing active folder before trying to repair it from the network.
+
+## The shared Chromium on Linux
+
+On Linux, Sabine goes one step further: apps installed for every user share one running Chromium. One browser process, GPU process and network service serve every such app's windows, while each app keeps its own profile, and with it its own cookies, storage and renderers. Pages of different profiles never share a renderer.
+
+A window asks the runtime for its browser over a socket, and the browser then connects to the window exactly as a Chromium of the app's own would, so painting, input and the bridge work the same way.
+
+### How it runs
+
+The runtime is a socket-activated systemd user service, `sabine-runtime@<key>.service`, that the first app needing it starts as a transient unit, with its socket in `$XDG_RUNTIME_DIR/sabine-runtime/`. Only one Chromium can hold a set of profiles, so the key names that profile folder. The runtime keeps the CEF runtime, host and Chromium flags it started with: after an update, apps launched while it still runs join it, and the next runtime starts from the update once it has quit.
+
+- A runtime quits 30 seconds after its last window closed, and its socket goes with it.
+- A runtime that crashes is started again by systemd. Its windows keep showing their last frame, reconnect, and reload their pages.
+- The browser's renderers move into the systemd unit of the window that asked for them, so the desktop's memory accounting and out-of-memory handling count an app's pages as part of the app. The browser, GPU and network processes stay in the runtime's unit.
+
+A request names the app and carries only what applies to that window: its page, bridge policy, app files, local file access, frame rates, background color and transparency.
+
+### Who shares
+
+Only apps installed for every user share a runtime with each other: their program lies below `/usr/lib/sabine/<app id>/`, which only an administrator or the system image can write. Every other app, such as one a person installed for themselves or an AppImage, gets a runtime of its own. That runtime keeps Chromium's data in a `runtime` folder beside the app's profile, so its windows still share one browser process with each other but never with another app. A page that took over the browser process can then reach only its own app's profile.
+
+The runtime answers only processes of the same user whose executable is the one registered for that app, or one installed for every user. See [Security model](/docs/concepts/security-model/#the-shared-runtime).
+
+### Profiles
+
+Chromium opens profiles only directly inside its user data folder, so the shared runtime keeps each app's profile in its own folder there, `profiles/shared/` in Sabine's cache, and moves it there from the app's profile folder the first time the app uses the runtime. An app that later runs its own Chromium moves it back. A profile is never open in both at once: the runtime doesn't take an app whose own Chromium is running, and an app's own Chromium doesn't start while a runtime holds its profile.
+
+Before either opens a profile, Sabine removes the lock files a browser left behind without quitting cleanly, judged by whether a Sabine browser still runs as the process the lock names. Neither a crash nor a changed hostname keeps Chromium from opening a profile.
+
+### When an app runs its own Chromium
+
+These always run their own Chromium, as apps do on Windows and macOS:
+
+- apps that opt out with `shared_runtime = false` under `[app]` in `Sabine.toml`, or `.shared_runtime(false)` in Rust
+- development runs
+- apps with remote DevTools enabled
+- apps in an [app sandbox](/docs/distribution/app-sandbox/)
+- systems without a user systemd instance
+- a window the runtime refused
+
+```toml
+[app]
+id = "com.example.notes"
+shared_runtime = false
+```
+
+## System-wide installations
+
+An operating system image or an administrator can install Sabine and apps once for every user, so no app ever prepares a runtime on first launch:
+
+```sh
+sabine runtime install --system-wide --root /image
+sabine install --bundle --system-wide --root /image .
+```
+
+Without `--root`, both write to the running system and need administrator rights. The system folder mirrors the per-user layout, read-only: `bin/current.json` names the active version under `bin/versions/<version>/` with the service, daemon and host, and `runtimes/cef` holds one runtime. On Linux the install also adds `/usr/lib/systemd/user/sabine.service`, which starts the system's daemon for every user at login.
+
+Apps and the service prefer the system installation unless it is older than an app needs, or older than the user's own installation, which a newer app or `sabine update` may bring. When a user's installation is newer, the system's daemon hands over to it. Each user still registers apps, runs their own daemon, and keeps logs, browser profiles and app data in their own folders. While the system provides a runtime, a user's daemon validates it instead of downloading its own.
+
+An image build can run `sabine-service check-apps` from the system installation, which fails when that Sabine wouldn't run one of the apps installed for every user.
+
+## Where files live
+
+All per-user Sabine state lives in one data folder. Browser profiles live in the user's cache folder instead.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+
+| What | Where |
+| --- | --- |
+| Sabine data | `$XDG_DATA_HOME/sabine`, by default `~/.local/share/sabine` |
+| Browser profiles | `$XDG_CACHE_HOME/sabine/profiles`, by default `~/.cache/sabine/profiles` |
+| Sockets | `$XDG_RUNTIME_DIR/sabine/` and `$XDG_RUNTIME_DIR/sabine-runtime/` |
+| System installation | `/usr/lib/sabine` |
+| Apps installed for every user | `/usr/lib/sabine/<app id>/`, with a launcher in `/usr/bin` |
+
+  </TabItem>
+  <TabItem label="Windows">
+
+| What | Where |
+| --- | --- |
+| Sabine data | `%LOCALAPPDATA%\Sabine` |
+| Browser profiles | `%LOCALAPPDATA%\sabine\profiles` |
+| Sockets | `%TEMP%\sabine` |
+| System installation | `%ProgramFiles%\Sabine` |
+
+  </TabItem>
+  <TabItem label="macOS">
+
+| What | Where |
+| --- | --- |
+| Sabine data | `~/Library/Application Support/Sabine` |
+| Browser profiles | `~/Library/Caches/sabine/profiles` |
+| Sockets | `$XDG_RUNTIME_DIR/sabine/`, or `~/.cache/sabine/run/` |
+| System installation | `/Library/Application Support/Sabine` |
+
+  </TabItem>
+</Tabs>
+
+Inside the data folder:
+
+<FileTree>
+
+- apps.json the app registry
+- apps/
+  - com.example.notes/ Sabine's folder for one app
+- bin/
+  - current link to the active version
+  - current.json
+  - held-update.json a release waiting for installed apps
+  - versions/
+    - 0.66/ service, daemon and host
+- daemon-state.json the running daemon's process id and version
+- downloads/
+- executions/ launch copies of the host on macOS and Windows
+- logs/ diagnostics, one `.jsonl` file per component
+- runtimes/
+  - cef/
+    - 156.0.15+gcf671c0+chromium-156.0.8078.80-minimal/
+
+</FileTree>
+
+On macOS, Chromium's sandbox needs the framework inside the application bundle it runs from, so the first launch assembles a private bundle for the selected host and runtime under `executions/`. APFS clones share unchanged file contents, other volumes copy them once, and nested libraries and bundles are signed ad hoc from the inside out. The distributed host and framework stay unchanged, signatures included. Removing a runtime also removes its launch bundles.
+
+Each profile folder is named after a hash of the app's id, and development runs, which use the `.dev` app id, get profiles of their own. Folder names Sabine derives from paths use SHA-256, so every Sabine build and the daemon agree on them.
+
+<Aside>
+  Your app's own files don't belong in Sabine's folders. Keep them in
+  `AppEnvironment::current().app_data_dir(app_id)`, the folder Sabine's app sandbox lets the app
+  write.
+</Aside>

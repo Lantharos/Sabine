@@ -1,0 +1,112 @@
+---
+title: Introduction
+description: What Sabine is, how a Sabine app is put together, and what happens when it starts.
+sidebar:
+  order: 1
+---
+
+Sabine is a Rust framework for desktop apps whose interface is a web page. You write the
+interface with the web tools you already use, and the native side in Rust. Sabine gives the page a
+native window, a typed bridge to your Rust code, and the desktop integration an app needs: trays,
+global shortcuts, notifications, file associations, single-instance launches and updates.
+
+Sabine runs on Linux under Wayland, on Windows, and on Apple Silicon Macs.
+
+## Why Sabine
+
+Most frameworks for web-based desktop apps either ship a complete browser inside every app, or
+use whichever web view the operating system provides. The first makes every app a few hundred
+megabytes and leaves each one to patch its own Chromium. The second gives you a different engine,
+with different bugs and features, on every platform.
+
+Sabine apps share one managed Chromium runtime instead. The first Sabine app on a machine sets it
+up, and every later app uses it, so an app download contains only the app. A background service
+keeps the runtime current and validates each new Chromium build before any app uses it. Your app
+gets the same engine on every platform, and its releases are independent of Chromium's: you ship
+when your app changes, not when Chromium does.
+
+## How an app is put together
+
+A Sabine app has three parts:
+
+- **A Rust executable.** It configures the window, registers the commands the page can call, and
+  owns any native work: files, databases, background tasks, other processes.
+- **A web interface.** Any framework or none. In production it is either packaged with the app
+  as static files or loaded from a URL you host.
+- **`Sabine.toml`.** The manifest identifies the app and points at its web content. The CLI, the
+  bundler and the app itself all read it.
+
+The smallest app looks like this:
+
+```rust
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
+fn main() {
+    sabine::SabineWindow::main(|window| Ok(window.app().title("My App")));
+}
+```
+
+```toml
+[app]
+id = "com.example.my-app"
+name = "My App"
+version = "1.0.0"
+
+[web]
+root = "ui"
+dist = "ui/dist"
+entry = "ui/dist/index.html"
+dev_port = 5173
+build = "bun run build"
+```
+
+The page calls Rust through commands you register on the window. With typed commands, Sabine
+writes a TypeScript client for them, so the page and the app share one contract:
+
+```rust
+window.bridge_typed("notes.create", create_note)
+```
+
+```ts
+import { commands } from "./bindings";
+
+const note = await commands.notesCreate({ title: "Groceries" });
+```
+
+## What happens when the app starts
+
+1. **The app process starts.** `SabineWindow::main` loads `Sabine.toml` and applies your builder.
+   A single-instance app hands the launch to its running instance at this point instead.
+2. **Sabine checks the machine.** If the shared service or the Chromium runtime is missing, a
+   native setup window downloads and prepares them, with a progress bar, before anything else
+   opens. This happens once per machine, not once per app.
+3. **The app registers with the service.** The service keeps track of installed apps, updates
+   the runtime in the background, and delivers app updates.
+4. **The window opens.** Sabine starts a window host process from the same executable. Chromium
+   renders the page off screen, and the window host composes it into a native window on the GPU.
+   The window appears with the page's first frame, so it never flashes empty.
+5. **The page talks to Rust.** Bridge calls travel from the page to the window host and on to
+   your handlers in the app process. Only your own pages and origins you allow can call them.
+
+If any step fails, Sabine shows a native error window with a button that opens the logs.
+
+## Supported platforms
+
+| Platform | Requirements | Notes |
+| --- | --- | --- |
+| Linux | A Wayland session | X11 is not supported. Apps installed for every user share one Chromium process. |
+| Windows | Windows 10 or 11, x86_64 or ARM64 | Frameless windows get rounded corners on Windows 11. |
+| macOS | Apple Silicon | Intel Macs are not supported. |
+
+Every platform renders the same way: Chromium paints off screen into GPU textures that Sabine
+composes into the window, with a shared-memory fallback when GPU frames are unavailable. See
+[Platform support](/docs/concepts/platform-support/) for the details of each desktop.
+
+## Where to go next
+
+- [Installation](/docs/start/installation/) sets up the CLI.
+- [Quick start](/docs/start/quick-start/) creates an app, adds a command and builds a bundle.
+- [Project structure](/docs/start/project-structure/) explains the files in a project.
+- [Creating windows](/docs/windows/creating-windows/) covers the window builder.
+- [Commands](/docs/bridge/commands/) covers the bridge between the page and Rust.
+- [Architecture](/docs/concepts/architecture/) explains how the pieces fit together.

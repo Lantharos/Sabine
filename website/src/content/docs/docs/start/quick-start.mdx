@@ -1,0 +1,163 @@
+---
+title: Quick start
+description: Create a Sabine app, add a command the page calls through typed bindings, and package it.
+sidebar:
+  order: 3
+---
+import { Steps } from "@astrojs/starlight/components";
+
+This walkthrough creates an app from the default template, adds a Rust command that the page calls,
+and builds a package you can hand to someone else. It assumes you have
+[installed the CLI](/docs/start/installation/).
+
+<Steps>
+
+1. **Create the project.**
+
+   ```sh
+   sabine new my-app
+   cd my-app
+   ```
+
+   The name may contain letters, digits, hyphens and underscores. The app's id becomes
+   `dev.sabine.my-app`; change it in `Sabine.toml` to a reverse domain you own before you ship.
+
+   The default template is a Vite and TypeScript page with one command. For a fuller starting
+   point, `sabine new my-notes --template notes` creates a small notes app instead: a glass window
+   that draws its own titlebar, with a command its page calls through generated bindings.
+
+2. **Run it.**
+
+   ```sh
+   sabine dev
+   ```
+
+   The first run prepares Sabine's runtime, which takes a minute. After that, `sabine dev`
+   installs the page's packages if `node_modules` is missing, starts the Vite server on port 5173
+   (or reuses one already running there), writes the page's TypeScript bindings, and starts the
+   app with `cargo run`. The window opens on the development server, so page edits reload as you
+   save them.
+
+   Development runs use the app id with `.dev` appended, so they keep their own browser storage
+   and never collide with an installed copy of the app. Right-click the page and choose
+   **Open DevTools** to inspect it.
+
+3. **Look around.**
+
+   `src/main.rs` builds the window and registers the template's one command:
+
+   ```rust
+   SabineWindow::main(|window| {
+       Ok(window
+           .app()
+           .size(960, 640)
+           .bridge_typed("app.version", |_request: VersionRequest| {
+               Ok(VersionResponse {
+                   version: env!("CARGO_PKG_VERSION"),
+               })
+           }))
+   });
+   ```
+
+   `ui/src/main.ts` calls it through `ui/src/bindings.ts`, which `sabine dev` generated from that
+   registration. [Project structure](/docs/start/project-structure/) describes every file.
+
+4. **Add a command.**
+
+   Commands take a request type and return a response type. Both derive serde's traits and
+   `specta::Type`, which lets Sabine describe them in TypeScript. Add a greeting command to
+   `src/main.rs`:
+
+   ```rust
+   #[derive(Deserialize, Type)]
+   struct GreetRequest {
+       name: String,
+   }
+
+   #[derive(Serialize, Type)]
+   struct Greeting {
+       message: String,
+   }
+
+   fn greet(request: GreetRequest) -> Result<Greeting, BridgeError> {
+       let name = request.name.trim();
+       if name.is_empty() {
+           return Err(BridgeError::new("Tell me your name first"));
+       }
+       Ok(Greeting {
+           message: format!("Hello, {name}!"),
+       })
+   }
+   ```
+
+   Register it next to the existing one:
+
+   ```rust
+   SabineWindow::main(|window| {
+       Ok(window
+           .app()
+           .size(960, 640)
+           .bridge_typed("app.version", |_request: VersionRequest| {
+               Ok(VersionResponse {
+                   version: env!("CARGO_PKG_VERSION"),
+               })
+           })
+           .bridge_typed("app.greet", greet))
+   });
+   ```
+
+   Stop `sabine dev` with Ctrl+C and start it again. It rebuilds the app and rewrites
+   `ui/src/bindings.ts` with an `appGreet` function before the page loads.
+
+5. **Call it from the page.**
+
+   Add a field and a button to `ui/index.html`, inside `<main>`:
+
+   ```html
+   <input id="name" placeholder="Your name" />
+   <button id="greet" type="button">Greet</button>
+   ```
+
+   Then call the command from `ui/src/main.ts`:
+
+   ```ts
+   const name = document.querySelector<HTMLInputElement>("#name");
+
+   document.querySelector("#greet")?.addEventListener("click", async () => {
+     if (!(status instanceof HTMLElement) || !name) return;
+     try {
+       const { message } = await commands.appGreet({ name: name.value });
+       status.textContent = message;
+     } catch (error) {
+       status.textContent = error instanceof Error ? error.message : String(error);
+     }
+   });
+   ```
+
+   The function's parameter and result types come from your Rust structs, so TypeScript catches a
+   misspelled field before the app runs. An `Err` from the handler rejects the promise with its
+   message.
+
+6. **Build a package.**
+
+   ```sh
+   sabine bundle . --target portable --release
+   ```
+
+   This builds the page with `bun run build`, compiles the app in release mode, and writes an
+   archive to `dist/` that runs on any machine with the same operating system: a tarball on Linux
+   and macOS, a zip on Windows. On first launch it prepares Sabine like any installed app.
+
+   Other targets build installers and system packages, such as `deb`, `rpm`, `appimage`, `msi`,
+   `exe` and `dmg`. See [Bundling](/docs/distribution/bundling/) for each of them.
+
+</Steps>
+
+## Next steps
+
+- [Creating windows](/docs/windows/creating-windows/) covers sizes, recipes, glass and the loading
+  screen.
+- [Commands](/docs/bridge/commands/) and [Typed bindings](/docs/bridge/typed-bindings/) cover the
+  bridge in depth, including async handlers, bytes and events.
+- [Window chrome](/docs/windows/window-chrome/) shows how to draw your own titlebar.
+- [Releases and updates](/docs/distribution/releases-and-updates/) sets up automatic updates.

@@ -1,0 +1,146 @@
+---
+title: Security model
+description: The boundaries Sabine keeps between pages, your app, other apps and the rest of the system, and what each one protects.
+sidebar:
+  order: 4
+---
+
+import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
+
+A Sabine app combines native code, which can do anything its user can, with web content, which may come from anywhere. Sabine's job is to keep the two apart except through the commands you choose to expose, to keep apps apart from each other, and to make sure that what runs on the machine is what its developers released. This page walks through each boundary.
+
+| Boundary | Keeps apart | Enforced by |
+| --- | --- | --- |
+| Browser sandbox | Web content and the operating system | Chromium's sandbox, on every platform |
+| Bridge rules | Pages and your native commands | The Sabine host, before anything reaches your app |
+| Guests | Embedded third-party pages and your app | No bridge, separate storage, explicit policies |
+| Profiles | One app's web data and another's | Separate Chromium profiles per app id |
+| Window connections | A window and anything else on the machine | Per-window sockets, tokens and peer checks |
+| Shared runtime | Apps that share one Chromium on Linux | Executable checks on every request |
+| App sandbox | Your app and the rest of your files | Landlock and a system call filter on Linux |
+| Signed updates | Your users and a tampered release | Ed25519 signatures and SHA-256 checksums |
+
+## The browser sandbox
+
+Chromium's renderers, GPU process and other helpers run in Chromium's own sandbox on every platform, and Sabine never turns it off.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+
+Linux uses Chromium's namespace and seccomp sandbox. When the system's policy prevents creating user namespaces, Sabine doesn't fall back to running without the sandbox; the system has to allow it.
+
+Ubuntu and some other distributions need an AppArmor exception for Chromium hosts installed in a user's home. Generate the profile as the user who runs Sabine, and have an administrator install it:
+
+```sh
+sabine runtime sandbox-profile > sabine-apparmor
+sudo install -m 644 sabine-apparmor /etc/apparmor.d/sabine-$USER
+sudo apparmor_parser -r /etc/apparmor.d/sabine-$USER
+sabine runtime doctor
+rm sabine-apparmor
+```
+
+The profile permits user namespaces for hosts under that user's Sabine data folder, with a separate attachment for an external host if one is selected, and covers runtime updates without changing the system's global AppArmor policy. An administrator should review the paths it names: anyone able to replace an executable at those paths can use the same permission.
+
+If the kernel disables user namespaces entirely, an administrator has to enable them, or provide Chromium's root-owned setuid sandbox helper through `CHROME_DEVEL_SANDBOX`. Running a Sabine app as root is not supported.
+
+Inside a Flatpak-style sandbox, which marks its processes with `/.flatpak-info`, Chromium can't create its renderer namespaces. When the sandbox provides Zypak in `ZYPAK_BIN`, Sabine starts Chromium through it, and Chromium's helpers start in a smaller sandbox of their own through the Flatpak spawn portal, where renderers keep their namespaces and system call filter.
+
+  </TabItem>
+  <TabItem label="Windows">
+
+Windows runs CEF's bootstrap executable with the Sabine client library and its matching `chrome_elf.dll`. Every Chromium process loads `libcef.dll` by its full path, since sandboxed processes can't search `PATH`. The installer grants Windows' restricted application processes read and execute access to the host files and the runtime through access control lists, inspecting the existing permissions before changing them.
+
+  </TabItem>
+  <TabItem label="macOS">
+
+Every Chromium helper initializes the sandbox from the runtime's `libcef_sandbox.dylib` before loading the Chromium framework, and a helper whose sandbox fails to initialize stops. Chromium's sandbox needs the framework inside the bundle it runs from, so Sabine assembles a private, ad-hoc signed launch bundle per host and runtime. The distributed host bundle and its signature stay unchanged.
+
+  </TabItem>
+</Tabs>
+
+## Pages and the bridge
+
+The bridge is the only way from a page to your native code, and Sabine has no permission layer beyond it: anything a page in an allowed document can call is something your app chose to expose. What Sabine guarantees is which documents can call at all. The full rules are in [Bridge security](/docs/bridge/security/); in short:
+
+- Pages served from your app's files at `sabine://app/` are trusted.
+- A remote page is trusted only when its document's origin exactly matches an allowed origin. `.url(...)` allows that URL's exact origin, `.allowed_origin(...)` and `allowed_origins` in `Sabine.toml` add others, and development URLs add the loopback variants local toolchains need. The document's security origin has to match too, so a page sandboxed by its Content Security Policy doesn't inherit trust just by keeping an allowed URL.
+- A command registered with `BridgeCommandDescriptor::allowed_origin` lets one more origin call that one command, without window controls or app events.
+- `file://` pages, opaque documents and developer tools pages get no bridge.
+- Commands must be registered before launch. The host rejects any other command, before the request reaches your app.
+- Window and guest operations pass the same document checks as your commands.
+- Every answer is bound to the V8 context and native request it came from. Navigating, cancelling, or reusing a request id can't redirect an answer into another document.
+
+Browser permission prompts are denied, except clipboard access for your app's own documents. Camera and microphone requests are denied, and notification and geolocation requests answer with a denial instead of waiting on a prompt that can't appear. Your own pages still get desktop notifications, which Sabine shows through the window with permission always granted.
+
+### Local files
+
+A local entry is served from its folder at `sabine://app/`, a secure origin that can load only that folder's files, so a page can't read other files on disk and remote pages can't embed your app's files. Apps that enable `local_files` can also load any file the user can read at `sabine://file/<absolute path>`, and only `sabine://app/` pages can use those URLs.
+
+Browsers hide the paths of dropped files from pages. Sabine gives them to your app's own pages only, and only your own pages can drag files out of the window. Other origins and guests get neither.
+
+## Guests
+
+Guests are pages your app embeds, such as a website shown inside the window, and they are untrusted by default:
+
+- They have no bridge unless you create them with `allow_bridge`. A guest that loads HTML you supplied stays trusted when you replace that HTML through `guest.navigate`, but data URLs from elsewhere never gain access.
+- A guest with a partition gets an isolated request context, so its cookies and storage stay apart from your app's and from guests in other partitions.
+- Popups are cancelled and reported to your app unless you choose another popup policy.
+- Downloads start only after your app accepts them, and your app decides where they go.
+- Shortcuts your app intercepts never reach the guest.
+
+See [Guests](/docs/web/guests/).
+
+## Profiles
+
+Every app id gets a Chromium profile of its own, so cookies, storage, caches and renderers are never shared between apps, even when apps share a browser process on Linux. Development runs use the `.dev` app id and so a separate profile from the installed app.
+
+Chromium protects its cookie and password key with DPAPI on Windows and the desktop keyring on Linux. On macOS it uses a fixed key instead of the login keychain: Sabine's launch bundle is signed ad hoc on each Mac, so its code identity changes with every runtime or host update, and the keychain would ask for the login password each time.
+
+<Aside type="caution">
+  Chromium never encrypts web storage such as `localStorage` or IndexedDB. Keep secrets that must
+  be protected from other software running as the same user in native storage, through a bridge
+  command.
+</Aside>
+
+## Window connections
+
+Each window talks to its browser over a socket of its own, in a folder only the user can open. On Linux and macOS the window host also rejects any peer running as another user. The browser has to present a random token, read from a one-use file beside the socket, before anything else. The browser's first message states its host protocol, and a mismatched host is disconnected before any page traffic reaches your app.
+
+Every message is bounded before it is allocated or mapped: surface sizes, inline payloads, shared memory, queue lengths and line lengths all have limits, and a stuck reader can't make the other side grow without bound. See [Architecture](/docs/concepts/architecture/#window-host-and-browser).
+
+## The shared runtime
+
+On Linux, apps installed for every user can share one Chromium process. That process holds several apps' profiles, so it decides carefully who may ask for what:
+
+- It answers only processes of the same user.
+- It identifies the caller through its process id, checked against a pidfd so the process can't be swapped underneath it, and reads the caller's executable.
+- It opens an app's profile only for that app's registered executable, or for an executable installed for every user below `/usr/lib/sabine/<app id>/` that is owned by root and not writable by group or others.
+
+So no process can open another app's profile by claiming its app id. Only apps installed for every user share one runtime; apps a user installed themselves, including AppImages, each get a runtime of their own, so a page that compromised the browser process can reach only its own app's profile. See [Shared runtime](/docs/concepts/shared-runtime/#who-shares).
+
+## The app sandbox
+
+Chromium's sandbox confines web content; the app sandbox confines your app itself. An app declares what it needs in `[sandbox]` in `Sabine.toml`, using Flatpak's names, and on Linux Sabine enforces that declaration as the app launches with Landlock and a system call filter that every process the app starts inherits, Chromium included. Windows and macOS carry the declaration in every bundle but don't enforce it yet.
+
+Pages that run in the shared Chromium run in its process, which only Chromium's own sandbox confines. See [App sandbox](/docs/distribution/app-sandbox/).
+
+## Signed updates
+
+Nothing Sabine installs or updates is trusted because of where it was downloaded from.
+
+- **Sabine releases** are described by release metadata signed with Ed25519. The bootstrap and the service check that signature against the key built into them and every artifact against its SHA-256 before installing it.
+- **App updates** are signed with each app's own Ed25519 key, kept as a secret in the app's release workflow; only the public key ships in the app. The service verifies the manifest's signature, then checks the app id, channel, exact platform and package target, version, artifact URL and SHA-256 before staging it. Only releases strictly newer than the installed app count as updates, and a staged update is checked against the installed version again before Sabine offers it or starts an installer.
+- **Native packages** installed with administrator rights are copied somewhere only the administrator can write, and their SHA-256 is checked there, so the package manager installs exactly the file that matched the release.
+- **Chromium runtimes** are checked against the size and SHA-1 in the CEF build index, then started once in a health probe before any app can use them.
+
+Downloads are bounded: release manifests to 1 MiB, the CEF build index to 64 MiB, and app downloads to 8 GiB even when the server sends no length. Archives extract inside the process, with paths confined to their destination, links validated, and limits on entry count and expanded size.
+
+## DevTools
+
+Remote debugging gives full control over a browser, so it is off unless you ask for it. Development runs listen on port 9222, or `SABINE_DEVTOOLS_PORT`; production builds listen only when the app calls `.debug(port)`. The port listens on the loopback interface, and Chromium refuses connections from web pages other than its own DevTools frontend. Programs on the same machine can still connect to it while it is open, so don't ship a production build with `.debug(port)` unless you mean to.
+
+## What Sabine doesn't protect against
+
+- **Other programs running as the same user.** They can read the same files your app can, including web storage and its profile. Use the operating system's keychain or credential store for secrets.
+- **The session bus.** The Linux app sandbox doesn't filter D-Bus.
+- **Your own commands.** A bridge command that runs whatever a page sends it gives every allowed page that power. Validate parameters in Rust, and keep remote origins to the minimum your app needs.

@@ -1,0 +1,111 @@
+---
+title: Platform support
+description: The desktops Sabine runs on, what each one needs, and how every feature behaves on Linux, Windows and macOS.
+sidebar:
+  order: 5
+---
+
+Sabine supports three desktops: Linux on Wayland, Windows, and macOS on Apple Silicon. Every feature is built natively for each of them, and where a desktop lacks something, this page says so.
+
+## Supported platforms
+
+| Platform | Architectures | Requirements |
+| --- | --- | --- |
+| Linux | x86_64, ARM64 | A Wayland session. A GPU with Vulkan, or OpenGL where no Vulkan adapter can present. User namespaces for Chromium's sandbox. |
+| Windows | x86_64, ARM64 | Windows 10 or 11 with Direct3D 12 |
+| macOS | Apple Silicon | macOS 12 or later |
+
+Not supported: X11 sessions, including XWayland-only setups; Intel Macs; mobile platforms. There is no fallback to another web engine or to windowed Chromium on any platform.
+
+Building apps needs Rust 1.98 or newer and Bun. People who install your app need neither: the first Sabine app on a machine downloads the Sabine system and Chromium runtime, and every later app reuses them. See [Shared runtime](/docs/concepts/shared-runtime/).
+
+### Linux desktop services
+
+Sabine talks to the desktop through standard protocols and portals. Features whose service is missing report it in the app's diagnostics and keep the app running:
+
+| Service | Used for |
+| --- | --- |
+| XDG desktop portal | File dialogs, global shortcuts, printing, appearance, opening links and folders, notifications without a notification server |
+| `org.freedesktop.Notifications` | Notifications, when a notification server runs |
+| StatusNotifierWatcher | The tray icon |
+| A user systemd instance | The shared Chromium runtime, and starting the Sabine daemon |
+| GStreamer with `playbin3` | Native video, loaded only when a page first plays one |
+| `ext_background_effect_v1` | Glass blur |
+| `kestrel_window_v1` | Keeping a window out of the taskbar and above others |
+
+## Features by platform
+
+| Feature | Linux | Windows | macOS |
+| --- | --- | --- | --- |
+| [Rendering path](/docs/concepts/rendering/) | dma-buf frames, Vulkan | D3D11 frames shared into D3D12, DirectComposition | IOSurface frames, Metal |
+| Software paint fallback | Yes | Yes | Yes |
+| [Glass](/docs/windows/glass-and-effects/) | Blur, on compositors with `ext_background_effect_v1` | Acrylic, plus `Blur`, `Mica`, `MicaAlt` | Under-window material, plus `HudWindow`, `Sidebar` |
+| [Window chrome](/docs/windows/window-chrome/) | Page draws controls | Page draws controls; rounded frameless corners on Windows 11 | System traffic lights over the page |
+| Skip taskbar, always on top | With `kestrel_window_v1` | Yes | Yes; skip taskbar hides the Dock icon |
+| [Tray](/docs/desktop/tray/) | StatusNotifierItem with dbusmenu | Notification area | Menu bar, image only |
+| [Notifications](/docs/desktop/notifications/) | Notification server or portal | Toasts | User notifications, bundled apps only |
+| [Global shortcuts](/docs/desktop/shortcuts/) | GlobalShortcuts portal | Yes | Yes |
+| Inhibit system shortcuts | Shortcuts inhibitor protocol | Low-level keyboard hook | Event tap, needs Accessibility permission |
+| [Single instance](/docs/desktop/single-instance/) | Yes | Yes | Yes, plus Dock and Finder reopen |
+| [Deep links and documents](/docs/desktop/links-and-documents/) | Desktop entry and `mimeapps.list` | Per-user registry | Bundled apps only |
+| [Autostart](/docs/desktop/autostart/) | XDG autostart entry | `Run` registry key | LaunchAgent |
+| [Clipboard](/docs/desktop/clipboard-and-drag/) | Owned by Sabine, every type, primary selection | Chromium's, plus other types through the package | Chromium's, plus other types through the package |
+| Drag and drop | Yes | Yes | Yes |
+| [Printing](/docs/desktop/printing/) | XDG print portal | System print dialog | System print dialog |
+| File dialogs | XDG portal | Common item dialog | Sheet |
+| Touch | Yes | Yes | No touchscreens |
+| Touch keyboard | Asks the compositor when a field is focused | Comes up on a touch or pen tap | No |
+| Pen | Pressure, pen and eraser, hover, barrel buttons | Pressure, pen and eraser, hover, barrel buttons | Arrives as mouse input |
+| Input methods | Yes, with surrounding text | Yes, no surrounding text | Yes, no surrounding text |
+| [Native video](/docs/web/native-video/) | GStreamer, transparent windows | Media Foundation, transparent windows | AVFoundation, transparent windows |
+| [Native messaging](/docs/desktop/native-messaging/) | Yes, including Flatpak and Snap browsers | Yes | Yes |
+| Screen readers | No | No | No |
+| [Shared Chromium process](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux) | Apps installed for every user | No, one per app | No, one per app |
+| Browser sandbox | Namespaces and seccomp | Restricted processes | Seatbelt |
+| [App sandbox](/docs/distribution/app-sandbox/) | Enforced | Declared, not enforced | Declared, not enforced |
+| [Packages](/docs/distribution/bundling/) | deb, rpm, AppImage, tarball, portable | MSI, setup `.exe`, folder, portable zip | `.app`, DMG, portable tarball |
+| [Code signing](/docs/distribution/code-signing/) | No package signing | Authenticode | Developer ID and notarization |
+| Signed updates | Yes | Yes | Yes |
+| Survives a compositor restart | Yes | Not applicable | Not applicable |
+
+## Notes and gaps
+
+### Linux
+
+- **Wayland only.** Sabine's windows and Chromium both use Wayland. Without a Wayland session, apps don't start.
+- **Glass** is a blur through `ext_background_effect_v1`. Compositors without it, such as GNOME's, show the page over a clear window. Input and opaque regions still apply.
+- **Skip taskbar and always on top** have no standard Wayland protocol. Sabine asks the compositor through `kestrel_window_v1`, which Kestrel provides; elsewhere the window is placed like any other, and the window log says why.
+- **The tray** needs a StatusNotifierWatcher. Desktops that don't host StatusNotifierItems themselves, such as GNOME without an extension, show no tray icon. The icon registers again whenever the watcher restarts.
+- **Global shortcuts** go through the GlobalShortcuts portal. The desktop decides whether to bind them and may ask the person first; a refused shortcut is reported as `globalShortcut.failed` and the rest keep working.
+- **Clipboard.** Chromium renders off screen and can't reach the compositor's clipboard, so the window host owns it: through `ext-data-control` when the compositor offers it, otherwise through the seat's data device on the window's connection. Pages get every MIME type, and the primary selection.
+- **Touch keyboard.** When a field gains focus, Sabine asks the compositor to show its on-screen keyboard through the text input protocol, where the compositor supports it.
+- **Window focus.** Compositors give focus only with an activation token. An app's first window carries the token its launcher handed it, and clicked notifications, shortcuts and single-instance activations pass theirs on.
+- **AppArmor.** Ubuntu and similar distributions need an AppArmor profile for Chromium hosts in a user's home. See [Security model](/docs/concepts/security-model/#the-browser-sandbox).
+- **Flatpak packaging** isn't a bundle target. Apps that run inside a Flatpak-style sandbox start their own Chromium through Zypak.
+
+### Windows
+
+- **Frameless corners** are rounded on Windows 11 and square on Windows 10.
+- **Glass regions.** DWM can't blur only part of a window, so the material covers the whole window and the page's transparency decides where it shows. The input region shapes the window instead: outside it, the window neither draws nor takes clicks.
+- **Out of sight.** Windows doesn't report when a window is covered, so only a minimized window counts as out of sight.
+- **Input methods** get no text around the caret and can't delete around it.
+- **Foreground.** A second launch of a single-instance app lets the running app take the foreground, which Windows otherwise grants only to the process the person just started.
+
+### macOS
+
+- **Apple Silicon only.** Bundles require a native arm64 executable.
+- **Notifications** need a bundled app; macOS asks for permission the first time.
+- **URL schemes and document types** must be declared in the bundle before it is signed, so test them with the bundled app rather than a development run.
+- **The tray** shows only the image in the menu bar, not the title. Black-and-white icons, and icons marked as templates, follow the menu bar's appearance.
+- **Tray icons and shortcuts** need the main thread's event loop. `SabineWindow::main` and `SabineProcess::wait()` run it; call `wait()` on the main thread when you manage the process yourself.
+- **Inhibiting system shortcuts** needs the Accessibility permission. Without it the request is rejected and macOS offers to open its settings.
+- **Glass regions** follow the blur region, minus the opaque region. Outside the input region the window ignores the mouse, switching as the pointer crosses the region's edge.
+- **Input methods** get no text around the caret and can't delete around it.
+
+### Every platform
+
+- **Screen readers.** The off-screen browser's accessibility tree isn't exposed to UI Automation, NSAccessibility or AT-SPI. Semantic HTML still helps keyboard navigation, but Sabine windows aren't accessible to desktop screen readers.
+- **Codecs.** Chromium's runtime has no H.264, HEVC or AAC decoders. Play such media through [native video](/docs/web/native-video/), which needs a transparent window.
+- **Browser permissions.** Camera, microphone and geolocation requests are denied, and there is no API to grant them.
+- **Pen data.** Chromium's touch input carries no tilt, twist or barrel pressure, and no button state while the pen touches the screen.
+- **Service worker notifications** aren't supported.

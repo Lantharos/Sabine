@@ -1,0 +1,156 @@
+---
+title: Architecture
+description: The processes a Sabine app runs, how they talk to each other, and what happens between launching the app and its first frame.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+A Sabine app is one Rust executable, but it never runs as one process. Your code, each native window, and Chromium live in separate processes, and a shared service keeps the Chromium runtime and app updates in order for every Sabine app on the machine. This page explains what each process does and how they fit together.
+
+## The processes
+
+```text
+ your app process                      the shared Sabine service
+ (SabineWindow, bridge handlers,       (app registry, runtime and app
+  tray, shortcuts, notifications)       updates, maintenance daemon)
+        │  stdin / stdout pipes
+        │  one pair per window
+        ▼
+ window host  ── one per window ──────────────────────────────┐
+ (native window, GPU composition, input, IME, menus, media)    │
+        │  Unix domain socket, one per window                  │
+        │  frames as dma-buf / NT handle / IOSurface           │
+        ▼                                                      │
+ Sabine host = CEF browser process  ◄──── shared by the app's other windows
+        ├── GPU process
+        ├── network service
+        └── renderer processes (pages, guests, popups)
+```
+
+### Your app process
+
+This is the executable you build. `SabineWindow::main` applies `Sabine.toml` and your builder, then launches the window and waits for it. Everything you register on the builder runs here:
+
+- Bridge handlers. Synchronous handlers run on four worker threads per window; async handlers are awaited on `sabine::async_runtime()`, a two-thread Tokio runtime started on first use.
+- Desktop services: the tray icon, global shortcuts, the single-instance endpoint, autostart and URL handler registration, and the queue of URLs and documents the app was asked to open.
+- The `SabineProcess`, which opens and closes windows, sends events, starts activities and drives guests.
+
+Your process never touches Chromium or the GPU. If it exits or crashes, its windows close with it.
+
+### Window hosts
+
+Each window runs in a window host: your own executable, started again by Sabine with an internal argument. A window host owns everything native about one window: the window itself, its GPU device and compositor, keyboard, pointer, touch and pen input, the input method, context menus and tooltips, native video, and on Linux the clipboard and printing. It starts the window's browser and composes the pages it paints.
+
+Because the window host is your executable, it needs no separate install, and a custom `main` has to let Sabine run it before doing anything else. See [Rust API](/docs/reference/rust-api/#entry-points).
+
+### The browser
+
+The browser is the Sabine host, a small CEF embedder written in C++ that ships with Sabine rather than with your app. It is Chromium's browser process: it loads pages with off-screen rendering, serves your app's files at `sabine://app/`, enforces the bridge's document rules, and hands each painted frame to the window host. Chromium starts its usual helpers beside it: a GPU process, the network service, and sandboxed renderer processes for pages, guests and popups.
+
+All windows of one app share one browser process and one profile. Each window is still its own browser inside it, with its own socket to its own window host. Apps with different app ids always get separate profiles. On Linux, apps installed for every user also share a single Chromium process among themselves, each in its own profile; see [Shared runtime](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux).
+
+### Short-lived helpers
+
+The same executable also runs a few internal modes that come and go:
+
+- The setup window, which shows progress while the Sabine service and Chromium runtime are downloaded on first launch.
+- Notices that explain why the app could not start, with an **Open logs** button.
+- The update prompt, which runs in a process of its own so it cannot take over the app's event loop before launch.
+- Setup and uninstall steps that the Windows installers run.
+
+### The shared service
+
+The Sabine service and its maintenance daemon belong to the machine, not to your app. Apps register with the service at launch; the daemon downloads and validates Chromium runtimes, installs Sabine and app updates, and removes apps that are gone. See [Shared runtime](/docs/concepts/shared-runtime/).
+
+## How the processes talk
+
+### App and window host
+
+Each window host's standard input and output are pipes to your app process. Bridge requests from the page travel up as lines; answers, events and window commands travel down the same way. Binary payloads skip JSON and base64: a line starting with `SABINE_BRIDGE_BYTES`, a tab, the length and another tab is followed by that many raw bytes. A command can carry up to 32 MiB in its body.
+
+Sending an event waits while a window's pages have not taken earlier events, so a fast producer such as terminal output runs at the pace the page keeps up with instead of losing events. The window host keeps half of its queue for its own input, so a burst of events never drops a keystroke.
+
+When your app process exits, the window host sees its input close and closes the window, on every platform. On Linux, child processes also ask the kernel to end them when their parent dies, and on Windows each window host runs in a job that ends it when the app does.
+
+### Window host and browser
+
+Every window and its browser talk over a Unix domain socket, on every platform including Windows:
+
+| Platform | Socket location | Who may connect |
+| --- | --- | --- |
+| Linux and macOS | `$XDG_RUNTIME_DIR/sabine/<app id>/`, or `~/.cache/sabine/run/<app id>/` without `XDG_RUNTIME_DIR`; folder mode `0700`, socket mode `0600` | The same user, checked with the peer's credentials |
+| Windows | The user's own temporary folder, which other accounts cannot open | The same user, through the folder's access control |
+
+The browser authenticates with a random token it reads from a one-use file beside the socket, and the window host accepts the connection as soon as the browser dials in. The browser's first message announces its host protocol. A host that doesn't match is disconnected before any page traffic reaches your app, and the window shows a repair or update error instead.
+
+From the browser to the window, messages are binary, each starting with the versioned `SAB1` signature: paints, shared GPU frames, cursors, input method state, drag starts, guest order and page events. From the window to the browser, messages are text lines: input, resizes, visibility, bridge answers and events. Both directions are bounded:
+
+- Surface sizes, inline payloads and shared mappings are checked before anything is allocated or mapped.
+- The window's paint queue holds at most 256 MiB. Merged paints keep every dirty rectangle, up to 256 rectangles and 64 MiB per batch, and larger batches apply backpressure instead of dropping damage.
+- Control queues hold 256 messages and 64 MiB on each side. Pointer motion, wheel turns and finger moves merge with newer ones of the same kind; clicks, keys and the pointer leaving the page are always delivered in order. An ordered command that would overflow closes the connection rather than being lost.
+- Socket writes have a five-second deadline.
+
+Frames themselves don't travel on the socket. The socket carries a handle to GPU memory: a dma-buf file descriptor on Linux, an NT handle duplicated into the window's process on Windows, and an IOSurface sent as a Mach port on macOS. Software paints use shared memory. See [Rendering](/docs/concepts/rendering/).
+
+### Browser and renderers
+
+Inside Chromium, the browser process and renderers use Chromium's own IPC. Bridge calls from a page reach the browser process through it, and bridge bytes travel between them in shared memory.
+
+## Windows and browsers
+
+Every window you open has its own window host, its own socket and its own browser, and they share the app's browser process and profile:
+
+- **Same process, more windows.** `SabineProcess::open_window` starts another window host with the same app id and bridge handlers. `close_window` closes one. `wait()` returns once every window has closed, unless the app runs in the background. Closing a window never ends the app process; the app process ending closes every window. See [Multiple windows](/docs/windows/multiple-windows/).
+- **A second launch of the same app.** With single-instance enabled, the second launch hands its arguments to the running app and exits before doing anything else. Without it, the new process opens its own window and joins the running app's browser process through Chromium's profile handoff, waiting up to 15 seconds for it. The two launches still close independently. See [Single instance](/docs/desktop/single-instance/).
+- **A different app.** A different app id means a different profile, so cookies, storage and renderers are never shared.
+
+Closing a window closes only its browser; Chromium quits when the app's last browser is gone. A browser that drops its connection is closed and restarted, at most three times in 60 seconds with increasing delays, while the window keeps showing its last frame. A renderer that crashes reloads its page at most three times in 60 seconds; the fourth crash closes that browser, and on the main page becomes a native error. Pages hear about crashes through the `runtime.renderer-crashed` event, with `guestId`, `code` and `recovering` fields.
+
+On Linux, every Chromium process stays in the systemd unit the app was started in, so the desktop's portals, memory accounting and out-of-memory handling see the browser as part of your app rather than as a separate Chromium.
+
+## From launch to first frame
+
+<Steps>
+
+1. **Internal modes.** The executable checks its arguments first. A window host, setup window, notice or update prompt runs its job and exits; an ordinary launch continues.
+
+2. **Configuration.** Sabine finds `Sabine.toml` and applies it, then runs your builder, so settings made in Rust win. When `sabine bindings` started the app, it writes or checks the TypeScript bindings and exits here.
+
+3. **Development identity.** In development the app id and single-instance id get a `.dev` suffix, and update sources, URL handlers, native messaging hosts and autostart entries are left out, so a development run never touches the installed app.
+
+4. **Validation.** The app id, title, sizes and content source are checked.
+
+5. **Single instance.** If the app asks for single-instance behavior and another instance runs, the launch is handed to it and this process exits, before registering with the service or asking about an update.
+
+6. **Runtime and service.** Sabine finds a usable Chromium runtime. On a machine without one, the setup window downloads the Sabine service and runtime first. The app then registers with the service, which may answer that the app is too old for this Sabine and show a notice instead. If the service has a newer installed version of the app, the launch moves to it; if an update is waiting, Sabine offers it.
+
+7. **Desktop services.** Autostart entries, the tray icon, global shortcuts and URL handlers are set up, and the app's arguments are queued as URLs or documents to open.
+
+8. **Window host.** The app leases the runtime so it can't be removed while in use, finds the Sabine host and, on Linux, applies the app's sandbox. It then starts the window host.
+
+9. **Browser and GPU.** On Linux and macOS the window host starts Chromium before it creates the window and graphics device, sized for the monitor the window opens on, so browser startup overlaps GPU initialization. On Windows it waits for the graphics adapter, since Chromium must render on the same one; a window that starts hidden opens out of sight and starts its device right away.
+
+10. **First frame.** The window stays unmapped until its page has loaded and painted, then appears with that frame. Pages can hold it back with `appWindow.revealWhen`, for at most five seconds, and apps can show a loading screen instead. See [Lifecycle](/docs/windows/lifecycle/).
+
+</Steps>
+
+Each stage is recorded as a launch metric. `SabineProcess::metrics()` returns them with their timings, and `SABINE_TRACE=1` prints them as they happen:
+
+| Stage | Reached when |
+| --- | --- |
+| `launch.start` | The launch began |
+| `config.ready` | Configuration passed validation |
+| `single_instance.ready` | No other instance took the launch |
+| `bootstrap.ready` | A runtime is ready and the app is registered |
+| `desktop_services.ready` | Tray, shortcuts and handlers are set up |
+| `dev_server.ready` | The development server answered, in development |
+| `host.ready` | The runtime is leased and the host found |
+| `osr_host.spawned.pid.<pid>` | The first window host started |
+| `launch.ready` | `launch()` is about to return |
+
+<Aside>
+  Sabine renders every page off screen on every platform. There is no windowed Chromium mode and no
+  other web engine to fall back to.
+</Aside>

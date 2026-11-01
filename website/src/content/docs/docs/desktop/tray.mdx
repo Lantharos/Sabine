@@ -1,0 +1,246 @@
+---
+title: Tray icons
+description: Put an icon with a menu in the system tray or menu bar, and change it from Rust or the page while the app runs.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+An app can show one status icon: in the system tray on Linux and Windows, and in the menu bar on
+macOS. A left click on the icon reaches the app's pages as an activation, and a right click opens
+its menu. The menu can hold plain items, checkbox items, submenus and separators.
+
+## Adding a tray icon
+
+Give the window a `TrayIcon` with `.tray_icon(...)`. Its `id` comes back with every click, and its
+`title` names the icon for assistive technology and for desktops that list tray items; the title is
+not drawn beside the icon.
+
+```rust
+use sabine::prelude::*;
+use sabine::{TrayMenuItem, resource_path};
+
+fn main() {
+    SabineWindow::main(|window| {
+        let mut tray = TrayIcon::new("main", "Sync")
+            .tooltip("Everything is up to date")
+            .menu(vec![
+                TrayMenuItem::new("open", "Open Sync"),
+                TrayMenuItem::checkbox("pause", "Pause syncing", false),
+                TrayMenuItem::submenu(
+                    "accounts",
+                    "Accounts",
+                    vec![
+                        TrayMenuItem::new("work", "Work"),
+                        TrayMenuItem::new("personal", "Personal"),
+                    ],
+                ),
+                TrayMenuItem::separator(),
+                TrayMenuItem::new("quit", "Quit"),
+            ]);
+        if let Some(icon) = resource_path("tray-icon") {
+            tray = tray.icon(icon);
+        }
+        Ok(window.tray_app().title("Sync").size(360, 480).tray_icon(tray))
+    });
+}
+```
+
+The icon image is a file Sabine decodes itself, such as a PNG. Name it under `[resources]` in
+`Sabine.toml` so `resource_path` finds it in your project during development and in the bundle once
+the app is packaged:
+
+```toml
+[resources]
+tray-icon = "assets/tray.png"
+```
+
+Without an image, or when the file can't be read, every desktop shows a plain grey dot so the app
+stays reachable. A file that can't be read is also recorded in the app's diagnostics.
+
+### `TrayIcon`
+
+| Builder | Default | Meaning |
+| --- | --- | --- |
+| `TrayIcon::new(id, title)` | | Creates the icon. `title` is also the tooltip until you set one. |
+| `.icon(path)` | none | The image to show. |
+| `.template(bool)` | `false` | Draw the image as a macOS template image. |
+| `.tooltip(text)` | the title | The text shown when the pointer rests on the icon. |
+| `.menu(items)` | empty | The menu that opens on a right click. |
+
+### `TrayMenuItem`
+
+| Constructor or builder | Meaning |
+| --- | --- |
+| `TrayMenuItem::new(id, label)` | A plain item. |
+| `TrayMenuItem::checkbox(id, label, checked)` | An item with a check mark that flips each time it is chosen. |
+| `TrayMenuItem::submenu(id, label, items)` | An item that opens a nested menu. |
+| `TrayMenuItem::separator()` | A dividing line. |
+| `.action(text)` | Any string you want back with the click, such as a command name. |
+| `.enabled(bool)` | Whether the item can be chosen. Items are enabled by default. |
+
+## The `tray_app` recipe
+
+`.tray_app()` sets a window up for an app that lives in the tray: it starts hidden, stays off the
+Windows taskbar and out of the macOS Dock, and uses the lifecycle policy for hidden windows, which
+keeps the page cheap while nobody looks at it. Pair it with `.tray_icon(...)` so people can reach
+the app, and with [single-instance](/docs/desktop/single-instance/) so a second launch brings the
+running app forward instead of starting another one:
+
+```rust
+window
+    .tray_app()
+    .tray_icon(tray)
+    .single_instance(SingleInstancePolicy::FocusExisting)
+```
+
+`SingleInstancePolicy` comes from the `sabine` crate. See
+[Window lifecycle](/docs/windows/lifecycle/) for what the hidden-window policy does to the page.
+
+## Handling clicks
+
+Clicks reach the app's pages as `events.trayActivate`. A click on the icon itself has `itemId:
+null`; a menu item reports its `id`, its `action` and, for a checkbox item, its new `checked` state.
+
+```ts
+import { appWindow, events } from "@lantharos/sabine";
+
+events.trayActivate(({ itemId, checked }) => {
+  switch (itemId) {
+    case null:
+    case "open":
+      appWindow.show();
+      appWindow.focus();
+      break;
+    case "pause":
+      setSyncPaused(checked ?? false);
+      break;
+    case "quit":
+      appWindow.close();
+      break;
+  }
+});
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `trayId` | `string` | The `id` of the `TrayIcon`. |
+| `itemId` | `string \| null` | The chosen menu item, or `null` for a click on the icon. |
+| `action` | `string \| null` | The item's `action`, if it has one. |
+| `checked` | `boolean \| null` | A checkbox item's state after the click. |
+
+A checkbox flips its own check mark when it is chosen, so the menu and the event agree without the
+app setting the menu again.
+
+## Changing the icon while the app runs
+
+### From Rust
+
+`SabineProcess::tray()` returns a `TrayHandle` while the app has a tray icon. The handle is cheap to
+clone and can be moved to any thread; changes apply in the order you make them.
+
+```rust
+use sabine::{SabineWindow, TrayIcon, TrayMenuItem};
+
+fn main() {
+    SabineWindow::main_with_process(
+        |window| Ok(window.tray_app().tray_icon(TrayIcon::new("main", "Sync"))),
+        |process| {
+            if let Some(tray) = process.tray() {
+                tray.set_tooltip(Some("Syncing 3 files".into()));
+                tray.set_menu(vec![TrayMenuItem::new("open", "Open Sync")]);
+            }
+        },
+    );
+}
+```
+
+| Method | Meaning |
+| --- | --- |
+| `set_icon(path: Option<PathBuf>, template: bool)` | Shows another image, or the plain dot with `None`. |
+| `set_tooltip(tooltip: Option<String>)` | Changes the tooltip, or goes back to the title with `None`. |
+| `set_menu(items: Vec<TrayMenuItem>)` | Replaces the whole menu. |
+
+Images are decoded off the thread that owns the icon, so setting one never holds up the tray. When
+you set several images quickly, the last one you asked for wins, even if an earlier one finishes
+decoding later.
+
+### From the page
+
+The package's `tray.update` changes the same things. Fields you leave out stay as they are;
+`null` clears the icon or tooltip.
+
+```ts
+import { tray } from "@lantharos/sabine";
+
+await tray.update({
+  tooltip: "Syncing 3 files",
+  menu: [
+    { id: "open", label: "Open Sync" },
+    { id: "pause", label: "Pause syncing", type: "checkbox", checked: true },
+    {
+      id: "accounts",
+      label: "Accounts",
+      type: "submenu",
+      items: [{ id: "work", label: "Work" }],
+    },
+    { type: "separator" },
+    { id: "quit", label: "Quit", enabled: false },
+  ],
+});
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `icon` | `string \| null` | Path to an image, or `null` for the plain dot. |
+| `template` | `boolean` | Draw `icon` as a macOS template image. Applies only together with `icon`. |
+| `tooltip` | `string \| null` | The tooltip, or `null` to show the title. |
+| `menu` | `TrayMenuItem[]` | Replaces the whole menu. |
+
+Menu items take `id`, `label`, `action`, `enabled` (default `true`), `type` (`"normal"`,
+`"separator"`, `"checkbox"` or `"submenu"`), `checked` for checkboxes and `items` for submenus.
+`tray.update` rejects when the app has no tray icon, and when the update has fields it doesn't
+know.
+
+## On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    The icon is a StatusNotifierItem with a dbusmenu menu, the protocol KDE Plasma and most other
+    Linux panels show. Sabine sends the image itself rather than an icon theme
+    name, so the icon looks the same everywhere. A click reports an activation, and the desktop opens
+    the menu on a right click.
+
+    The desktop shows the icon through its StatusNotifierWatcher. Without one, such as on GNOME
+    without an AppIndicator extension, the icon waits and appears as soon as a watcher starts.
+    When the watcher restarts, for example after the panel crashes, Sabine registers the icon
+    again. A change that fails to reach the desktop is recorded in the app's diagnostics, and the
+    icon keeps taking changes; the desktop sees the latest state the next time it asks.
+
+    The `template` setting has no effect on Linux.
+  </TabItem>
+  <TabItem label="Windows">
+    The icon sits in the notification area, which may tuck it into the overflow until people pin
+    it. A left click reports an activation and a right click opens the menu. The tooltip shows
+    when the pointer rests on the icon.
+
+    The `template` setting has no effect on Windows.
+  </TabItem>
+  <TabItem label="macOS">
+    The icon sits in the menu bar. macOS shows only the image there, never the title. A left click
+    reports an activation and a right click opens the menu.
+
+    Template images are drawn in the menu bar's own color, so they follow light and dark menu
+    bars and the highlight when the menu opens. Sabine draws an icon as a template when you set
+    `template`, and also when every visible pixel of the image is black, or every one is white.
+    Use a black image with transparency for a standard menu bar icon.
+  </TabItem>
+</Tabs>
+
+## Related pages
+
+- [Window lifecycle](/docs/windows/lifecycle/) covers hidden windows and how their pages are
+  suspended.
+- [Single instance](/docs/desktop/single-instance/) keeps a tray app to one running copy.
+- [Bridge events](/docs/bridge/events/) explains how events reach pages.

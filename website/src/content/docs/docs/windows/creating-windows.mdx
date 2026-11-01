@@ -1,0 +1,350 @@
+---
+title: Creating windows
+description: Build an app's window with SabineWindow, its recipes, and the options for size, visibility, background and the first frame.
+sidebar:
+  order: 1
+---
+
+Every Sabine app describes its window with a `SabineWindow` builder and hands it to
+`SabineWindow::main`. The builder holds everything about the window: its size and chrome, the page
+it shows, the commands that page can call, and the desktop services that come with it.
+
+## The entry point
+
+```rust
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .title("Atlas")
+            .size(1100, 720)
+            .min_size(640, 420)
+            .remember_size())
+    });
+}
+```
+
+`SabineWindow::main` does the whole launch and never returns:
+
+1. It runs Sabine's internal modes when the executable was started as one. The same executable
+   also serves as the window host and as the first-launch setup, so this check comes before
+   anything else.
+2. It finds `Sabine.toml` and applies it: the app id, name and version, the production page, and
+   the `[window]` settings.
+3. It calls your closure with that builder. Settings you make in Rust override the manifest.
+4. It launches the window, waits until the app's last window has closed, and exits with the
+   window's exit status.
+
+If the closure returns an error, or the launch fails, Sabine shows a native error window and exits
+with status 1.
+
+The `windows_subsystem` attribute keeps Windows from opening a console window next to the app.
+
+### Getting hold of the process
+
+`main_with_process` and `main_with_process_mut` also hand you the launched `SabineProcess` before
+Sabine waits on it. Use them to keep its event emitter, to open more windows, or to start work that
+needs the running app:
+
+```rust
+SabineWindow::main_with_process(
+    |window| Ok(window.app().title("Atlas")),
+    |process| {
+        let events = process.bridge_event_emitter();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            events.emit("clock.minute", serde_json::json!({}));
+        });
+    },
+);
+```
+
+The `_mut` variant passes `&mut SabineProcess`, which [opening more windows](/docs/windows/multiple-windows/)
+needs. App code that only builds the window can get a handle to the process later with
+`.on_launched(|handle| ...)`.
+
+### Custom entry points
+
+An app with its own argument parser, logger or async runtime can launch the window itself. Call
+`sabine::dispatch_host_mode_from_args` first, before any other initialization, and return when it
+says the process was one of Sabine's internal modes:
+
+```rust
+fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
+    if sabine::dispatch_host_mode_from_args(&args) {
+        return;
+    }
+
+    let window = sabine::SabineWindow::for_current_app()
+        .expect("Sabine.toml is readable")
+        .app()
+        .title("Atlas");
+    let process = window.launch().expect("the window opens");
+    process.wait().expect("the app runs");
+}
+```
+
+`SabineWindow::for_current_app()` builds a window from the app's manifest, as `main` does.
+`launch()` returns the running `SabineProcess`; `wait()` blocks until its windows have closed. On
+macOS, call `wait()` on the main thread, or run an AppKit event loop there, so the tray icon and
+global shortcuts work.
+
+The Windows setup programs that `sabine bundle` builds run the app with arguments that only
+`SabineWindow::main` and its variants handle, so apps you package as `exe` or `msi` installers
+should enter through those.
+
+## Recipes
+
+Recipes set a window up for a common role. Call one first and refine it with the builder calls
+after it; a recipe called later would overwrite them.
+
+| Recipe | Chrome | Background | Starts | Taskbar | Lifecycle |
+| --- | --- | --- | --- | --- | --- |
+| `.app()` | System titlebar and frame | Opaque | Shown and focused | Listed | Freezes the page five minutes after the window went out of sight |
+| `.palette()` | Frameless | Glass | Shown | Not listed | Hides when it loses focus; freezes a minute after hiding |
+| `.tray_app()` | System | Opaque | Hidden, not focused | Not listed | Freezes a minute after hiding |
+
+`.app()` is a conventional desktop window. Most apps start here.
+
+`.palette()` is a launcher or command palette that floats over other windows and goes away when
+the person clicks elsewhere. Add `.hidden()` to keep it closed until a shortcut or tray click
+shows it, and `.always_on_top(true)` to keep it above other windows:
+
+```rust
+use sabine::SingleInstancePolicy;
+
+SabineWindow::main(|window| {
+    Ok(window
+        .palette()
+        .hidden()
+        .always_on_top(true)
+        .size(640, 380)
+        .single_instance(SingleInstancePolicy::FocusExisting))
+});
+```
+
+`.tray_app()` is an app that lives in the tray and opens its window on demand. Pair it with a
+[tray icon](/docs/desktop/tray/) and [single-instance handling](/docs/desktop/single-instance/),
+so launching the app again shows the running one:
+
+```rust
+use sabine::{SingleInstancePolicy, TrayIcon, TrayMenuItem};
+
+SabineWindow::main(|window| {
+    Ok(window
+        .tray_app()
+        .size(420, 560)
+        .tray_icon(
+            TrayIcon::new("main", "Sync")
+                .tooltip("Sync")
+                .menu(vec![
+                    TrayMenuItem::new("open", "Open"),
+                    TrayMenuItem::separator(),
+                    TrayMenuItem::new("quit", "Quit"),
+                ]),
+        )
+        .single_instance(SingleInstancePolicy::FocusExisting))
+});
+```
+
+`.background()` launches the app without its window: neither the window host nor Chromium runs
+until the app is activated, for example by launching it again, opening one of its links, or a
+call to `SabineProcessHandle::present`. Closing the window ends both again while the app keeps
+running, and the next activation opens a new one. Combine it with a recipe for the window's own
+role and `.single_instance(SingleInstancePolicy::FocusExisting)`, for an app that syncs in the
+background from login and opens its window when someone launches it.
+
+## Size and placement
+
+```rust
+window
+    .size(1100, 720)
+    .min_size(640, 420)
+    .maximized(false)
+    .remember_size()
+```
+
+Sizes are logical pixels, which the desktop scales for the display. A window opens at 900 × 640
+with a minimum of 420 × 280 unless you say otherwise, centered on the primary display where the
+desktop lets apps place their windows. Wayland compositors place windows themselves.
+
+- `.size(width, height)` sets the size the window opens at.
+- `.min_size(width, height)` keeps people from making it smaller.
+- `.fixed_size(width, height)` sets both and turns resizing off.
+- `.resizable(false)` turns resizing off at the current size. A window that can't be resized also
+  ignores double clicks on its drag regions.
+- `.maximized(true)` opens it maximized.
+- `.remember_size()` opens the window at the size and maximized state it last closed with. The
+  first launch uses `.size()` and `.maximized()`, and a remembered size is never smaller than the
+  minimum. Sabine keeps it in `window.json` in the app's state folder, under the app id.
+
+The window's title comes from `[app] name` in the manifest unless you set `.title()`. It names the
+window in the taskbar and window switcher, and Sabine's own titlebar shows it.
+
+## Visibility and focus
+
+| Option | Effect |
+| --- | --- |
+| `.visible(false)` | Opens the window hidden. The page still loads, so showing it later is instant |
+| `.hidden()` | `.visible(false)` and `.active(false)` together |
+| `.active(false)` | Opens the window without taking focus |
+| `.hide_on_blur(true)` | Hides the window when it loses focus |
+| `.hide_on_close(true)` | The close button and `appWindow.close()` hide the window instead of closing it |
+| `.skip_taskbar(true)` | Keeps the window out of the taskbar and window switcher |
+| `.always_on_top(true)` | Keeps the window above other windows |
+
+A hidden window keeps its page loaded and reappears with its last frame at once. While it is hidden,
+its page runs at the window's background frame rate, or stops rendering altogether; see
+[Lifecycle](/docs/windows/lifecycle/) for what a hidden window costs.
+
+The page shows and hides its window with `appWindow.show()` and `appWindow.hide()`, and Rust with
+`show()`, `hide()` and `focus_window()` on the `SabineProcess` or its `BridgeEventEmitter`.
+
+`skip_taskbar` and `always_on_top` depend on the desktop:
+
+| Platform | `skip_taskbar` | `always_on_top` |
+| --- | --- | --- |
+| Windows | Leaves the taskbar | Topmost window |
+| macOS | The app has no Dock icon | Raised window level |
+| Linux | Leaves the taskbar and switcher on compositors with `kestrel_window_v1`, such as Kestrel | Stays above other windows on the same compositors |
+
+Wayland has no standard protocol for either, so on other compositors the window is placed like any
+other, and Sabine records why in its window log.
+
+## Background color
+
+The background color is what the window shows before the page has painted: behind the page while
+it loads, on Sabine's loading screen, and around the last frame while the page catches up with a
+resize. Chromium
+also uses it as the page's default background, so an opaque window never flashes another color
+before the page's styles apply. The default is `#111113`.
+
+Set it to your page's background:
+
+```rust
+window.background_color(SabineColor::rgb8(250, 249, 247))
+```
+
+`SabineColor::rgb8` and `SabineColor::rgba8` take the same 8-bit channels as CSS, and
+`.opacity(alpha)` scales a color's alpha.
+
+## Transparency
+
+A transparent window shows what is behind it wherever the page doesn't paint:
+
+```rust
+window.app().transparent(true)
+```
+
+In a transparent window, Sabine makes the page's `html` and `body` backgrounds transparent, so
+paint backgrounds on elements inside them. Rounded corners, shadows and floating panels then show
+the desktop around them.
+
+`.glass()` turns transparency on and blurs what is behind the window with the desktop's own
+material. `.transparent(false)` turns transparency off again, and with it any background effect.
+See [Glass and effects](/docs/windows/glass-and-effects/).
+
+## The first frame
+
+A window stays off screen until its page has loaded and painted, and then appears with that frame,
+however long the page takes. It never shows an empty or half-styled window. While the page reloads,
+or while Sabine restarts a browser that exited unexpectedly, the window keeps showing its last
+frame and switches to the new page with its first frame.
+
+Some pages load first and then fetch what their first view shows. Such a page can keep the window
+off screen a little longer with `appWindow.revealWhen`. Call it while the page starts, before it has
+finished loading, with a promise that settles once the view is in the document:
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+appWindow.revealWhen(loadSettings().then(renderSettings));
+```
+
+The window then appears with the first frame painted after the promise settles, whether it
+resolves or rejects, or after five seconds at most.
+
+## Loading screen
+
+For pages that can take a while to appear, Sabine can show a neutral loading screen instead of
+waiting with nothing on screen:
+
+```toml
+[window]
+splash = true
+splash_delay_ms = 1500
+```
+
+or in Rust:
+
+```rust
+window.splash(true)
+// or with a delay of your own:
+window.splash_after(std::time::Duration::from_millis(800))
+```
+
+A launching window that hasn't shown its page within the delay, 1.5 seconds unless you set one,
+appears on the loading screen instead. A window already on screen shows the loading screen 120
+milliseconds into a reload. The loading screen uses the window's chrome and background color, shows
+a rotating line of loading text, and fades into the page over 167 milliseconds once the page is
+ready.
+
+## Content and identity
+
+`SabineWindow::main` takes the app's identity and production page from `Sabine.toml`, so most apps
+never set these in Rust. They are there for apps that build their configuration themselves.
+
+| Option | Effect |
+| --- | --- |
+| `.app_id(id)` | The app id, which names its browser profile, data folders and registrations |
+| `.app_version(version)` | The app version reported to the Sabine service |
+| `.entry(path)` | A local HTML file to show; its folder is served at `sabine://app/` |
+| `.url(url)` | A remote page to show in production; its origin may use the bridge |
+| `.dev_url(url)` | The development server's page, used instead of `entry` or `url` when set |
+| `.content_suffix(suffix)` | Appends a query string or fragment to the page's address, such as `#settings` |
+| `.allowed_origin(origin)` | Lets one more origin use the bridge |
+| `.local_files(true)` | Lets the app's pages load any file the user can read through `sabine://file/` |
+| `.security(ContentSecurity)` | Replaces the bridge's origin policy |
+| `.debug(port)` | Opens Chromium's remote DevTools on a port; development runs use 9222 |
+| `.with_manifest(path)` | Applies another `Sabine.toml` |
+
+A window needs exactly one production page: `entry` or `url`. See
+[Frontend](/docs/web/frontend/) for how pages are served and [Security](/docs/bridge/security/) for
+which documents may call the bridge.
+
+`.with_manifest(path)` applies another manifest's identity, URL schemes, update source,
+production page and `[window]` settings. `SabineWindow::main` finds the app's own manifest by itself: through
+`SABINE_MANIFEST_PATH`, which `sabine dev` sets, beside a bundled executable, in the working
+directory, or in the Cargo package's folder during `cargo run`.
+
+## Builder reference
+
+The options covered on other pages:
+
+| Options | See |
+| --- | --- |
+| `system_chrome`, `frameless`, `no_chrome`, `chrome`, `app_chrome`, `drag_region`, `drag_exclusion_region`, `titlebar_drag_region`, `control_region` | [Window chrome](/docs/windows/window-chrome/) |
+| `glass`, `background_effect`, `regions`, `blur_region`, `opaque_region`, `input_region` | [Glass and effects](/docs/windows/glass-and-effects/) |
+| `lifecycle_policy`, `active_frame_rate`, `background_frame_rate`, `suspend_on_minimize`, `suspend_on_occluded`, `suspend_on_blur`, `freeze_after`, `disable_freezing`, `retain_hidden_frame`, `on_visibility_changed` | [Lifecycle](/docs/windows/lifecycle/) |
+| `bridge_typed`, `bridge_typed_async`, `bridge_handler`, `bridge_handler_async`, `bridge_descriptor_handler`, `bridge_descriptor_handler_async` | [Commands](/docs/bridge/commands/) |
+| `bridge_event`, `bridge_type` | [Typed bindings](/docs/bridge/typed-bindings/) |
+| `tray_icon` | [Tray](/docs/desktop/tray/) |
+| `global_shortcut` | [Shortcuts](/docs/desktop/shortcuts/) |
+| `single_instance`, `single_instance_id` | [Single instance](/docs/desktop/single-instance/) |
+| `autostart` | [Autostart](/docs/desktop/autostart/) |
+| `native_messaging_host` | [Native messaging](/docs/desktop/native-messaging/) |
+| `on_appearance_changed` | [Appearance and shell](/docs/desktop/appearance-and-shell/) |
+| `on_launched` | [Multiple windows](/docs/windows/multiple-windows/) |
+
+The rest:
+
+| Option | Effect |
+| --- | --- |
+| `.runtime(RuntimeConfig)` | Where the CEF runtime may come from. The default suits nearly every app |
+| `.shared_runtime(false)` | Linux only. Runs the app's pages in a Chromium of its own instead of the [shared runtime](/docs/concepts/shared-runtime/) |
+| `.vaapi_hardware_decode(true)` | Linux only. Turns on VA-API hardware video decoding for WebCodecs and Media Source playback. Off by default, since its driver paths crash on many GPUs |

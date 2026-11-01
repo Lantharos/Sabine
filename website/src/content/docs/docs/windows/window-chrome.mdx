@@ -1,0 +1,318 @@
+---
+title: Window chrome
+description: Choose between the system titlebar and a titlebar your page draws, with drag regions, window controls and resize edges.
+sidebar:
+  order: 2
+---
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+A window's chrome is its titlebar, frame and controls. Sabine windows either keep the system's, or
+leave the whole window to the page, which then draws a titlebar of its own.
+
+## Chrome options
+
+| Builder call | Chrome |
+| --- | --- |
+| `.system_chrome()` | The system's titlebar, frame and controls. The default, and what `.app()` uses |
+| `.app_chrome(AppChrome)` | The page draws the titlebar; Sabine provides the drag strip and the window controls' behavior. On macOS the system's traffic lights stay |
+| `.frameless()` | No titlebar or frame. The page draws and handles everything |
+| `.no_chrome()` | The same as `.frameless()` |
+| `.chrome(SabineWindowChrome::Sabine)` | A plain 38-pixel titlebar Sabine draws above the page, with the window title and round minimize, maximize and close buttons |
+
+`.chrome(SabineWindowChrome)` takes any of them as a value: `System`, `Sabine`, `Frameless` or
+`None`.
+
+On Windows 11, windows without system chrome keep the system's rounded corners; Windows 10 keeps
+them square.
+
+## A titlebar the page draws
+
+`AppChrome` is the recommended way to draw your own titlebar. It lays out a titlebar strip that
+moves the window, window controls at its right end that Sabine handles natively, and, for glass
+windows, the regions of a sidebar layout:
+
+```rust
+use sabine::prelude::*;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .glass()
+            .app_chrome(AppChrome::default())
+            .min_size(720, 480))
+    });
+}
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `titlebar` | `38` | Height of the titlebar strip in logical pixels |
+| `sidebar` | `260` | Width of a sidebar along the left edge, below the titlebar. `0` for none |
+| `radius` | `14` | Corner radius of the window's regions |
+| `control_width` | `46` | Width of each window control |
+
+`AppChrome::new(titlebar, sidebar)` sets the first two and keeps the other defaults. For a layout
+without a sidebar:
+
+```rust
+window.app_chrome(AppChrome { sidebar: 0, ..AppChrome::default() })
+```
+
+`app_chrome` sets up the window differently on each desktop:
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    The window turns frameless. The strip across the top, `titlebar` pixels high, moves the
+    window. Three control areas at its right end, each `control_width` wide and as high as the
+    titlebar, minimize, maximize and close it, in that order from left to right. The page draws
+    the buttons there.
+  </TabItem>
+  <TabItem label="Windows">
+    The same as on Linux: a frameless window, a draggable strip, and minimize, maximize and close
+    areas at the right end of the titlebar for the page to draw buttons in.
+  </TabItem>
+  <TabItem label="macOS">
+    The window keeps the system's traffic lights. Its titlebar turns transparent and the page
+    extends underneath it, so the page draws the titlebar but no controls, and leaves the
+    top-left corner free for the traffic lights. The strip across the top moves the window as on
+    the other desktops. AppKit rounds the window's corners itself, so the regions keep square
+    corners.
+  </TabItem>
+</Tabs>
+
+With a sidebar, `app_chrome` also sets the blur, opaque and input regions of a glass sidebar
+layout: the titlebar and sidebar blur what is behind the window, the content area beside the
+sidebar is opaque, and input follows the window's rounded shape. They only change how the window
+looks when it is glass. See [Glass and effects](/docs/windows/glass-and-effects/) to change them.
+
+### The controls area
+
+Clicks in the control areas never reach the page: Sabine handles them like the system's own
+buttons. Maximize toggles between maximized and restored. The page still receives pointer
+movement there, so `:hover` styles on the buttons it draws work as usual. Draw the buttons where
+Sabine expects them and mark them `aria-hidden`, since they are only pictures of the controls:
+
+```html
+<header class="titlebar">
+  <span class="title">Notes</span>
+  <div class="window-controls" aria-hidden="true">
+    <span class="control minimize"></span>
+    <span class="control maximize"></span>
+    <span class="control close"></span>
+  </div>
+</header>
+```
+
+```css
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding-inline-start: calc(var(--sabine-controls-left, 0px) + 16px);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.window-controls {
+  display: flex;
+  margin-inline-start: auto;
+}
+
+.control {
+  width: 46px;
+  height: 38px;
+}
+
+.control:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.control.close:hover {
+  background: #c42b1c;
+}
+
+:root[data-controls="system"] .window-controls {
+  display: none;
+}
+```
+
+### The controls overlay
+
+The page needs to know whether to draw controls at all, and how much room the system's controls
+take. `appWindow.controlsOverlay()` reports the area of the window's top corners that the system's
+controls cover, in logical pixels:
+
+```ts
+import { appWindow, type ControlsOverlay } from "@lantharos/sabine";
+
+function placeControls({ left, right }: ControlsOverlay) {
+  document.documentElement.dataset.controls = left || right ? "system" : "page";
+}
+
+appWindow.onControlsOverlayChanged(placeControls);
+appWindow.revealWhen(appWindow.controlsOverlay().then(placeControls));
+```
+
+With `AppChrome` on macOS, `left` is the width of the traffic lights and `height` their height.
+Everywhere else all three are zero, because the page draws its own controls. The overlay changes,
+and `onControlsOverlayChanged` fires, when the window enters or leaves fullscreen.
+
+Sabine also sets the same values on every page as CSS properties, so the layout can follow them
+without script:
+
+| Property | Value |
+| --- | --- |
+| `--sabine-controls-left` | Width the system's controls cover at the top left |
+| `--sabine-controls-right` | Width they cover at the top right |
+| `--sabine-controls-height` | Height they cover |
+
+Passing the overlay to `revealWhen` keeps the window off screen until the page has placed its
+controls, so it never appears with the wrong layout for a frame.
+
+## Drag regions
+
+Parts of the window that move it when dragged are drag regions. A double click on one maximizes
+or restores the window, unless it can't be resized. A press in a drag region goes to the window
+system, not to the page, so buttons and fields inside one need to be marked as not draggable.
+
+Pages mark regions with CSS:
+
+```css
+.titlebar {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar button,
+.titlebar input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+```
+
+Chromium reads both the prefixed and the standard property. Page regions follow the layout as it
+changes, and work in every kind of chrome.
+
+Rust can add fixed regions, in logical pixels from the window's top left:
+
+| Builder call | Region |
+| --- | --- |
+| `.titlebar_drag_region(height)` | The full width of the window, `height` pixels from the top |
+| `.drag_region(WindowRegionRect)` | A rectangle that moves the window |
+| `.drag_exclusion_region(WindowRegionRect)` | A rectangle that never moves the window, even inside a drag region |
+
+A negative `x` counts from the window's right edge, and a width of `i32::MAX` reaches the right
+edge, so regions follow the window's width:
+
+```rust
+use sabine::WindowRegionRect;
+
+window
+    .frameless()
+    .titlebar_drag_region(44)
+    .drag_exclusion_region(WindowRegionRect::new(-180, 0, 180, 44))
+```
+
+Page `no-drag` regions take precedence over Rust drag regions, so `app-region: no-drag` makes a
+titlebar button clickable even inside `AppChrome`'s strip.
+
+Without drag regions of either kind, a window with Sabine's own titlebar moves from that titlebar,
+and a frameless window doesn't move at all.
+
+For anything regions can't express, start a move from a `mousedown` handler with
+`appWindow.startDrag()`:
+
+```ts
+handle.addEventListener("mousedown", (event) => {
+  if (event.button === 0) appWindow.startDrag();
+});
+```
+
+## Drawing your own controls
+
+A frameless window without `AppChrome` has no controls until the page draws them. Buttons call the
+window API:
+
+```html
+<div class="controls">
+  <button id="minimize" aria-label="Minimize"></button>
+  <button id="maximize" aria-label="Maximize"></button>
+  <button id="close" aria-label="Close"></button>
+</div>
+```
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+document.querySelector("#minimize")?.addEventListener("click", () => appWindow.minimize());
+document.querySelector("#maximize")?.addEventListener("click", () => appWindow.toggleMaximize());
+document.querySelector("#close")?.addEventListener("click", () => appWindow.close());
+
+appWindow.onStateChanged(({ maximized }) => {
+  document.querySelector("#maximize")?.setAttribute("aria-label", maximized ? "Restore" : "Maximize");
+});
+```
+
+Give the buttons `app-region: no-drag` when they sit in a drag region.
+
+| Call | Effect |
+| --- | --- |
+| `appWindow.minimize()` | Minimizes the window |
+| `appWindow.maximize()` | Maximizes it; does nothing when it already is |
+| `appWindow.toggleMaximize()` | Maximizes it, or restores it when it is maximized |
+| `appWindow.restore()` | Leaves fullscreen, maximized and minimized states |
+| `appWindow.setFullscreen(enabled)` | Enters or leaves fullscreen |
+| `appWindow.close()` | Closes the window, or hides it with `.hide_on_close(true)` |
+
+`appWindow.maximized`, `appWindow.fullscreen` and `appWindow.tiled` report the window's state, and
+`appWindow.onStateChanged` hears about changes. `tiled` is true while a Wayland compositor has
+snapped the window against a screen edge.
+
+Page buttons work everywhere, including inside drag regions marked `no-drag`. To have Sabine handle
+a control natively instead, as `AppChrome` does, give it a control region:
+
+```rust
+use sabine::{SabineWindowControlAction, WindowRegionRect};
+
+window
+    .frameless()
+    .titlebar_drag_region(40)
+    .control_region(SabineWindowControlAction::Close, WindowRegionRect::new(-40, 0, 40, 40))
+```
+
+## Rounded corners
+
+A window the desktop has maximized, made fullscreen or tiled meets the screen's edges, so rounded
+corners there look wrong. Sabine squares the corners of the window's regions in those states by
+itself. Pages that draw rounded corners can follow the same states:
+
+```ts
+appWindow.onStateChanged(({ maximized, fullscreen, tiled }) => {
+  document.documentElement.classList.toggle("docked", maximized || fullscreen || tiled);
+});
+```
+
+## Resize edges
+
+Windows with system chrome resize through their frame. Windows without it resize from their edges:
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sabine reserves a 7-pixel band along the edges of resizable windows and starts the
+    compositor's interactive resize from it. Presses there don't reach the page. On Kestrel, which
+    resizes windows from just outside their edges, Sabine reserves no band, so scrollbars at the
+    edge of the page stay grabbable.
+  </TabItem>
+  <TabItem label="Windows">
+    Sabine reserves a 7-pixel band along the edges of resizable windows and starts the system's
+    interactive resize from it. Presses there don't reach the page.
+  </TabItem>
+  <TabItem label="macOS">
+    AppKit resizes borderless windows from their edges itself, so Sabine reserves no band and
+    presses at the edges reach the page.
+  </TabItem>
+</Tabs>
+
+Where several overlap, Sabine looks at a press in this order: a resize edge, then a control area,
+then a drag region, and only then the page.

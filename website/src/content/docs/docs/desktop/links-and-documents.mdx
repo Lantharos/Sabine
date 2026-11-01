@@ -1,0 +1,236 @@
+---
+title: Links and documents
+description: Register URL schemes and document types, and receive the links and files people open with the app.
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+An app can handle its own URL schemes, such as `my-notes://open/42`, and open document types, such
+as Markdown files. You declare both in `Sabine.toml`. Sabine registers them with the desktop, and
+every link or file people open with the app, whether at launch, from another launch or from the
+system, lands in one queue the app reads.
+
+## Declaring schemes and document types
+
+List URL schemes as `x-scheme-handler/<scheme>` MIME types and document types by their MIME type
+under `[app]`, and give each document type its file extensions under `[app.extensions]`:
+
+```toml
+[app]
+id = "com.example.notes"
+name = "Notes"
+mime_types = ["text/markdown", "application/vnd.example.notes", "x-scheme-handler/my-notes"]
+
+[app.extensions]
+"text/markdown" = ["md", "markdown"]
+"application/vnd.example.notes" = ["notes"]
+```
+
+- URL schemes start with a letter and contain lowercase letters, digits, `+`, `.` or `-`.
+- Extensions are lowercase letters and digits, plus `+`, `-` or `_`, without the leading dot.
+- Every type under `[app.extensions]` must be a document type listed in `mime_types`; URL schemes
+  have no extensions.
+
+The manifest is the only place URL schemes come from. The app registers exactly the schemes it
+declares, under its app id, so uninstalling it removes all of them. A manifest with URL schemes
+needs an app id.
+
+## Receiving links and documents
+
+Sabine queues what the app should open: URLs with one of its schemes, and documents as `file://`
+URLs. Read the queue from the page with `app.takeOpenUrls()`, and subscribe to
+`events.openUrlsAvailable` to hear when more arrive:
+
+```ts
+import { app, events } from "@lantharos/sabine";
+
+async function openPending() {
+  for (const url of await app.takeOpenUrls()) {
+    const link = new URL(url);
+    if (link.protocol === "file:") {
+      await openDocument(link);
+    } else if (link.protocol === "my-notes:") {
+      await openNoteLink(link);
+    }
+  }
+}
+
+const unsubscribe = events.openUrlsAvailable(openPending);
+await openPending();
+```
+
+Subscribe before the first `takeOpenUrls()`, as above, so nothing that arrives while the page
+starts is missed. `takeOpenUrls()` empties the queue, including URLs that arrived before the page
+loaded. Call `unsubscribe()` when the listener goes away.
+
+Rust code reads the same queue with `SabineProcess::take_open_urls()`. Whichever side takes a URL
+first consumes it.
+
+<Aside type="caution">
+  Treat every URL as input from outside the app. Check its scheme and contents before acting on it,
+  the same way you would check a form submission.
+</Aside>
+
+The queue holds up to 128 URLs, each up to 32 KiB. URLs beyond that are dropped and recorded in the
+app's diagnostics.
+
+### Command-line arguments
+
+When the app starts, Sabine looks at its arguments, and at the arguments a second launch hands to a
+[single instance](/docs/desktop/single-instance/). An argument is queued when it is:
+
+- a URL with one of the app's schemes, or
+- a file, named by path or by `file:` URL, whose extension is listed under `[app.extensions]`.
+
+Relative paths are resolved against the working directory of the launch that received them.
+Arguments that start with `-` and anything else are left to the app, so your own options keep
+working:
+
+```sh
+notes --profile work ~/Notes/Ideas.md my-notes://open/42 config.toml
+```
+
+Here `~/Notes/Ideas.md` and `my-notes://open/42` are queued; `--profile`, `work` and `config.toml`
+are not.
+
+### Keeping links in one window
+
+On Linux and Windows the desktop opens a link or document by starting the app with it as an
+argument. Without a single-instance policy, every click starts another copy. Make later launches
+hand their arguments to the running app instead:
+
+```rust
+use sabine::prelude::*;
+use sabine::SingleInstancePolicy;
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window
+            .app()
+            .single_instance(SingleInstancePolicy::FocusExisting))
+    });
+}
+```
+
+macOS sends links and documents to the running app itself, through its application delegate, and
+Sabine brings the window forward when they arrive.
+
+## How each desktop registers them
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Installed packages list the schemes and document types in the app's desktop entry as
+    `MimeType`, and install a shared-mime-info file so desktops recognize the extensions.
+
+    Each launch also registers the URL schemes for the current user. When the installed desktop
+    entry already declares every scheme, Sabine makes it the handler. Otherwise it writes a hidden
+    handler entry, `<app id>.sabine-url.desktop` in `~/.local/share/applications`, which starts
+    the running executable, or the AppImage file when the app runs from one. It then sets the app
+    as the default for each scheme in `~/.config/mimeapps.list`, unless another installed app is
+    already the default. Other associations in the file are kept, and Sabine apps take turns
+    updating it, so they never overwrite each other's changes.
+
+    Handler entries name the executable in `TryExec` as well as `Exec`, so once a package is
+    removed, desktops stop offering a handler whose program is gone.
+  </TabItem>
+  <TabItem label="Windows">
+    Each scheme is registered for the current user under `HKCU\Software\Classes\<scheme>`, pointing
+    to the app's executable, when the app is installed and again every time it runs.
+
+    Installers and `sabine install` register a `<app id>.document` ProgID and add it to each
+    extension's `OpenWithProgids`, so the app appears under Open with for those files.
+  </TabItem>
+  <TabItem label="macOS">
+    macOS reads schemes and document types from the bundle's `Info.plist`. Bundles list URL
+    schemes in `CFBundleURLTypes` and document types in `CFBundleDocumentTypes`. Types macOS
+    already knows, such as `public.plain-text` for `text/plain`, are referred to directly; the
+    others are declared as imported types with their MIME type and extensions. The app is listed
+    as an alternate viewer for its documents, so it appears under Open With without taking over
+    files another app opens.
+
+    Schemes must be in the bundle before it is signed. At launch, the app checks that its bundle
+    declares every scheme in the manifest, and stops with an error naming the missing one if it
+    doesn't. Rebuild the bundle after adding a scheme.
+  </TabItem>
+</Tabs>
+
+## Testing links
+
+Development runs, such as `sabine dev`, register no URL schemes, so an installed build doesn't lose
+its handlers to a development copy. Test schemes with an installed build:
+
+<Steps>
+
+1. Install the app from your project:
+
+   ```sh
+   sabine install --bundle .
+   ```
+
+2. Open a link from a terminal, or click one in a browser:
+
+   <Tabs syncKey="platform">
+     <TabItem label="Linux">
+       ```sh
+       xdg-open my-notes://open/42
+       ```
+     </TabItem>
+     <TabItem label="Windows">
+       ```sh
+       start my-notes://open/42
+       ```
+     </TabItem>
+     <TabItem label="macOS">
+       ```sh
+       open my-notes://open/42
+       ```
+     </TabItem>
+   </Tabs>
+
+3. Check that the page's `openUrlsAvailable` listener received it.
+
+</Steps>
+
+## Apps that only open from links
+
+Some apps should only open through their schemes or documents, such as a sign-in window a
+notification raises. Keep them out of launchers with `listed = false`:
+
+```toml
+[app]
+listed = false
+mime_types = ["x-scheme-handler/my-app-signin"]
+```
+
+The app is still installed and still handles its schemes and documents.
+
+- Linux desktop entries get `NoDisplay=true` and keep their `MimeType`.
+- Windows installers skip the Start menu shortcut and the finish page's option to launch the app,
+  while still registering the schemes and keeping the uninstall entry.
+- `sabine install` on macOS leaves the bundle out of `~/Applications` and registers it with Launch
+  Services directly, so it handles its schemes without appearing in Launchpad. A bundle someone
+  drags from a disk image into `/Applications` is listed like any other app, since no
+  `Info.plist` key hides a usable app from Launchpad.
+
+## Uninstalling
+
+Windows installers remove the scheme keys and the document ProgID when the app is uninstalled.
+`sabine uninstall` removes what the app registered on every platform: the scheme keys and ProgID
+on Windows; the hidden handler, the shared-mime-info file and the `mimeapps.list` entries naming
+the app on Linux; and the bundle's Launch Services record on macOS. A scheme or handler that has
+since been taken over by a different executable is left alone.
+
+Removing a deb or rpm package runs as root and can't reach each user's files, so after a package is
+removed, or an AppImage deleted, the hidden handler and its `mimeapps.list` entries stay until the
+app is installed and launched again. Because the handler names its program in `TryExec`, desktops
+stop offering it in the meantime.
+
+## Related pages
+
+- [Single instance](/docs/desktop/single-instance/) explains how later launches reach the running
+  app.
+- [Manifest reference](/docs/reference/manifest/) lists every `[app]` key.
+- [Bundling](/docs/distribution/bundling/) and [Installing](/docs/distribution/installing/) cover
+  packages and `sabine install`.
