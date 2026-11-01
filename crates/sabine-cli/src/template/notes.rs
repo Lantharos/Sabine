@@ -18,7 +18,10 @@ const FILES: [(&str, &str); 6] = [
     ("ui/styles.css", include_str!(example!("ui/styles.css"))),
     ("ui/app.ts", include_str!(example!("ui/app.ts"))),
     ("ui/bindings.ts", include_str!(example!("ui/bindings.ts"))),
-    ("ui/fonts/OFL.txt", include_str!(example!("ui/fonts/OFL.txt"))),
+    (
+        "ui/fonts/OFL.txt",
+        include_str!(example!("ui/fonts/OFL.txt")),
+    ),
 ];
 
 const FONTS: [(&str, &[u8]); 2] = [

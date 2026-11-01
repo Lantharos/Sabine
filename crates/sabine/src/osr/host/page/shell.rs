@@ -47,7 +47,7 @@ impl OsrNativeHost {
 
     /// Answers the page once the desktop has taken the request, without
     /// holding up the window meanwhile.
-    fn answer_later<F, Fut>(&self, request: &BridgeRequest, open: F)
+    fn answer_later<F, Fut>(&mut self, request: &BridgeRequest, open: F)
     where
         F: FnOnce(Requester) -> Fut + Send + 'static,
         Fut: Future<Output = Result<(), String>> + Send,
@@ -68,12 +68,10 @@ impl OsrNativeHost {
     /// On Wayland the desktop keeps its dialogs over the window and lets
     /// what opens take focus, with a token made while the person uses it.
     #[cfg(target_os = "linux")]
-    fn with_requester(&self, then: impl FnOnce(Requester) + Send + 'static) {
+    fn with_requester(&mut self, then: impl FnOnce(Requester) + Send + 'static) {
         let mut requester = Requester {
             app_id: self.config.app_id.clone(),
-            parent_window: self.window.as_ref().and_then(|window| {
-                sabine_platform::shell::ParentWindow::export(window.as_ref()).ok()
-            }),
+            parent: self.portal_parent(),
             activation_token: None,
         };
         match &self.clipboard {
@@ -86,7 +84,7 @@ impl OsrNativeHost {
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn with_requester(&self, then: impl FnOnce(Requester)) {
+    fn with_requester(&mut self, then: impl FnOnce(Requester)) {
         then(Requester {
             app_id: self.config.app_id.clone(),
         });

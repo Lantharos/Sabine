@@ -8,12 +8,13 @@ pub use crate::linux::ParentWindow;
 
 /// Where a request to open something comes from. On Linux the desktop
 /// portal names the app by its id, keeps any dialog it shows over the parent
-/// window, and hands the activation token's focus to the app that opens.
+/// window, which `ParentWindow::identifier` names, and hands the activation
+/// token's focus to the app that opens.
 #[derive(Default)]
 pub struct Requester {
     pub app_id: Option<String>,
     #[cfg(target_os = "linux")]
-    pub parent_window: Option<ParentWindow>,
+    pub parent: String,
     #[cfg(target_os = "linux")]
     pub activation_token: Option<String>,
 }
@@ -102,11 +103,7 @@ mod platform {
             Ok(Self {
                 proxy: portal::proxy(&connection, OPEN_URI).await?,
                 connection,
-                parent: requester
-                    .parent_window
-                    .as_ref()
-                    .map(|window| window.identifier())
-                    .unwrap_or_default(),
+                parent: requester.parent.clone(),
                 activation_token: requester.activation_token.as_deref(),
             })
         }

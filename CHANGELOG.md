@@ -54,6 +54,28 @@
 - The Linux print dialog stays over the window that printed.
 - Windows no longer wake on a timer while waiting for Chromium, and recovering from a lost
   graphics device no longer holds up the window.
+- An activity a page begins ends when the page reloads, navigates away, loses its renderer or its
+  window closes, and keeps only its own window running. Pages list and end only their window's
+  activities.
+- On Wayland, `shell.openLink` and `shell.showFolder` let the app that opens take focus and keep the
+  desktop's app chooser over the window. On macOS, `showFolder` opens app bundles in Finder instead
+  of launching them, and on Windows it opens folders by their plain path.
+- Accent color changes reach `events.appearanceChanged` and `--sabine-accent-color` on Windows and
+  macOS too.
+- macOS reports dismissed notifications as `close`. A notification shown with the tag of an earlier
+  one closes the earlier one, and pages forget notifications people clicked.
+- Clipboard requests from pages give up after 30 seconds and when the page goes away.
+- `bridge.send` sends a command without waiting for its answer, and `NativeVideo` uses it for its
+  frequent updates, so they no longer leave rejected promises behind.
+- `appWindow.onControlsOverlayChanged` follows the corner the system's window controls cover.
+- `WindowBackgroundEffect::Glass` is each desktop's standard material and the only one on Linux;
+  Windows adds `Blur`, `Mica` and `MicaAlt`, and macOS `HudWindow` and `Sidebar`. `Acrylic`,
+  `Vibrancy` and `UnderWindowBackground` are gone; use `Glass`.
+- `BridgeCommandDescriptor` no longer has targets; register a command for one desktop under
+  `#[cfg(target_os = "...")]`. `BridgeRuntime::new` takes only the handlers.
+- Glass windows send the compositor far fewer region rectangles for rounded corners.
+- The `notes` template and the example it comes from build their page with Bun, call their command
+  through generated bindings and draw window controls only where the desktop has none.
 
 # Sabine 0.65
 

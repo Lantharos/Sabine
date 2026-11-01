@@ -2,6 +2,8 @@
 mod direct;
 mod geometry;
 mod launch;
+#[cfg(target_os = "linux")]
+mod parent;
 mod renderer;
 mod window;
 
@@ -118,7 +120,7 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) input_panel: super::input::InputPanelState,
     #[cfg(target_os = "linux")]
-    pub(super) exported_window: Option<super::print::ExportedWindow>,
+    pub(super) exported_window: Option<sabine_platform::shell::ParentWindow>,
     #[cfg(windows)]
     pub(super) touch_keyboard: super::input::TouchKeyboard,
     pub(super) occluded: bool,

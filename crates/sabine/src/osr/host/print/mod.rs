@@ -4,8 +4,6 @@ mod files;
 mod page;
 #[cfg(not(target_os = "linux"))]
 mod paper;
-#[cfg(target_os = "linux")]
-mod parent;
 mod pdf;
 #[cfg(target_os = "linux")]
 mod portal;
@@ -22,8 +20,6 @@ use super::page::BridgeRequest;
 use crate::osr::control::ControlWriter;
 use crate::osr::protocol::PrintDocumentOutcome;
 pub(in crate::osr::host) use files::PrintFiles;
-#[cfg(target_os = "linux")]
-pub(in crate::osr::host) use parent::ExportedWindow;
 
 /// What this window prints: the documents its browser loads out of sight,
 /// and on Linux the print dialogs its pages are waiting for.

@@ -7,6 +7,7 @@ use zbus::{Connection, Fd, OwnedVariant, Proxy, Variant};
 
 use super::Paper;
 use super::pdf::PageRanges;
+use crate::osr::host::native::OsrNativeHost;
 
 const PRINT: &str = "org.freedesktop.portal.Print";
 const A4: (f64, f64) = (210.0, 297.0);
@@ -22,6 +23,15 @@ static REMEMBERED: Mutex<Option<(Results, Results)>> = Mutex::new(None);
 pub(super) struct Requester {
     pub(super) app_id: Option<String>,
     pub(super) parent: String,
+}
+
+impl OsrNativeHost {
+    pub(super) fn print_requester(&mut self) -> Requester {
+        Requester {
+            app_id: self.config.app_id.clone(),
+            parent: self.portal_parent(),
+        }
+    }
 }
 
 /// One conversation with the desktop's print portal.
