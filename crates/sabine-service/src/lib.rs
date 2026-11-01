@@ -69,11 +69,14 @@ mod tests {
     use super::*;
 
     fn service() -> SabineService {
-        SabineService::new(std::env::temp_dir().join(format!(
+        let root = std::env::temp_dir().join(format!(
             "sabine-service-test-{}-{}",
             std::process::id(),
             types::unix_timestamp()
-        )))
+        ));
+        let mut service = SabineService::new(&root);
+        service.system_root = root.join("system");
+        service
     }
 
     fn manifest() -> AppManifest {

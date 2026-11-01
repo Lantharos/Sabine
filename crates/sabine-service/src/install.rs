@@ -52,13 +52,16 @@ const SERVICE_REPO: &str = "Lantharos/Sabine";
 const SYSTEM_UPDATE_PUBLIC_KEYS: &str = include_str!("../update-public-key.txt");
 
 pub fn installed_system_compatibility() -> SystemCompatibility {
-    system_compatibility_in(&sabine_runtime::sabine_data_dir())
+    system_compatibility_in(
+        &sabine_runtime::sabine_data_dir(),
+        &sabine_runtime::system_dir(),
+    )
 }
 
 /// What the newest Sabine accepts, of the one installed under `root` and the
-/// one installed for every user.
-pub(crate) fn system_compatibility_in(root: &Path) -> SystemCompatibility {
-    [root, &sabine_runtime::system_dir()]
+/// one installed for every user under `system_root`.
+pub(crate) fn system_compatibility_in(root: &Path, system_root: &Path) -> SystemCompatibility {
+    [root, system_root]
         .into_iter()
         .filter_map(read_installation_state_in)
         .map(|state| state.compatibility)

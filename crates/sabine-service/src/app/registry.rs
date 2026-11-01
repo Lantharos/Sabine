@@ -17,6 +17,7 @@ use crate::types::{
 #[derive(Clone, Debug)]
 pub struct SabineService {
     pub(crate) root: PathBuf,
+    pub(crate) system_root: PathBuf,
     pub(crate) runtime: RuntimeConfig,
 }
 
@@ -30,6 +31,7 @@ impl SabineService {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             root: root.into(),
+            system_root: sabine_runtime::system_dir(),
             runtime: RuntimeConfig::default(),
         }
     }
@@ -49,7 +51,7 @@ impl SabineService {
         let mut registry = self.load_registry()?;
         if let Some(message) = incompatibility_message(
             &manifest,
-            crate::install::system_compatibility_in(&self.root),
+            crate::install::system_compatibility_in(&self.root, &self.system_root),
         ) {
             return Err(ServiceError::IncompatibleApp(message));
         }
@@ -124,7 +126,7 @@ impl SabineService {
     }
 
     pub(crate) fn incompatible_apps(&self) -> ServiceResult<Vec<String>> {
-        let compatibility = crate::install::system_compatibility_in(&self.root);
+        let compatibility = crate::install::system_compatibility_in(&self.root, &self.system_root);
         Ok(self
             .apps()?
             .into_iter()
