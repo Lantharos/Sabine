@@ -1,12 +1,16 @@
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(target_os = "linux")]
 mod portal;
-#[cfg(not(target_os = "linux"))]
-mod system;
+#[cfg(target_os = "windows")]
+mod windows;
 
+#[cfg(target_os = "macos")]
+pub use macos::AppearanceWatcher;
 #[cfg(target_os = "linux")]
 pub use portal::AppearanceWatcher;
-#[cfg(not(target_os = "linux"))]
-pub use system::system_appearance;
+#[cfg(target_os = "windows")]
+pub use windows::AppearanceWatcher;
 
 /// The desktop's light or dark preference and the accent color people chose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

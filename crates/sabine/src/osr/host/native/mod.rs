@@ -162,7 +162,6 @@ pub(super) struct OsrNativeHost {
     pub(super) placement: Option<sabine_platform::WindowPlacement>,
     #[cfg(target_os = "linux")]
     pub(super) resized_from_outside: bool,
-    #[cfg(target_os = "linux")]
     pub(super) appearance: sabine_platform::AppearanceWatcher,
     pub(super) published_appearance: Option<sabine_platform::Appearance>,
     pub(super) notifier: Option<sabine_platform::Notifier>,
@@ -198,7 +197,6 @@ impl OsrNativeHost {
         } else {
             LifecycleState::Suspended
         };
-        #[cfg(target_os = "linux")]
         let appearance_proxy = proxy.clone();
         Self {
             config,
@@ -307,7 +305,6 @@ impl OsrNativeHost {
             placement: None,
             #[cfg(target_os = "linux")]
             resized_from_outside: false,
-            #[cfg(target_os = "linux")]
             appearance: sabine_platform::AppearanceWatcher::start(move || {
                 appearance_proxy.wake_up()
             }),

@@ -68,7 +68,7 @@ impl Theme {
         #[cfg(target_os = "linux")]
         let dark = self.watcher.appearance(window).dark;
         #[cfg(not(target_os = "linux"))]
-        let dark = sabine_platform::system_appearance(window).dark;
+        let dark = window.theme() == Some(winit::window::Theme::Dark);
         if dark { DARK } else { LIGHT }
     }
 }

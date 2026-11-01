@@ -77,16 +77,12 @@ impl WindowRegion {
     }
 
     pub fn rounded_rect(width: i32, height: i32, radius: i32) -> Self {
-        let mut region = Self::empty();
         let radius = radius.min(width / 2).min(height / 2).max(0);
-        if radius == 0 {
-            return Self::full(width, height);
+        let mut shape = Shape::default();
+        for span in rounded_spans(0, height, height, radius) {
+            shape.add(span.inset, span, width - span.inset * 2);
         }
-        for y in 0..height.max(0) {
-            let inset = rounded_region_row_inset(y, height, radius);
-            region = region.add_rect(inset, y, width - inset * 2, 1);
-        }
-        region
+        shape.into_region()
     }
 
     pub fn adaptive_rounded_rect(radius: i32) -> Self {
@@ -97,16 +93,12 @@ impl WindowRegion {
     }
 
     pub fn rounded_left(width: i32, height: i32, radius: i32) -> Self {
-        let mut region = Self::empty();
         let radius = radius.min(width).min(height / 2).max(0);
-        if radius == 0 {
-            return Self::full(width, height);
+        let mut shape = Shape::default();
+        for span in rounded_spans(0, height, height, radius) {
+            shape.add(span.inset, span, width - span.inset);
         }
-        for y in 0..height.max(0) {
-            let inset = rounded_region_row_inset(y, height, radius);
-            region = region.add_rect(inset, y, width - inset, 1);
-        }
-        region
+        shape.into_region()
     }
 
     pub fn adaptive_rounded_left(width: i32, radius: i32) -> Self {
@@ -256,32 +248,19 @@ impl WindowRegion {
         titlebar_height: i32,
         radius: i32,
     ) -> Self {
-        let mut region = Self::empty();
         let width = width.max(0);
         let height = height.max(0);
         let sidebar_width = sidebar_width.clamp(0, width);
         let titlebar_height = titlebar_height.clamp(0, height);
         let radius = radius.min(width / 2).min(height / 2).max(0);
-
-        for y in 0..titlebar_height {
-            let inset = if radius > 0 && y < radius {
-                rounded_region_row_inset(y, radius * 2, radius)
-            } else {
-                0
-            };
-            region = region.add_rect(inset, y, width - inset * 2, 1);
+        let mut shape = Shape::default();
+        for span in rounded_spans(0, titlebar_height, height, radius) {
+            shape.add(span.inset, span, width - span.inset * 2);
         }
-
-        for y in titlebar_height..height {
-            let inset = if radius > 0 && y >= height - radius {
-                rounded_region_row_inset(y, height, radius)
-            } else {
-                0
-            };
-            region = region.add_rect(inset, y, sidebar_width - inset, 1);
+        for span in rounded_spans(titlebar_height, height, height, radius) {
+            shape.add(span.inset, span, sidebar_width - span.inset);
         }
-
-        region
+        shape.into_region()
     }
 
     fn content_after_sidebar(
@@ -309,7 +288,6 @@ impl WindowRegion {
         titlebar_height: i32,
         radius: i32,
     ) -> Self {
-        let mut region = Self::empty();
         let width = width.max(0);
         let height = height.max(0);
         let sidebar_width = sidebar_width.clamp(0, width);
@@ -318,16 +296,11 @@ impl WindowRegion {
             .min((width - sidebar_width) / 2)
             .min(height / 2)
             .max(0);
-        if radius == 0 {
-            return Self::content_after_sidebar(width, height, sidebar_width, titlebar_height);
+        let mut shape = Shape::default();
+        for span in rounded_spans(titlebar_height, height, height, radius) {
+            shape.add(sidebar_width, span, width - sidebar_width - span.inset);
         }
-
-        for y in titlebar_height..height {
-            let inset = rounded_region_row_inset(y, height, radius);
-            region = region.add_rect(sidebar_width, y, width - sidebar_width - inset, 1);
-        }
-
-        region
+        shape.into_region()
     }
 }
 
@@ -374,15 +347,106 @@ impl WindowRegions {
     }
 }
 
-fn rounded_region_row_inset(y: i32, height: i32, radius: i32) -> i32 {
-    let top = y < radius;
-    let bottom = y >= height - radius;
-    if !top && !bottom {
-        return 0;
+/// Rows of a shape that share how far its rounded corners inset them.
+#[derive(Clone, Copy)]
+struct Span {
+    y: i32,
+    height: i32,
+    inset: i32,
+}
+
+/// The rows from `top` to `bottom` of a shape `height` tall whose corners are
+/// rounded with `radius`: one span per row along the corners, and one for the
+/// straight rows between them.
+fn rounded_spans(top: i32, bottom: i32, height: i32, radius: i32) -> impl Iterator<Item = Span> {
+    let top_corner = (top..radius.min(bottom)).map(move |y| Span {
+        y,
+        height: 1,
+        inset: corner_inset(radius - y, radius),
+    });
+    let straight = radius.max(top)..(height - radius).min(bottom);
+    let straight = (!straight.is_empty()).then(|| Span {
+        y: straight.start,
+        height: straight.end - straight.start,
+        inset: 0,
+    });
+    let bottom_corner = (height - radius).max(top)..bottom;
+    let bottom_corner = bottom_corner.map(move |y| Span {
+        y,
+        height: 1,
+        inset: corner_inset(y - (height - radius - 1), radius),
+    });
+    top_corner.chain(straight).chain(bottom_corner)
+}
+
+/// How far a corner of `radius` insets the row `distance` rows from the
+/// corner's center.
+fn corner_inset(distance: i32, radius: i32) -> i32 {
+    let distance = f64::from(distance);
+    let radius = f64::from(radius);
+    (radius - (radius * radius - distance * distance).max(0.0).sqrt()).ceil() as i32
+}
+
+/// Rects built row span by row span, with spans that line up joined into one.
+#[derive(Default)]
+struct Shape(Vec<WindowRegionRect>);
+
+impl Shape {
+    fn add(&mut self, x: i32, span: Span, width: i32) {
+        let rect = WindowRegionRect::new(x, span.y, width, span.height);
+        if rect.is_empty() {
+            return;
+        }
+        match self.0.last_mut() {
+            Some(last)
+                if last.x == rect.x
+                    && last.width == rect.width
+                    && last.y + last.height == rect.y =>
+            {
+                last.height += rect.height;
+            }
+            _ => self.0.push(rect),
+        }
     }
 
-    let center_y = if top { radius } else { height - radius - 1 };
-    let dy = (y - center_y).abs() as f64;
-    let radius = radius as f64;
-    (radius - (radius * radius - dy * dy).max(0.0).sqrt()).ceil() as i32
+    fn into_region(self) -> WindowRegion {
+        WindowRegion {
+            rects: self.0,
+            adaptive: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn covers(region: &WindowRegion, x: i32, y: i32) -> bool {
+        region.rects.iter().any(|rect| {
+            (rect.x..rect.x + rect.width).contains(&x)
+                && (rect.y..rect.y + rect.height).contains(&y)
+        })
+    }
+
+    #[test]
+    fn rounded_rects_keep_straight_rows_in_one_rect() {
+        let region = WindowRegion::rounded_rect(400, 300, 12);
+        assert!(region.rects.len() <= 12 * 2 + 1);
+        assert!(region.rects.iter().any(|rect| rect.height == 300 - 24));
+        assert!(!covers(&region, 0, 0));
+        assert!(covers(&region, 12, 0));
+        assert!(covers(&region, 0, 150));
+        assert!(!covers(&region, 399, 299));
+    }
+
+    #[test]
+    fn titlebar_and_sidebar_round_only_the_outer_corners() {
+        let region = WindowRegion::titlebar_sidebar(800, 600, 260, 38, 14);
+        assert!(!covers(&region, 0, 0));
+        assert!(!covers(&region, 799, 0));
+        assert!(covers(&region, 799, 37));
+        assert!(!covers(&region, 400, 300));
+        assert!(covers(&region, 259, 599));
+        assert!(!covers(&region, 0, 599));
+    }
 }

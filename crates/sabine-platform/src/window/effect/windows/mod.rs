@@ -1,9 +1,12 @@
 // ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
 //
 // DWM composes a window's material behind its whole client area, so the page's
-// own transparency decides where it shows. Regions shape what Windows lets a
-// window do: an empty blur region removes the material and the input region
-// becomes the window's shape. Windows with system decorations keep their frame
+// own transparency decides where it shows. Windows has no region for the
+// material: since Windows 8 the region of DwmEnableBlurBehindWindow only makes
+// the window see-through without blurring, and DWM draws the material under
+// opaque DirectComposition content all the same, so an opaque region would
+// save nothing. Regions shape what Windows lets a window do: an empty blur
+// region removes the material and the input region becomes the window's shape. Windows with system decorations keep their frame
 // and are never shaped.
 
 mod material;
@@ -45,7 +48,17 @@ impl Backend {
         if !options.chrome.uses_native_decorations() {
             shape::round_corners(backend.hwnd);
         }
-        backend.show_material(window.theme().unwrap_or(Theme::Light));
+        if !backend.show_material(window.theme().unwrap_or(Theme::Light))
+            && backend.effect != WindowBackgroundEffect::None
+        {
+            sabine_runtime::report_error(
+                "window",
+                format!(
+                    "the {} material is not available on this version of Windows",
+                    backend.effect.as_str()
+                ),
+            );
+        }
         Some(backend)
     }
 
@@ -95,12 +108,7 @@ impl Backend {
         }
     }
 
-    fn show_material(&self, theme: Theme) {
-        if !material::show(self.hwnd, self.effect, theme == Theme::Dark)
-            && self.effect != WindowBackgroundEffect::None
-            && std::env::var_os("SABINE_TRACE").is_some()
-        {
-            eprintln!("Sabine window effect {:?} was not applied", self.effect);
-        }
+    fn show_material(&self, theme: Theme) -> bool {
+        material::show(self.hwnd, self.effect, theme == Theme::Dark)
     }
 }

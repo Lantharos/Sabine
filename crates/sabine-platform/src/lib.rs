@@ -1,43 +1,31 @@
-mod appearance;
-#[cfg(target_os = "macos")]
-mod controls_overlay;
-mod desktop_integration;
-mod effect;
-mod notifications;
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+compile_error!("Sabine supports Linux, macOS, and Windows desktop targets");
+
+mod desktop;
 #[cfg(target_os = "linux")]
-pub mod portal;
-mod regions;
-pub mod shell;
+mod linux;
 mod shortcut_inhibit;
 mod tasks;
-#[cfg(target_os = "linux")]
-mod wayland_client;
-mod window_options;
-#[cfg(target_os = "linux")]
-mod window_placement;
+mod window;
 
-pub use appearance::Appearance;
-#[cfg(target_os = "linux")]
-pub use appearance::AppearanceWatcher;
-#[cfg(not(target_os = "linux"))]
-pub use appearance::system_appearance;
-#[cfg(target_os = "macos")]
-pub use controls_overlay::{ControlsOverlay, controls_overlay};
-pub use desktop_integration::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation, GlobalShortcutFailure,
-    GlobalShortcutRegistration, NativeMessagingHost, PlatformEvent, Shortcut, ShortcutModifiers,
+pub use desktop::{
+    Appearance, AppearanceWatcher, AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation,
+    GlobalShortcutFailure, GlobalShortcutRegistration, NativeMessagingHost, Notification,
+    NotificationEvent, NotificationEvents, Notifier, PlatformEvent, Shortcut, ShortcutModifiers,
     SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
-    TrayMenuItemKind,
+    TrayMenuItemKind, Urgency, shell,
 };
-pub use effect::WindowEffect;
-pub use notifications::{Notification, NotificationEvent, NotificationEvents, Notifier, Urgency};
-pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+#[cfg(target_os = "linux")]
+pub use linux::portal;
 pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]
 pub use shortcut_inhibit::SystemKey;
 pub use tasks::async_runtime;
-pub use window_options::{
-    PlatformOs, WindowBackgroundEffect, WindowChrome, WindowOptions, current_desktop_os,
+#[cfg(target_os = "macos")]
+pub use window::{ControlsOverlay, controls_overlay};
+pub use window::{
+    WindowBackgroundEffect, WindowChrome, WindowEffect, WindowOptions, WindowRegion,
+    WindowRegionAdaptive, WindowRegionRect, WindowRegions,
 };
 #[cfg(target_os = "linux")]
-pub use window_placement::{WindowPlacement, resizes_from_outside};
+pub use window::{WindowPlacement, resizes_from_outside};

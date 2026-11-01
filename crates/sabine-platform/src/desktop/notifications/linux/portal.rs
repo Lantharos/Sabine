@@ -1,8 +1,8 @@
 use futures_util::StreamExt;
 use zbus::{Connection, OwnedVariant, Proxy, Variant};
 
-use crate::notifications::{Notification, NotificationEvent, NotificationEvents, Urgency};
 use crate::portal::{self, Options, Results};
+use crate::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 const NOTIFICATION: &str = "org.freedesktop.portal.Notification";
 const DEFAULT_ACTION: &str = "app.sabine-notification";

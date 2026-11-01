@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Mutex};
 use futures_util::StreamExt;
 use zbus::{Connection, Proxy, Variant, message::Message};
 
-use crate::notifications::{Notification, NotificationEvent, NotificationEvents, Urgency};
+use crate::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 pub(super) const SERVICE: &str = "org.freedesktop.Notifications";
 const PATH: &str = "/org/freedesktop/Notifications";

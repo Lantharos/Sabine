@@ -30,9 +30,8 @@ impl Backend {
             return None;
         };
         let view = unsafe { Retained::retain(handle.ns_view.cast::<NSView>().as_ptr()) }?;
-        let material = options
-            .wants_background_effect()
-            .then(|| install_material(main_thread, &view, options.background_effect));
+        let material = visual_effect_material(options)
+            .map(|material| install_material(main_thread, &view, material));
         Some(Self {
             view,
             material,
@@ -74,16 +73,23 @@ impl Drop for Backend {
     }
 }
 
+fn visual_effect_material(options: &WindowOptions) -> Option<NSVisualEffectMaterial> {
+    if !options.transparent {
+        return None;
+    }
+    match options.background_effect {
+        WindowBackgroundEffect::None => None,
+        WindowBackgroundEffect::Glass => Some(NSVisualEffectMaterial::UnderWindowBackground),
+        WindowBackgroundEffect::HudWindow => Some(NSVisualEffectMaterial::HUDWindow),
+        WindowBackgroundEffect::Sidebar => Some(NSVisualEffectMaterial::Sidebar),
+    }
+}
+
 fn install_material(
     main_thread: MainThreadMarker,
     content_view: &NSView,
-    effect: WindowBackgroundEffect,
+    material: NSVisualEffectMaterial,
 ) -> Retained<NSVisualEffectView> {
-    let material = match effect {
-        WindowBackgroundEffect::HudWindow => NSVisualEffectMaterial::HUDWindow,
-        WindowBackgroundEffect::Sidebar => NSVisualEffectMaterial::Sidebar,
-        _ => NSVisualEffectMaterial::UnderWindowBackground,
-    };
     let effect_view = NSVisualEffectView::initWithFrame(main_thread.alloc(), content_view.bounds());
     effect_view.setMaterial(material);
     effect_view.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);

@@ -18,21 +18,41 @@ use windows::UI::Notifications::{
 };
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
 use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
-use windows::core::HSTRING;
+use windows::core::{HSTRING, Ref};
 
 use super::{Notification, NotificationEvent, NotificationEvents, Urgency};
 
 pub(super) struct Backend {
     notifier: Result<ToastNotifier, String>,
-    shown: Arc<Mutex<HashMap<String, ToastNotification>>>,
+    shown: Shown,
     events: NotificationEvents,
+}
+
+/// The toasts on screen by id. A toast leaves it when it is clicked or
+/// dismissed, unless one shown later with the same id replaced it.
+#[derive(Clone, Default)]
+struct Shown(Arc<Mutex<HashMap<String, ToastNotification>>>);
+
+impl Shown {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, ToastNotification>> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn forget(&self, id: &str, toast: Option<&ToastNotification>) -> bool {
+        let mut shown = self.lock();
+        let current = toast.is_some() && shown.get(id) == toast;
+        if current {
+            shown.remove(id);
+        }
+        current
+    }
 }
 
 impl Backend {
     pub(super) fn new(app_id: &str, app_name: &str, events: NotificationEvents) -> Self {
         Self {
             notifier: register_app(app_id, app_name).map_err(|error| error.to_string()),
-            shown: Arc::default(),
+            shown: Shown::default(),
             events,
         }
     }
@@ -44,12 +64,9 @@ impl Backend {
         }
     }
 
+    /// Hides the toast, which reports it closed once Windows dismissed it.
     pub(super) fn close(&self, id: &str) {
-        let toast = self
-            .shown
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .remove(id);
+        let toast = self.shown.lock().get(id).cloned();
         if let (Ok(notifier), Some(toast)) = (&self.notifier, toast) {
             let _ = notifier.Hide(&toast);
         }
@@ -59,38 +76,31 @@ impl Backend {
         let notifier = self.notifier.as_ref().map_err(Clone::clone)?;
         let toast = toast(&notification).map_err(|error| error.to_string())?;
         let id = notification.id;
-        let clicked = (Arc::clone(&self.events), id.clone());
+        let clicked = (Arc::clone(&self.events), id.clone(), self.shown.clone());
         toast
-            .Activated(&TypedEventHandler::new(move |_, _| {
-                (clicked.0)(NotificationEvent::Clicked {
-                    id: clicked.1.clone(),
-                    activation_token: None,
-                });
-                Ok(())
-            }))
+            .Activated(&TypedEventHandler::new(
+                move |sender: Ref<ToastNotification>, _| {
+                    clicked.2.forget(&clicked.1, sender.as_ref());
+                    (clicked.0)(NotificationEvent::Clicked {
+                        id: clicked.1.clone(),
+                        activation_token: None,
+                    });
+                    Ok(())
+                },
+            ))
             .map_err(|error| error.to_string())?;
-        let dismissed = (
-            Arc::clone(&self.events),
-            id.clone(),
-            Arc::clone(&self.shown),
-        );
+        let dismissed = (Arc::clone(&self.events), id.clone(), self.shown.clone());
         toast
-            .Dismissed(&TypedEventHandler::new(move |_, _| {
-                dismissed
-                    .2
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .remove(&dismissed.1);
-                (dismissed.0)(NotificationEvent::Closed(dismissed.1.clone()));
-                Ok(())
-            }))
+            .Dismissed(&TypedEventHandler::new(
+                move |sender: Ref<ToastNotification>, _| {
+                    if dismissed.2.forget(&dismissed.1, sender.as_ref()) {
+                        (dismissed.0)(NotificationEvent::Closed(dismissed.1.clone()));
+                    }
+                    Ok(())
+                },
+            ))
             .map_err(|error| error.to_string())?;
-        if let Some(previous) = self
-            .shown
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .insert(id, toast.clone())
-        {
+        if let Some(previous) = self.shown.lock().insert(id, toast.clone()) {
             let _ = notifier.Hide(&previous);
         }
         notifier.Show(&toast).map_err(|error| error.to_string())

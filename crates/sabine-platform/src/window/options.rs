@@ -1,28 +1,4 @@
-use crate::regions::WindowRegions;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlatformOs {
-    Linux,
-    Windows,
-    Macos,
-}
-
-pub fn current_desktop_os() -> PlatformOs {
-    #[cfg(target_os = "linux")]
-    {
-        PlatformOs::Linux
-    }
-    #[cfg(target_os = "windows")]
-    {
-        PlatformOs::Windows
-    }
-    #[cfg(target_os = "macos")]
-    {
-        PlatformOs::Macos
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-    compile_error!("Sabine supports Linux, macOS, and Windows desktop targets");
-}
+use super::regions::WindowRegions;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WindowChrome {
@@ -39,34 +15,49 @@ impl WindowChrome {
     }
 }
 
+/// The material a transparent window shows behind its page, where the page
+/// leaves it see-through. Each desktop has materials of its own; `Glass` is
+/// the standard one everywhere.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WindowBackgroundEffect {
     #[default]
     None,
-    Blur,
+    /// A blur of what is behind the window on Wayland compositors that offer
+    /// `ext_background_effect_v1`, acrylic on Windows and the under-window
+    /// material on macOS.
     Glass,
-    Acrylic,
+    /// A plain blur, without acrylic's tint.
+    #[cfg(target_os = "windows")]
+    Blur,
+    /// The Windows 11 material tinted by the desktop background.
+    #[cfg(target_os = "windows")]
     Mica,
+    /// Mica tinted more strongly, as tabbed windows use it.
+    #[cfg(target_os = "windows")]
     MicaAlt,
-    Vibrancy,
+    /// The dark material of heads-up panels.
+    #[cfg(target_os = "macos")]
     HudWindow,
+    /// The material of sidebars such as Finder's.
+    #[cfg(target_os = "macos")]
     Sidebar,
-    UnderWindowBackground,
 }
 
 impl WindowBackgroundEffect {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "none" => Some(Self::None),
-            "blur" => Some(Self::Blur),
             "glass" => Some(Self::Glass),
-            "acrylic" => Some(Self::Acrylic),
+            #[cfg(target_os = "windows")]
+            "blur" => Some(Self::Blur),
+            #[cfg(target_os = "windows")]
             "mica" => Some(Self::Mica),
+            #[cfg(target_os = "windows")]
             "mica-alt" => Some(Self::MicaAlt),
-            "vibrancy" => Some(Self::Vibrancy),
+            #[cfg(target_os = "macos")]
             "hud-window" => Some(Self::HudWindow),
+            #[cfg(target_os = "macos")]
             "sidebar" => Some(Self::Sidebar),
-            "under-window-background" => Some(Self::UnderWindowBackground),
             _ => None,
         }
     }
@@ -74,15 +65,17 @@ impl WindowBackgroundEffect {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "none",
-            Self::Blur => "blur",
             Self::Glass => "glass",
-            Self::Acrylic => "acrylic",
+            #[cfg(target_os = "windows")]
+            Self::Blur => "blur",
+            #[cfg(target_os = "windows")]
             Self::Mica => "mica",
+            #[cfg(target_os = "windows")]
             Self::MicaAlt => "mica-alt",
-            Self::Vibrancy => "vibrancy",
+            #[cfg(target_os = "macos")]
             Self::HudWindow => "hud-window",
+            #[cfg(target_os = "macos")]
             Self::Sidebar => "sidebar",
-            Self::UnderWindowBackground => "under-window-background",
         }
     }
 

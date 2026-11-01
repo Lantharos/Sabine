@@ -260,10 +260,7 @@ impl OsrNativeHost {
 
     fn current_appearance(&self) -> Option<sabine_platform::Appearance> {
         let window = self.window.as_ref()?;
-        #[cfg(target_os = "linux")]
-        return Some(self.appearance.appearance(window.as_ref()));
-        #[cfg(not(target_os = "linux"))]
-        return Some(sabine_platform::system_appearance(window.as_ref()));
+        Some(self.appearance.appearance(window.as_ref()))
     }
 
     /// Tells the page and the app when the desktop's appearance changed.

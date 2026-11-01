@@ -5,8 +5,7 @@ mod wayland;
 #[cfg(target_os = "windows")]
 mod windows;
 
-#[cfg(target_os = "linux")]
-use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+#[cfg(not(target_os = "linux"))]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
@@ -44,24 +43,9 @@ impl ShortcutInhibitor {
 
     #[cfg(target_os = "linux")]
     pub fn new(window: &dyn Window) -> Result<Self, String> {
-        let RawDisplayHandle::Wayland(display) = window
-            .display_handle()
-            .map_err(|error| error.to_string())?
-            .as_raw()
-        else {
-            return Err("The window has no Wayland display".to_string());
-        };
-        let RawWindowHandle::Wayland(surface) = window
-            .window_handle()
-            .map_err(|error| error.to_string())?
-            .as_raw()
-        else {
-            return Err("The window has no Wayland surface".to_string());
-        };
-        let wayland = unsafe {
-            wayland::WaylandInhibitor::new(display.display.as_ptr(), surface.surface.as_ptr())
-        }?;
-        Ok(Self { _wayland: wayland })
+        Ok(Self {
+            _wayland: wayland::WaylandInhibitor::new(window)?,
+        })
     }
 
     /// Install the hook. Ctrl, Alt and the Windows keys stop reaching the OS

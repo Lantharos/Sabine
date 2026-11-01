@@ -229,12 +229,7 @@ impl SabineWindow {
     }
 
     pub fn glass(self) -> Self {
-        let effect = match sabine_platform::current_desktop_os() {
-            sabine_platform::PlatformOs::Windows => WindowBackgroundEffect::Acrylic,
-            sabine_platform::PlatformOs::Macos => WindowBackgroundEffect::Vibrancy,
-            sabine_platform::PlatformOs::Linux => WindowBackgroundEffect::Blur,
-        };
-        self.background_effect(effect)
+        self.background_effect(WindowBackgroundEffect::Glass)
     }
 
     pub fn background_effect(mut self, effect: WindowBackgroundEffect) -> Self {

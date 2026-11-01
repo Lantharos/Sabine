@@ -5,6 +5,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use sabine_platform::shell::{Requester, show_folder};
+
 pub fn log_directory() -> PathBuf {
     sabine_runtime::diagnostic_path("startup")
         .parent()
@@ -79,70 +81,14 @@ pub(crate) fn open_logs(
 ) -> Result<(), String> {
     let directory = log_directory();
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    std::thread::Builder::new()
-        .name("sabine-open-logs".into())
-        .spawn(move || {
-            let result = open_directory(&directory)
-                .map_err(|error| format!("{error}. Logs: {}", directory.display()));
-            if let Err(error) = &result {
-                sabine_runtime::report_error("notice", error);
-            }
-            finished(result);
-        })
-        .map(|_| ())
-        .map_err(|error| format!("Could not open logs: {error}"))
-}
-
-#[cfg(not(target_os = "windows"))]
-fn open_directory(directory: &std::path::Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let mut command = sabine_runtime::background_command("/usr/bin/open");
-    #[cfg(target_os = "linux")]
-    let mut command = sabine_runtime::background_command("xdg-open");
-    let status = command
-        .arg(directory)
-        .status()
-        .map_err(|error| error.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("The file manager exited with {status}"))
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn open_directory(directory: &std::path::Path) -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows::{
-        Win32::{
-            System::Com::{
-                COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
-            },
-            UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
-        },
-        core::{PCWSTR, w},
-    };
-    let path: Vec<u16> = directory.as_os_str().encode_wide().chain(Some(0)).collect();
-    unsafe {
-        CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)
-            .ok()
-            .map_err(|error| error.to_string())?;
-        let result = ShellExecuteW(
-            None,
-            w!("open"),
-            PCWSTR(path.as_ptr()),
-            None,
-            None,
-            SW_SHOWNORMAL,
-        );
-        CoUninitialize();
-        if result.0 as usize > 32 {
-            Ok(())
-        } else {
-            Err(format!(
-                "The Windows shell could not open logs (error {})",
-                result.0 as usize
-            ))
+    sabine_platform::async_runtime().spawn(async move {
+        let result = show_folder(&directory, Requester::default())
+            .await
+            .map_err(|error| format!("{error}. Logs: {}", directory.display()));
+        if let Err(error) = &result {
+            sabine_runtime::report_error("notice", error);
         }
-    }
+        finished(result);
+    });
+    Ok(())
 }

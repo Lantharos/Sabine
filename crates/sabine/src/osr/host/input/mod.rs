@@ -57,7 +57,6 @@ impl ApplicationHandler for OsrNativeHost {
         self.forward_system_keys();
         #[cfg(target_os = "linux")]
         self.deliver_clipboard_drops();
-        #[cfg(target_os = "linux")]
         self.refresh_appearance();
         self.process_osr_events(event_loop);
     }

@@ -2,15 +2,20 @@ use block2::{DynBlock, RcBlock};
 use objc2::{
     AllocAnyThread, DefinedClass, define_class, msg_send, rc::Retained, runtime::ProtocolObject,
 };
-use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSArray, NSBundle, NSError, NSObject, NSObjectProtocol, NSSet, NSString};
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNMutableNotificationContent, UNNotification,
+    UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationCategory,
+    UNNotificationCategoryOptions, UNNotificationDismissActionIdentifier,
     UNNotificationInterruptionLevel, UNNotificationPresentationOptions, UNNotificationRequest,
     UNNotificationResponse, UNNotificationSound, UNUserNotificationCenter,
     UNUserNotificationCenterDelegate,
 };
 
 use super::{Notification, NotificationEvent, NotificationEvents, Urgency};
+
+/// The category of every notification Sabine shows, which asks macOS to
+/// report dismissals as well as clicks.
+const CATEGORY: &str = "dev.sabine.notification";
 
 define_class!(
     #[unsafe(super(NSObject))]
@@ -42,9 +47,15 @@ define_class!(
             completion: &DynBlock<dyn Fn()>,
         ) {
             let id = response.notification().request().identifier().to_string();
-            (self.ivars())(NotificationEvent::Clicked {
-                id,
-                activation_token: None,
+            let dismissed =
+                &*response.actionIdentifier() == unsafe { UNNotificationDismissActionIdentifier };
+            (self.ivars())(if dismissed {
+                NotificationEvent::Closed(id)
+            } else {
+                NotificationEvent::Clicked {
+                    id,
+                    activation_token: None,
+                }
             });
             completion.call(());
         }
@@ -72,6 +83,14 @@ impl Backend {
                 ]
             };
             center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+            let category =
+                UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(
+                    &NSString::from_str(CATEGORY),
+                    &NSArray::new(),
+                    &NSArray::new(),
+                    UNNotificationCategoryOptions::CustomDismissAction,
+                );
+            center.setNotificationCategories(&NSSet::from_retained_slice(&[category]));
             center.requestAuthorizationWithOptions_completionHandler(
                 UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
                 &RcBlock::new(|_, _| {}),
@@ -92,6 +111,7 @@ impl Backend {
         let content = UNMutableNotificationContent::new();
         content.setTitle(&NSString::from_str(&notification.title));
         content.setBody(&NSString::from_str(&notification.body));
+        content.setCategoryIdentifier(&NSString::from_str(CATEGORY));
         if !notification.silent {
             content.setSound(Some(&UNNotificationSound::defaultSound()));
         }

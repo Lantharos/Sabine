@@ -45,10 +45,10 @@ type SetWindowCompositionAttribute =
 pub(super) fn show(hwnd: HWND, effect: WindowBackgroundEffect, dark: bool) -> bool {
     let applied = match effect {
         WindowBackgroundEffect::None => return false,
+        WindowBackgroundEffect::Glass => set_accent(hwnd, ACCENT_ACRYLIC, 125, dark),
         WindowBackgroundEffect::Blur => set_accent(hwnd, ACCENT_BLUR, 0, dark),
         WindowBackgroundEffect::Mica => set_backdrop(hwnd, DWMSBT_MAINWINDOW),
         WindowBackgroundEffect::MicaAlt => set_backdrop(hwnd, DWMSBT_TABBEDWINDOW),
-        _ => set_accent(hwnd, ACCENT_ACRYLIC, 125, dark),
     };
     set_dark_mode(hwnd, dark);
     applied
@@ -60,7 +60,7 @@ pub(super) fn hide(hwnd: HWND, effect: WindowBackgroundEffect) {
         WindowBackgroundEffect::Mica | WindowBackgroundEffect::MicaAlt => {
             set_backdrop(hwnd, DWMSBT_NONE);
         }
-        _ => {
+        WindowBackgroundEffect::Glass | WindowBackgroundEffect::Blur => {
             set_accent(hwnd, ACCENT_DISABLED, 0, false);
         }
     }
