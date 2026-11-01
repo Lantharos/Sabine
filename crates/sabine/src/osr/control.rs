@@ -52,11 +52,55 @@ struct ControlQueueState {
 
 enum ControlMessage {
     Motion(String),
+    Wheel {
+        wheel: Wheel,
+        line: String,
+    },
+    TouchMove {
+        id: i32,
+        line: String,
+    },
     Ordered {
         line: String,
         coalescing_key: Option<ControlCoalescingKey>,
     },
     Relayed(Vec<u8>),
+}
+
+/// A wheel turn the page has yet to receive, which later turns with the same
+/// modifiers add to while it waits.
+#[derive(Clone, Copy)]
+pub(crate) struct Wheel {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) dx: i32,
+    pub(crate) dy: i32,
+    pub(crate) modifiers: u32,
+}
+
+impl Wheel {
+    fn line(&self) -> String {
+        let Self {
+            x,
+            y,
+            dx,
+            dy,
+            modifiers,
+        } = self;
+        format!("mouse_wheel\t{x:.2}\t{y:.2}\t{dx}\t{dy}\t{modifiers}\n")
+    }
+
+    fn add(&mut self, newer: Self) -> bool {
+        if self.modifiers != newer.modifiers {
+            return false;
+        }
+        *self = Self {
+            dx: self.dx.saturating_add(newer.dx),
+            dy: self.dy.saturating_add(newer.dy),
+            ..newer
+        };
+        true
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -93,6 +137,16 @@ impl ControlWriter {
 
     pub(super) fn send_motion(&self, line: String) -> Result<(), String> {
         self.finish_send(self.queue.push_motion(line))
+    }
+
+    pub(super) fn send_wheel(&self, wheel: Wheel) -> Result<(), String> {
+        self.finish_send(self.queue.push_wheel(wheel))
+    }
+
+    /// Sends where a finger moved, replacing where it had moved to if the
+    /// browser has yet to hear that.
+    pub(super) fn send_touch_move(&self, id: i32, line: String) -> Result<(), String> {
+        self.finish_send(self.queue.push_touch_move(id, line))
     }
 
     fn finish_send(&self, result: Result<(), String>) -> Result<(), String> {
@@ -170,7 +224,7 @@ impl ControlQueue {
         while state.messages.len() >= MAX_QUEUED_CONTROLS
             || state.bytes + line.len() > MAX_QUEUED_BYTES
         {
-            let Some(index) = state.messages.iter().position(ControlMessage::is_motion) else {
+            let Some(index) = state.messages.iter().position(ControlMessage::is_lossy) else {
                 return Err("control queue is full".to_string());
             };
             if let Some(removed) = state.messages.remove(index) {
@@ -188,31 +242,76 @@ impl ControlQueue {
     }
 
     fn push_motion(&self, line: String) -> Result<(), String> {
-        if line.len() > MAX_QUEUED_BYTES {
-            return Err("control message exceeds 64 MiB".to_string());
-        }
         let mut state = self.lock_open_state()?;
         if matches!(state.messages.back(), Some(ControlMessage::Motion(_)))
             && let Some(removed) = state.messages.pop_back()
         {
             state.bytes -= removed.len();
         }
-        if (state.messages.len() >= MAX_QUEUED_CONTROLS
-            || state.bytes + line.len() > MAX_QUEUED_BYTES)
-            && let Some(index) = state.messages.iter().position(ControlMessage::is_motion)
+        self.push_lossy(state, ControlMessage::Motion(line));
+        Ok(())
+    }
+
+    fn push_wheel(&self, wheel: Wheel) -> Result<(), String> {
+        let mut state = self.lock_open_state()?;
+        let queue = &mut *state;
+        if let Some(ControlMessage::Wheel {
+            wheel: queued,
+            line,
+        }) = queue.messages.back_mut()
+            && queued.add(wheel)
+        {
+            let merged = queued.line();
+            queue.bytes = queue.bytes - line.len() + merged.len();
+            *line = merged;
+            return Ok(());
+        }
+        let line = wheel.line();
+        self.push_lossy(state, ControlMessage::Wheel { wheel, line });
+        Ok(())
+    }
+
+    fn push_touch_move(&self, id: i32, line: String) -> Result<(), String> {
+        let mut state = self.lock_open_state()?;
+        let queue = &mut *state;
+        let pending = queue
+            .messages
+            .iter_mut()
+            .rev()
+            .take_while(|message| matches!(message, ControlMessage::TouchMove { .. }))
+            .find_map(|message| match message {
+                ControlMessage::TouchMove { id: queued, line } if *queued == id => Some(line),
+                _ => None,
+            });
+        if let Some(pending) = pending {
+            let replaced = std::mem::replace(pending, line);
+            queue.bytes = queue.bytes - replaced.len() + pending.len();
+            return Ok(());
+        }
+        self.push_lossy(state, ControlMessage::TouchMove { id, line });
+        Ok(())
+    }
+
+    /// Queues input a newer event supersedes, giving way to whatever must
+    /// reach the browser when the queue is full.
+    fn push_lossy(
+        &self,
+        mut state: std::sync::MutexGuard<'_, ControlQueueState>,
+        message: ControlMessage,
+    ) {
+        let len = message.len();
+        if (state.messages.len() >= MAX_QUEUED_CONTROLS || state.bytes + len > MAX_QUEUED_BYTES)
+            && let Some(index) = state.messages.iter().position(ControlMessage::is_lossy)
             && let Some(removed) = state.messages.remove(index)
         {
             state.bytes -= removed.len();
         }
-        if state.messages.len() < MAX_QUEUED_CONTROLS
-            && state.bytes + line.len() <= MAX_QUEUED_BYTES
-        {
-            state.bytes += line.len();
-            state.messages.push_back(ControlMessage::Motion(line));
+        if state.messages.len() < MAX_QUEUED_CONTROLS && state.bytes + len <= MAX_QUEUED_BYTES {
+            state.bytes += len;
+            state.messages.push_back(message);
         }
         drop(state);
         self.ready.notify_one();
-        Ok(())
     }
 
     fn lock_open_state(&self) -> Result<std::sync::MutexGuard<'_, ControlQueueState>, String> {
@@ -259,13 +358,19 @@ impl ControlQueue {
 impl ControlMessage {
     fn len(&self) -> usize {
         match self {
-            Self::Motion(line) | Self::Ordered { line, .. } => line.len(),
+            Self::Motion(line)
+            | Self::Wheel { line, .. }
+            | Self::TouchMove { line, .. }
+            | Self::Ordered { line, .. } => line.len(),
             Self::Relayed(frame) => frame.len(),
         }
     }
 
-    fn is_motion(&self) -> bool {
-        matches!(self, Self::Motion(_))
+    fn is_lossy(&self) -> bool {
+        matches!(
+            self,
+            Self::Motion(_) | Self::Wheel { .. } | Self::TouchMove { .. }
+        )
     }
 
     fn is_coalescible_state(&self) -> bool {
@@ -290,7 +395,10 @@ impl ControlMessage {
 
     fn into_bytes(self) -> Vec<u8> {
         match self {
-            Self::Motion(line) | Self::Ordered { line, .. } => line.into_bytes(),
+            Self::Motion(line)
+            | Self::Wheel { line, .. }
+            | Self::TouchMove { line, .. }
+            | Self::Ordered { line, .. } => line.into_bytes(),
             Self::Relayed(frame) => frame,
         }
     }

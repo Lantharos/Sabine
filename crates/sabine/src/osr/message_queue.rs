@@ -1,9 +1,11 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     sync::{Arc, Condvar, Mutex},
 };
 
-use super::protocol::{FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect};
+use super::protocol::{
+    ContextMenuItem, FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect,
+};
 
 const MAX_QUEUED_MESSAGES: usize = 256;
 const MAX_QUEUED_BYTES: usize = 256 * 1024 * 1024;
@@ -34,10 +36,16 @@ pub(super) struct MessageQueue {
 
 #[derive(Default)]
 struct MessageQueueState {
-    messages: VecDeque<OsrMessage>,
+    messages: VecDeque<RetainedMessage>,
     wake_queued: bool,
     retained_bytes: usize,
     closed: bool,
+}
+
+/// A queued message with the bytes it keeps alive, counted once when queued.
+struct RetainedMessage {
+    message: OsrMessage,
+    bytes: usize,
 }
 
 impl MessageQueue {
@@ -58,30 +66,42 @@ impl MessageQueue {
         let available = MAX_QUEUED_BYTES.saturating_sub(state.retained_bytes);
         let message = match message {
             OsrMessage::PaintBatch(incoming) => {
-                let matching = state
+                let incoming_bytes = batch_retained_bytes(&incoming);
+                let queue = &mut *state;
+                let matching = queue
                     .messages
                     .iter_mut()
                     .rev()
-                    .take_while(|message| is_frame(message))
-                    .find_map(|message| match message {
-                        OsrMessage::PaintBatch(queued) if queued.surface == incoming.surface => {
-                            Some(queued)
+                    .take_while(|queued| is_frame(&queued.message))
+                    .find_map(|queued| match &mut queued.message {
+                        OsrMessage::PaintBatch(batch) if batch.surface == incoming.surface => {
+                            Some((batch, &mut queued.bytes))
                         }
                         _ => None,
                     });
-                if let Some(queued) = matching {
-                    let previous_bytes = batch_retained_bytes(queued);
-                    match merge_paint_batch(queued, incoming, available + previous_bytes) {
-                        None => {
-                            let merged_bytes = batch_retained_bytes(queued);
-                            state.retained_bytes =
-                                state.retained_bytes - previous_bytes + merged_bytes;
-                            return Queued::woken(queue_wake(&mut state));
+                if let Some((queued, queued_bytes)) = matching {
+                    let merge_limit = (available + *queued_bytes).min(MAX_MERGED_BYTES);
+                    if let Some(incoming) = merge_paint_batch(
+                        queued,
+                        incoming,
+                        *queued_bytes + incoming_bytes,
+                        merge_limit,
+                    ) {
+                        RetainedMessage {
+                            message: OsrMessage::PaintBatch(incoming),
+                            bytes: incoming_bytes,
                         }
-                        Some(incoming) => OsrMessage::PaintBatch(incoming),
+                    } else {
+                        let merged_bytes = batch_retained_bytes(queued);
+                        queue.retained_bytes = queue.retained_bytes - *queued_bytes + merged_bytes;
+                        *queued_bytes = merged_bytes;
+                        return Queued::woken(queue_wake(queue));
                     }
                 } else {
-                    OsrMessage::PaintBatch(incoming)
+                    RetainedMessage {
+                        message: OsrMessage::PaintBatch(incoming),
+                        bytes: incoming_bytes,
+                    }
                 }
             }
             OsrMessage::AccelFrame(incoming) => {
@@ -89,10 +109,10 @@ impl MessageQueue {
                     .messages
                     .iter_mut()
                     .rev()
-                    .take_while(|message| is_frame(message))
-                    .find_map(|message| match message {
-                        OsrMessage::AccelFrame(queued) if queued.surface == incoming.surface => {
-                            Some(queued)
+                    .take_while(|queued| is_frame(&queued.message))
+                    .find_map(|queued| match &mut queued.message {
+                        OsrMessage::AccelFrame(frame) if frame.surface == incoming.surface => {
+                            Some(frame)
                         }
                         _ => None,
                     });
@@ -103,11 +123,11 @@ impl MessageQueue {
                         replaced_slot: Some(replaced.slot_token),
                     };
                 }
-                OsrMessage::AccelFrame(incoming)
+                RetainedMessage::new(OsrMessage::AccelFrame(incoming))
             }
-            message => message,
+            message => RetainedMessage::new(message),
         };
-        let bytes = message_retained_bytes(&message);
+        let bytes = message.bytes;
         while state.messages.len() >= MAX_QUEUED_MESSAGES
             || (!state.messages.is_empty()
                 && state.retained_bytes.saturating_add(bytes) > MAX_QUEUED_BYTES)
@@ -140,8 +160,16 @@ impl MessageQueue {
             return (VecDeque::new(), false);
         };
         let count = state.messages.len().min(MESSAGE_DISPATCH_BUDGET);
-        let messages: VecDeque<_> = state.messages.drain(..count).collect();
-        state.retained_bytes -= messages.iter().map(message_retained_bytes).sum::<usize>();
+        let mut released = 0;
+        let messages: VecDeque<_> = state
+            .messages
+            .drain(..count)
+            .map(|queued| {
+                released += queued.bytes;
+                queued.message
+            })
+            .collect();
+        state.retained_bytes -= released;
         let remaining = !state.messages.is_empty();
         state.wake_queued = remaining;
         drop(state);
@@ -166,17 +194,27 @@ fn queue_wake(state: &mut MessageQueueState) -> bool {
     }
 }
 
+impl RetainedMessage {
+    fn new(message: OsrMessage) -> Self {
+        let bytes = message_retained_bytes(&message);
+        Self { message, bytes }
+    }
+}
+
+/// Folds a newer batch for the same surface into a queued one, unless the
+/// two together would keep more than `limit` bytes alive. Returns the newer
+/// batch when it has to queue on its own.
 fn merge_paint_batch(
     queued: &mut OsrPaintBatch,
     incoming: OsrPaintBatch,
-    available: usize,
+    combined_bytes: usize,
+    limit: usize,
 ) -> Option<OsrPaintBatch> {
     if queued.surface != incoming.surface
         || queued.width != incoming.width
         || queued.height != incoming.height
         || queued.rects.len().saturating_add(incoming.rects.len()) > MAX_MERGED_RECTS
-        || batch_retained_bytes(queued).saturating_add(batch_retained_bytes(&incoming))
-            > available.min(MAX_MERGED_BYTES)
+        || combined_bytes > limit
     {
         return Some(incoming);
     }
@@ -202,17 +240,21 @@ fn rect_covers(newer: &PaintRect, older: &PaintRect) -> bool {
         && newer_bottom >= older_bottom
 }
 
+/// The bytes a batch keeps alive. The rects of one browser message share its
+/// buffer and stay next to each other, since merging appends whole batches,
+/// so each buffer counts once where its rects begin.
 fn batch_retained_bytes(batch: &OsrPaintBatch) -> usize {
-    let mut inline_sources = HashSet::new();
+    let mut previous_source = None;
     batch
         .rects
         .iter()
         .map(|rect| match &rect.bytes {
             FrameBytes::Inline { source, .. } => {
-                if inline_sources.insert(Arc::as_ptr(source)) {
-                    source.len()
-                } else {
+                let source_id = Arc::as_ptr(source);
+                if previous_source.replace(source_id) == Some(source_id) {
                     0
+                } else {
+                    source.len()
                 }
             }
             #[cfg(unix)]
@@ -232,7 +274,7 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
         | OsrMessage::TooltipChanged(text) => text.capacity(),
         OsrMessage::Cursor(PageCursorMessage::Custom(image)) => image.rgba.capacity(),
         OsrMessage::ContextMenu { items, .. } => {
-            items.iter().map(|item| item.label.capacity()).sum()
+            items.iter().map(ContextMenuItem::retained_bytes).sum()
         }
         OsrMessage::BridgeRequest(frame) => {
             frame.line.capacity() + frame.body.as_ref().map_or(0, Vec::capacity)
@@ -247,8 +289,11 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
             (drag.capacity() + exclusion.capacity())
                 * std::mem::size_of::<sabine_platform::WindowRegionRect>()
         }
-        OsrMessage::DragStarted { content, .. } => {
-            content.text.capacity() + content.html.capacity() + content.url.capacity()
+        OsrMessage::DragStarted { content, image, .. } => {
+            content.text.capacity()
+                + content.html.capacity()
+                + content.url.capacity()
+                + image.as_ref().map_or(0, |image| image.rgba.capacity())
         }
         OsrMessage::ImeSurroundingChanged { text, .. } => text.capacity(),
         _ => 0,
