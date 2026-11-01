@@ -6,6 +6,8 @@
 
 #include <cstdio>
 
+#include "include/cef_version_info.h"
+
 namespace sabine_osr {
 namespace {
 
@@ -126,13 +128,18 @@ bool FinishCopy(VulkanContext* vulkan, CopySubmission* submission) {
   return true;
 }
 
+bool FramesMayStillBeDrawing() {
+  static const bool may_still_be_drawing = cef_version_info(4) < 158;
+  return may_still_be_drawing;
+}
+
 bool SubmitCopy(VulkanContext* vulkan,
                 CopySubmission* submission,
                 std::optional<int> source_fd,
                 int target_fd) {
   const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
   VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-  if (kFramesMayStillBeDrawing && source_fd &&
+  if (FramesMayStillBeDrawing() && source_fd &&
       WaitForProducer(vulkan, submission->drawn, *source_fd)) {
     submit.waitSemaphoreCount = 1;
     submit.pWaitSemaphores = &submission->drawn;

@@ -253,7 +253,7 @@ bool CopyIntoSlot(VulkanContext* vulkan,
     slot->filled = true;
   }
   slot->unsettled =
-      kFramesMayStillBeDrawing && source_fd ? changed : PixelRegion{};
+      FramesMayStillBeDrawing() && source_fd ? changed : PixelRegion{};
   out->slot_token = g_surfaces.Claim(*slot);
   out->fd = slot->image.fd;
   out->resource_id = slot->resource_id;

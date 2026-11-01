@@ -3,15 +3,15 @@
 
 #include <optional>
 
-#include "include/cef_version.h"
 #include "osr/accelerated/linux/vulkan_context.h"
 
 namespace sabine_osr {
 
 // Chromium before 158 hands over a frame once its draw is submitted, not once
 // it finished (crbug.com/428022619), so a copy waits for the fences on the
-// dma-buf and copies again what it took from a frame still being drawn.
-constexpr bool kFramesMayStillBeDrawing = CHROME_VERSION_MAJOR < 158;
+// dma-buf and copies again what it took from a frame still being drawn. This
+// follows the Chromium the host runs on, not the one it was compiled against.
+bool FramesMayStillBeDrawing();
 
 // What one slot's copies are recorded and ordered with. A slot is copied into
 // again only after the window released it, so its last copy has normally long
