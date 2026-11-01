@@ -42,6 +42,18 @@
 - The Windows daemon comes back after a crash, as it does on Linux and macOS.
 - Runtime downloads read the full CEF build index, which outgrew the old 10 MB limit, and retry
   when the index server fails.
+- On Windows, a window that starts hidden, such as a tray app or palette, paints on the GPU like
+  any other window.
+- Fast scrolling and touch gestures no longer reconnect the page when Chromium falls behind:
+  pending wheel turns and finger moves merge instead of piling up, and leaving the window always
+  clears hover.
+- Dragging shows the dragged picture under the pointer, also outside the window.
+- Context menus show submenus and checked entries, and arrow keys open and close submenus.
+- Pen barrel buttons click as right and middle buttons while the pen hovers.
+- On Windows, the touch keyboard comes up when a touch or pen tap focuses a text field.
+- The Linux print dialog stays over the window that printed.
+- Windows no longer wake on a timer while waiting for Chromium, and recovering from a lost
+  graphics device no longer holds up the window.
 
 # Sabine 0.65
 
