@@ -43,11 +43,7 @@ impl BuildEnvironment {
             .env("NODE_ENV", self.mode.as_str())
             .env("SABINE_ENV", self.mode.as_str());
         if self.mode == sabine_service::AppEnvironment::Production {
-            for key in [
-                "SABINE_DEV_URL",
-                "SABINE_APP_ID",
-                "SABINE_MANIFEST_PATH",
-            ] {
+            for key in ["SABINE_DEV_URL", "SABINE_APP_ID", "SABINE_MANIFEST_PATH"] {
                 command.env_remove(key);
             }
         }

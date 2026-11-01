@@ -5,6 +5,7 @@ mod notes;
 
 use std::{fs, path::PathBuf, process::ExitCode};
 
+use crate::release::workflow::write_release_workflow;
 use app::write_app_template;
 use notes::write_notes_template;
 
@@ -29,7 +30,7 @@ pub fn new_app(name: &str, template: &str) -> ExitCode {
         _ => write_app_template(&root, name),
     }
     .and_then(|_| write_default_icon(&root))
-    .and_then(|_| write_release_workflow(&root));
+    .and_then(|_| write_release_workflow(&root).map(|_| ()));
     match result {
         Ok(()) => {
             println!("Created Sabine app at {}", root.display());
@@ -53,36 +54,6 @@ fn write_default_icon(root: &std::path::Path) -> std::io::Result<()> {
   <path d="M354 153c-25-24-59-37-99-37-65 0-111 34-111 84 0 54 47 70 104 82 47 10 69 18 69 42 0 25-24 39-61 39-43 0-80-16-108-47l-35 38c35 39 84 59 140 59 69 0 116-35 116-88 0-55-43-73-106-87-43-9-67-17-67-39 0-22 22-35 58-35 34 0 64 11 88 33z" fill="#f4f5f7"/>
 </svg>
 "##,
-    )
-}
-
-fn write_release_workflow(root: &std::path::Path) -> std::io::Result<()> {
-    let workflows = root.join(".github/workflows");
-    fs::create_dir_all(&workflows)?;
-    fs::write(
-        workflows.join("release.yml"),
-        format!(
-            r#"name: Release
-
-on:
-  push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-
-jobs:
-  release:
-    uses: Lantharos/Sabine/.github/workflows/release-app.yml@v{version}
-    with:
-      sabine_version: v{version}
-    secrets: inherit
-"#,
-            version = sabine_service::SABINE_VERSION
-        ),
     )
 }
 

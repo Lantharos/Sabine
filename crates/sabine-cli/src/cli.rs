@@ -134,6 +134,9 @@ pub(crate) enum Command {
         artifact: Vec<String>,
         #[arg(long)]
         executable: Vec<String>,
+        /// The HTTPS folder the packages are uploaded to; GitHub sources default to the release's downloads.
+        #[arg(long)]
+        base_url: Option<String>,
     },
     /// Lay out the service, daemon and CEF host of a Sabine system release.
     #[command(hide = true)]
@@ -158,9 +161,13 @@ pub(crate) enum Command {
         public_output: PathBuf,
     },
     ReleasePublicKey,
+    /// Set up signed GitHub releases and the release workflow for the app in this folder.
     ReleaseInit {
         #[arg(long)]
         repository: Option<String>,
+        /// Replace an existing update signing key; copies built with the old one stop updating.
+        #[arg(long)]
+        rotate_key: bool,
     },
 }
 

@@ -1,36 +1,44 @@
+mod init;
+pub(crate) mod workflow;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sabine_service::{
     AppArtifact, AppArtifactKind, AppReleaseManifest, AppUpdateSource, SystemReleaseArtifact,
-    SystemReleaseManifest, UpdatePolicy, public_key_from_private, sign_app_release,
-    sign_system_release,
+    SystemReleaseManifest, public_key_from_private, sign_app_release, sign_system_release,
 };
 
 use std::{
     collections::BTreeMap,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
+
+pub(crate) use init::initialize_github_release;
 
 use crate::project::{ConfigOverrides, absolute_path, resolve_app};
 
-pub(crate) fn write_manifest(
-    source: &Path,
-    output: &Path,
-    channel: &str,
-    artifact_specs: &[String],
-    executable_specs: &[String],
-) -> Result<(), String> {
+pub(crate) struct ManifestRequest<'a> {
+    pub source: &'a Path,
+    pub output: &'a Path,
+    pub channel: &'a str,
+    pub artifact_specs: &'a [String],
+    pub executable_specs: &'a [String],
+    pub base_url: Option<&'a str>,
+}
+
+pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
+    let ManifestRequest {
+        source,
+        output,
+        channel,
+        artifact_specs,
+        executable_specs,
+        base_url,
+    } = request;
     let app = resolve_app(source, ConfigOverrides::default())?;
     let updates = app.updates.ok_or_else(|| {
-        "configure [updates] in Sabine.toml, or build inside GitHub Actions".to_string()
+        "Sabine.toml names no update source; configure [updates], or build inside GitHub Actions"
+            .to_string()
     })?;
-    if updates.policy == UpdatePolicy::Disabled {
-        return Err("updates are disabled in Sabine.toml".to_string());
-    }
-    let AppUpdateSource::Github { repository } = &updates.source else {
-        return Err("release manifest generation currently requires the GitHub provider".into());
-    };
     let tag = format!("v{}", app.version);
     if let Ok(ref_name) = std::env::var("GITHUB_REF_NAME")
         && ref_name != tag
@@ -45,6 +53,20 @@ pub(crate) fn write_manifest(
             updates.channel
         ));
     }
+    let base_url = match (base_url, &updates.source) {
+        (Some(base_url), _) if base_url.starts_with("https://") => {
+            base_url.trim_end_matches('/').to_string()
+        }
+        (Some(_), _) => return Err("--base-url must use HTTPS".to_string()),
+        (None, AppUpdateSource::Github { repository }) => {
+            format!("https://github.com/{repository}/releases/download/{tag}")
+        }
+        (None, AppUpdateSource::Http { .. }) => {
+            return Err(
+                "pass --base-url with the HTTPS folder the packages are uploaded to".to_string(),
+            );
+        }
+    };
     let executables = parse_assignments(executable_specs)?;
     let mut artifacts = BTreeMap::new();
     for (target, raw_path) in parse_assignments(artifact_specs)? {
@@ -63,7 +85,7 @@ pub(crate) fn write_manifest(
         artifacts.insert(
             target.clone(),
             AppArtifact {
-                url: format!("https://github.com/{repository}/releases/download/{tag}/{file_name}"),
+                url: format!("{base_url}/{file_name}"),
                 sha256: sha256(&path)?,
                 kind,
                 executable: executables.get(&target).map(PathBuf::from),
@@ -179,89 +201,6 @@ pub(crate) fn generate_signing_key(public_output: &Path) -> Result<String, Strin
     }
     std::fs::write(public_output, format!("{public_key}\n")).map_err(|error| error.to_string())?;
     Ok(private_key)
-}
-
-pub(crate) fn initialize_github_release(repository: Option<&str>) -> Result<String, String> {
-    let repository = repository
-        .map(str::to_string)
-        .or_else(|| std::env::var("GITHUB_REPOSITORY").ok())
-        .or_else(|| {
-            Command::new("gh")
-                .args([
-                    "repo",
-                    "view",
-                    "--json",
-                    "nameWithOwner",
-                    "--jq",
-                    ".nameWithOwner",
-                ])
-                .output()
-                .ok()
-                .filter(|output| output.status.success())
-                .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        })
-        .filter(|repository| repository.split_once('/').is_some())
-        .ok_or_else(|| {
-            "could not determine GitHub repository; pass --repository owner/name".to_string()
-        })?;
-    let private_key = new_private_key()?;
-    let mut child = Command::new("gh")
-        .args([
-            "secret",
-            "set",
-            "SABINE_UPDATE_SIGNING_KEY",
-            "--repo",
-            &repository,
-        ])
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("failed to start GitHub CLI: {error}"))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| "GitHub CLI did not open secret input".to_string())?
-        .write_all(private_key.as_bytes())
-        .map_err(|error| error.to_string())?;
-    let status = child.wait().map_err(|error| error.to_string())?;
-    if !status.success() {
-        return Err("could not configure the app update signing secret".to_string());
-    }
-    let status = Command::new("gh")
-        .args([
-            "api",
-            "--method",
-            "PUT",
-            "-H",
-            "X-GitHub-Api-Version: 2026-03-10",
-            &format!("repos/{repository}/immutable-releases"),
-        ])
-        .status()
-        .map_err(|error| format!("failed to enable immutable releases: {error}"))?;
-    if !status.success() {
-        return Err("could not enable immutable GitHub Releases".to_string());
-    }
-    let public_key = public_key_from_private(&private_key).map_err(|error| error.to_string())?;
-    configure_app_updates(&repository, &public_key)?;
-    Ok(public_key)
-}
-
-fn configure_app_updates(repository: &str, public_key: &str) -> Result<(), String> {
-    let path = std::env::current_dir()
-        .map_err(|error| error.to_string())?
-        .join("Sabine.toml");
-    if !path.is_file() {
-        return Ok(());
-    }
-    let source = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
-    let mut document = source
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
-    document["updates"]["provider"] = toml_edit::value("github");
-    document["updates"]["repository"] = toml_edit::value(repository);
-    document["updates"]["channel"] = toml_edit::value("stable");
-    document["updates"]["policy"] = toml_edit::value("automatic");
-    document["updates"]["public_key"] = toml_edit::value(public_key);
-    std::fs::write(path, document.to_string()).map_err(|error| error.to_string())
 }
 
 pub(crate) fn signing_public_key() -> Result<String, String> {

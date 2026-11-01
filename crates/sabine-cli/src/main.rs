@@ -185,7 +185,15 @@ fn main() -> ExitCode {
             channel,
             artifact,
             executable,
-        } => match release::write_manifest(&source, &output, &channel, &artifact, &executable) {
+            base_url,
+        } => match release::write_manifest(release::ManifestRequest {
+            source: &source,
+            output: &output,
+            channel: &channel,
+            artifact_specs: &artifact,
+            executable_specs: &executable,
+            base_url: base_url.as_deref(),
+        }) {
             Ok(()) => {
                 println!("wrote {}", output.display());
                 ExitCode::SUCCESS
@@ -242,17 +250,18 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
-        Command::ReleaseInit { repository } => {
-            match release::initialize_github_release(repository.as_deref()) {
-                Ok(public_key) => {
-                    println!("configured signed immutable releases (public key {public_key})");
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("{error}");
-                    ExitCode::from(1)
-                }
+        Command::ReleaseInit {
+            repository,
+            rotate_key,
+        } => match release::initialize_github_release(repository.as_deref(), rotate_key) {
+            Ok(public_key) => {
+                println!("configured signed immutable releases (public key {public_key})");
+                ExitCode::SUCCESS
             }
-        }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
     }
 }
