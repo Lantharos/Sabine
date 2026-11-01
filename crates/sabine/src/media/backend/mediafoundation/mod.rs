@@ -17,7 +17,7 @@ use windows::Win32::Graphics::DirectComposition::{
 use winit::window::Window;
 
 use super::{Backend, Player};
-use crate::media::command::{Command, Events, PlayerOptions};
+use crate::media::command::{Command, Events, Failures, PlayerOptions};
 use crate::media::geometry::Layout;
 use crate::render::Composition;
 use worker::{Order, Surface, Worker};
@@ -31,6 +31,7 @@ pub(in crate::media) struct MediaFoundation {
 pub(in crate::media) struct MfPlayer {
     worker: Worker,
     placement: Option<Placement>,
+    failures: Failures,
 }
 
 /// The visuals the window thread positions: a clip for the visible part of
@@ -57,8 +58,9 @@ impl Backend for MediaFoundation {
 
     fn spawn(&mut self, options: PlayerOptions, events: Events) -> Result<MfPlayer, String> {
         Ok(MfPlayer {
-            worker: Worker::spawn(options, events),
+            worker: Worker::spawn(options, Arc::clone(&events)),
             placement: None,
+            failures: Failures::new(events),
         })
     }
 
@@ -101,9 +103,11 @@ impl Player for MfPlayer {
 
     fn place(&mut self, layout: Option<Layout>) {
         if let Some(placement) = &self.placement {
-            let placed = unsafe { placement.place(layout) };
-            if let Err(error) = placed {
-                eprintln!("Sabine media: could not place video: {error}");
+            match unsafe { placement.place(layout) } {
+                Ok(()) => self.failures.recovered(),
+                Err(error) => self
+                    .failures
+                    .report(format!("could not place video: {error}")),
             }
         }
         self.worker

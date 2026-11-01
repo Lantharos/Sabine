@@ -28,7 +28,7 @@ impl Worker {
             .name("sabine-media".into())
             .spawn(move || {
                 let session = gst::gst().and_then(|gst| {
-                    let presenter = Presenter::new(gst, wayland)?;
+                    let presenter = Presenter::new(gst, wayland, Arc::clone(&events))?;
                     Session::new(gst, options, presenter, thread_inbox, Arc::clone(&events))
                 });
                 match session {

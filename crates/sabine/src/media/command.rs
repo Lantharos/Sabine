@@ -11,6 +11,40 @@ pub(super) fn emit(events: &Events, kind: &str, mut payload: Value) {
     events(payload);
 }
 
+/// Tells the app's diagnostics and the page about a player failing to show
+/// its video, once until it shows video again rather than on every frame.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub(super) struct Failures {
+    events: Events,
+    reported: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+impl Failures {
+    pub(super) fn new(events: Events) -> Self {
+        Self {
+            events,
+            reported: false,
+        }
+    }
+
+    pub(super) fn report(&mut self, message: String) {
+        if std::mem::replace(&mut self.reported, true) {
+            return;
+        }
+        sabine_runtime::report_error("media", &message);
+        emit(
+            &self.events,
+            "error",
+            serde_json::json!({ "message": message }),
+        );
+    }
+
+    pub(super) fn recovered(&mut self) {
+        self.reported = false;
+    }
+}
+
 pub(super) struct PlayerOptions {
     pub(super) uri: String,
     pub(super) autoplay: bool,

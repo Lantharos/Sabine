@@ -45,7 +45,7 @@ fn app_file(url: &Url, web_root: Option<&Path>) -> Result<PathBuf, String> {
 
 fn local_file(url: &Url) -> Result<PathBuf, String> {
     let path = decoded_path(url)?;
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     let path = path
         .strip_prefix("/")
         .map(Path::to_path_buf)

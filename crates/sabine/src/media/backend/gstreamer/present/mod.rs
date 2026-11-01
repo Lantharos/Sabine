@@ -10,6 +10,7 @@ use khronos_egl as khronos;
 
 use super::gst::{self, Gst, Handle, types};
 use super::wayland::Target;
+use crate::media::command::{Events, Failures};
 use crate::media::geometry::Frame;
 use shader::{Picture, VideoProgram};
 
@@ -29,6 +30,7 @@ pub(super) struct Presenter {
     occluded: bool,
     shown: bool,
     sample: Option<Sample>,
+    failures: Failures,
 }
 
 struct Sample {
@@ -39,7 +41,7 @@ struct Sample {
 }
 
 impl Presenter {
-    pub(super) fn new(gst: &'static Gst, wayland: Handle) -> Result<Self, String> {
+    pub(super) fn new(gst: &'static Gst, wayland: Handle, events: Events) -> Result<Self, String> {
         let display = egl::display(gst, wayland)?;
         let context = display.create_context()?;
         display
@@ -74,6 +76,7 @@ impl Presenter {
             occluded: false,
             shown: false,
             sample: None,
+            failures: Failures::new(events),
         })
     }
 
@@ -191,7 +194,7 @@ impl Presenter {
             {
                 Ok(surface) => surface,
                 Err(error) => {
-                    eprintln!("Sabine media: {error}");
+                    self.failures.report(error);
                     return;
                 }
             },
@@ -205,7 +208,8 @@ impl Presenter {
                 Some(surface.surface),
                 Some(self.context),
             ) {
-                eprintln!("Sabine media: could not draw video: {error}");
+                self.failures
+                    .report(format!("could not draw video: {error}"));
                 return;
             }
             let _ = egl.swap_interval(self.display.display, 0);
@@ -227,9 +231,11 @@ impl Presenter {
             };
         }
         if let Err(error) = egl.swap_buffers(self.display.display, surface.surface) {
-            eprintln!("Sabine media: could not present video: {error}");
+            self.failures
+                .report(format!("could not present video: {error}"));
             return;
         }
+        self.failures.recovered();
         self.shown = true;
     }
 

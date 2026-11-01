@@ -2,7 +2,7 @@
 mod avfoundation;
 #[cfg(target_os = "linux")]
 mod gstreamer;
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 mod mediafoundation;
 
 use winit::window::Window;
@@ -11,7 +11,7 @@ use winit::window::Window;
 pub(super) use avfoundation::AvFoundation as Native;
 #[cfg(target_os = "linux")]
 pub(super) use gstreamer::GStreamer as Native;
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 pub(super) use mediafoundation::MediaFoundation as Native;
 
 use super::command::{Command, Events, PlayerOptions};
