@@ -36,6 +36,12 @@ export default defineConfig({
       title: "Sabine",
       description: "Build native desktop apps in Rust with a web interface, on Linux, Windows and macOS.",
       favicon: "/favicon.svg",
+      head: [
+        { tag: "meta", attrs: { property: "og:image", content: "https://sabine.rs/og.jpg" } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: "Sabine: Rust framework for native desktop apps powered by Chromium" } },
+      ],
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/Lantharos/Sabine" }],
       editLink: { baseUrl: "https://github.com/Lantharos/Sabine/edit/main/website/" },
       customCss: ["./src/styles/docs.css"],

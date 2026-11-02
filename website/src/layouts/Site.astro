@@ -9,6 +9,18 @@ interface Props {
 
 const { title, description } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  name: "Sabine",
+  description,
+  url: Astro.site,
+  codeRepository: "https://github.com/Lantharos/Sabine",
+  programmingLanguage: ["Rust", "TypeScript"],
+  runtimePlatform: ["Linux", "Windows", "macOS"],
+  license: ["https://opensource.org/license/mit", "https://www.apache.org/licenses/LICENSE-2.0"],
+  author: { "@type": "Organization", name: "Lantharos" },
+};
 ---
 
 <!doctype html>
@@ -27,8 +39,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={new URL("/og.png", Astro.site)} />
+    <meta property="og:site_name" content="Sabine" />
+    <meta property="og:image" content={new URL("/og.jpg", Astro.site)} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Sabine: Rust framework for native desktop apps powered by Chromium" />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
   </head>
   <body class="min-h-dvh overflow-x-clip font-sans">
     <slot />
