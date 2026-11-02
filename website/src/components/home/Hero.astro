@@ -1,6 +1,6 @@
 ---
 import { Image } from "astro:assets";
-import terrace from "./terrace.jpg";
+import planters from "./planters.jpg";
 ---
 
 <section class="frame grid grid-cols-12 gap-x-6 pt-8 sm:pt-14 lg:pt-12">
@@ -28,13 +28,13 @@ import terrace from "./terrace.jpg";
 
   <figure class="bleed unveil col-span-12 mt-14 lg:col-span-8 lg:mt-12" style="--delay:0.1s">
     <Image
-      src={terrace}
-      alt="A painted stone terrace with sheer curtains lifting in the wind and a swallow over the hills"
-      widths={[640, 1020]}
+      src={planters}
+      alt="A stone terrace in Ravello with a column, terracotta planters of geraniums and the Amalfi coast beyond"
+      widths={[640, 1024, 1440, 2048, 2400]}
       sizes="(min-width: 1024px) 66vw, 100vw"
       loading="eager"
       fetchpriority="high"
-      class="aspect-[4/5] w-full object-cover object-[58%_50%] sm:aspect-[16/11] lg:aspect-[16/10] lg:rounded-l-[1.25rem] lg:object-[50%_42%]"
+      class="aspect-[4/5] w-full object-cover object-[30%_50%] sm:aspect-[16/11] lg:aspect-[16/10] lg:rounded-l-[1.25rem] lg:object-[50%_55%]"
     />
   </figure>
 </section>

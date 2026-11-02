@@ -1,6 +1,6 @@
 ---
 import { Image } from "astro:assets";
-import banner from "../../../../assets/banner.png";
+import curtains from "./curtains.jpg";
 import barometer from "../../assets/apps/barometer.png";
 import disks from "../../assets/apps/disks.png";
 import draft from "../../assets/apps/draft.png";
@@ -45,7 +45,7 @@ const widest = Math.max(...apps.map((app) => app.shot.width));
   </div>
 
   <div class="bleed relative col-span-12 mt-12 overflow-hidden bg-cream-200 lg:col-span-8 lg:mt-0 lg:rounded-l-[1.25rem]">
-    <Image src={banner} alt="" width={480} loading="lazy" class="wallpaper" />
+    <Image src={curtains} alt="" width={960} loading="lazy" class="wallpaper" />
     <div class="stage aspect-[4/3] sm:aspect-[16/11]">
       {
         apps.map((app, index) => (
@@ -87,8 +87,8 @@ const widest = Math.max(...apps.map((app) => app.shot.width));
     height: 124%;
     max-width: none;
     object-fit: cover;
-    object-position: 70% 50%;
-    filter: blur(40px) saturate(1.15);
+    object-position: 50% 50%;
+    filter: blur(14px);
   }
 
   .stage {
