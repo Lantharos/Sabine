@@ -87,7 +87,9 @@ When the app starts, Sabine looks at its arguments, and at the arguments a secon
 [single instance](/docs/desktop/single-instance/). An argument is queued when it is:
 
 - a URL with one of the app's schemes, or
-- a file, named by path or by `file:` URL, whose extension is listed under `[app.extensions]`.
+- a file, named by path or by `file:` URL, whose extension is listed under `[app.extensions]`, or,
+  on Linux, whose type in the desktop's MIME database is one of the app's document types or a
+  kind of one, so a text editor that lists `text/plain` opens a `Makefile` or a `.conf` file.
 
 Relative paths are resolved against the working directory of the launch that received them.
 Arguments that start with `-` and anything else are left to the app, so your own options keep

@@ -12,6 +12,7 @@ use crate::error::{SabineError, SabineResult};
 
 const MANIFEST_ENV: &str = "SABINE_MANIFEST_PATH";
 const APP_ID_ENV: &str = "SABINE_APP_ID";
+const SCHEME_HANDLER: &str = "x-scheme-handler/";
 
 impl SabineWindow {
     /// Creates another window using the current app's resolved identity and
@@ -63,11 +64,14 @@ impl SabineWindow {
         if let Some(version) = file.app.version {
             self = self.app_version(version);
         }
-        let schemes = file
+        let (schemes, types): (Vec<_>, Vec<_>) = file
             .app
             .mime_types
             .iter()
-            .filter_map(|mime| mime.strip_prefix("x-scheme-handler/"))
+            .partition(|mime| mime.starts_with(SCHEME_HANDLER));
+        let schemes = schemes
+            .into_iter()
+            .filter_map(|mime| mime.strip_prefix(SCHEME_HANDLER))
             .collect::<Vec<_>>();
         if !schemes.is_empty() {
             let id = self
@@ -79,7 +83,10 @@ impl SabineWindow {
                 })?;
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
-        self.config.document_extensions = file.app.extensions.into_values().flatten().collect();
+        self.config.documents = super::DocumentTypes {
+            types: types.into_iter().cloned().collect(),
+            extensions: file.app.extensions.into_values().flatten().collect(),
+        };
         self.config.app_update = file
             .updates
             .map(sabine_service::AppUpdatesSection::resolve)

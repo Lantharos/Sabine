@@ -68,6 +68,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 khronos-egl = { version = "6.0.0", features = ["dynamic"] }
 landlock = "0.4.7"
 libc = "0.2.190"
+mime = "0.3.17"
 lopdf = { version = "0.46.0", default-features = false }
 libloading = "0.9.0"
 resvg = "0.48.1"
@@ -118,6 +119,7 @@ wayland-protocols = { version = "0.32.13", features = ["client", "staging", "uns
 wayland-scanner = "0.31.11"
 wgpu = "30.0.1"
 winit = { git = "https://github.com/Lantharos/winit", rev = "b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
+xdg-mime = "0.4.0"
 windows = "0.62.2"
 windows-core = "0.62.2"
 zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }

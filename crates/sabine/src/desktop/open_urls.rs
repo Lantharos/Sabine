@@ -90,22 +90,30 @@ impl OpenUrls {
 }
 
 /// What the app opens from its arguments: URLs with its schemes, and files
-/// with the extensions of its document types.
+/// of its document types, by extension and, on Linux, by the type the
+/// desktop gives them.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Openable {
     schemes: Vec<String>,
     extensions: Vec<String>,
+    #[cfg(target_os = "linux")]
+    types: super::platform::DocumentTypes,
 }
 
 impl Openable {
-    pub(crate) fn new(deep_links: &[DeepLinkRegistration], extensions: &[String]) -> Self {
+    pub(crate) fn new(
+        deep_links: &[DeepLinkRegistration],
+        documents: &crate::window::DocumentTypes,
+    ) -> Self {
         Self {
             schemes: deep_links
                 .iter()
                 .flat_map(|registration| &registration.schemes)
                 .map(|scheme| scheme.to_ascii_lowercase())
                 .collect(),
-            extensions: extensions.to_vec(),
+            extensions: documents.extensions.clone(),
+            #[cfg(target_os = "linux")]
+            types: super::platform::DocumentTypes::new(&documents.types),
         }
     }
 
@@ -128,6 +136,10 @@ impl Openable {
     }
 
     fn is_document(&self, path: &Path) -> bool {
+        self.has_document_extension(path) || self.has_document_type(path)
+    }
+
+    fn has_document_extension(&self, path: &Path) -> bool {
         path.extension()
             .and_then(|extension| extension.to_str())
             .is_some_and(|extension| {
@@ -135,6 +147,16 @@ impl Openable {
                     .iter()
                     .any(|known| known.eq_ignore_ascii_case(extension))
             })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn has_document_type(&self, path: &Path) -> bool {
+        self.types.describe(path)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn has_document_type(&self, _: &Path) -> bool {
+        false
     }
 }
 
@@ -150,7 +172,10 @@ mod tests {
         std::fs::write(directory.join("config.toml"), "").unwrap();
         let openable = Openable::new(
             &[DeepLinkRegistration::new("com.sabine.notes", ["notes"])],
-            &["md".to_string()],
+            &crate::window::DocumentTypes {
+                types: Vec::new(),
+                extensions: vec!["md".to_string()],
+            },
         );
         let urls = OpenUrls::default();
         urls.receive_arguments(

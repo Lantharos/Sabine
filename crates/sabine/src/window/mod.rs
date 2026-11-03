@@ -12,7 +12,8 @@ pub(crate) mod style;
 pub use builder::AppChrome;
 use config::SabineWindowConfig;
 pub use config::{
-    SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
+    DocumentTypes, SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction,
+    SabineWindowControlRegion,
 };
 pub use listeners::WindowVisibility;
 pub(crate) use listeners::{

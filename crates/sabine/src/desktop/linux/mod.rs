@@ -1,4 +1,5 @@
 mod appimage;
+mod document_types;
 mod links;
 mod shortcuts;
 mod util;
@@ -6,6 +7,7 @@ mod util;
 use sabine_platform::{AutostartEntry, DeepLinkRegistration, NativeMessagingHost};
 
 pub(super) use appimage::native_host_program;
+pub(crate) use document_types::DocumentTypes;
 pub(super) use shortcuts::{GlobalShortcuts, ShortcutHost};
 
 pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> Result<(), String> {

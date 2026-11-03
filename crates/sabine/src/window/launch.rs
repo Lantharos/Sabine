@@ -58,7 +58,7 @@ impl SabineWindow {
         }
         let openable = Openable::new(
             &self.config.desktop_services.deep_links,
-            &self.config.document_extensions,
+            &self.config.documents,
         );
         self.config.listeners.open_urls.receive_arguments(
             &std::env::args().skip(1).collect::<Vec<_>>(),

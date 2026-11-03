@@ -54,9 +54,11 @@ glow.workspace = true
 khronos-egl.workspace = true
 landlock.workspace = true
 libloading.workspace = true
+mime.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
+xdg-mime.workspace = true
 zbus = { workspace = true, features = ["proxy", "service"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

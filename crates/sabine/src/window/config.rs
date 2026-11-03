@@ -59,8 +59,7 @@ pub(crate) struct SabineWindowConfig {
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
     pub control_regions: Vec<SabineWindowControlRegion>,
     pub desktop_services: DesktopServiceConfig,
-    /// File extensions of the app's document types, from `[app.extensions]`.
-    pub document_extensions: Vec<String>,
+    pub documents: DocumentTypes,
     pub lifecycle: SabineLifecyclePolicy,
     pub runtime: RuntimeConfig,
     pub bridge: BridgeRegistry,
@@ -110,7 +109,7 @@ impl Default for SabineWindowConfig {
             drag_exclusion_regions: Vec::new(),
             control_regions: Vec::new(),
             desktop_services: DesktopServiceConfig::default(),
-            document_extensions: Vec::new(),
+            documents: DocumentTypes::default(),
             lifecycle: SabineLifecyclePolicy::default(),
             runtime: RuntimeConfig::default(),
             bridge: BridgeRegistry::default(),
@@ -249,6 +248,14 @@ impl SabineLifecyclePolicy {
             ..Self::default()
         }
     }
+}
+
+/// The document types an app opens, from `mime_types` and
+/// `[app.extensions]` in its manifest.
+#[derive(Clone, Debug, Default)]
+pub struct DocumentTypes {
+    pub types: Vec<String>,
+    pub extensions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]

@@ -1,3 +1,11 @@
+# Unreleased
+
+- On Linux, a file opens as one of the app's documents when the desktop's MIME database gives it
+  one of the types in `mime_types`, or a kind of one, as well as when its extension is listed under
+  `[app.extensions]`. A text editor that lists `text/plain` opens `notes.txt`, a `Makefile` or a
+  `.conf` file again, whether the desktop hands it a `file:` URL or a path, at launch or to the
+  running instance.
+
 # Sabine 0.70
 
 - The release workflow builds apps that update from Schelf without publishing them: it skips the
