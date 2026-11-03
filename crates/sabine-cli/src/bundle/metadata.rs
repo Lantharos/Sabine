@@ -86,9 +86,10 @@ pub(super) fn runtime_manifest(
             AppUpdateSource::Http { url } => {
                 manifest.push_str(&format!("provider = \"http\"\nurl = \"{}\"\n", quote(url)))
             }
+            AppUpdateSource::Schelf => manifest.push_str("provider = \"schelf\"\n"),
         }
         manifest.push_str(&format!(
-            "channel = \"{}\"\npolicy = \"{}\"\ninstall_mode = \"{}\"\npublic_key = \"{}\"\n",
+            "channel = \"{}\"\npolicy = \"{}\"\ninstall_mode = \"{}\"\n",
             quote(&updates.channel),
             match updates.policy {
                 sabine_service::UpdatePolicy::Notify => "notify",
@@ -99,8 +100,13 @@ pub(super) fn runtime_manifest(
                 AppInstallMode::Package => "package",
                 AppInstallMode::Store => "store",
             },
-            quote(&updates.public_key)
         ));
+        if updates.source != AppUpdateSource::Schelf {
+            manifest.push_str(&format!(
+                "public_key = \"{}\"\n",
+                quote(&updates.public_key)
+            ));
+        }
         if let Some(kind) = package_kind {
             manifest.push_str(&format!("package_kind = \"{}\"\n", kind.config_value()));
         }

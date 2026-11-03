@@ -31,7 +31,7 @@ pub use discovery::paths::{
 };
 pub use discovery::resolve::resolve_runtime;
 pub use download::download_to;
-pub use download::http::fetch_bytes;
+pub use download::http::{fetch_bytes, fetch_bytes_once};
 pub use download::transfer::DownloadProgress;
 pub use error::RuntimeError;
 pub use files::{

@@ -2,7 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -131,39 +131,58 @@ pub fn run_daemon() -> ServiceResult<()> {
     show_sabine_in_desktop();
     schedule_installation_finalization(owner.pid);
     let service = SabineService::default();
+    let mut next_maintenance = Instant::now();
     loop {
-        if hand_over(stage_system_update()) {
-            return Ok(());
-        }
-        match service.maintain() {
-            Ok(report) => {
-                for error in &report.update_failures {
-                    sabine_runtime::report_error("maintenance", error);
-                }
-                if let Some(required) = report.required_system_update
-                    && hand_over(stage_required_system_update(required))
-                {
-                    return Ok(());
-                }
+        if Instant::now() >= next_maintenance {
+            if run_maintenance(&service) {
+                return Ok(());
             }
-            Err(error) => sabine_runtime::report_error("maintenance", error),
+            next_maintenance = Instant::now() + crate::default_maintenance_interval();
         }
-        match service.clean_up_apps() {
-            Ok(cleanup) => {
-                for id in &cleanup.removed {
-                    let _ = sabine_runtime::record_diagnostic(
-                        "maintenance",
-                        &format!("removed {id}, which is no longer installed"),
-                    );
-                }
-                for failure in &cleanup.failures {
-                    sabine_runtime::report_error("maintenance", failure);
-                }
-            }
-            Err(error) => sabine_runtime::report_error("maintenance", error),
+        if let Err(error) = service.refresh_store_revocations() {
+            sabine_runtime::report_error("schelf", error);
         }
-        std::thread::sleep(crate::default_maintenance_interval());
+        std::thread::sleep(
+            crate::schelf::REVOCATIONS_REFRESH
+                .min(next_maintenance.saturating_duration_since(Instant::now())),
+        );
     }
+}
+
+/// Updates Sabine and the apps and clears out removed apps, and says whether
+/// the daemon handed over to a newer Sabine and should exit.
+fn run_maintenance(service: &SabineService) -> bool {
+    if hand_over(stage_system_update()) {
+        return true;
+    }
+    match service.maintain() {
+        Ok(report) => {
+            for error in &report.update_failures {
+                sabine_runtime::report_error("maintenance", error);
+            }
+            if let Some(required) = report.required_system_update
+                && hand_over(stage_required_system_update(required))
+            {
+                return true;
+            }
+        }
+        Err(error) => sabine_runtime::report_error("maintenance", error),
+    }
+    match service.clean_up_apps() {
+        Ok(cleanup) => {
+            for id in &cleanup.removed {
+                let _ = sabine_runtime::record_diagnostic(
+                    "maintenance",
+                    &format!("removed {id}, which is no longer installed"),
+                );
+            }
+            for failure in &cleanup.failures {
+                sabine_runtime::report_error("maintenance", failure);
+            }
+        }
+        Err(error) => sabine_runtime::report_error("maintenance", error),
+    }
+    false
 }
 
 /// Whether this daemon handed over to the update `staged`, and should exit.

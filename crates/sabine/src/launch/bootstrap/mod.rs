@@ -1,6 +1,7 @@
 mod emergency;
 mod icons;
 pub(crate) mod installer;
+mod standing;
 
 use crate::launch::executable::launch_executable;
 use crate::window::config::SabineWindowConfig;
@@ -19,6 +20,8 @@ use std::{
 pub(crate) const CONFIRM_UPDATE_ARG: &str = "--sabine-confirm-update";
 
 pub(crate) const NOTICE_ARG: &str = "--sabine-notice";
+
+pub(crate) const BLOCKED_ARG: &str = "--sabine-blocked";
 
 pub(crate) fn show_failure(title: &str, error: &dyn std::fmt::Display) {
     sabine_runtime::report_error("startup", error);
@@ -49,6 +52,19 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
                     })
                 });
         std::process::exit(if accepted { 0 } else { 2 });
+    }
+    if let Some(index) = args.iter().position(|arg| arg == BLOCKED_ARG) {
+        let remove = args
+            .get(index + 1)
+            .zip(args.get(index + 2))
+            .is_some_and(|(title, body)| {
+                standing::confirm_removal(title, body).unwrap_or_else(|error| {
+                    sabine_runtime::report_error("notice", &error);
+                    emergency::show(title, body);
+                    false
+                })
+            });
+        std::process::exit(if remove { 0 } else { 2 });
     }
     if let Some(index) = args.iter().position(|arg| arg == NOTICE_ARG) {
         if let (Some(title), Some(message)) = (args.get(index + 1), args.get(index + 2))
@@ -133,6 +149,7 @@ pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<RuntimeInfo> 
     };
     relaunch_managed_update(config);
     offer_pending_update(config);
+    standing::check_store_standing(config);
     Ok(runtime)
 }
 

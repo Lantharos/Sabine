@@ -66,6 +66,11 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
                 "pass --base-url with the HTTPS folder the packages are uploaded to".to_string(),
             );
         }
+        (None, AppUpdateSource::Schelf) => {
+            return Err(
+                "apps that update from Schelf get their update feed from Schelf when a release is published there".to_string(),
+            );
+        }
     };
     let executables = parse_assignments(executable_specs)?;
     let mut artifacts = BTreeMap::new();
@@ -103,6 +108,8 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
         published_at: unix_now(),
         requires_sabine: sabine_service::SabineVersion::current(),
         artifacts,
+        rollout: None,
+        key: None,
         signature: String::new(),
     };
     sign_app_release(&mut manifest, &signing_key()?).map_err(|error| error.to_string())?;

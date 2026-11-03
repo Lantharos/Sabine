@@ -23,6 +23,7 @@ pub struct AppUpdatesSection {
 enum Provider {
     Github,
     Http,
+    Schelf,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -46,6 +47,9 @@ impl AppUpdatesSection {
                 AppUpdateSource::Github { repository }
             }
             (Some(Provider::Http), None, Some(url)) => AppUpdateSource::Http { url },
+            (Some(Provider::Schelf), None, None) if self.public_key.is_none() => {
+                AppUpdateSource::Schelf
+            }
             (Some(Provider::Github), _, _) => {
                 return Err(
                     "[updates] with provider = \"github\" takes a repository and no url".into(),
@@ -54,6 +58,11 @@ impl AppUpdatesSection {
             (Some(Provider::Http), _, _) => {
                 return Err(
                     "[updates] with provider = \"http\" takes a url and no repository".into(),
+                );
+            }
+            (Some(Provider::Schelf), _, _) => {
+                return Err(
+                    "[updates] with provider = \"schelf\" takes no repository, url or public_key; Schelf signs its own feed".into(),
                 );
             }
             (None, _, _) => {
@@ -70,7 +79,7 @@ impl AppUpdatesSection {
         };
         config
             .source
-            .manifest_url(&config.channel)
+            .validate(&config.channel)
             .map_err(|error| match error {
                 ServiceError::InvalidManifest(message) => format!("[updates]: {message}"),
                 error => error.to_string(),
@@ -119,6 +128,16 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn schelf_sources_name_nothing_but_the_provider() {
+        let config = resolve("[updates]\nprovider = \"schelf\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(config.source, AppUpdateSource::Schelf);
+        assert!(resolve("[updates]\nprovider = \"schelf\"\npublic_key = \"abc\"").is_err());
+        assert!(resolve("[updates]\nprovider = \"schelf\"\nchannel = \"../x\"").is_err());
     }
 
     #[test]

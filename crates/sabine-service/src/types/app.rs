@@ -36,32 +36,55 @@ pub struct AppUpdateConfig {
 pub enum AppUpdateSource {
     Github { repository: String },
     Http { url: String },
+    Schelf,
+}
+
+impl AppUpdateConfig {
+    /// Whether Schelf vouches for the app, through its update feed or by
+    /// having installed it, so the store's revocation list applies to it.
+    pub fn follows_schelf(&self) -> bool {
+        self.source == AppUpdateSource::Schelf || self.install_mode == AppInstallMode::Store
+    }
 }
 
 impl AppUpdateSource {
-    pub fn manifest_url(&self, channel: &str) -> ServiceResult<String> {
-        match self {
-            Self::Github { repository } => {
-                if channel != "stable" {
-                    return Err(ServiceError::InvalidManifest(
-                        "GitHub update sources follow the repository's latest release, so their only channel is stable; use an http source for other channels".to_string(),
-                    ));
-                }
-                if !valid_github_repository(repository) {
-                    return Err(ServiceError::InvalidManifest(
-                        "GitHub repository must be in owner/name form".to_string(),
-                    ));
-                }
-                Ok(format!(
-                    "https://github.com/{repository}/releases/latest/download/sabine-update.json"
-                ))
+    /// Checks the source, and that it serves `channel`.
+    pub fn validate(&self, channel: &str) -> ServiceResult<()> {
+        let problem = match self {
+            Self::Github { .. } if channel != "stable" => {
+                "GitHub update sources follow the repository's latest release, so their only channel is stable; use an http source for other channels"
             }
-            Self::Http { url } if is_https_url(url) => Ok(url.clone()),
-            Self::Http { .. } => Err(ServiceError::InvalidManifest(
-                "update manifests must use HTTPS".to_string(),
-            )),
-        }
+            Self::Github { repository } if !valid_github_repository(repository) => {
+                "GitHub repository must be in owner/name form"
+            }
+            Self::Http { url } if !is_https_url(url) => "update manifests must use HTTPS",
+            Self::Schelf if !valid_schelf_channel(channel) => {
+                "Schelf channels contain only lowercase letters, digits and hyphens"
+            }
+            _ => return Ok(()),
+        };
+        Err(ServiceError::InvalidManifest(problem.to_string()))
     }
+
+    pub fn manifest_url(&self, app_id: &str, channel: &str) -> ServiceResult<String> {
+        self.validate(channel)?;
+        Ok(match self {
+            Self::Github { repository } => {
+                format!(
+                    "https://github.com/{repository}/releases/latest/download/sabine-update.json"
+                )
+            }
+            Self::Http { url } => url.clone(),
+            Self::Schelf => crate::schelf::feed_url(app_id, channel),
+        })
+    }
+}
+
+fn valid_schelf_channel(channel: &str) -> bool {
+    !channel.is_empty()
+        && channel
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -114,8 +137,8 @@ impl AppManifest {
             ));
         }
         if let Some(update) = &self.update {
-            update.source.manifest_url(&update.channel)?;
-            if update.install_mode != AppInstallMode::Store && update.public_key.trim().is_empty() {
+            update.source.manifest_url(&self.id, &update.channel)?;
+            if !update.follows_schelf() && update.public_key.trim().is_empty() {
                 return Err(ServiceError::InvalidManifest(
                     "updates require an Ed25519 public key".to_string(),
                 ));
@@ -153,6 +176,13 @@ pub struct AppReleaseManifest {
     #[serde(default)]
     pub requires_sabine: SabineVersion,
     pub artifacts: std::collections::BTreeMap<String, AppArtifact>,
+    /// The share of installations offered this release, in percent; all of
+    /// them when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollout: Option<u8>,
+    /// The id of the key that signed the manifest, for sources with several.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     #[serde(default)]
     pub signature: String,
 }

@@ -2,10 +2,11 @@ use std::path::{Path, PathBuf};
 
 use crate::app::registry::{RegistryLock, SabineService};
 use crate::download::{download_artifact, verify_sha256};
+use crate::schelf::{Trust, update_download_url};
 use crate::types::{
-    AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateStatus,
-    PendingAppUpdate, SabineVersion, ServiceError, ServiceResult, is_https_url, unix_timestamp,
-    update_artifact_target, version_is_newer,
+    AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateSource,
+    AppUpdateStatus, PendingAppUpdate, SabineVersion, ServiceError, ServiceResult, is_https_url,
+    unix_timestamp, update_artifact_target, version_is_newer,
 };
 use crate::{release_is_soaked, verify_app_release};
 
@@ -66,17 +67,27 @@ impl SabineService {
         if update.install_mode == AppInstallMode::Store {
             return Ok(AppUpdateStatus::StoreManaged);
         }
-        let manifest_url = update.source.manifest_url(&update.channel)?;
-        let release = fetch_release(&manifest_url)?;
-        verify_app_release(&release, &update.public_key)?;
+        let release = fetch_release(&update.source.manifest_url(id, &update.channel)?)?;
+        let schelf = (update.source == AppUpdateSource::Schelf).then(|| Trust::new(&self.root));
+        match &schelf {
+            Some(trust) => trust.verify_feed(&release)?,
+            None => verify_app_release(&release, &update.public_key)?,
+        }
         validate_release(&release, id, &update.channel)?;
         if !version_is_newer(&release.version, &app.manifest.version) {
             return Ok(AppUpdateStatus::Current);
         }
-        if require_soak && !release_is_soaked(&release.published_at) {
+        let reached = match &schelf {
+            Some(trust) => trust.in_rollout(release.rollout),
+            None => release_is_soaked(&release.published_at),
+        };
+        if require_soak && !reached {
             return Ok(AppUpdateStatus::Deferred {
                 version: release.version,
             });
+        }
+        if schelf.is_some() {
+            self.refuse_blocked_release(id, &release.version)?;
         }
         let system = crate::install::installed_system_compatibility();
         let installed = SabineVersion {
@@ -217,7 +228,7 @@ impl SabineService {
             std::fs::remove_file(path)?;
         }
         if !path.is_file() {
-            download_artifact(&artifact.url, path, None, |_| {})?;
+            download_artifact(&update_download_url(&artifact.url), path, None, |_| {})?;
         }
         verify_sha256(path, &artifact.sha256)
     }

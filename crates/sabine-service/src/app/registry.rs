@@ -45,10 +45,17 @@ impl SabineService {
         &self.root
     }
 
-    pub fn register(&self, manifest: AppManifest) -> ServiceResult<RegisteredApp> {
-        manifest.validate()?;
+    /// Registers an app, or records what changed about it. An app a store
+    /// installed stays the store's to update, whatever it says itself.
+    pub fn register(&self, mut manifest: AppManifest) -> ServiceResult<RegisteredApp> {
         let _lock = RegistryLock::acquire(&self.root)?;
         let mut registry = self.load_registry()?;
+        if let Some(existing) = registry.apps.get(&manifest.id)
+            && crate::schelf::installed_by_store(existing)
+        {
+            manifest.update = existing.manifest.update.clone();
+        }
+        manifest.validate()?;
         if let Some(message) = incompatibility_message(
             &manifest,
             crate::install::system_compatibility_in(&self.root, &self.system_root),

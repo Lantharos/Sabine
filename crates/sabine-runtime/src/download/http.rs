@@ -31,6 +31,14 @@ pub fn fetch_bytes(url: &str, limit: u64) -> Result<Vec<u8>, RuntimeError> {
     Err(RuntimeError::Request(failure))
 }
 
+/// Fetches a document of at most `limit` bytes in one try that gives up after
+/// `timeout`, for checks that mustn't hold anything up.
+pub fn fetch_bytes_once(url: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>, RuntimeError> {
+    fetch_once(url, limit, timeout).map_err(
+        |(Failure::Retry(message) | Failure::Fatal(message))| RuntimeError::Request(message),
+    )
+}
+
 enum Failure {
     Retry(String),
     Fatal(String),

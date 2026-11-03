@@ -25,6 +25,17 @@ pub fn verify_app_release(
     verify_value(manifest, &manifest.signature, encoded_public_key)
 }
 
+/// Whether `key` signed `manifest`.
+pub(crate) fn app_release_signed_by(manifest: &AppReleaseManifest, key: &VerifyingKey) -> bool {
+    let Ok(signature) = decode_array::<64>(&manifest.signature, "update signature") else {
+        return false;
+    };
+    unsigned_payload(manifest).is_ok_and(|payload| {
+        key.verify(&payload, &Signature::from_bytes(&signature))
+            .is_ok()
+    })
+}
+
 pub fn sign_system_release(
     manifest: &mut SystemReleaseManifest,
     encoded_private_key: &str,
@@ -58,12 +69,21 @@ fn verify_value<T>(
 where
     T: Serialize + Clone + ClearSignature,
 {
+    verify_payload(
+        &unsigned_payload(value)?,
+        encoded_signature,
+        encoded_public_key,
+    )
+}
+
+fn unsigned_payload<T>(value: &T) -> ServiceResult<Vec<u8>>
+where
+    T: Serialize + Clone + ClearSignature,
+{
     let mut unsigned = value.clone();
     unsigned.clear_signature();
-    let payload = serde_json::to_vec(&unsigned).map_err(|error| {
-        ServiceError::Update(format!("could not encode signed metadata: {error}"))
-    })?;
-    verify_payload(&payload, encoded_signature, encoded_public_key)
+    serde_json::to_vec(&unsigned)
+        .map_err(|error| ServiceError::Update(format!("could not encode signed metadata: {error}")))
 }
 
 fn verify_payload(
@@ -101,7 +121,7 @@ impl ClearSignature for SystemReleaseManifest {
     }
 }
 
-fn decode_array<const N: usize>(encoded: &str, label: &str) -> ServiceResult<[u8; N]> {
+pub(crate) fn decode_array<const N: usize>(encoded: &str, label: &str) -> ServiceResult<[u8; N]> {
     let bytes = STANDARD
         .decode(encoded.trim())
         .map_err(|_| ServiceError::Update(format!("{label} is not valid base64")))?;
@@ -133,6 +153,8 @@ mod tests {
             published_at: "12345".to_string(),
             requires_sabine: crate::SabineVersion::current(),
             artifacts: BTreeMap::new(),
+            rollout: None,
+            key: None,
             signature: String::new(),
         };
         sign_app_release(&mut manifest, &private).unwrap();

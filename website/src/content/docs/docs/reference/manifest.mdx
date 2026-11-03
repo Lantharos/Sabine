@@ -228,15 +228,16 @@ explains each setting.
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `provider` | string | required | `"github"` or `"http"` |
+| `provider` | string | required | `"github"`, `"http"` or `"schelf"` |
 | `repository` | string | | `owner/name` of the GitHub repository; required with `provider = "github"`, and only with it |
 | `url` | string | | The HTTPS URL of the release manifest; required with `provider = "http"`, and only with it |
 | `channel` | string | `"stable"` | The channel releases must name; GitHub sources have only `stable`, and any other is an error |
 | `policy` | string | `"automatic"` | `"automatic"` installs releases in the background, `"notify"` asks before each one, `"disabled"` never updates |
-| `public_key` | string | Derived from `SABINE_UPDATE_SIGNING_KEY` at bundle time | The base64 Ed25519 public key releases are signed with |
+| `public_key` | string | Derived from `SABINE_UPDATE_SIGNING_KEY` at bundle time | The base64 Ed25519 public key releases are signed with; not with `provider = "schelf"` |
 
 `policy = "disabled"` turns updates off whatever else the table holds, and needs no provider; any
-other table without `provider` is an error. Without `[updates]`, bundles built in GitHub Actions
+other table without `provider` is an error. `provider = "schelf"` needs nothing else: Schelf signs
+the updates with its own keys. Without `[updates]`, bundles built in GitHub Actions
 update from their repository's releases, and others don't update.
 
 ## `[sandbox]`
@@ -266,7 +267,7 @@ platform applies it.
 - `[sandbox]`, normalized, and `[window]` when `splash` is on
 - `[updates]` with the source, channel, policy and public key, plus two keys the bundle sets for
   its package kind: `install_mode` (`"managed"` for archives, `"package"` for installers and
-  packages) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`, `"exe"` or `"dmg"`)
+  packages; a store that installs the app records `"store"` instead) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`, `"exe"` or `"dmg"`)
 
 Development keys and everything only the CLI uses stay out of it. Stores and systems read this file
 to learn about an app without starting it.

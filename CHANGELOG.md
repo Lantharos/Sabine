@@ -1,3 +1,20 @@
+# Unreleased
+
+- `[updates] provider = "schelf"` updates an app from schelf.store, with no URL or key to set.
+  Sabine checks the store's update manifests against store keys that its built-in Schelf root key
+  vouches for, follows the store's rollouts instead of the soak, and marks package downloads as
+  updates.
+- Sabine's service fetches Schelf's list of pulled releases every hour. A version on it can't open:
+  the app explains why and offers to remove it where Sabine can. A version Schelf warns about opens
+  after a notice shown once. This covers apps that update from Schelf and apps a store installed.
+- `sabine-service install-store <archive> --id <id>` installs an app from the Linux archive a store
+  downloaded and checked, with its launcher entry, icons and file types, and leaves its updates to
+  the store, even when the app registers itself with its own `[updates]` later.
+  `SabineService::install_store_app` does the same from Rust.
+- `sabine-service remove <id>` and `SabineService::remove_app` take an app off the computer,
+  keeping its data.
+- Update manifests can carry `rollout` and `key`. `AppUpdateSource::manifest_url` takes the app id.
+
 # Sabine 0.68
 
 - Builds made by `sabine bundle` always run in production: they ignore `SABINE_DEV_URL`,

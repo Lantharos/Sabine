@@ -26,6 +26,9 @@ pub(crate) fn resolve_updates(
     let Some(mut update) = updates else {
         return Ok(None);
     };
+    if update.source == AppUpdateSource::Schelf {
+        return Ok(Some(update));
+    }
     if let Ok(private_key) = std::env::var("SABINE_UPDATE_SIGNING_KEY")
         && !private_key.trim().is_empty()
     {

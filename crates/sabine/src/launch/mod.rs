@@ -23,7 +23,10 @@ pub(crate) fn dispatch_host_mode_from_args(args: &[String]) -> bool {
     if args.iter().any(|arg| {
         matches!(
             arg.as_str(),
-            bootstrap::BOOTSTRAP_ARG | bootstrap::NOTICE_ARG | bootstrap::CONFIRM_UPDATE_ARG
+            bootstrap::BOOTSTRAP_ARG
+                | bootstrap::NOTICE_ARG
+                | bootstrap::CONFIRM_UPDATE_ARG
+                | bootstrap::BLOCKED_ARG
         )
     }) {
         return bootstrap::run_from_args(args);

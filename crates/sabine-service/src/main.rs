@@ -43,6 +43,20 @@ enum Command {
         #[arg(long)]
         relaunch: Option<PathBuf>,
     },
+    /// Install an app from the Linux archive a store downloaded and checked,
+    /// leaving its updates to the store.
+    #[cfg(target_os = "linux")]
+    InstallStore {
+        archive: PathBuf,
+        #[arg(long)]
+        id: String,
+    },
+    /// Remove an app from this computer, keeping its data.
+    Remove {
+        id: String,
+        #[arg(long)]
+        wait_pid: Option<u32>,
+    },
     #[command(hide = true)]
     CompleteSystemUpdate {
         #[arg(long)]
@@ -175,6 +189,18 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("{id} has no pending update");
             }
+        }
+        #[cfg(target_os = "linux")]
+        Command::InstallStore { archive, id } => {
+            let app = service.install_store_app(&archive, &id)?;
+            println!("installed {id} {}", app.manifest.version);
+        }
+        Command::Remove { id, wait_pid } => {
+            if let Some(pid) = wait_pid {
+                wait_for_process(pid);
+            }
+            service.remove_app(&id)?;
+            println!("removed {id}");
         }
         Command::CompleteSystemUpdate { from_pid, version } => {
             sabine_service::complete_system_update(from_pid, &version)?;
