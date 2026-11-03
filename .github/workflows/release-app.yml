@@ -24,8 +24,8 @@ on:
         default: ""
     secrets:
       SABINE_UPDATE_SIGNING_KEY:
-        description: Base64 Ed25519 seed used to sign app update metadata
-        required: true
+        description: Base64 Ed25519 seed used to sign app update metadata; apps that update from Schelf don't use one
+        required: false
       MACOS_CERTIFICATE:
         description: Base64 Developer ID Application certificate (.p12) that signs macOS apps
         required: false
@@ -57,6 +57,21 @@ permissions:
   attestations: write
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      schelf: ${{ steps.updates.outputs.schelf }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: Sabine.toml
+          sparse-checkout-cone-mode: false
+      - id: updates
+        shell: pwsh
+        run: |
+          $schelf = (Get-Content Sabine.toml -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
+          "schelf=$($schelf.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
   build:
     env:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
@@ -315,7 +330,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.schelf != 'true'
     runs-on: ubuntu-24.04
     env:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}

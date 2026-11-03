@@ -113,7 +113,8 @@ Windows builds stop.
 | `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
 | `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
 
-The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, and takes the optional
+The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, unless the app
+[updates from Schelf](#updating-from-schelf), and takes the optional
 [signing secrets](/docs/distribution/code-signing/#the-release-workflows-secrets) for macOS and
 Windows. `secrets: inherit` passes them all on.
 
@@ -193,6 +194,11 @@ URL or key to set. Installed copies read
 `https://dl.schelf.store/sabine/<app id>/<channel>.json`, an update manifest in the format below
 that Schelf writes and signs when it approves a release, so `sabine release-manifest` isn't used
 for these apps.
+
+[The release workflow](#the-release-workflow) builds these apps the same way and stops there: it
+writes no update manifest, doesn't need the `SABINE_UPDATE_SIGNING_KEY` secret, and leaves the
+GitHub release alone, so the packages reach people through Schelf. `bunx schelf init` writes a
+workflow that calls it when you publish a GitHub release and hands the packages to Schelf.
 
 Sabine checks Schelf's manifests with keys it trusts on its own. The store signs with keys that
 change every year, and Sabine carries the store's root key, which vouches for them in

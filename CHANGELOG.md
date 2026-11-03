@@ -1,3 +1,9 @@
+# Unreleased
+
+- The release workflow builds apps that update from Schelf without publishing them: it skips the
+  update manifest and the GitHub release, and doesn't need `SABINE_UPDATE_SIGNING_KEY`, so a Schelf
+  workflow can call it when a GitHub release is published and hand the packages to the store.
+
 # Sabine 0.69
 
 - `[updates] provider = "schelf"` updates an app from schelf.store, with no URL or key to set.
