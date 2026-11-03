@@ -189,9 +189,9 @@ removes Sabine. App data stays on the computer.
 
 ## App stores
 
-A store that installs Sabine apps for people, such as Schelf on Luft, hands Sabine the app's Linux
-archive (the `portable` bundle) once it has downloaded it and checked it against its own signed
-index:
+On Linux, a store that installs Sabine apps for people, such as Schelf on Luft, hands Sabine the
+app's Linux archive (the `portable` bundle) once it has downloaded it and checked it against its own
+signed index:
 
 ```sh
 sabine-service install-store ~/Downloads/com.example.tern-1.1.0-portable.tar.gz --id com.example.tern
@@ -206,12 +206,15 @@ Installing a newer archive the same way updates the app in place, keeping files 
 its own; close the app first. Sabine leaves updates to the store, whatever the app's own `[updates]`
 says, but still keeps a pulled version from opening.
 
-`remove` takes the app off the computer with its launcher entry, icons and file types, and keeps its
-data. `--wait-pid <pid>` waits for that process to exit first.
+`remove` takes an app a store installed off the computer with its launcher entry, icons and file
+types, and keeps its data. It removes other apps the way uninstalling Sabine does: through the
+app's own uninstaller on Windows, and otherwise by forgetting the app and leaving its files.
+`--wait-pid <pid>` waits for that process to exit first.
 
-A store written in Rust can call the same thing through the `sabine-service` crate:
-`SabineService::default().install_store_app(archive, id)` and `remove_store_app(id)`. Both run as
-the user, with no administrator rights. `sabine-service` is in the `bin/current` folder of Sabine's
+A store written in Rust can call the same things through the `sabine-service` crate:
+`SabineService::default().install_store_app(archive, id)` and `remove_app(id)`, or
+`remove_store_app(id)`, which refuses an app no store installed. They run as the user, with no
+administrator rights. `sabine-service` is in the `bin/current` folder of Sabine's
 installation, such as `/usr/lib/sabine/bin/current/sabine-service` when Sabine is installed for every
 user.
 
@@ -222,7 +225,7 @@ user.
     | What | Where |
     | --- | --- |
     | Sabine's data: service, host, runtimes, registry, downloads, logs | `$XDG_DATA_HOME/sabine`, by default `~/.local/share/sabine` |
-    | `sabine install` apps | `~/.local/share/sabine/apps/<app id>/install` |
+    | `sabine install` apps and apps a store installed | `~/.local/share/sabine/apps/<app id>/install` |
     | Development launchers | `~/.local/share/sabine/apps/<app id>.dev/launch.sh` |
     | Launcher entries | `~/.local/share/applications/<app id>.desktop` |
     | Icons and file types | `~/.local/share/icons/hicolor`, `~/.local/share/mime/packages/<app id>.xml` |

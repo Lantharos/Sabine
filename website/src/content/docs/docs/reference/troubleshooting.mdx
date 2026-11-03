@@ -5,7 +5,8 @@ sidebar:
   order: 6
 ---
 
-import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
+import { Aside, Code, TabItem, Tabs } from "@astrojs/starlight/components";
+import { release } from "~/version";
 
 ## Where to look first
 
@@ -49,6 +50,7 @@ Each component has a file of its own, `<component>.jsonl`, with one JSON object 
 | `gpu.jsonl` | Lost graphics devices and the switch to software painting |
 | `manifest.jsonl` | Keys in the app's `Sabine.toml` it doesn't know, and a `[resources]` table it couldn't read |
 | `maintenance.jsonl`, `daemon.jsonl` | The Sabine daemon |
+| `schelf.jsonl` | Schelf's list of pulled releases, when it couldn't be fetched or checked |
 
 Other parts, such as `desktop`, `input`, `clipboard`, `media` and `print`, write files named after themselves when something goes wrong. Every message also goes to standard error, and a window host's output is forwarded to the terminal that launched the app, so running the app from a terminal shows everything as it happens.
 
@@ -64,11 +66,9 @@ Other parts, such as `desktop`, `input`, `clipboard`, `media` and `print`, write
 sabine -V
 ```
 
-```text
-Sabine CLI: 0.66
-Sabine service (installed): 0.66
-Sabine daemon (running): 0.66
-```
+<Code lang="text" code={`Sabine CLI: ${release}
+Sabine service (installed): ${release}
+Sabine daemon (running): ${release}`} />
 
 A service that says `not installed` means no app has prepared Sabine on this machine yet. A daemon that says `not running` is started again by the next Sabine app that launches.
 
@@ -178,6 +178,16 @@ The app was built against a Sabine build older than the oldest one the installed
 > *App* needs Sabine *N*, but this computer could not update past Sabine *M*.
 
 The app pulled the Sabine release it needs, and installing it failed or was held. Run `sabine update` to see why: it names the installed apps a release waits for, and `maintenance.jsonl` records failed updates. A release that would stop another installed app installs once that app updates or is removed.
+
+### The app says Schelf stopped this version
+
+> *App* can't open. Schelf stopped this version of *App*: …
+
+Schelf has pulled this version of an app that updates from it or that a store installed, and the
+rest of the message is the store's reason. Where Sabine can, the notice offers **Remove**, which
+takes the app off the computer and keeps its data; otherwise remove it the way you installed it.
+Once the app updates to a version Schelf hasn't pulled, it opens again. A version Schelf only warns
+about opens after a notice that shows once. See [Pulled releases](/docs/distribution/releases-and-updates/#pulled-releases).
 
 ### Chromium can't start on Linux
 

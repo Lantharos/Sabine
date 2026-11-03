@@ -195,7 +195,7 @@ sabine update --all
 | --- | --- |
 | `[target]` | What to update; everything Sabine provides when absent. See below |
 | `--all` | Also updates every registered app. Not with a target |
-| `--force` | Installs releases before their soak period ends; signature, checksum and version checks still apply |
+| `--force` | Installs releases before their soak period ends, or before a Schelf rollout reaches this computer; signature, checksum and version checks still apply |
 
 | Target | Updates |
 | --- | --- |
@@ -203,7 +203,7 @@ sabine update --all
 | `sabine` or `system` | The CLI and Sabine's service, daemon and host |
 | `cef` or `runtime` | The CEF runtime, after checking that Chromium starts on it |
 | a project folder | Rebuilds a `sabine install --bundle` install from the checkout, or rewrites a development launcher |
-| an app id | Checks the app's update source and installs a release, rebuilds a `sabine install --bundle` install without one from its checkout, or rewrites a development launcher |
+| an app id | Checks the app's update source and installs a release, rebuilds a `sabine install --bundle` install without one from its checkout, or rewrites a development launcher. An app a store installed is left to the store |
 
 `sabine update` reports a Sabine release that is still soaking, or one it holds back because it would
 stop an installed app, naming the apps it waits for. For an app whose release comes as a package,
@@ -263,7 +263,8 @@ sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.ter
 ```
 
 Writes the signed update manifest for one release, signed with `SABINE_UPDATE_SIGNING_KEY`. The app
-needs an update source in `[updates]`. See
+needs a GitHub or HTTP update source in `[updates]`; Schelf writes the manifests of apps that update
+from it. See
 [Release manifests](/docs/distribution/releases-and-updates/#release-manifests).
 
 | Argument or flag | Default | Meaning |

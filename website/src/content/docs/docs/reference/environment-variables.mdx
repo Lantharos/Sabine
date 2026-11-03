@@ -55,7 +55,7 @@ The CLI also loads `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` f
 | Variable | Applies to | What it does |
 | --- | --- | --- |
 | `SABINE_BUILD_TARGET` | Cargo build | Set by `sabine bundle` for the app's Cargo build: `linux`, `windows` or `macos`. Build scripts can read it. |
-| `SABINE_UPDATE_SIGNING_KEY` | CLI | The app's private Ed25519 update signing key, base64. `sabine bundle` writes its public key into the bundle, and fails if `[updates]` names a different public key. `sabine release-manifest` signs the update manifest with it. Inside GitHub Actions, bundles with updates enabled require it. |
+| `SABINE_UPDATE_SIGNING_KEY` | CLI | The app's private Ed25519 update signing key, base64. `sabine bundle` writes its public key into the bundle, and fails if `[updates]` names a different public key. `sabine release-manifest` signs the update manifest with it. Inside GitHub Actions, bundles with updates enabled require it, unless they update from Schelf. |
 | `SABINE_MACOS_SIGNING_IDENTITY` | CLI | Developer ID Application identity in the keychain. Signs every framework, helper and executable inside an `.app` before the bundle itself, with the hardened runtime, and signs disk images. |
 | `SABINE_NOTARY_APPLE_ID` | CLI | Apple ID for notarization. Set together with the next two. |
 | `SABINE_NOTARY_TEAM_ID` | CLI | Team ID for notarization. |
@@ -66,7 +66,7 @@ The CLI also loads `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` f
 | `SABINE_WINDOWS_TIMESTAMP_URL` | CLI | RFC 3161 timestamp server. `http://timestamp.digicert.com` by default. |
 | `GITHUB_REPOSITORY` | CLI | In GitHub Actions, bundles without an `[updates]` table update from this repository's releases. `sabine release-init` uses it when no `--repository` is given. |
 | `GITHUB_REF_NAME` | CLI | `sabine release-manifest` checks that the release tag matches the app's version, such as `v1.0.0`. |
-| `GITHUB_ACTIONS` | CLI | When set, a bundle with updates enabled must have a signing key. |
+| `GITHUB_ACTIONS` | CLI | When set, a bundle with updates enabled must have a signing key, unless it updates from Schelf. |
 | `SOURCE_DATE_EPOCH` | CLI | The release date written into Linux AppStream metadata, for reproducible packages. The current time when unset. |
 | `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS` | CLI | Kept for Windows builds, with Sabine's flags for the static C runtime and the GUI subsystem added. |
 

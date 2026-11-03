@@ -129,9 +129,10 @@ mime_types = ["text/markdown"]
 | a MIME type | array of strings | Extensions without the leading dot, in lowercase letters, digits, `+`, `-` and `_`, starting with a letter or digit |
 
 Every key must be a document type listed in `mime_types`, not a URL scheme. Extensions register the
-app under **Open with** on Windows, as shared MIME globs on Linux and as document types on macOS,
-and command-line arguments open as documents only when they name a file with one of these
-extensions.
+app under **Open with** on Windows, as shared MIME globs on Linux and as document types on macOS.
+A file the app is handed opens as a document when it has one of these extensions, or, on Linux,
+when the desktop's MIME database gives it one of the document types in `mime_types` or a kind of
+one, whatever its extension. Elsewhere, only the extensions count.
 
 ## `[web]`
 
@@ -265,9 +266,11 @@ platform applies it.
   `allowed_origins` and `local_files`
 - `[resources]` pointing at the copies in `files/`
 - `[sandbox]`, normalized, and `[window]` when `splash` is on
-- `[updates]` with the source, channel, policy and public key, plus two keys the bundle sets for
-  its package kind: `install_mode` (`"managed"` for archives, `"package"` for installers and
-  packages; a store that installs the app records `"store"` instead) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`, `"exe"` or `"dmg"`)
+- `[updates]` with the source, channel, policy and public key (none for Schelf sources), plus two
+  keys the bundle sets for its package kind: `install_mode` (`"managed"` for archives, `"package"`
+  for installers and packages) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`,
+  `"exe"` or `"dmg"`). An app a store installs is registered with `"store"` instead, whatever its
+  bundle says
 
 Development keys and everything only the CLI uses stay out of it. Stores and systems read this file
 to learn about an app without starting it.

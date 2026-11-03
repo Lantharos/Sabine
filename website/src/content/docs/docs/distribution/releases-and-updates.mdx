@@ -112,8 +112,8 @@ Windows builds stop.
 | `rust_toolchain` | `stable` | The Rust toolchain that builds the app; Sabine needs 1.98 or newer |
 | `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
 | `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
-| `app` | `.` | The app's folder, for a repository that holds several apps; web dependencies still install at the repository root |
-| `platforms` | every platform | The platforms to build, separated by spaces, such as `linux-x86_64 linux-aarch64`, for an app that doesn't run everywhere |
+| `app` | `.` | The app's folder, for a repository that holds several apps. The workflow reads its `Sabine.toml` and bundles it from there; web dependencies still install at the repository root |
+| `platforms` | every platform | The platforms to build, separated by spaces, such as `linux-x86_64 linux-aarch64`, for an app that doesn't run everywhere. The platforms are `linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-aarch64` and `macos-aarch64`; any other name stops the run before it builds |
 | `linux_packages` | empty | More Ubuntu packages the Linux builds install, for apps that link system libraries |
 
 The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, unless the app
@@ -136,6 +136,8 @@ repository root, and runs `sabine bundle` for each package:
 The tarballs serve installations that update from archives, such as `sabine install --bundle` and
 unpacked portable bundles.
 
+With `platforms`, only the platforms you name build, and the release carries only their packages.
+
 On Windows x86_64 the workflow then installs the MSI silently on a clean machine, launches the app,
 waits for Sabine's first-run setup to finish with a running service, and checks that the page
 renders, before uninstalling it again. It also checks that the executable needs no C runtime
@@ -143,7 +145,8 @@ redistributable, runs as a GUI program, and carries its icon.
 
 Once every platform succeeds, the workflow writes and signs `sabine-update.json` with
 `sabine release-manifest`, records build provenance attestations for every file, and publishes them
-as the GitHub release for the tag with generated release notes.
+as the GitHub release for the tag with generated release notes. Apps that
+[update from Schelf](#updating-from-schelf) stop before this step.
 
 ## Update settings
 
@@ -180,8 +183,8 @@ so each channel needs a `url` of its own.
 | `notify` | The service checks and downloads in the background like `automatic`, but every installation asks first: the next time the app opens, it offers the downloaded release |
 | `disabled` | The app never updates itself, even when `[updates]` names a source |
 
-`sabine update <app id>` checks the app's source and installs a release right away under both
-`automatic` and `notify`.
+`sabine update <app id>` checks the app's source right away and installs a release that has
+[soaked](#soak-and-rollout), under both `automatic` and `notify`.
 
 ### Updating from Schelf
 
@@ -199,9 +202,12 @@ that Schelf writes and signs when it approves a release, so `sabine release-mani
 for these apps.
 
 [The release workflow](#the-release-workflow) builds these apps the same way and stops there: it
-writes no update manifest, doesn't need the `SABINE_UPDATE_SIGNING_KEY` secret, and leaves the
-GitHub release alone, so the packages reach people through Schelf. `bunx schelf init` writes a
-workflow that calls it when you publish a GitHub release and hands the packages to Schelf.
+writes no update manifest, doesn't need the `SABINE_UPDATE_SIGNING_KEY` secret, records no
+attestations and leaves the GitHub release alone. The packages stay with the workflow run, as one
+`release-<platform>` artifact per platform, and reach people through Schelf. `bunx schelf init`
+sets `provider = "schelf"` and writes a workflow that calls Sabine's when you publish a GitHub
+release and hands the packages to Schelf. These apps don't need `sabine release-init`, which would
+point `[updates]` at GitHub instead.
 
 Sabine checks Schelf's manifests with keys it trusts on its own. The store signs with keys that
 change every year, and Sabine carries the store's root key, which vouches for them in
@@ -212,7 +218,8 @@ yet.
 Instead of the soak, Schelf releases roll out: the manifest says what share of installations get
 the release, and the store raises it over a few days. Every computer draws a number below 100 once
 and keeps it, and takes a release once its share is above that number, so the store never learns who
-is in which group. `sabine update <app id>` installs a release that hasn't reached this computer yet.
+is in which group. `sabine update <app id> --force` installs a release that hasn't reached this
+computer yet.
 
 Package downloads from the store are marked as updates, so the store counts installs and updates
 apart without knowing who made them.
@@ -257,7 +264,8 @@ Update manifests are signed with Ed25519. The private key is a base64 32-byte se
 When `SABINE_UPDATE_SIGNING_KEY` is set during `sabine bundle`, Sabine derives the public key from
 it and writes that into the bundle. If `[updates]` also names a `public_key`, the two must match.
 Inside GitHub Actions, bundling an app with enabled updates fails when it ends up without a public
-key, so a release can't ship copies that would never accept an update.
+key, so a release can't ship copies that would never accept an update. Apps that update from Schelf
+need no key: Sabine checks their releases with the store's keys.
 
 To manage a key without `sabine release-init`, for example for an HTTP source:
 
@@ -274,8 +282,8 @@ of your repository; each app should have its own.
 ## Release manifests
 
 `sabine release-manifest` writes the signed manifest for the packages of one release. It reads the
-app's id, version and `[updates]` from `Sabine.toml`, so it needs an update source that isn't
-disabled, and `SABINE_UPDATE_SIGNING_KEY`:
+app's id, version and `[updates]` from `Sabine.toml`, so it needs a GitHub or HTTP update source
+and `SABINE_UPDATE_SIGNING_KEY`:
 
 ```sh
 sabine release-manifest . \
@@ -348,10 +356,10 @@ app with an update source. For each one it:
 <Steps>
 
 1. fetches the release manifest over HTTPS,
-2. checks its signature against the app's public key, and that it names this app, this channel and
-   manifest schema 1,
+2. checks its signature against the app's public key, or Schelf's store keys for apps that update
+   from Schelf, and that it names this app, this channel and manifest schema 1,
 3. continues only when the release is strictly newer than the installed version, by SemVer,
-4. waits for the release to soak (see below),
+4. waits for the release to soak (see below), or for a Schelf rollout to reach this computer,
 5. makes sure the installed Sabine runs the release, installing a newer Sabine first when the
    release needs one,
 6. picks the artifact for the installation's own target and downloads it over HTTPS, checking its
@@ -397,9 +405,10 @@ A release becomes eligible 24 hours after it was published, plus a rollout offse
 six hours that each installation picks once at random and keeps. This spreads downloads out and
 leaves you a day to withdraw a bad release before most people get it.
 
-`sabine update <app id> --force` installs a release before it has soaked; signatures, checksums and
-version checks still apply. An app that the installed Sabine can no longer run skips the soak, so
-it gets a working version as soon as there is one.
+`sabine update <app id> --force` installs a release before it has soaked, or before a Schelf
+rollout reaches this computer; signatures, checksums and version checks still apply. An app that
+the installed Sabine can no longer run skips the soak, so it gets a working version as soon as
+there is one.
 
 ## Sabine updates
 
