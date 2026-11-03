@@ -111,7 +111,8 @@ fn follows_schelf(app: &RegisteredApp) -> bool {
         .is_some_and(AppUpdateConfig::follows_schelf)
 }
 
-pub(crate) fn installed_by_store(app: &RegisteredApp) -> bool {
+/// Whether a store installed `app`, and so removes and updates it.
+pub fn installed_by_store(app: &RegisteredApp) -> bool {
     app.manifest
         .update
         .as_ref()

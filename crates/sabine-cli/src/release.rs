@@ -54,6 +54,11 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
         ));
     }
     let base_url = match (base_url, &updates.source) {
+        (_, AppUpdateSource::Schelf) => {
+            return Err(
+                "apps that update from Schelf get their update feed from Schelf when a release is published there".to_string(),
+            );
+        }
         (Some(base_url), _) if base_url.starts_with("https://") => {
             base_url.trim_end_matches('/').to_string()
         }
@@ -64,11 +69,6 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
         (None, AppUpdateSource::Http { .. }) => {
             return Err(
                 "pass --base-url with the HTTPS folder the packages are uploaded to".to_string(),
-            );
-        }
-        (None, AppUpdateSource::Schelf) => {
-            return Err(
-                "apps that update from Schelf get their update feed from Schelf when a release is published there".to_string(),
             );
         }
     };

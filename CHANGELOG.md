@@ -1,3 +1,12 @@
+# Unreleased
+
+- `sabine release-init` on an app that updated from an HTTP source drops its `url` when it moves
+  `[updates]` to GitHub releases, so `Sabine.toml` still parses afterwards.
+- `sabine release-manifest` refuses apps that update from Schelf even with `--base-url`, since
+  installed copies only read the manifest Schelf signs.
+- `sabine uninstall` removes apps a store installed, as `sabine-service remove` does, instead of
+  sending you to a package manager.
+
 # Sabine 0.73
 
 - A window's blur, opaque and input regions, its drag areas and its window control areas follow

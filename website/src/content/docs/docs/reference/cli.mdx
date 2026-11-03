@@ -172,8 +172,8 @@ sabine uninstall com.example.tern --purge
 sabine uninstall --system
 ```
 
-Removes an app installed with `sabine install`, keeping its data. Apps installed from packages are
-removed with their package manager or uninstaller instead.
+Removes an app installed with `sabine install` or by a store, keeping its data. Apps installed from
+packages are removed with their package manager or uninstaller instead.
 
 | Argument or flag | Meaning |
 | --- | --- |
@@ -246,7 +246,8 @@ sabine release-init --repository example/tern
 
 Creates a new update signing key, stores it as the repository's `SABINE_UPDATE_SIGNING_KEY` Actions
 secret, turns on immutable releases, writes the `[updates]` table of the `Sabine.toml` in the
-current folder, and writes the release workflow. It stops when the app already has a signing key.
+current folder, and writes the release workflow. An app that updated from another source moves to
+GitHub releases. It stops when the app already has a signing key.
 Needs the GitHub CLI, signed in. See
 [Publishing from GitHub](/docs/distribution/releases-and-updates/#sabine-release-init).
 

@@ -134,6 +134,15 @@ fn enable_immutable_releases(repository: &str) -> Result<(), String> {
 
 fn configure_updates(document: &mut toml_edit::DocumentMut, repository: &str, public_key: &str) {
     let updates = document["updates"].or_insert(toml_edit::table());
+    if let Some(previous) = updates["provider"]
+        .as_str()
+        .filter(|name| *name != "github")
+    {
+        println!("moved [updates] from provider = \"{previous}\" to GitHub releases");
+    }
+    if let Some(table) = updates.as_table_like_mut() {
+        table.remove("url");
+    }
     updates["provider"] = toml_edit::value("github");
     updates["repository"] = toml_edit::value(repository);
     updates["public_key"] = toml_edit::value(public_key);
@@ -162,4 +171,22 @@ fn gh_output(args: &[&str]) -> Option<String> {
         .ok()
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_an_http_source_to_github_drops_its_url() {
+        let mut document: toml_edit::DocumentMut =
+            "[updates]\nprovider = \"http\"\nurl = \"https://example.com/tern\"\npolicy = \"notify\"\n"
+                .parse()
+                .unwrap();
+        configure_updates(&mut document, "example/tern", "key");
+        let updates = &document["updates"];
+        assert!(updates.get("url").is_none());
+        assert_eq!(updates["provider"].as_str(), Some("github"));
+        assert_eq!(updates["policy"].as_str(), Some("notify"));
+    }
 }

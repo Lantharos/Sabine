@@ -18,7 +18,7 @@ use ed25519_dalek::VerifyingKey;
 use crate::{AppReleaseManifest, ServiceResult};
 use keys::{Envelope, StoreKeys, untrusted};
 pub use notices::StoreNotice;
-pub(crate) use notices::installed_by_store;
+pub use notices::installed_by_store;
 use revocations::Revocations;
 
 const DOWNLOAD_ORIGIN: &str = "https://dl.schelf.store";

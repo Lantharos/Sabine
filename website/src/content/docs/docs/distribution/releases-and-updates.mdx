@@ -59,8 +59,9 @@ repository's secrets and settings.
   `SABINE_UPDATE_SIGNING_KEY`. The private key never touches the disk.
 - It turns on immutable releases for the repository, so a published release can't be changed.
 - It sets `provider = "github"`, the repository and the new `public_key` in the `[updates]` table of
-  the folder's `Sabine.toml`, creating the file or the table when there is none. Everything else in
-  the file, such as the policy, stays as it was.
+  the folder's `Sabine.toml`, creating the file or the table when there is none. An app that updated
+  from an HTTP source or Schelf moves to GitHub releases, and loses its `url`. Everything else in the
+  file, such as the policy, stays as it was.
 - It writes [the release workflow](#the-release-workflow) to `.github/workflows/release.yml`. When
   that file already calls Sabine's workflow, it moves it onto the CLI's Sabine release instead, and
   it leaves a workflow of your own alone.

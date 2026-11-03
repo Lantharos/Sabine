@@ -36,6 +36,14 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     let registered = service.app(&id);
     if !source_install && !bundle_install {
         let app = registered.map_err(|error| error.to_string())?;
+        if sabine_service::installed_by_store(&app) {
+            service.remove_app(&id).map_err(|error| error.to_string())?;
+            if purge {
+                remove_data(&id, &directory)?;
+            }
+            report_uninstalled(&app.manifest.name, purge);
+            return Ok(ExitCode::SUCCESS);
+        }
         return Err(format!(
             "{} was not installed by sabine install; remove it through its package manager or OS uninstaller",
             app.manifest.name
@@ -71,16 +79,26 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
         remove_path(&directory.join(entry))?;
     }
     if purge {
-        remove_path(&directory)?;
-        let profile = sabine_service::browser_profile_path(&id);
-        remove_path(profile.parent().ok_or("browser profile has no parent")?)?;
-        for shared in sabine_service::shared_browser_profile_paths(&id) {
-            remove_path(&shared)?;
-        }
+        remove_data(&id, &directory)?;
     } else {
         remove_empty_dir(&install)?;
         remove_empty_dir(&directory)?;
     }
+    report_uninstalled(&name, purge);
+    Ok(ExitCode::SUCCESS)
+}
+
+fn remove_data(id: &str, directory: &Path) -> Result<(), String> {
+    remove_path(directory)?;
+    let profile = sabine_service::browser_profile_path(id);
+    remove_path(profile.parent().ok_or("browser profile has no parent")?)?;
+    for shared in sabine_service::shared_browser_profile_paths(id) {
+        remove_path(&shared)?;
+    }
+    Ok(())
+}
+
+fn report_uninstalled(name: &str, purge: bool) {
     println!(
         "Uninstalled {name}{}",
         if purge {
@@ -89,7 +107,6 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
             "; app data was kept"
         }
     );
-    Ok(ExitCode::SUCCESS)
 }
 
 fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> {

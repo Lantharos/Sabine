@@ -135,8 +135,9 @@ stay, and so does the folder until it's empty. App data and browser profiles are
 `--system` stops the daemon and turns off starting at login before deleting anything, and keeps app
 data unless you add `--purge`, which also removes Sabine's data folder and every browser profile.
 
-`sabine uninstall` only removes apps that `sabine install` installed. For one installed from a
-package, it says so; remove it with the package manager or the system's own uninstaller instead.
+`sabine uninstall` also removes apps [a store installed](#app-stores), the way the store's own
+removal does, and with `--purge` their data too. For an app installed from a package, it says so;
+remove it with the package manager or the system's own uninstaller instead.
 
 ## Packages
 
