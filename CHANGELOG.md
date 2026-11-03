@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.69
 
 - `[updates] provider = "schelf"` updates an app from schelf.store, with no URL or key to set.
   Sabine checks the store's update manifests against store keys that its built-in Schelf root key
