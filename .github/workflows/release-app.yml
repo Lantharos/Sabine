@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: ""
+      artifact:
+        description: Name the builds' artifacts start with, followed by the platform, so several apps can build in one run
+        required: false
+        type: string
+        default: release
     secrets:
       SABINE_UPDATE_SIGNING_KEY:
         description: Base64 Ed25519 seed used to sign app update metadata; apps that update from Schelf don't use one
@@ -345,12 +350,12 @@ jobs:
         if: always() && matrix.platform == 'windows-x86_64'
         uses: actions/upload-artifact@v7
         with:
-          name: startup-diagnostics
+          name: startup-diagnostics-${{ inputs.artifact }}
           path: ${{ runner.temp }}/sabine-msi-*.log
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v7
         with:
-          name: release-${{ matrix.platform }}
+          name: ${{ inputs.artifact }}-${{ matrix.platform }}
           path: dist/release
           if-no-files-found: error
 
@@ -381,7 +386,7 @@ jobs:
         run: cargo install --git https://github.com/Lantharos/Sabine --tag "${{ inputs.sabine_version }}" --locked sabine-cli
       - uses: actions/download-artifact@v8
         with:
-          pattern: release-*
+          pattern: ${{ inputs.artifact }}-*
           path: release
           merge-multiple: true
       - name: Generate updater manifest
