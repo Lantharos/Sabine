@@ -7,6 +7,7 @@
 #include <system_error>
 #include <utility>
 
+#include "app/file_range.h"
 #include "include/cef_parser.h"
 #include "include/cef_resource_handler.h"
 
@@ -19,33 +20,6 @@ constexpr char kScheme[] = "sabine";
 constexpr char kAppHost[] = "app";
 constexpr char kFileHost[] = "file";
 constexpr char kAppOrigin[] = "sabine://app";
-
-struct ByteRange {
-  uint64_t start = 0;
-  uint64_t length = 0;
-  bool partial = false;
-};
-
-bool Seek(FILE* file, uint64_t offset, int origin) {
-#if defined(OS_WIN)
-  return _fseeki64(file, static_cast<int64_t>(offset), origin) == 0;
-#else
-  return fseeko(file, static_cast<off_t>(offset), origin) == 0;
-#endif
-}
-
-FILE* OpenFile(const fs::path& path, uint64_t offset) {
-#if defined(OS_WIN)
-  FILE* file = _wfopen(path.c_str(), L"rb");
-#else
-  FILE* file = std::fopen(path.c_str(), "rb");
-#endif
-  if (file && !Seek(file, offset, SEEK_SET)) {
-    std::fclose(file);
-    return nullptr;
-  }
-  return file;
-}
 
 bool Contains(const fs::path& root, const fs::path& path) {
   return std::mismatch(root.begin(), root.end(), path.begin(), path.end())
@@ -98,50 +72,6 @@ std::optional<fs::path> ResolveFile(const std::optional<fs::path>& root,
   return root ? ResolveAppFile(*root, path) : ResolveLocalFile(path);
 }
 
-std::optional<ByteRange> RequestedRange(const std::string& header,
-                                        uint64_t size) {
-  const std::string prefix = "bytes=";
-  if (header.rfind(prefix, 0) != 0 || header.find(',') != std::string::npos) {
-    return ByteRange{0, size, false};
-  }
-  const std::string spec = header.substr(prefix.size());
-  const size_t dash = spec.find('-');
-  if (dash == std::string::npos) {
-    return ByteRange{0, size, false};
-  }
-  const std::string first = spec.substr(0, dash);
-  const std::string last = spec.substr(dash + 1);
-  const auto number = [](const std::string& text) -> std::optional<uint64_t> {
-    if (text.empty() || !std::all_of(text.begin(), text.end(), [](char digit) {
-          return digit >= '0' && digit <= '9';
-        })) {
-      return std::nullopt;
-    }
-    return std::strtoull(text.c_str(), nullptr, 10);
-  };
-  if (first.empty()) {
-    const auto suffix = number(last);
-    if (!suffix || *suffix == 0 || size == 0) {
-      return std::nullopt;
-    }
-    const uint64_t length = std::min(*suffix, size);
-    return ByteRange{size - length, length, true};
-  }
-  const auto start = number(first);
-  if (!start || *start >= size) {
-    return std::nullopt;
-  }
-  uint64_t end = size - 1;
-  if (!last.empty()) {
-    const auto requested_end = number(last);
-    if (!requested_end || *requested_end < *start) {
-      return std::nullopt;
-    }
-    end = std::min(*requested_end, end);
-  }
-  return ByteRange{*start, end - *start + 1, true};
-}
-
 std::string MimeType(const fs::path& file) {
   const std::u8string suffix = file.extension().u8string();
   const std::string extension(
@@ -154,11 +84,6 @@ class FileHandler : public CefResourceHandler {
  public:
   FileHandler(const std::optional<fs::path>& root, const std::string& reader)
       : root_(root), reader_(reader) {}
-  ~FileHandler() override {
-    if (file_) {
-      std::fclose(file_);
-    }
-  }
 
   bool Open(CefRefPtr<CefRequest> request,
             bool& handle_request,
@@ -178,13 +103,10 @@ class FileHandler : public CefResourceHandler {
       status_ = 416;
       return true;
     }
-    file_ = OpenFile(*path, range->start);
-    if (!file_) {
+    if (!file_.Open(*path, *range)) {
       status_ = 404;
       return true;
     }
-    range_ = *range;
-    remaining_ = range->length;
     status_ = range->partial ? 206 : 200;
     mime_type_ = MimeType(*path);
     return true;
@@ -197,10 +119,11 @@ class FileHandler : public CefResourceHandler {
     CefResponse::HeaderMap headers{{"Accept-Ranges", "bytes"},
                                    {"Cache-Control", "no-cache"}};
     if (status_ == 206) {
-      headers.emplace("Content-Range",
-                      "bytes " + std::to_string(range_.start) + "-" +
-                          std::to_string(range_.start + range_.length - 1) +
-                          "/" + std::to_string(size_));
+      headers.emplace(
+          "Content-Range",
+          "bytes " + std::to_string(file_.range().start) + "-" +
+              std::to_string(file_.range().start + file_.range().length - 1) +
+              "/" + std::to_string(size_));
     } else if (status_ == 416) {
       headers.emplace("Content-Range", "bytes */" + std::to_string(size_));
     }
@@ -208,21 +131,19 @@ class FileHandler : public CefResourceHandler {
       headers.emplace("Access-Control-Allow-Origin", reader_);
     }
     response->SetHeaderMap(headers);
-    response->SetMimeType(file_ ? mime_type_ : "text/plain");
-    response_length = file_ ? static_cast<int64_t>(range_.length) : 0;
+    response->SetMimeType(file_.is_open() ? mime_type_ : "text/plain");
+    response_length =
+        file_.is_open() ? static_cast<int64_t>(file_.range().length) : 0;
   }
 
   bool Skip(int64_t bytes_to_skip,
             int64_t& bytes_skipped,
             CefRefPtr<CefResourceSkipCallback> callback) override {
-    const uint64_t skipped =
-        std::min(static_cast<uint64_t>(bytes_to_skip), remaining_);
-    if (!file_ || skipped == 0 || !Seek(file_, skipped, SEEK_CUR)) {
+    if (!file_.SkipToRangeStart(static_cast<uint64_t>(bytes_to_skip))) {
       bytes_skipped = ERR_FAILED;
       return false;
     }
-    remaining_ -= skipped;
-    bytes_skipped = static_cast<int64_t>(skipped);
+    bytes_skipped = bytes_to_skip;
     return true;
   }
 
@@ -230,12 +151,8 @@ class FileHandler : public CefResourceHandler {
             int bytes_to_read,
             int& bytes_read,
             CefRefPtr<CefResourceReadCallback> callback) override {
-    const size_t wanted = static_cast<size_t>(
-        std::min<uint64_t>(static_cast<uint64_t>(bytes_to_read), remaining_));
-    bytes_read = file_ && wanted
-                     ? static_cast<int>(std::fread(data_out, 1, wanted, file_))
-                     : 0;
-    remaining_ -= static_cast<uint64_t>(bytes_read);
+    bytes_read = static_cast<int>(
+        file_.Read(data_out, static_cast<size_t>(bytes_to_read)));
     return bytes_read > 0;
   }
 
@@ -244,11 +161,9 @@ class FileHandler : public CefResourceHandler {
  private:
   const std::optional<fs::path> root_;
   const std::string reader_;
-  FILE* file_ = nullptr;
+  FileRangeReader file_;
   int status_ = 404;
   uint64_t size_ = 0;
-  ByteRange range_;
-  uint64_t remaining_ = 0;
   std::string mime_type_;
   IMPLEMENT_REFCOUNTING(FileHandler);
 };

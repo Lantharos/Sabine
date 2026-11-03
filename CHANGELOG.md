@@ -1,3 +1,9 @@
+# Unreleased
+
+- Files from `sabine://app` and `sabine://file` serve the byte range a page asks for. Ranges used
+  to start at twice the requested offset, so seeking a song or video past its middle stopped it and
+  seeking anywhere else played the wrong part.
+
 # Sabine 0.71
 
 - On Linux, a file opens as one of the app's documents when the desktop's MIME database gives it
