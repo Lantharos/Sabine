@@ -10,6 +10,7 @@ use crate::SabineWindowControlRegion;
 use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
 use crate::window::style::Color;
 
+use super::chrome_hits::ChromeHits;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     CONTROL_GAP, CONTROL_SIZE, ControlRect, RESIZE_EDGE, TitlebarControl,
@@ -87,36 +88,25 @@ impl OsrNativeHost {
         x: f32,
         y: f32,
     ) -> Option<TitlebarControl> {
-        let zoom = self.page_zoom as f32;
-        if let Some(control) = configured_control_at(
-            &self.config.control_regions,
-            width / zoom,
-            x / zoom,
-            y / zoom,
-        ) {
-            return Some(control);
-        }
-        titlebar_control_at(width, self.titlebar_height(), x, y)
+        self.chrome_hits().control_at(width, x, y)
     }
 
     pub(in crate::osr::host) fn is_drag_region(&self, width: f32, x: f32, y: f32) -> bool {
-        let page_y = y - self.titlebar_height();
-        let page_excluded = page_y >= 0.0
-            && configured_region_at(&self.page_drag_exclusion_regions, width, x, page_y);
-        let zoom = self.page_zoom as f32;
-        let (app_width, app_x, app_y) = (width / zoom, x / zoom, y / zoom);
-        if configured_region_at(&self.config.drag_exclusion_regions, app_width, app_x, app_y)
-            || page_excluded
-        {
-            return false;
+        self.chrome_hits().is_drag_region(width, x, y)
+    }
+
+    /// The window controls and drag areas pointer input reaches.
+    fn chrome_hits(&self) -> ChromeHits<'_> {
+        ChromeHits {
+            controls: &self.config.control_regions,
+            drag: &self.config.drag_regions,
+            drag_exclusions: &self.config.drag_exclusion_regions,
+            page_drag: &self.page_drag_regions,
+            page_drag_exclusions: &self.page_drag_exclusion_regions,
+            titlebar_height: self.titlebar_height(),
+            zoom: self.page_zoom as f32,
         }
-        if !self.config.drag_regions.is_empty() || !self.page_drag_regions.is_empty() {
-            let page_draggable =
-                page_y >= 0.0 && configured_region_at(&self.page_drag_regions, width, x, page_y);
-            return configured_region_at(&self.config.drag_regions, app_width, app_x, app_y)
-                || page_draggable;
-        }
-        self.titlebar_height() > 0.0 && y <= self.titlebar_height()
+        .unless_fullscreen(self.toplevel.fullscreen())
     }
 }
 

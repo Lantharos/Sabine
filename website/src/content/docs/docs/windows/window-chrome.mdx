@@ -88,7 +88,7 @@ looks when it is glass. See [Glass and effects](/docs/windows/glass-and-effects/
 
 Clicks in the control areas never reach the page: Sabine handles them like the system's own
 buttons. The areas are in the page's CSS pixels, like the titlebar strip, so they stay under the
-buttons the page draws when people [zoom the page](/docs/desktop/shortcuts/#zooming-the-page). Maximize toggles between maximized and restored. The page still receives pointer
+buttons the page draws when people [zoom the page](/docs/desktop/shortcuts/#zooming-the-page). Maximize toggles between maximized and restored. A fullscreen window has no control or drag areas, so the page gets every click there, and they come back when it leaves fullscreen; hide the buttons you draw while `appWindow.fullscreen` is true. The page still receives pointer
 movement there, so `:hover` styles on the buttons it draws work as usual. Draw the buttons where
 Sabine expects them and mark them `aria-hidden`, since they are only pictures of the controls:
 

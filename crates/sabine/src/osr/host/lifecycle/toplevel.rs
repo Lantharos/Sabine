@@ -14,6 +14,10 @@ impl ToplevelState {
     pub(in crate::osr::host) fn floating(self) -> bool {
         !(self.maximized || self.fullscreen || self.tiled)
     }
+
+    pub(in crate::osr::host) fn fullscreen(self) -> bool {
+        self.fullscreen
+    }
 }
 
 impl OsrNativeHost {

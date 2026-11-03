@@ -1,5 +1,9 @@
 # Sabine 0.74
 
+- A fullscreen window no longer has window control or drag areas. Clicks where the close button
+  sits in the floating window used to close the app even after the page hid its buttons, so a
+  button the page put in that corner in fullscreen, such as a menu, quit it. They come back when
+  the window leaves fullscreen.
 - Apps whose publisher deleted them from Schelf keep running quietly. Their feeds now answer
   `410 Gone`, and Sabine stops reporting a failed update on every check; it asks again once a week
   in case the app is restored. A `404` or a network failure still counts as a failed check.
