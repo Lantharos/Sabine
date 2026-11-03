@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.73
 
 - A window's blur, opaque and input regions, its drag areas and its window control areas follow
   the page's zoom. Zooming an app with a glass sidebar used to leave the blur at the sidebar's
