@@ -236,7 +236,7 @@ See [Window chrome](/docs/windows/window-chrome/) and [Glass and effects](/docs/
 | `titlebar_drag_region(i32)` | A drag strip of this height across the top |
 | `control_region(SabineWindowControlAction, WindowRegionRect)` | An area that minimizes, maximizes or closes the window; a negative `x` counts from the right edge |
 
-Pages can also mark draggable areas with `-webkit-app-region: drag`, and change regions while the window runs.
+Regions and areas are in the page's CSS pixels, so they follow the page's zoom; at 100% they match logical pixels, and corner radii never change. Pages can also mark draggable areas with `-webkit-app-region: drag`, and change regions while the window runs.
 
 ### Lifecycle
 
@@ -333,7 +333,7 @@ impl AppChrome {
 }
 ```
 
-`app_chrome` gives the window a drag strip as tall as `titlebar`. On Linux and Windows the window turns frameless and gets minimize, maximize and close regions, each `control_width` wide, at the titlebar's right end, for the page to draw buttons over. On macOS the window keeps its traffic lights over a transparent titlebar, and the page extends under it. With a sidebar, the window also gets the blur, opaque and input regions of a glass sidebar layout, rounded by `radius` except on macOS, where the system rounds the window.
+`app_chrome` gives the window a drag strip as tall as `titlebar`, in the page's CSS pixels. On Linux and Windows the window turns frameless and gets minimize, maximize and close regions, each `control_width` wide, at the titlebar's right end, for the page to draw buttons over. On macOS the window keeps its traffic lights over a transparent titlebar, and the page extends under it. With a sidebar, the window also gets the blur, opaque and input regions of a glass sidebar layout, rounded by `radius` except on macOS, where the system rounds the window.
 
 ### Chrome, colors and controls
 

@@ -58,6 +58,7 @@ The same executable also runs a few internal modes that come and go:
 - The setup window, which shows progress while the Sabine service and Chromium runtime are downloaded on first launch.
 - Notices that explain why the app could not start, with an **Open logs** button.
 - The update prompt, which runs in a process of its own so it cannot take over the app's event loop before launch.
+- The prompt that explains why a release Schelf pulled won't open, and offers to remove the app.
 - Setup and uninstall steps that the Windows installers run.
 
 ### The shared service
@@ -114,7 +115,7 @@ On Linux, every Chromium process stays in the systemd unit the app was started i
 
 <Steps>
 
-1. **Internal modes.** The executable checks its arguments first. A window host, setup window, notice or update prompt runs its job and exits; an ordinary launch continues.
+1. **Internal modes.** The executable checks its arguments first. A window host, setup window, notice or prompt runs its job and exits; an ordinary launch continues.
 
 2. **Configuration.** Sabine finds `Sabine.toml` and applies it, then runs your builder, so settings made in Rust win. When `sabine bindings` started the app, it writes or checks the TypeScript bindings and exits here.
 
@@ -124,7 +125,7 @@ On Linux, every Chromium process stays in the systemd unit the app was started i
 
 5. **Single instance.** If the app asks for single-instance behavior and another instance runs, the launch is handed to it and this process exits, before registering with the service or asking about an update.
 
-6. **Runtime and service.** Sabine finds a usable Chromium runtime. On a machine without one, the setup window downloads the Sabine service and runtime first. The app then registers with the service, which may answer that the app is too old for this Sabine and show a notice instead. If the service has a newer installed version of the app, the launch moves to it; if an update is waiting, Sabine offers it.
+6. **Runtime and service.** Sabine finds a usable Chromium runtime. On a machine without one, the setup window downloads the Sabine service and runtime first. The app then registers with the service, which may answer that the app is too old for this Sabine and show a notice instead. If the service has a newer installed version of the app, the launch moves to it; if an update is waiting, Sabine offers it. A version Schelf has pulled stops here, and one it warns about shows the store's notice once before it opens.
 
 7. **Desktop services.** Autostart entries, the tray icon, global shortcuts and URL handlers are set up, and the app's arguments are queued as URLs or documents to open.
 

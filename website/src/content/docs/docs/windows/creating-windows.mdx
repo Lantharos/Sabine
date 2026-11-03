@@ -316,8 +316,8 @@ A window needs exactly one production page: `entry` or `url`. See
 [Frontend](/docs/web/frontend/) for how pages are served and [Security](/docs/bridge/security/) for
 which documents may call the bridge.
 
-`.with_manifest(path)` applies another manifest's identity, URL schemes, update source,
-production page and `[window]` settings. `SabineWindow::main` finds the app's own manifest by itself: through
+`.with_manifest(path)` applies another manifest's identity, URL schemes, document types, update
+source, production page and `[window]` settings. `SabineWindow::main` finds the app's own manifest by itself: through
 `SABINE_MANIFEST_PATH`, which `sabine dev` sets, beside a bundled executable, in the working
 directory, or in the Cargo package's folder during `cargo run`.
 
@@ -333,6 +333,7 @@ The options covered on other pages:
 | `bridge_typed`, `bridge_typed_async`, `bridge_handler`, `bridge_handler_async`, `bridge_descriptor_handler`, `bridge_descriptor_handler_async` | [Commands](/docs/bridge/commands/) |
 | `bridge_event`, `bridge_type` | [Typed bindings](/docs/bridge/typed-bindings/) |
 | `tray_icon` | [Tray](/docs/desktop/tray/) |
+| `on_desktop_event` | [Tray](/docs/desktop/tray/) and [Single instance](/docs/desktop/single-instance/) |
 | `global_shortcut` | [Shortcuts](/docs/desktop/shortcuts/) |
 | `single_instance`, `single_instance_id` | [Single instance](/docs/desktop/single-instance/) |
 | `autostart` | [Autostart](/docs/desktop/autostart/) |

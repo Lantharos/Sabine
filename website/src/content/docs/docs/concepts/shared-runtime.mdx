@@ -13,7 +13,7 @@ Sabine apps don't ship a browser. A machine has one Sabine system, installed by 
 
 | Part | What it does |
 | --- | --- |
-| `sabine-service` | Registers apps, prepares and repairs the system, installs app updates, and runs maintenance on request |
+| `sabine-service` | Registers apps, prepares and repairs the system, installs app updates and the apps a [store](/docs/distribution/installing/#app-stores) hands it, and runs maintenance on request |
 | `sabine-service-daemon` | Runs in the background for the user and does the maintenance: runtime updates, Sabine updates, app updates, cleanup |
 | Sabine host | The CEF embedder every app's windows run their pages in. See [Architecture](/docs/concepts/architecture/#the-browser) |
 | CEF runtimes | Chromium itself, in CEF's Minimal distribution, one folder per version |
@@ -78,6 +78,8 @@ The daemon holds an operating-system file lock for as long as it runs, so two da
 - Downloads and stages app updates.
 - Removes apps that are gone: an app whose program has been missing for a week, and a development registration from `sabine dev` that hasn't been launched for 30 days, lose their registration and everything Sabine keeps for them: login item, browser extension hosts, staged updates and downloads, Sabine's folder for the app, the desktop entries and URL handler Sabine wrote on Linux, and the app's browser profile. Installed apps whose program is still there are never removed for being unused, and an app that comes back registers again.
 
+Between passes, the daemon fetches Schelf's signed list of [pulled releases](/docs/distribution/releases-and-updates/#pulled-releases) every hour, and an app from Schelf checks it again before it opens when the copy is older than that.
+
 Runtime failures are reported separately from app updates, and each failure stays in the maintenance report.
 
 | Platform | How the daemon starts |
@@ -96,7 +98,7 @@ The old daemon hands over to the new one from outside the service manager's job,
 
 ### Rollout
 
-Routine releases, of Sabine and of apps, become eligible 24 hours after they are published, plus a rollout offset between zero and six hours that is fixed for each installation. That spreads the load and leaves time to withdraw a bad release before most machines see it.
+Routine releases, of Sabine and of apps, become eligible 24 hours after they are published, plus a rollout offset between zero and six hours that is fixed for each installation. That spreads the load and leaves time to withdraw a bad release before most machines see it. Apps that update from Schelf follow the store's own rollout instead; see [Updating from Schelf](/docs/distribution/releases-and-updates/#updating-from-schelf).
 
 An app that needs a newer Sabine than the machine has doesn't wait. Its bundled bootstrap fetches the signed manifest of that exact Sabine build, installs it, hands the daemon over, and only then registers the app.
 

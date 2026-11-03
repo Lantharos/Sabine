@@ -374,8 +374,10 @@ See [Glass and effects](/docs/windows/glass-and-effects/).
 
 ### `region`
 
-Builds regions for `setRegions`. Regions other than `rect` follow the window's size as it resizes,
-and rounded corners turn square while the window is maximized, fullscreen or tiled.
+Builds regions for `setRegions`. Sizes and positions are in the page's CSS pixels, so regions grow
+and shrink with the page when it is zoomed; corner radii stay as they are. Regions other than
+`rect` follow the window's size as it resizes, and rounded corners turn square while the window is
+maximized, fullscreen or tiled.
 
 | Function | Region |
 | --- | --- |

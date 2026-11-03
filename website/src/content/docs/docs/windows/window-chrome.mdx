@@ -45,7 +45,7 @@ fn main() {
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `titlebar` | `38` | Height of the titlebar strip in logical pixels |
+| `titlebar` | `38` | Height of the titlebar strip in the page's CSS pixels |
 | `sidebar` | `260` | Width of a sidebar along the left edge, below the titlebar. `0` for none |
 | `radius` | `14` | Corner radius of the window's regions |
 | `control_width` | `46` | Width of each window control |
@@ -87,7 +87,8 @@ looks when it is glass. See [Glass and effects](/docs/windows/glass-and-effects/
 ### The controls area
 
 Clicks in the control areas never reach the page: Sabine handles them like the system's own
-buttons. Maximize toggles between maximized and restored. The page still receives pointer
+buttons. The areas are in the page's CSS pixels, like the titlebar strip, so they stay under the
+buttons the page draws when people [zoom the page](/docs/desktop/shortcuts/#zooming-the-page). Maximize toggles between maximized and restored. The page still receives pointer
 movement there, so `:hover` styles on the buttons it draws work as usual. Draw the buttons where
 Sabine expects them and mark them `aria-hidden`, since they are only pictures of the controls:
 
