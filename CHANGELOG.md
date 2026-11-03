@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.74
 
 - Apps whose publisher deleted them from Schelf keep running quietly. Their feeds now answer
   `410 Gone`, and Sabine stops reporting a failed update on every check; it asks again once a week
