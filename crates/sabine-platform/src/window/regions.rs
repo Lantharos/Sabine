@@ -19,6 +19,21 @@ impl WindowRegionRect {
     pub fn is_empty(&self) -> bool {
         self.width <= 0 || self.height <= 0
     }
+
+    /// The rect as a page zoomed by `zoom` lays it out: its edges move
+    /// `zoom` times as far from the window's left and top, or from its right
+    /// for rects placed from there.
+    pub fn zoomed(&self, zoom: f64) -> Self {
+        let scale = |value: i32| (f64::from(value) * zoom).round() as i32;
+        let x = scale(self.x);
+        let y = scale(self.y);
+        Self {
+            x,
+            y,
+            width: scale(self.x.saturating_add(self.width)) - x,
+            height: scale(self.y.saturating_add(self.height)) - y,
+        }
+    }
 }
 
 /// A part of the window, in logical pixels. Its shapes follow the window's
@@ -117,6 +132,50 @@ impl WindowRegion {
         Self {
             rects: Vec::new(),
             adaptive: Some(adaptive),
+        }
+    }
+
+    /// The region as a page zoomed by `zoom` lays it out. Corner radii belong
+    /// to the window, not the page, and stay as they are.
+    pub fn zoomed(&self, zoom: f64) -> Self {
+        let scale = |value: i32| (f64::from(value) * zoom).round() as i32;
+        let adaptive = self.adaptive.clone().map(|adaptive| match adaptive {
+            WindowRegionAdaptive::RoundedLeft { width, radius } => {
+                WindowRegionAdaptive::RoundedLeft {
+                    width: scale(width),
+                    radius,
+                }
+            }
+            WindowRegionAdaptive::TitlebarAndSidebar {
+                sidebar_width,
+                titlebar_height,
+                radius,
+            } => WindowRegionAdaptive::TitlebarAndSidebar {
+                sidebar_width: scale(sidebar_width),
+                titlebar_height: scale(titlebar_height),
+                radius,
+            },
+            WindowRegionAdaptive::ContentAfterSidebar {
+                sidebar_width,
+                titlebar_height,
+            } => WindowRegionAdaptive::ContentAfterSidebar {
+                sidebar_width: scale(sidebar_width),
+                titlebar_height: scale(titlebar_height),
+            },
+            WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
+                sidebar_width,
+                titlebar_height,
+                radius,
+            } => WindowRegionAdaptive::ContentAfterSidebarRoundedRight {
+                sidebar_width: scale(sidebar_width),
+                titlebar_height: scale(titlebar_height),
+                radius,
+            },
+            whole_window => whole_window,
+        });
+        Self {
+            rects: self.rects.iter().map(|rect| rect.zoomed(zoom)).collect(),
+            adaptive,
         }
     }
 
@@ -306,6 +365,16 @@ impl WindowRegions {
         self
     }
 
+    /// The regions as a page zoomed by `zoom` lays them out.
+    pub fn zoomed(&self, zoom: f64) -> Self {
+        let zoomed = |region: &WindowRegion| region.zoomed(zoom);
+        Self {
+            blur: self.blur.as_ref().map(zoomed),
+            opaque: self.opaque.as_ref().map(zoomed),
+            input: self.input.as_ref().map(zoomed),
+        }
+    }
+
     /// The same regions with square corners, for windows against screen edges.
     pub fn squared(&self) -> Self {
         Self {
@@ -405,6 +474,24 @@ mod tests {
         assert!(covers(&region, 12, 0));
         assert!(covers(&region, 0, 150));
         assert!(!covers(&region, 399, 299));
+    }
+
+    #[test]
+    fn zoom_moves_page_edges_but_keeps_window_corners() {
+        let zoom = 1.5;
+        let sidebar = WindowRegion::rounded_left(260, 15).zoomed(zoom);
+        let blur = sidebar.resolved_rects(1200, 800);
+        assert!(covers(&blur, 389, 400));
+        assert!(!covers(&blur, 390, 400));
+        assert!(!covers(&blur, 0, 0));
+        assert!(covers(&blur, 15, 0));
+
+        let content = WindowRegion::content_after_sidebar_rounded_right(260, 0, 15).zoomed(zoom);
+        let opaque = content.resolved_rects(1200, 800);
+        assert!(!covers(&opaque, 389, 400));
+        assert!(covers(&opaque, 390, 400));
+        assert!(covers(&opaque, 1184, 0));
+        assert!(!covers(&opaque, 1199, 0));
     }
 
     #[test]

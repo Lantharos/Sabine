@@ -133,8 +133,11 @@ window
 
 ### Region shapes
 
-Regions are in logical pixels. Every shape except a rectangle is computed from the window's size
-every time it changes, and has the same name in Rust and JavaScript.
+Regions are in the page's CSS pixels, so they grow and shrink with the page when people
+[zoom it](/docs/desktop/shortcuts/#zooming-the-page); at 100% they match logical pixels. Corner
+radii belong to the window and stay the same at every zoom. Every shape except a rectangle is
+computed from the window's size every time it changes, and has the same name in Rust and
+JavaScript.
 
 | Rust | JavaScript | Shape |
 | --- | --- | --- |

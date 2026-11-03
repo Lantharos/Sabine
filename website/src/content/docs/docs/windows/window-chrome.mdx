@@ -139,7 +139,7 @@ Sabine expects them and mark them `aria-hidden`, since they are only pictures of
 
 The page needs to know whether to draw controls at all, and how much room the system's controls
 take. `appWindow.controlsOverlay()` reports the area of the window's top corners that the system's
-controls cover, in logical pixels:
+controls cover, in the page's CSS pixels:
 
 ```ts
 import { appWindow, type ControlsOverlay } from "@lantharos/sabine";
@@ -192,7 +192,8 @@ Pages mark regions with CSS:
 Chromium reads both the prefixed and the standard property. Page regions follow the layout as it
 changes, and work in every kind of chrome.
 
-Rust can add fixed regions, in logical pixels from the window's top left:
+Rust can add fixed regions, in the page's CSS pixels from the window's top left, which follow the
+page's zoom like the page's own regions do:
 
 | Builder call | Region |
 | --- | --- |

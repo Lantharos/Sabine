@@ -1,14 +1,14 @@
 use std::path::Path;
 
 use sabine_bridge::{
-    AUTOSCROLL_SCRIPT, IME_STATE_SCRIPT, INSTALL_SCRIPT, MOUSE_NAVIGATION_SCRIPT,
+    AUTOSCROLL_SCRIPT, IME_STATE_SCRIPT, INSTALL_SCRIPT, MOUSE_NAVIGATION_SCRIPT, PAGE_ZOOM_SCRIPT,
     TRANSPARENT_BACKGROUND_SCRIPT, clipboard, media,
 };
 
 include!(concat!(env!("OUT_DIR"), "/host_files.rs"));
 
 /// Page scripts the host embeds, as `(header, script file, constant, script)`.
-const SCRIPTS: [(&str, &str, &str, &str); 7] = [
+const SCRIPTS: [(&str, &str, &str, &str); 8] = [
     (
         "sabine_bridge_js.h",
         "bridge/*.js",
@@ -38,6 +38,12 @@ const SCRIPTS: [(&str, &str, &str, &str); 7] = [
         "ime_state.js",
         "SABINE_IME_STATE_JS_RAW",
         IME_STATE_SCRIPT,
+    ),
+    (
+        "sabine_page_zoom_js.h",
+        "page_zoom.js",
+        "SABINE_PAGE_ZOOM_JS_RAW",
+        PAGE_ZOOM_SCRIPT,
     ),
     (
         "sabine_mouse_navigation_js.h",

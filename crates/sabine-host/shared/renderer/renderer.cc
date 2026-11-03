@@ -14,6 +14,7 @@
 #include "sabine_bridge_js.h"
 #include "sabine_ime_state_js.h"
 #include "sabine_media_state_js.h"
+#include "sabine_page_zoom_js.h"
 
 namespace {
 
@@ -90,8 +91,11 @@ void SabineRenderer::OnContextCreated(CefRefPtr<CefBrowser> browser,
   frame->ExecuteJavaScript(SABINE_AUTOSCROLL_JS_RAW, url, 0);
 #endif
   const auto policy = BridgePolicyFor(browser);
-  if (frame->IsMain())
+  if (frame->IsMain()) {
     ReportRenderer(frame, policy);
+    sabine_bridge::RunWithTransport(frame, context, SABINE_PAGE_ZOOM_JS_RAW,
+                                    "reportResolution", "sabine.page_zoom");
+  }
   const std::string security_origin = sabine_bridge::RememberContext(context);
   const bool bridged =
       frame->IsMain() && sabine_bridge::ExposesBridge(policy, url) &&

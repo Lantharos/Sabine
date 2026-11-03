@@ -1,13 +1,21 @@
 #include "osr/handler.h"
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include "common/trace.h"
+#include "include/cef_parser.h"
 #include "include/wrapper/cef_helpers.h"
 
 using namespace sabine_osr;
+
+namespace {
+
+constexpr char kPageZoomCommand[] = "sabine.window.pageZoom";
+
+}  // namespace
 
 bool SabineOsrHandler::OnCursorChange(CefRefPtr<CefBrowser> browser,
                                       CefCursorHandle cursor,
@@ -60,6 +68,25 @@ bool SabineOsrHandler::OnTooltip(CefRefPtr<CefBrowser> browser,
   SendMessage(kTooltipChanged, 0, 0, 0, 0, value.data(),
               static_cast<uint32_t>(value.size()));
   return true;
+}
+
+// The window's regions are drawn in the page's CSS pixels, so the window
+// follows the page's zoom, whichever way it changed.
+void SabineOsrHandler::ReportPageZoom() {
+  CEF_REQUIRE_UI_THREAD();
+  const double zoom = std::pow(1.2, browser_->GetHost()->GetZoomLevel());
+  if (zoom == page_zoom_)
+    return;
+  page_zoom_ = zoom;
+  CefRefPtr<CefValue> payload = CefValue::Create();
+  CefRefPtr<CefDictionaryValue> fields = CefDictionaryValue::Create();
+  fields->SetDouble("factor", zoom);
+  payload->SetDictionary(fields);
+  const std::string line =
+      "SABINE_BRIDGE_REQUEST\t" + std::to_string(browser_->GetIdentifier()) +
+      "\t\t\t" + kPageZoomCommand + "\t" +
+      CefWriteJSON(payload, JSON_WRITER_DEFAULT).ToString();
+  SendMessage(kBridgeRequest, {line});
 }
 
 bool SabineOsrHandler::GetScreenInfo(CefRefPtr<CefBrowser> browser,

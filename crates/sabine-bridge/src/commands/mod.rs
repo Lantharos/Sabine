@@ -10,6 +10,9 @@ pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
+/// The zoom factor of the window's page, sent by the native host itself
+/// whenever it changes and never by pages.
+pub const PAGE_ZOOM_COMMAND: &str = "sabine.window.pageZoom";
 /// A token another app's window can present to take focus, made for this
 /// window while the person uses it.
 pub const ACTIVATION_TOKEN_COMMAND: &str = "sabine.window.activationToken";

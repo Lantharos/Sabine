@@ -127,6 +127,9 @@ pub(super) struct OsrNativeHost {
     pub(super) published_window_state: Option<super::types::WindowState>,
     pub(super) toplevel: super::lifecycle::toplevel::ToplevelState,
     pub(super) square_corners: bool,
+    /// How far the page is zoomed. The app's regions are in the page's CSS
+    /// pixels, so they grow and shrink with it.
+    pub(super) page_zoom: f64,
     pub(super) lifecycle_state: LifecycleState,
     pub(super) last_frame_rate: Cell<Option<u32>>,
     pub(super) freeze_deadline: Option<Instant>,
@@ -276,6 +279,7 @@ impl OsrNativeHost {
             published_window_state: None,
             toplevel: Default::default(),
             square_corners: false,
+            page_zoom: 1.0,
             lifecycle_state,
             last_frame_rate: Cell::new(None),
             freeze_deadline: None,
@@ -344,12 +348,14 @@ impl OsrNativeHost {
         self.toplevel.floating() && !self.square_corners
     }
 
-    /// The app's regions, with square corners unless the window rounds them.
+    /// The app's regions at the page's zoom, with square corners unless the
+    /// window rounds them.
     pub(super) fn regions(&self) -> WindowRegions {
+        let regions = self.config.regions.zoomed(self.page_zoom);
         if self.rounds_corners() {
-            self.config.regions.clone()
+            regions
         } else {
-            self.config.regions.squared()
+            regions.squared()
         }
     }
 

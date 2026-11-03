@@ -26,6 +26,15 @@ impl Rect {
         self.y + self.height
     }
 
+    fn zoomed(self, zoom: f64) -> Self {
+        Self::new(
+            self.x * zoom,
+            self.y * zoom,
+            self.width * zoom,
+            self.height * zoom,
+        )
+    }
+
     fn offset(self, x: f64, y: f64) -> Self {
         Self::new(self.x + x, self.y + y, self.width, self.height)
     }
@@ -84,19 +93,26 @@ pub(super) struct Layout {
     pub(super) scale: f64,
 }
 
-/// The page content area inside the window, and the window's scale.
+/// The page content area inside the window, how far the page is zoomed, and
+/// the window's scale.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Viewport {
     pub(crate) content: Rect,
+    pub(crate) zoom: f64,
     pub(crate) scale: f64,
 }
 
 impl PageRect {
     pub(super) fn layout(self, viewport: Viewport) -> Option<Layout> {
         let content = viewport.content;
-        let bounds = self.bounds.offset(content.x, content.y);
+        let zoom = viewport.zoom;
+        let radius = self.radius * zoom;
+        let bounds = self.bounds.zoomed(zoom).offset(content.x, content.y);
         let clip = match self.clip {
-            Some(clip) => clip.offset(content.x, content.y).intersect(content)?,
+            Some(clip) => clip
+                .zoomed(zoom)
+                .offset(content.x, content.y)
+                .intersect(content)?,
             None => content,
         };
         let visible = bounds.intersect(clip)?;
@@ -106,7 +122,7 @@ impl PageRect {
         Some(Layout {
             hole: MediaHole {
                 bounds: visible,
-                radius: if unclipped { self.radius } else { 0.0 },
+                radius: if unclipped { radius } else { 0.0 },
                 surface,
             },
             frame: Frame {
@@ -121,10 +137,10 @@ impl PageRect {
                     (bounds.width * scale) as f32,
                     (bounds.height * scale) as f32,
                 ],
-                radius: (self.radius * scale) as f32,
+                radius: (radius * scale) as f32,
             },
             bounds,
-            radius: self.radius,
+            radius,
             scale,
         })
     }
@@ -156,6 +172,7 @@ mod tests {
             width: 800.0,
             height: 562.0,
         },
+        zoom: 1.0,
         scale: 1.5,
     };
 
@@ -180,6 +197,31 @@ mod tests {
         assert_eq!(layout.hole.radius, 8.0);
         assert_eq!(layout.frame.buffer, (600, 338));
         assert_eq!(layout.frame.video, [0.0, 0.0, 600.0, 337.5]);
+    }
+
+    #[test]
+    fn places_media_where_the_zoomed_page_draws_it() {
+        let layout = PageRect {
+            bounds: Rect::new(8.0, 20.0, 400.0, 224.0),
+            clip: None,
+            radius: 8.0,
+        }
+        .layout(Viewport {
+            zoom: 1.25,
+            ..VIEWPORT
+        })
+        .unwrap();
+        assert_eq!(
+            layout.hole.surface,
+            SurfaceRect {
+                x: 10,
+                y: 63,
+                width: 500,
+                height: 280
+            }
+        );
+        assert_eq!(layout.hole.radius, 10.0);
+        assert_eq!(layout.frame.video, [0.0, 0.0, 750.0, 420.0]);
     }
 
     #[test]

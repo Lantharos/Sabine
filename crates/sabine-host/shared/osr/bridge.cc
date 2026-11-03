@@ -63,6 +63,11 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     UpdateFrameMediaState(browser, frame, arguments->GetString(0) == "1");
     return true;
   }
+  if (message->GetName() == "sabine.page_zoom") {
+    if (frame->IsMain() && browser_ && browser_->IsSame(browser))
+      ReportPageZoom();
+    return true;
+  }
   if (message->GetName() == "sabine.ime_state") {
     UpdateImeSurrounding(browser, frame, arguments->GetString(0));
     return true;

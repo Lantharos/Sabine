@@ -11,9 +11,7 @@ namespace sabine_osr {
 namespace {
 
 constexpr int kKeyCodeSemicolon = 0xBA;
-constexpr int kKeyCodeEquals = 0xBB;
 constexpr int kKeyCodeComma = 0xBC;
-constexpr int kKeyCodeMinus = 0xBD;
 constexpr int kKeyCodePeriod = 0xBE;
 constexpr int kKeyCodeSlash = 0xBF;
 constexpr int kKeyCodeBacktick = 0xC0;

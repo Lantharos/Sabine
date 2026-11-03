@@ -7,6 +7,9 @@
 
 namespace sabine_osr {
 
+constexpr int kKeyCodeEquals = 0xBB;
+constexpr int kKeyCodeMinus = 0xBD;
+
 int KeyCodeForName(const std::string& key);
 cef_mouse_button_type_t MouseButtonFromString(const std::string& value);
 

@@ -209,6 +209,23 @@ ends it.
   </TabItem>
 </Tabs>
 
+## Zooming the page
+
+Pages zoom like they do in a browser, so people can make an app's text and controls larger or
+smaller:
+
+| Shortcut | Does |
+| --- | --- |
+| Ctrl and + or = (Command on macOS) | Zooms in |
+| Ctrl and - (Command on macOS) | Zooms out |
+| Ctrl and 0 (Command on macOS) | Goes back to 100% |
+| Ctrl and the scroll wheel, or a pinch on a touchpad | Zooms in or out |
+
+A page sees these keys first, and the window only zooms when the page doesn't handle them, so an
+app that calls `preventDefault()` on Ctrl+- keeps the shortcut for itself. Each app remembers its
+zoom between launches. The window's [regions](/docs/windows/glass-and-effects/#regions) and
+drag areas grow and shrink with the page, so a sidebar's blur stays under the sidebar.
+
 ## Related pages
 
 - [Creating windows](/docs/windows/creating-windows/) covers the `.palette()` recipe used above.

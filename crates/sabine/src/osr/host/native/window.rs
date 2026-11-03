@@ -162,7 +162,11 @@ impl OsrNativeHost {
                 .as_ref()
                 .and_then(|window| sabine_platform::controls_overlay(window.as_ref()))
         {
-            return serde_json::json!({ "left": overlay.left, "right": 0, "height": overlay.height });
+            return serde_json::json!({
+                "left": overlay.left / self.page_zoom,
+                "right": 0,
+                "height": overlay.height / self.page_zoom,
+            });
         }
         serde_json::json!({ "left": 0, "right": 0, "height": 0 })
     }
@@ -297,6 +301,16 @@ impl OsrNativeHost {
     pub(in crate::osr::host) fn set_regions(&mut self, regions: sabine_platform::WindowRegions) {
         self.config.regions = regions;
         self.update_effect_regions();
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    pub(in crate::osr::host) fn set_page_zoom(&mut self, zoom: f64) {
+        self.page_zoom = zoom;
+        self.relayout_media();
+        self.update_effect_regions();
+        self.send_controls_overlay();
         if let Some(window) = &self.window {
             window.request_redraw();
         }

@@ -1,3 +1,13 @@
+# Unreleased
+
+- A window's blur, opaque and input regions, its drag areas and its window control areas follow
+  the page's zoom. Zooming an app with a glass sidebar used to leave the blur at the sidebar's
+  unzoomed width, so a strip of blur ran past a sidebar that had grown, or stopped short of one
+  that had shrunk. Native video stays over its element at every zoom too.
+- Ctrl and +, - and 0 (Command on macOS) zoom a page in, out and back to 100% when the page
+  doesn't handle those keys itself, as Ctrl and the scroll wheel already did. Each app remembers
+  its zoom between launches.
+
 # Sabine 0.72
 
 - Files from `sabine://app` and `sabine://file` serve the byte range a page asks for. Ranges used

@@ -8,8 +8,8 @@ mod shell;
 
 use sabine_bridge::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND,
-    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, OPEN_LINK_COMMAND, PRINT_FILES_COMMAND,
-    REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
+    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND,
+    PRINT_FILES_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -56,6 +56,16 @@ impl OsrNativeHost {
         self.send_bridge_response(request.browser_id, request.request_id, result);
     }
 
+    fn follow_page_zoom(&mut self, request: &BridgeRequest) {
+        #[derive(serde::Deserialize)]
+        struct PageZoom {
+            factor: f64,
+        }
+        if let Ok(zoom) = serde_json::from_str::<PageZoom>(request.payload) {
+            self.set_page_zoom(zoom.factor);
+        }
+    }
+
     fn answer_drag_files(&mut self, request: &BridgeRequest) {
         #[derive(serde::Deserialize)]
         struct DragFiles {
@@ -84,6 +94,7 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            PAGE_ZOOM_COMMAND => self.follow_page_zoom(&request),
             DRAG_FILES_COMMAND => self.answer_drag_files(&request),
             APPEARANCE_COMMAND => self.send_bridge_response(
                 request.browser_id,

@@ -27,7 +27,7 @@ pub use commands::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, APPEARANCE_EVENT, CONTROLS_OVERLAY_COMMAND,
     CONTROLS_OVERLAY_EVENT, DRAG_FILES_COMMAND, HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND,
     NOTIFICATION_CLOSE_COMMAND, NOTIFICATION_COMMAND_PREFIX, NOTIFICATION_SHOW_COMMAND,
-    OPEN_LINK_COMMAND, PRINT_FILES_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
+    OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND, PRINT_FILES_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
     SHOW_FOLDER_COMMAND, clipboard, media, page_commands,
 };
 pub use guest::{
@@ -55,6 +55,10 @@ pub const AUTOSCROLL_SCRIPT: &str = include_str!("scripts/autoscroll.js");
 /// Reports the text around the caret of the focused editable to the input method, evaluated in
 /// every frame by the native host with the reporting function it alone holds.
 pub const IME_STATE_SCRIPT: &str = include_str!("scripts/ime_state.js");
+
+/// Tells the native host each time the main frame's resolution changes, so the window can follow
+/// the page's zoom, evaluated by the native host with the reporting function it alone holds.
+pub const PAGE_ZOOM_SCRIPT: &str = include_str!("scripts/page_zoom.js");
 
 /// Turns the back and forward mouse buttons into history navigation unless the page handles
 /// them, called by the native host with the pointer position, button, and modifiers.

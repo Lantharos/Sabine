@@ -65,9 +65,7 @@ struct BrowserViewport {
 class SabineOsrHandler : public CefClient,
                          public CefDisplayHandler,
                          public CefDragHandler,
-#if defined(OS_MAC)
                          public CefKeyboardHandler,
-#endif
                          public CefLifeSpanHandler,
                          public CefLoadHandler,
                          public CefPermissionHandler,
@@ -92,12 +90,10 @@ class SabineOsrHandler : public CefClient,
     return downloads_;
   }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
-#if defined(OS_MAC)
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
                   const CefKeyEvent& event,
                   CefEventHandle os_event) override;
-#endif
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
@@ -451,6 +447,7 @@ class SabineOsrHandler : public CefClient,
                              CefRefPtr<CefFrame> frame,
                              bool playing);
   void ReportMediaPlaying();
+  void ReportPageZoom();
   bool UpdateViewHidden();
   void DispatchWindowState();
   void ApplyToplevelState(bool maximized, bool fullscreen, bool tiled);
@@ -520,6 +517,7 @@ class SabineOsrHandler : public CefClient,
   CefRect guest_popup_rect_;
   int screen_origin_x_ = 0;
   int screen_origin_y_ = 0;
+  double page_zoom_ = 1.0;
 
   GuestRegistry guests_;
   GuestCreations guest_creations_;

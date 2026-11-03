@@ -1,20 +1,8 @@
-#include "osr/handler.h"
+#include "osr/input/macos/edit_commands.h"
 
-#include "include/wrapper/cef_helpers.h"
+namespace sabine_osr {
 
-// macOS sends Command shortcuts to the Edit menu rather than to the page, and
-// an offscreen browser has no menu, so the ones the page leaves unhandled run
-// their edit command on the focused frame here.
-bool SabineOsrHandler::OnKeyEvent(CefRefPtr<CefBrowser> browser,
-                                  const CefKeyEvent& event,
-                                  CefEventHandle os_event) {
-  CEF_REQUIRE_UI_THREAD();
-  constexpr uint32_t kChordModifiers =
-      EVENTFLAG_COMMAND_DOWN | EVENTFLAG_CONTROL_DOWN | EVENTFLAG_ALT_DOWN;
-  if (event.type != KEYEVENT_RAWKEYDOWN ||
-      (event.modifiers & kChordModifiers) != EVENTFLAG_COMMAND_DOWN) {
-    return false;
-  }
+bool RunEditCommand(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event) {
   CefRefPtr<CefFrame> frame = browser->GetFocusedFrame();
   if (!frame) {
     return false;
@@ -48,3 +36,5 @@ bool SabineOsrHandler::OnKeyEvent(CefRefPtr<CefBrowser> browser,
       return false;
   }
 }
+
+}  // namespace sabine_osr

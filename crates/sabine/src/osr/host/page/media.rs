@@ -38,6 +38,7 @@ impl OsrNativeHost {
                 f64::from(self.logical_width()),
                 (f64::from(self.logical_height()) - top).max(0.0),
             ),
+            zoom: self.page_zoom,
             scale,
         }
     }
