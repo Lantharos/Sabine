@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.70
 
 - The release workflow builds apps that update from Schelf without publishing them: it skips the
   update manifest and the GitHub release, and doesn't need `SABINE_UPDATE_SIGNING_KEY`, so a Schelf
