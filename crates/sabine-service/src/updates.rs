@@ -4,7 +4,11 @@ use sabine_runtime::{
 };
 
 use crate::app::registry::SabineService;
-use crate::types::{AppUpdateStatus, MaintenanceReport, ServiceError, ServiceResult, UpdatePolicy};
+use crate::schelf::Withdrawal;
+use crate::types::{
+    AppUpdateSource, AppUpdateStatus, MaintenanceReport, ServiceError, ServiceResult, UpdatePolicy,
+    unix_timestamp,
+};
 
 mod apps;
 pub(crate) mod installers;
@@ -38,6 +42,11 @@ impl SabineService {
             let Some(update) = &app.manifest.update else {
                 continue;
             };
+            if update.source == AppUpdateSource::Schelf
+                && !Withdrawal::of(&self.root, &app.manifest.id).due(unix_timestamp())
+            {
+                continue;
+            }
             let archive_updates = match update.policy {
                 UpdatePolicy::Automatic => ArchiveUpdates::Install,
                 UpdatePolicy::Notify => ArchiveUpdates::AskFirst,
@@ -66,7 +75,8 @@ impl SabineService {
                 Ok(
                     AppUpdateStatus::Current
                     | AppUpdateStatus::Deferred { .. }
-                    | AppUpdateStatus::StoreManaged,
+                    | AppUpdateStatus::StoreManaged
+                    | AppUpdateStatus::Withdrawn,
                 ) => {}
                 Err(error) => update_failures.push(format!("{}: {error}", app.manifest.id)),
             }

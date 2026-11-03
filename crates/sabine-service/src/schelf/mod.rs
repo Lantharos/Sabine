@@ -7,6 +7,7 @@ mod revocations;
 mod rollout;
 #[cfg(target_os = "linux")]
 mod store;
+mod withdrawn;
 
 use std::{
     path::{Path, PathBuf},
@@ -20,6 +21,7 @@ use keys::{Envelope, StoreKeys, untrusted};
 pub use notices::StoreNotice;
 pub use notices::installed_by_store;
 use revocations::Revocations;
+pub(crate) use withdrawn::Withdrawal;
 
 const DOWNLOAD_ORIGIN: &str = "https://dl.schelf.store";
 const STORE_KEYS: &str = "trust/v1/store-keys.json";

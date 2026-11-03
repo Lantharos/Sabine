@@ -1,5 +1,8 @@
 # Unreleased
 
+- Apps whose publisher deleted them from Schelf keep running quietly. Their feeds now answer
+  `410 Gone`, and Sabine stops reporting a failed update on every check; it asks again once a week
+  in case the app is restored. A `404` or a network failure still counts as a failed check.
 - Guests and the `popup` surface follow the page's zoom. A guest placed from
   `getBoundingClientRect()` used to land at its unzoomed position and size once people zoomed the
   page, and clicks, scrolling, menus and text input went to the wrong place in it. Guests now move

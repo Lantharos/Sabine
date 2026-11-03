@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::app::registry::{RegistryLock, SabineService};
 use crate::download::{download_artifact, verify_sha256};
-use crate::schelf::{Trust, update_download_url};
+use crate::schelf::{Trust, Withdrawal, update_download_url};
 use crate::types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateSource,
     AppUpdateStatus, PendingAppUpdate, SabineVersion, ServiceError, ServiceResult, is_https_url,
@@ -67,8 +67,17 @@ impl SabineService {
         if update.install_mode == AppInstallMode::Store {
             return Ok(AppUpdateStatus::StoreManaged);
         }
-        let release = fetch_release(&update.source.manifest_url(id, &update.channel)?)?;
         let schelf = (update.source == AppUpdateSource::Schelf).then(|| Trust::new(&self.root));
+        let release = match fetch_release(&update.source.manifest_url(id, &update.channel)?) {
+            Err(ServiceError::Gone(_)) if schelf.is_some() => {
+                Withdrawal::of(&self.root, id).record(unix_timestamp())?;
+                return Ok(AppUpdateStatus::Withdrawn);
+            }
+            release => release?,
+        };
+        if schelf.is_some() {
+            Withdrawal::of(&self.root, id).clear()?;
+        }
         match &schelf {
             Some(trust) => trust.verify_feed(&release)?,
             None => verify_app_release(&release, &update.public_key)?,

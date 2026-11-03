@@ -40,6 +40,8 @@ pub enum ServiceError {
     Runtime(#[from] sabine_runtime::RuntimeError),
     #[error("app update failed: {0}")]
     Update(String),
+    #[error("{0}")]
+    Gone(String),
     #[error("could not decode {path}: {source}")]
     Decode {
         path: PathBuf,

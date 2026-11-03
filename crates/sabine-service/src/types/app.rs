@@ -277,6 +277,9 @@ pub enum AppUpdateStatus {
     },
     PendingApproval(PendingAppUpdate),
     StoreManaged,
+    /// Its publisher deleted it from schelf.store, which no longer offers it
+    /// updates. It keeps running.
+    Withdrawn,
 }
 
 #[derive(Clone, Debug)]

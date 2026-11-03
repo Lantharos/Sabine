@@ -230,6 +230,12 @@ computer yet.
 Package downloads from the store are marked as updates, so the store counts installs and updates
 apart without knowing who made them.
 
+When a publisher deletes an app from Schelf, its feeds answer `410 Gone`. Installed copies keep
+running without updates, Sabine stops reporting a failed update for them, and asks again once a
+week, in case the publisher restores the app during the store's 30 days to do so. Any other
+failure, including `404 Not Found`, counts as a failed check like it would for other sources.
+`sabine update <app id>` always asks right away.
+
 #### Pulled releases
 
 Schelf keeps a signed list of apps and releases it has pulled. Sabine's service fetches it every

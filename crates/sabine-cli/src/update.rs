@@ -128,6 +128,7 @@ fn update_app(target: &str, force: bool) -> Result<(), String> {
             "{target} {version} is waiting for its soak period; use --force to install it now"
         ),
         AppUpdateStatus::StoreManaged => println!("Update {target} through its app store"),
+        AppUpdateStatus::Withdrawn => println!("{target} no longer gets updates from Schelf"),
         AppUpdateStatus::RequiresSystem { sabine, .. } => {
             return Err(format!(
                 "{target} requires Sabine {}; run sabine update first",

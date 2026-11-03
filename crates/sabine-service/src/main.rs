@@ -171,6 +171,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             AppUpdateStatus::StoreManaged => {
                 println!("{id} is updated by its application store")
             }
+            AppUpdateStatus::Withdrawn => {
+                println!("{id} no longer gets updates from Schelf")
+            }
         },
         Command::ApplyUpdate {
             id,

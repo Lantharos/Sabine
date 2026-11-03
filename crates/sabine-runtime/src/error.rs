@@ -12,6 +12,8 @@ pub enum RuntimeError {
     InstallationFailed(String),
     #[error("{0}")]
     Request(String),
+    #[error("{0}")]
+    Gone(String),
     #[error("runtime downloads are disabled by configuration")]
     DownloadsDisabled,
     #[error("IO error: {0}")]
