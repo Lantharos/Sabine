@@ -33,6 +33,11 @@ mime_types = ["text/markdown", "application/vnd.example.notes", "x-scheme-handle
 - Every type under `[app.extensions]` must be a document type listed in `mime_types`; URL schemes
   have no extensions.
 
+Extensions are optional. On Linux, the app also opens files by the type the desktop's MIME
+database gives them, so a type the desktop already knows, such as `text/plain`, works without
+extensions there. Windows offers the app only for the extensions you list, and macOS needs them for
+types it doesn't know itself.
+
 The manifest is the only place URL schemes come from. The app registers exactly the schemes it
 declares, under its app id, so uninstalling it removes all of them. A manifest with URL schemes
 needs an app id.
