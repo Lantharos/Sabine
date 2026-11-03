@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.71
 
 - On Linux, a file opens as one of the app's documents when the desktop's MIME database gives it
   one of the types in `mime_types`, or a kind of one, as well as when its extension is listed under
