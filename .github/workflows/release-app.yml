@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: ""
+      version:
+        description: Version to build, replacing the one in Sabine.toml, such as a nightly's 0.2.0-nightly.202611030415.g1a2b3c4
+        required: false
+        type: string
+        default: ""
     secrets:
       SABINE_UPDATE_SIGNING_KEY:
         description: Base64 Ed25519 seed used to sign app update metadata; apps that update from Schelf don't use one
@@ -114,6 +119,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Use the version being released
+        if: inputs.version != ''
+        shell: pwsh
+        run: |
+          $path = Join-Path '${{ inputs.app }}' Sabine.toml
+          $text = Get-Content $path -Raw
+          $version = [regex]::new('(?ms)^(\[app\][^\n]*\n(?:(?!^\[).)*?^version\s*=\s*)"[^"]*"')
+          if (-not $version.IsMatch($text)) { throw "Sabine.toml has no [app] version to replace" }
+          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""${{ inputs.version }}""", 1))
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -348,6 +362,15 @@ jobs:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v7
+      - name: Use the version being released
+        if: inputs.version != ''
+        shell: pwsh
+        run: |
+          $path = Join-Path '${{ inputs.app }}' Sabine.toml
+          $text = Get-Content $path -Raw
+          $version = [regex]::new('(?ms)^(\[app\][^\n]*\n(?:(?!^\[).)*?^version\s*=\s*)"[^"]*"')
+          if (-not $version.IsMatch($text)) { throw "Sabine.toml has no [app] version to replace" }
+          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""${{ inputs.version }}""", 1))
       - run: rustup toolchain install "${{ inputs.rust_toolchain }}" --profile minimal
       - run: rustup override set "${{ inputs.rust_toolchain }}"
       - name: Install CLI build dependencies
