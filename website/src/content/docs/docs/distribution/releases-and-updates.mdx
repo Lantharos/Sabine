@@ -112,6 +112,9 @@ Windows builds stop.
 | `rust_toolchain` | `stable` | The Rust toolchain that builds the app; Sabine needs 1.98 or newer |
 | `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
 | `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
+| `app` | `.` | The app's folder, for a repository that holds several apps; web dependencies still install at the repository root |
+| `platforms` | every platform | The platforms to build, separated by spaces, such as `linux-x86_64 linux-aarch64`, for an app that doesn't run everywhere |
+| `linux_packages` | empty | More Ubuntu packages the Linux builds install, for apps that link system libraries |
 
 The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, unless the app
 [updates from Schelf](#updating-from-schelf), and takes the optional

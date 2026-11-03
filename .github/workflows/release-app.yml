@@ -22,6 +22,21 @@ on:
         required: false
         type: string
         default: ""
+      app:
+        description: Folder of the app inside the repository, for repositories that hold several apps
+        required: false
+        type: string
+        default: "."
+      platforms:
+        description: Platforms to build, separated by spaces, such as "linux-x86_64 linux-aarch64"; every platform when empty
+        required: false
+        type: string
+        default: ""
+      linux_packages:
+        description: More Ubuntu packages the app needs to build on Linux, separated by spaces
+        required: false
+        type: string
+        default: ""
     secrets:
       SABINE_UPDATE_SIGNING_KEY:
         description: Base64 Ed25519 seed used to sign app update metadata; apps that update from Schelf don't use one
@@ -60,46 +75,41 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     outputs:
-      schelf: ${{ steps.updates.outputs.schelf }}
+      schelf: ${{ steps.plan.outputs.schelf }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: Sabine.toml
+          sparse-checkout: ${{ inputs.app == '.' && 'Sabine.toml' || format('{0}/Sabine.toml', inputs.app) }}
           sparse-checkout-cone-mode: false
-      - id: updates
+      - id: plan
         shell: pwsh
         run: |
-          $schelf = (Get-Content Sabine.toml -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
+          $schelf = (Get-Content (Join-Path '${{ inputs.app }}' Sabine.toml) -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
           "schelf=$($schelf.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          $linux = @{ targets = 'appimage deb rpm portable' }
+          $platforms = @(
+            @{ os = 'windows-latest'; platform = 'windows-x86_64'; targets = 'msi exe windows' }
+            @{ os = 'windows-11-arm'; platform = 'windows-aarch64'; targets = 'msi exe windows' }
+            @{ os = 'macos-15'; platform = 'macos-aarch64'; targets = 'dmg macos' }
+            $linux + @{ os = 'ubuntu-24.04'; platform = 'linux-x86_64'; appimagetool = 'x86_64'; appimagetool_sha256 = 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0' }
+            $linux + @{ os = 'ubuntu-24.04-arm'; platform = 'linux-aarch64'; appimagetool = 'aarch64'; appimagetool_sha256 = 'f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158' }
+          )
+          $wanted = @(-split '${{ inputs.platforms }}' | Where-Object { $_ })
+          $unknown = $wanted | Where-Object { $_ -notin $platforms.platform }
+          if ($unknown) { throw "Sabine can't build for $($unknown -join ', ')" }
+          $chosen = @($platforms | Where-Object { -not $wanted -or $_.platform -in $wanted })
+          "matrix=$(ConvertTo-Json @{ include = $chosen } -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
 
   build:
     env:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows-x86_64
-            targets: msi exe windows
-          - os: windows-11-arm
-            platform: windows-aarch64
-            targets: msi exe windows
-          - os: macos-15
-            platform: macos-aarch64
-            targets: dmg macos
-          - os: ubuntu-24.04
-            platform: linux-x86_64
-            targets: appimage deb rpm portable
-            appimagetool: x86_64
-            appimagetool_sha256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-          - os: ubuntu-24.04-arm
-            platform: linux-aarch64
-            targets: appimage deb rpm portable
-            appimagetool: aarch64
-            appimagetool_sha256: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -114,7 +124,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm
+          sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm ${{ inputs.linux_packages }}
           if [ -n "${{ matrix.appimagetool }}" ]; then
             curl --fail --location --output "$RUNNER_TEMP/appimagetool" "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${{ matrix.appimagetool }}.AppImage"
             echo "${{ matrix.appimagetool_sha256 }}  $RUNNER_TEMP/appimagetool" | sha256sum --check
@@ -194,7 +204,7 @@ jobs:
         run: |
           $platform = '${{ matrix.platform }}'
           foreach ($target in -split '${{ matrix.targets }}') {
-            $bundle = sabine bundle . --target $target --json | Select-Object -Last 1
+            $bundle = sabine bundle '${{ inputs.app }}' --target $target --json | Select-Object -Last 1
             if ($LASTEXITCODE -ne 0) { throw "Bundling $target failed" }
             $result = $bundle | ConvertFrom-Json
             if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact" }
@@ -237,7 +247,7 @@ jobs:
             throw "Windows executable is not marked as a GUI application"
           }
           $wixSource = Get-Content (Get-ChildItem dist/msi -Filter installer.wxs -File -Recurse | Select-Object -First 1) -Raw
-          $config = Get-Content Sabine.toml -Raw
+          $config = Get-Content (Join-Path '${{ inputs.app }}' Sabine.toml) -Raw
           if ($config -match '(?m)^icon\s*=\s*"' -and ($wixSource -notmatch '<Icon Id="AppIcon.ico"' -or $wixSource -notmatch 'Icon="AppIcon.ico"')) {
             throw "MSI shortcut icon metadata is missing"
           }
@@ -364,7 +374,7 @@ jobs:
               $arguments += "$($_.Name)=$((Get-Content $executable -Raw).Trim())"
             }
           }
-          sabine release-manifest . --output release/sabine-update.json @arguments
+          sabine release-manifest '${{ inputs.app }}' --output release/sabine-update.json @arguments
       - name: Flatten release assets
         shell: pwsh
         run: |
