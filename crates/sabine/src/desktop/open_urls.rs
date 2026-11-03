@@ -170,12 +170,11 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(directory.join("note.md"), "").unwrap();
         std::fs::write(directory.join("config.toml"), "").unwrap();
+        let mut documents = crate::window::DocumentTypes::default();
+        documents.extensions.push("md".to_string());
         let openable = Openable::new(
             &[DeepLinkRegistration::new("com.sabine.notes", ["notes"])],
-            &crate::window::DocumentTypes {
-                types: Vec::new(),
-                extensions: vec!["md".to_string()],
-            },
+            &documents,
         );
         let urls = OpenUrls::default();
         urls.receive_arguments(

@@ -254,6 +254,7 @@ impl SabineLifecyclePolicy {
 /// `[app.extensions]` in its manifest.
 #[derive(Clone, Debug, Default)]
 pub struct DocumentTypes {
+    #[cfg(target_os = "linux")]
     pub types: Vec<String>,
     pub extensions: Vec<String>,
 }

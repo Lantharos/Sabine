@@ -64,13 +64,10 @@ impl SabineWindow {
         if let Some(version) = file.app.version {
             self = self.app_version(version);
         }
-        let (schemes, types): (Vec<_>, Vec<_>) = file
+        let schemes = file
             .app
             .mime_types
             .iter()
-            .partition(|mime| mime.starts_with(SCHEME_HANDLER));
-        let schemes = schemes
-            .into_iter()
             .filter_map(|mime| mime.strip_prefix(SCHEME_HANDLER))
             .collect::<Vec<_>>();
         if !schemes.is_empty() {
@@ -84,7 +81,14 @@ impl SabineWindow {
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
         self.config.documents = super::DocumentTypes {
-            types: types.into_iter().cloned().collect(),
+            #[cfg(target_os = "linux")]
+            types: file
+                .app
+                .mime_types
+                .iter()
+                .filter(|mime| !mime.starts_with(SCHEME_HANDLER))
+                .cloned()
+                .collect(),
             extensions: file.app.extensions.into_values().flatten().collect(),
         };
         self.config.app_update = file
