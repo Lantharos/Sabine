@@ -1,4 +1,5 @@
 mod init;
+mod repository;
 pub(crate) mod workflow;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -52,6 +53,9 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
             "requested channel {channel} does not match Sabine.toml channel {}",
             updates.channel
         ));
+    }
+    if matches!(updates.source, AppUpdateSource::Github { .. }) {
+        repository::ensure_only_app(&app.source_dir)?;
     }
     let base_url = match (base_url, &updates.source) {
         (_, AppUpdateSource::Schelf) => {

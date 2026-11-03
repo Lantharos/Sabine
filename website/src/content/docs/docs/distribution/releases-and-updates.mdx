@@ -47,6 +47,11 @@ The workflow builds and signs every package, writes the signed manifest, and pub
 the release for that tag. The tag has to match the version exactly; a `v1.0.1` tag on a project at
 `1.0.0` fails before anything is published.
 
+Installed copies look for updates in the repository's latest release, so an app that updates from
+GitHub releases has to be the only app in its repository. In a repository that holds several apps,
+have them [update from Schelf](#updating-from-schelf) or from an HTTP source.
+`sabine release-manifest` refuses a GitHub source when git tracks another app's `Sabine.toml` there.
+
 ### sabine release-init
 
 `sabine release-init` sets up signed releases for a GitHub repository. It uses the
@@ -113,7 +118,7 @@ Windows builds stop.
 | `rust_toolchain` | `stable` | The Rust toolchain that builds the app; Sabine needs 1.98 or newer |
 | `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
 | `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
-| `app` | `.` | The app's folder, for a repository that holds several apps. The workflow reads its `Sabine.toml` and bundles it from there; web dependencies still install at the repository root |
+| `app` | `.` | The app's folder, for a repository that holds several apps, which [update from Schelf](#updating-from-schelf). The workflow reads its `Sabine.toml` and bundles it from there; web dependencies still install at the repository root |
 | `platforms` | every platform | The platforms to build, separated by spaces, such as `linux-x86_64 linux-aarch64`, for an app that doesn't run everywhere. The platforms are `linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-aarch64` and `macos-aarch64`; any other name stops the run before it builds |
 | `linux_packages` | empty | More Ubuntu packages the Linux builds install, for apps that link system libraries |
 
@@ -296,7 +301,8 @@ sabine release-manifest . \
 Each `--artifact` maps an update target to a package file, and `--executable` gives the program's
 path inside an archive, as `sabine bundle --json` reports it. The manifest goes to
 `dist/sabine-update.json` unless you pass `--output`, and `--channel` must match `[updates]`. Inside
-GitHub Actions the version must match the tag being built.
+GitHub Actions the version must match the tag being built. For a GitHub source, the app has to be
+the only one in its repository.
 
 Each package's download URL is its file name in the release's downloads on GitHub. For an HTTP
 source, upload the packages and the manifest yourself and pass the HTTPS folder the packages are in:

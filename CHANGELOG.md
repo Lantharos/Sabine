@@ -10,6 +10,9 @@
   `[updates]` to GitHub releases, so `Sabine.toml` still parses afterwards.
 - `sabine release-manifest` refuses apps that update from Schelf even with `--base-url`, since
   installed copies only read the manifest Schelf signs.
+- `sabine release-manifest` refuses an app that updates from GitHub releases when its repository
+  holds other apps. Installed copies read the repository's latest release, which only ever belongs
+  to one of them; apps in a repository with several update from Schelf or an HTTP source.
 - `sabine uninstall` removes apps a store installed, as `sabine-service remove` does, instead of
   sending you to a package manager.
 
