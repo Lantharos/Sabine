@@ -1,5 +1,11 @@
 # Unreleased
 
+- Guests and the `popup` surface follow the page's zoom. A guest placed from
+  `getBoundingClientRect()` used to land at its unzoomed position and size once people zoomed the
+  page, and clicks, scrolling, menus and text input went to the wrong place in it. Guests now move
+  and grow with the page and their pages zoom along, the way an iframe would, so a guest stays over
+  its placeholder at every zoom without new bounds. The back and forward mouse buttons also find
+  the element under the pointer on a zoomed page.
 - `sabine release-init` on an app that updated from an HTTP source drops its `url` when it moves
   `[updates]` to GitHub releases, so `Sabine.toml` still parses afterwards.
 - `sabine release-manifest` refuses apps that update from Schelf even with `--base-url`, since

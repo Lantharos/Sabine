@@ -1,12 +1,44 @@
 #include "osr/guest/registry.h"
 
 #include <algorithm>
+#include <cmath>
 
 const char kSabinePopupGuestId[] = "__sabine_popup";
 const char kSabineDevToolsGuestId[] = "__sabine_devtools";
 
 bool IsInternalGuestId(const std::string& id) {
   return id == kSabinePopupGuestId || id == kSabineDevToolsGuestId;
+}
+
+namespace {
+
+CefRect Zoomed(const CefRect& rect, double zoom) {
+  const auto scale = [zoom](int value) {
+    return static_cast<int>(std::lround(value * zoom));
+  };
+  const int x = scale(rect.x);
+  const int y = scale(rect.y);
+  return CefRect(x, y, scale(rect.x + rect.width) - x,
+                 scale(rect.y + rect.height) - y);
+}
+
+}  // namespace
+
+CefRect GuestView::ViewBounds() const {
+  return Zoomed(bounds, page_zoom);
+}
+
+CefRect GuestView::ToView(const CefRect& rect) const {
+  const CefRect view = ViewBounds();
+  const CefRect zoomed = Zoomed(rect, page_zoom);
+  return CefRect(view.x + zoomed.x, view.y + zoomed.y, zoomed.width,
+                 zoomed.height);
+}
+
+CefPoint GuestView::FromView(int x, int y) const {
+  const CefRect view = ViewBounds();
+  return CefPoint(static_cast<int>(std::floor((x - view.x) / page_zoom)),
+                  static_cast<int>(std::floor((y - view.y) / page_zoom)));
 }
 
 GuestView* GuestRegistry::Find(const std::string& id) {
@@ -70,7 +102,7 @@ GuestView* GuestRegistry::TopmostAt(int x, int y) {
     if (!guest || !guest->visible) {
       continue;
     }
-    const CefRect& bounds = guest->bounds;
+    const CefRect bounds = guest->ViewBounds();
     if (x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.width &&
         y < bounds.y + bounds.height) {
       return guest;

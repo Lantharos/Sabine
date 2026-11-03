@@ -75,6 +75,10 @@ new ResizeObserver(() => tab.setBounds(boundsOf(viewport))).observe(viewport);
 
 Sabine rounds bounds to whole pixels and keeps width and height at one pixel or more.
 
+When people [zoom the page](/docs/desktop/shortcuts/#zooming-the-page), guests move and grow with
+it and their pages zoom along, the way an iframe would, so a guest stays over its placeholder
+without new bounds. `setZoom` zooms a guest's page further on top of that.
+
 Guests are drawn above the page, so the page can't draw over them. While it shows something that
 should cover them, such as a dialog or a menu, hide them all with `guest.setCovered(true)`, and
 show them again with `guest.setCovered(false)`:
@@ -148,7 +152,7 @@ aren't guests the page manages: they aren't listed and send no guest events.
 | `partition` | Its storage partition. |
 | `allowBridge` | Whether its pages get the bridge. |
 | `popupPolicy` | What it does with new windows. |
-| `zoomFactor` | The zoom the guest shows, as last set with `setZoom` and kept between 0.25 and 5. |
+| `zoomFactor` | The guest's own zoom, as last set with `setZoom` and kept between 0.25 and 5, which applies on top of the page's. |
 
 ## Storage partitions
 

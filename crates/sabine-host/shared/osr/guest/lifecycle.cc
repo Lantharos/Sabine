@@ -166,6 +166,7 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   guest.id = request.id;
   guest.url = request.url;
   guest.bounds = request.bounds;
+  guest.page_zoom = guest.FollowsPageZoom() ? page_zoom_ : 1.0;
   guest.partition = request.partition;
   guest.visible = request.visible;
   guest.allow_bridge = request.allow_bridge;
@@ -406,8 +407,9 @@ bool SabineOsrHandler::SendGuestPaint(const GuestView& guest,
                                       int width,
                                       int height,
                                       const RectList& dirty_rects) {
-  return SendPaintBatch(PaintSurface::kGuest, guest.id, guest.bounds.x,
-                        guest.bounds.y, buffer, width, height, dirty_rects);
+  const CefRect view = guest.ViewBounds();
+  return SendPaintBatch(PaintSurface::kGuest, guest.id, view.x, view.y, buffer,
+                        width, height, dirty_rects);
 }
 
 void SabineOsrHandler::SendGuestHidden(const GuestView& guest) {

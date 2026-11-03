@@ -215,12 +215,12 @@ SabineOsrHandler::AcceleratedTargetFor(CefRefPtr<CefBrowser> browser,
                                        PaintElementType type) {
   if (GuestView* guest = GuestForBrowser(browser)) {
     if (type == PET_POPUP) {
-      return AcceleratedTarget{kGuestAccel, guest->id + "/popup",
-                               guest->bounds.x + guest_popup_rect_.x,
-                               guest->bounds.y + guest_popup_rect_.y};
+      const CefRect popup = guest->ToView(guest_popup_rect_);
+      return AcceleratedTarget{kGuestAccel, guest->id + "/popup", popup.x,
+                               popup.y};
     }
-    return AcceleratedTarget{kGuestAccel, guest->id, guest->bounds.x,
-                             guest->bounds.y};
+    const CefRect view = guest->ViewBounds();
+    return AcceleratedTarget{kGuestAccel, guest->id, view.x, view.y};
   }
   if (view_hidden_ || !browser_ || !browser_->IsSame(browser)) {
     return std::nullopt;

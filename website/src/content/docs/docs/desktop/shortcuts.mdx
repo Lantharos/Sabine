@@ -224,7 +224,9 @@ smaller:
 A page sees these keys first, and the window only zooms when the page doesn't handle them, so an
 app that calls `preventDefault()` on Ctrl+- keeps the shortcut for itself. Each app remembers its
 zoom between launches. The window's [regions](/docs/windows/glass-and-effects/#regions) and
-drag areas grow and shrink with the page, so a sidebar's blur stays under the sidebar.
+drag areas grow and shrink with the page, so a sidebar's blur stays under the sidebar, and
+[guests](/docs/web/guests/#positioning), popups and native video stay over the elements they
+belong to.
 
 ## Related pages
 

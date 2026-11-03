@@ -22,7 +22,11 @@ bool IsInternalGuestId(const std::string& id);
 struct GuestView {
   std::string id;
   CefRefPtr<CefBrowser> browser;
+  // In the page's CSS pixels, from the window's content area.
   CefRect bounds;
+  // The zoom of the window's page, which the guest moves, grows and zooms
+  // with. Sabine's DevTools sits beside the page and stays at 1.
+  double page_zoom = 1.0;
   std::string url;
   std::string title;
   std::string partition;
@@ -39,6 +43,13 @@ struct GuestView {
   double zoom = 1.0;
 
   bool ShownToPage() const { return !IsInternalGuestId(id); }
+  bool FollowsPageZoom() const { return id != kSabineDevToolsGuestId; }
+  // Where the guest sits in the window's view.
+  CefRect ViewBounds() const;
+  // A rect of the guest's own coordinates, placed in the window's view.
+  CefRect ToView(const CefRect& rect) const;
+  // A point of the window's view in the guest's own coordinates.
+  CefPoint FromView(int x, int y) const;
 };
 
 /// Guest views keyed by id, with a separate bottom-to-top z-order used for

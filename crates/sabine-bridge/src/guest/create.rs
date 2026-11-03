@@ -15,8 +15,9 @@ pub enum GuestPopupPolicy {
 
 /// Pixel bounds of a guest relative to the host window client area.
 ///
-/// Values are in **CSS pixels / DIPs** (what `getBoundingClientRect()`
-/// returns). The OSR host converts them to physical pixels using the window DPI.
+/// Values are in the page's CSS pixels (what `getBoundingClientRect()`
+/// returns), so a guest follows the page's zoom; at 100% they match logical
+/// pixels. The OSR host converts them to physical pixels using the window DPI.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct GuestBounds {
     pub x: i32,

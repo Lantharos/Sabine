@@ -101,18 +101,15 @@ void SabineOsrHandler::UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
 void SabineOsrHandler::SendFocusedImeState() {
   CEF_REQUIRE_UI_THREAD();
   CefRefPtr<CefBrowser> target = browser_;
-  int offset_x = 0;
-  int offset_y = 0;
+  const GuestView* guest = nullptr;
   if (!focused_guest_id_.empty()) {
-    GuestView* guest = guests_.Find(focused_guest_id_);
+    guest = guests_.Find(focused_guest_id_);
     if (!guest || !guest->browser) {
       SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0, nullptr,
                   0);
       return;
     }
     target = guest->browser;
-    offset_x = guest->bounds.x;
-    offset_y = guest->bounds.y;
   }
   if (!target) {
     SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0, nullptr,
@@ -136,8 +133,7 @@ void SabineOsrHandler::SendFocusedImeState() {
   if (cursor == ime_.cursor_rects.end()) {
     return;
   }
-  const CefRect& rect = cursor->second;
+  const CefRect rect = guest ? guest->ToView(cursor->second) : cursor->second;
   SendMessage(kImeCursorAreaChanged, std::max(1, rect.width),
-              std::max(1, rect.height), rect.x + offset_x, rect.y + offset_y,
-              nullptr, 0);
+              std::max(1, rect.height), rect.x, rect.y, nullptr, 0);
 }

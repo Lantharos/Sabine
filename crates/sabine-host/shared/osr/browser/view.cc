@@ -70,14 +70,20 @@ bool SabineOsrHandler::OnTooltip(CefRefPtr<CefBrowser> browser,
   return true;
 }
 
-// The window's regions are drawn in the page's CSS pixels, so the window
-// follows the page's zoom, whichever way it changed.
+// The window's regions and guests are placed in the page's CSS pixels, so the
+// window follows the page's zoom, whichever way it changed.
 void SabineOsrHandler::ReportPageZoom() {
   CEF_REQUIRE_UI_THREAD();
   const double zoom = std::pow(1.2, browser_->GetHost()->GetZoomLevel());
   if (zoom == page_zoom_)
     return;
   page_zoom_ = zoom;
+  for (GuestView* guest : guests_.InZOrder()) {
+    if (guest->FollowsPageZoom()) {
+      guest->page_zoom = zoom;
+      ApplyGuestBounds(*guest);
+    }
+  }
   CefRefPtr<CefValue> payload = CefValue::Create();
   CefRefPtr<CefDictionaryValue> fields = CefDictionaryValue::Create();
   fields->SetDouble("factor", zoom);
@@ -95,6 +101,8 @@ bool SabineOsrHandler::GetScreenInfo(CefRefPtr<CefBrowser> browser,
   screen_info.depth = 32;
   screen_info.depth_per_component = 8;
   if (const GuestView* guest = GuestForBrowser(browser)) {
+    screen_info.device_scale_factor =
+        static_cast<float>(scale_ * guest->page_zoom);
     screen_info.rect = CefRect(0, 0, guest->bounds.width, guest->bounds.height);
     screen_info.available_rect = screen_info.rect;
     return true;
@@ -165,10 +173,9 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
   }
   if (GuestView* guest = GuestForBrowser(browser)) {
     if (type == PET_POPUP) {
-      SendPaintBatch(PaintSurface::kGuest, guest->id + "/popup",
-                     guest->bounds.x + guest_popup_rect_.x,
-                     guest->bounds.y + guest_popup_rect_.y, buffer, width,
-                     height, dirtyRects);
+      const CefRect popup = guest->ToView(guest_popup_rect_);
+      SendPaintBatch(PaintSurface::kGuest, guest->id + "/popup", popup.x,
+                     popup.y, buffer, width, height, dirtyRects);
       return;
     }
     if (!guest->painted) {

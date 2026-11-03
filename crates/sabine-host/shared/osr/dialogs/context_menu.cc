@@ -122,15 +122,13 @@ bool PageDialogs::RunContextMenu(
     CefRefPtr<CefMenuModel> model,
     CefRefPtr<CefRunContextMenuCallback> callback) {
   CEF_REQUIRE_UI_THREAD();
-  int x = params->GetXCoord();
-  int y = params->GetYCoord();
+  CefRect point(params->GetXCoord(), params->GetYCoord(), 0, 0);
   if (const GuestView* guest = owner_->GuestForBrowser(browser)) {
-    x += guest->bounds.x;
-    y += guest->bounds.y;
+    point = guest->ToView(point);
   }
   const std::string items = MenuItemsJson(model);
   if (model->GetCount() == 0 ||
-      !owner_->SendMessage(kContextMenu, 0, 0, x, y, items.data(),
+      !owner_->SendMessage(kContextMenu, 0, 0, point.x, point.y, items.data(),
                            static_cast<uint32_t>(items.size()))) {
     callback->Cancel();
     return true;

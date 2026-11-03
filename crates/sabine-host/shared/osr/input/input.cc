@@ -1,6 +1,7 @@
 #include "osr/handler.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -80,6 +81,7 @@ void SabineOsrHandler::HandleControlLine(
   }
   CefRefPtr<CefBrowser> target_browser = browser_;
   GuestView* pointer_guest = nullptr;
+  double pointer_zoom = 1.0;
   int pointer_x = parts.size() >= 3 ? std::atoi(parts[1].c_str()) : 0;
   int pointer_y = parts.size() >= 3 ? std::atoi(parts[2].c_str()) : 0;
   const bool pointer_event =
@@ -90,8 +92,10 @@ void SabineOsrHandler::HandleControlLine(
     pointer_guest = guests_.TopmostAt(pointer_x, pointer_y);
     if (pointer_guest && pointer_guest->browser) {
       target_browser = pointer_guest->browser;
-      pointer_x -= pointer_guest->bounds.x;
-      pointer_y -= pointer_guest->bounds.y;
+      const CefPoint point = pointer_guest->FromView(pointer_x, pointer_y);
+      pointer_x = point.x;
+      pointer_y = point.y;
+      pointer_zoom = pointer_guest->page_zoom;
       if (parts[0] == "mouse_click") {
         FocusGuest(pointer_guest->id);
       }
@@ -169,9 +173,11 @@ void SabineOsrHandler::HandleControlLine(
     const int click_count = std::max(1, std::atoi(parts[6].c_str()));
     host->SendMouseClickEvent(event, button, up, click_count);
   } else if (parts[0] == "mouse_navigation" && parts.size() >= 5) {
+    const double zoom = std::pow(1.2, host->GetZoomLevel());
     const std::string script =
         std::string("(") + SABINE_MOUSE_NAVIGATION_JS_RAW + ")(" +
-        std::to_string(pointer_x) + "," + std::to_string(pointer_y) + "," +
+        std::to_string(pointer_x / zoom) + "," +
+        std::to_string(pointer_y / zoom) + "," +
         std::to_string(std::atoi(parts[3].c_str())) + "," +
         std::to_string(std::strtoul(parts[4].c_str(), nullptr, 10)) + ");";
     CefRefPtr<CefFrame> frame = target_browser->GetMainFrame();
@@ -190,8 +196,9 @@ void SabineOsrHandler::HandleControlLine(
     event.x = pointer_x;
     event.y = pointer_y;
     event.modifiers = modifiers;
-    host->SendMouseWheelEvent(event, static_cast<int>(dx),
-                              static_cast<int>(dy));
+    host->SendMouseWheelEvent(event,
+                              static_cast<int>(std::lround(dx / pointer_zoom)),
+                              static_cast<int>(std::lround(dy / pointer_zoom)));
   } else if (parts[0] == "touch" && parts.size() >= 8) {
     CefTouchEvent event;
     event.x = pointer_x;
