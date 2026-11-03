@@ -102,6 +102,7 @@ jobs:
           "matrix=$(ConvertTo-Json @{ include = $chosen } -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
 
   build:
+    name: Build for ${{ matrix.platform }}
     env:
       SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
