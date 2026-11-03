@@ -6,7 +6,7 @@ Typed helpers for pages running inside a Sabine window. Prefer these exports ove
 ## Install
 
 ```sh
-bun add github:Lantharos/Sabine#v0.71
+bun add github:Lantharos/Sabine#v0.72
 ```
 
 See the [JavaScript API reference](https://sabine.rs/docs/reference/javascript-api/) for bridge commands, window controls, guests, native video and the rest of the page API.

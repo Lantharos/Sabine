@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.72
 
 - Files from `sabine://app` and `sabine://file` serve the byte range a page asks for. Ranges used
   to start at twice the requested offset, so seeking a song or video past its middle stopped it and
