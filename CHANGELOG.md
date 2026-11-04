@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.75
 
 - On Linux, a window hands the page's frames straight to the desktop's compositor whenever it
   draws nothing over the page, instead of drawing every frame again with its own GPU device. A
