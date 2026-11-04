@@ -9,7 +9,6 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
 };
 
 use crossbeam_channel::Receiver;
@@ -36,9 +35,6 @@ use wayland_protocols::wp::{
 use super::{Backdrop, Command, DirectFrame, DirectOutcome, Release};
 use crate::osr::accel::Dmabuf;
 
-/// How long the compositor gets to give back frames after the subsurface
-/// came down, before their slots return to the browser regardless.
-const DRAIN_LIMIT: Duration = Duration::from_millis(500);
 const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
 const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
 const DRM_FORMAT_XRGB8888: u32 = u32::from_le_bytes(*b"XR24");
@@ -49,7 +45,7 @@ const DRM_FORMAT_ABGR8888: u32 = u32::from_le_bytes(*b"AB24");
 pub(super) struct Buffer {
     pub(super) buffer: WlBuffer,
     pub(super) release: Option<Release>,
-    _dmabuf: Arc<Dmabuf>,
+    dmabuf: Arc<Dmabuf>,
 }
 
 pub(super) struct State {
@@ -67,15 +63,14 @@ pub(super) struct State {
     viewporter: WpViewporter,
     pub(super) modifiers: HashSet<(u32, u64)>,
     pub(super) buffers: HashMap<u64, Buffer>,
-    creating: HashSet<u64>,
+    creating: HashMap<u64, Arc<Dmabuf>>,
     waiting: Option<DirectFrame>,
     attached: bool,
     map_requested: bool,
     shown: bool,
-    hidden_at: Option<Instant>,
+    hidden: bool,
     failed: bool,
     report: Box<dyn Fn(DirectOutcome) + Send>,
-    drained: bool,
 }
 
 impl State {
@@ -126,15 +121,14 @@ impl State {
             viewporter,
             modifiers: HashSet::new(),
             buffers: HashMap::new(),
-            creating: HashSet::new(),
+            creating: HashMap::new(),
             waiting: None,
             attached: false,
             map_requested: false,
             shown: false,
-            hidden_at: None,
+            hidden: false,
             failed: false,
             report,
-            drained: false,
         };
         queue
             .roundtrip(&mut state)
@@ -160,60 +154,105 @@ impl State {
                 let _ = self.connection.flush();
                 let _ = done.send(());
             }
+            Command::Reveal(frame, done) => {
+                let revealed = self.reveal(frame);
+                let _ = self.connection.flush();
+                let _ = done.send(revealed);
+            }
+            Command::Desync => self.subsurface.set_desync(),
         }
     }
 
     fn present(&mut self, frame: DirectFrame) {
-        if self.failed || self.hidden_at.is_some() {
+        if self.failed || self.hidden {
             (frame.release)();
             return;
         }
+        self.forget_retired_buffers();
         if self.buffers.contains_key(&frame.resource_id) {
+            if let Some(older) = self.waiting.take() {
+                (older.release)();
+            }
             self.show(frame);
             return;
         }
-        let Some(format) = drm_format(frame.format, self.transparent) else {
-            self.fail(format!("unsupported frame color format {}", frame.format));
+        if !self.import(&frame) {
             (frame.release)();
             return;
-        };
-        if !self.modifiers.contains(&(format, frame.dmabuf.modifier)) {
-            self.fail(format!(
-                "the compositor cannot import format {format:#x} with modifier {:#x}",
-                frame.dmabuf.modifier
-            ));
-            (frame.release)();
-            return;
-        }
-        if self.creating.insert(frame.resource_id) {
-            let dmabuf = &frame.dmabuf;
-            let params = self.dmabuf.create_params(&self.handle, frame.resource_id);
-            params.add(
-                dmabuf.fd.as_fd(),
-                0,
-                dmabuf.offset,
-                dmabuf.stride,
-                (dmabuf.modifier >> 32) as u32,
-                dmabuf.modifier as u32,
-            );
-            params.create(
-                dmabuf.width as i32,
-                dmabuf.height as i32,
-                format,
-                zwp_linux_buffer_params_v1::Flags::empty(),
-            );
         }
         if let Some(replaced) = self.waiting.replace(frame) {
             (replaced.release)();
         }
     }
 
+    /// Shows `frame` together with the window's next commit, or hands it
+    /// back while the compositor has yet to import its dma-buf.
+    fn reveal(&mut self, frame: DirectFrame) -> Result<(), DirectFrame> {
+        self.forget_retired_buffers();
+        if self.failed || !self.buffers.contains_key(&frame.resource_id) {
+            if !self.failed {
+                self.import(&frame);
+            }
+            return Err(frame);
+        }
+        self.hidden = false;
+        self.subsurface.set_sync();
+        self.show(frame);
+        Ok(())
+    }
+
+    /// Asks the compositor to import a frame's dma-buf, unless it already
+    /// does. Returns whether the import is under way.
+    fn import(&mut self, frame: &DirectFrame) -> bool {
+        let Some(format) = drm_format(frame.format, self.transparent) else {
+            self.fail(format!("unsupported frame color format {}", frame.format));
+            return false;
+        };
+        if !self.modifiers.contains(&(format, frame.dmabuf.modifier)) {
+            self.fail(format!(
+                "the compositor cannot import format {format:#x} with modifier {:#x}",
+                frame.dmabuf.modifier
+            ));
+            return false;
+        }
+        if self.creating.contains_key(&frame.resource_id) {
+            return true;
+        }
+        let dmabuf = &frame.dmabuf;
+        let params = self.dmabuf.create_params(&self.handle, frame.resource_id);
+        params.add(
+            dmabuf.fd.as_fd(),
+            0,
+            dmabuf.offset,
+            dmabuf.stride,
+            (dmabuf.modifier >> 32) as u32,
+            dmabuf.modifier as u32,
+        );
+        params.create(
+            dmabuf.width as i32,
+            dmabuf.height as i32,
+            format,
+            zwp_linux_buffer_params_v1::Flags::empty(),
+        );
+        self.creating
+            .insert(frame.resource_id, Arc::clone(&frame.dmabuf));
+        true
+    }
+
+    /// Lets go of the buffers of dma-bufs the browser retired, once the
+    /// compositor gave them back.
+    fn forget_retired_buffers(&mut self) {
+        self.buffers.retain(|_, buffer| {
+            let retired = Arc::strong_count(&buffer.dmabuf) == 1 && buffer.release.is_none();
+            if retired {
+                buffer.buffer.destroy();
+            }
+            !retired
+        });
+    }
+
     pub(super) fn buffer_created(&mut self, resource_id: u64, buffer: WlBuffer) {
-        self.creating.remove(&resource_id);
-        let Some(frame) = self
-            .waiting
-            .take_if(|frame| frame.resource_id == resource_id)
-        else {
+        let Some(dmabuf) = self.creating.remove(&resource_id) else {
             buffer.destroy();
             return;
         };
@@ -222,10 +261,15 @@ impl State {
             Buffer {
                 buffer,
                 release: None,
-                _dmabuf: Arc::clone(&frame.dmabuf),
+                dmabuf,
             },
         );
-        self.show(frame);
+        if let Some(frame) = self
+            .waiting
+            .take_if(|frame| frame.resource_id == resource_id)
+        {
+            self.show(frame);
+        }
     }
 
     pub(super) fn buffer_failed(&mut self, resource_id: u64) {
@@ -280,7 +324,7 @@ impl State {
     }
 
     fn map(&mut self) {
-        if self.shown || !self.map_requested || !self.attached || self.hidden_at.is_some() {
+        if self.shown || !self.map_requested || !self.attached || self.hidden {
             return;
         }
         self.shown = true;
@@ -291,10 +335,10 @@ impl State {
     }
 
     fn hide(&mut self) {
-        if self.hidden_at.is_some() {
+        if self.hidden {
             return;
         }
-        self.hidden_at = Some(Instant::now());
+        self.hidden = true;
         self.subsurface.set_sync();
         self.surface.attach(None, 0, 0);
         self.surface.commit();
@@ -308,23 +352,6 @@ impl State {
             self.failed = true;
             (self.report)(DirectOutcome::Failed(reason));
         }
-    }
-
-    /// The time left for the compositor to give back frames, or `None`
-    /// once every frame is back.
-    fn drain(&mut self) -> Option<Duration> {
-        let hidden_at = self.hidden_at?;
-        let outstanding = self.buffers.values().any(|buffer| buffer.release.is_some());
-        let left = DRAIN_LIMIT.saturating_sub(hidden_at.elapsed());
-        if outstanding && !left.is_zero() {
-            return Some(left);
-        }
-        if !self.drained {
-            self.drained = true;
-            self.release_all();
-            (self.report)(DirectOutcome::Drained);
-        }
-        None
     }
 
     fn release_all(&mut self) {
@@ -368,13 +395,12 @@ pub(super) fn run(
         if queue.dispatch_pending(&mut state).is_err() {
             return;
         }
-        let timeout = state.drain();
         let _ = queue.flush();
         let Some(guard) = queue.prepare_read() else {
             continue;
         };
         let connection_fd = guard.connection_fd().as_raw_fd();
-        let [connection_ready, woken] = wait(connection_fd, wake.as_raw_fd(), timeout);
+        let [connection_ready, woken] = wait(connection_fd, wake.as_raw_fd());
         if connection_ready {
             match guard.read() {
                 Ok(_) => {}
@@ -397,14 +423,13 @@ pub(super) fn run(
     }
 }
 
-fn wait(connection: i32, wake: i32, timeout: Option<Duration>) -> [bool; 2] {
+fn wait(connection: i32, wake: i32) -> [bool; 2] {
     let mut fds = [connection, wake].map(|fd| libc::pollfd {
         fd,
         events: libc::POLLIN,
         revents: 0,
     });
-    let timeout = timeout.map_or(-1, |timeout| timeout.as_millis().max(1) as i32);
-    if unsafe { libc::poll(fds.as_mut_ptr(), 2, timeout) } < 0 {
+    if unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) } < 0 {
         return [false, false];
     }
     fds.map(|fd| fd.revents != 0)

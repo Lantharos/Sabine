@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
 
-Chromium never draws into a Sabine window directly. It renders every page off screen, and the window host composes those frames into the native window with its own GPU renderer. This is the same on every platform: there is no windowed mode and no other web engine. What differs is how a frame moves from Chromium's GPU process into the window's GPU device without being copied through the CPU.
+Chromium never draws into a Sabine window directly. It renders every page off screen, and the window host composes those frames into the native window with its own GPU renderer, or on Linux hands them to the desktop's compositor while the window draws nothing over the page. This is the same on every platform: there is no windowed mode and no other web engine. What differs is how a frame moves from Chromium's GPU process into the window's GPU device without being copied through the CPU.
 
 Each platform has exactly one paint policy. Apps don't choose a renderer, a transport or Chromium's graphics flags.
 
@@ -25,7 +25,7 @@ CEF lends its frame to the callback and gives it back to Chromium's pool as soon
 
 1. Chromium paints. The host picks a free slot and copies into it only the area that changed since that slot last received a frame.
 2. The slot's texture travels to the window once, the first time it is used. Later frames only name the slot.
-3. The window imports the texture once, samples it without copying, and acknowledges the slot only after the GPU work that read it has finished.
+3. The window imports the texture once, samples it without copying, and acknowledges the slot only after the GPU work that read it has finished. A frame the desktop's compositor shows itself, as on Linux, is acknowledged once the compositor gives it back.
 4. The host never reuses a slot before its acknowledgement.
 
 When the window falls behind, a newer frame for the same surface replaces the queued one and its slot is released at once. When every slot is in use, the host drops the intermediate frame and asks for the newest paint once a slot frees up. It never falls back to reading pixels back to the CPU.
@@ -144,11 +144,15 @@ On Windows and macOS, the window resizes its surface and presents the last frame
 
 Resize messages coalesce to the newest size on Chromium's UI thread. Frames that Chromium painted for a size the page is moving away from are discarded, so the window never stretches a stale frame or shows a half laid-out one.
 
-## The first frame on Linux
+## The page in a subsurface on Linux
 
-A Linux window without Sabine's own titlebar or a loading screen doesn't wait for its graphics device to show the page. The page's first frame goes to the desktop compositor as it is: a dma-buf shown in a subsurface of the window, over a buffer with the window's background color, and the window appears with it. The window's device starts once that frame is on screen, so it never competes with Chromium for the first frame. When the device has the page's latest frame, the subsurface comes down with the window's own first frame in one commit.
+A Linux window without Sabine's own titlebar or a loading screen hands the page's frames to the desktop compositor as they are: each frame is a dma-buf shown in a subsurface of the window, over the window's own buffer with its background color. The compositor composes the window anyway, so a frame costs the window no drawing of its own and its GPU device stays idle while a page animates.
 
-A compositor without `linux-dmabuf`, subsurfaces or viewports, or one that can't import the frame's format, leaves the window to wait for its device instead.
+The window's first frame shows this way too, so the window doesn't wait for its graphics device to appear. The device starts once that frame is on screen, so it never competes with Chromium for the first frame.
+
+Whenever the window has something to draw over or around the page, such as a popup, a guest, a tooltip, the context menu, native video or a resize in progress, the page moves into the window's device for as long as that lasts. The window asks Chromium for a fresh frame, and the subsurface comes down with the first window frame that draws it, in one commit. Once the window draws nothing over the page again, the next page frame goes back to the subsurface together with a window frame that leaves the page out.
+
+A compositor without `linux-dmabuf`, subsurfaces or viewports, or one that can't import the frame's format, leaves every frame to the window's device.
 
 On every platform the window's graphics device starts on a thread of its own, so the browser's connection, bridge calls and page events keep flowing while drivers start. Only what the platform ties to the window's thread happens there: on macOS, AppKit lets only the main thread create the window's Metal surface, while the adapter, device and pipelines are made on the other thread.
 

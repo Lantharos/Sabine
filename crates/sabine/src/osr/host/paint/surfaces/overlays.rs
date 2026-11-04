@@ -38,6 +38,11 @@ impl Overlays {
             .filter_map(|id| Some((id, *self.surfaces.get(id)?)))
     }
 
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn is_empty(&self) -> bool {
+        self.surfaces.is_empty()
+    }
+
     pub(in crate::osr::host) fn clear(&mut self) {
         self.surfaces.clear();
         self.drawing_order.clear();

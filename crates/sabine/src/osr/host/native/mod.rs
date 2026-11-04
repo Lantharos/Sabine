@@ -8,7 +8,7 @@ mod renderer;
 mod window;
 
 #[cfg(target_os = "linux")]
-pub(super) use direct::DirectOutcome;
+pub(super) use direct::{DirectOutcome, PageRoute};
 
 use std::{
     cell::Cell,
@@ -58,12 +58,14 @@ pub(super) struct OsrNativeHost {
     pub(super) gpu_starts: Vec<std::thread::JoinHandle<()>>,
     #[cfg(target_os = "linux")]
     pub(super) direct: Option<direct::DirectPresenter>,
-    /// Whether the window's own device holds a page frame to replace the
-    /// directly shown one with.
+    /// Whether the window's own device holds a newer page frame than the
+    /// directly shown one.
     #[cfg(target_os = "linux")]
     pub(super) direct_handover_ready: bool,
+    /// Whether the browser was asked for a page frame for the window's
+    /// device to take the page over with.
     #[cfg(target_os = "linux")]
-    pub(super) retiring_direct: Option<direct::DirectPresenter>,
+    pub(super) direct_repaint_requested: bool,
     /// The app's own Chromium, started if the shared runtime cannot serve
     /// the window being opened.
     #[cfg(target_os = "linux")]
@@ -220,7 +222,7 @@ impl OsrNativeHost {
             #[cfg(target_os = "linux")]
             direct_handover_ready: false,
             #[cfg(target_os = "linux")]
-            retiring_direct: None,
+            direct_repaint_requested: false,
             #[cfg(target_os = "linux")]
             own_browser: None,
             #[cfg(target_os = "linux")]

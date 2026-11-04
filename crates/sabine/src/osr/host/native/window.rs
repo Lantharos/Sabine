@@ -216,7 +216,6 @@ impl OsrNativeHost {
         #[cfg(target_os = "linux")]
         {
             self.direct = None;
-            self.retiring_direct = None;
             self.exported_window = None;
         }
         self.renderer_starting = false;

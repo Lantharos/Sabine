@@ -159,7 +159,7 @@ impl OsrNativeHost {
         }
         let top = self.titlebar_height();
         let scale = self.scale();
-        if let Some(surface) = self.main_surface {
+        if let Some(surface) = self.main_surface.filter(|_| !self.page_in_subsurface()) {
             list.push(surface_image(ImageId::Main, surface, top, scale));
         }
         for (overlay_id, geometry) in self.overlays.in_drawing_order() {
@@ -174,6 +174,13 @@ impl OsrNativeHost {
         }
         self.draw_tooltip(list, width, height);
         self.draw_context_menu(list);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+impl OsrNativeHost {
+    fn page_in_subsurface(&self) -> bool {
+        false
     }
 }
 

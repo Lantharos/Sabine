@@ -1,5 +1,8 @@
 mod dispatch;
+mod page;
 mod worker;
+
+pub(in crate::osr::host) use page::PageRoute;
 
 use std::{
     ffi::c_void,
@@ -24,7 +27,7 @@ use crate::osr::accel::Dmabuf;
 
 use worker::State;
 
-const HIDE_TIMEOUT: Duration = Duration::from_millis(250);
+const COMMAND_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub(in crate::osr::host) type Release = Box<dyn FnOnce() + Send>;
 
@@ -52,26 +55,30 @@ pub(in crate::osr::host) struct Backdrop {
 pub(in crate::osr::host) enum DirectOutcome {
     Shown,
     Failed(String),
-    /// Every frame came back after the subsurface came down.
-    Drained,
 }
 
 enum Command {
     Present(DirectFrame),
     Map(Backdrop),
     Hide(mpsc::SyncSender<()>),
+    Reveal(DirectFrame, mpsc::SyncSender<Result<(), DirectFrame>>),
+    Desync,
 }
 
 /// Shows the page's frames in a subsurface of the window, imported by the
-/// compositor itself, until the window's own graphics device has started.
-/// Chromium and the window would otherwise start their GPU drivers at the
-/// same time, which delays the page's first frame.
+/// compositor itself. The window's first frame shows this way before its
+/// own graphics device has started, as Chromium and the window would
+/// otherwise start their GPU drivers at the same time. Afterwards the page
+/// stays in the subsurface whenever the window draws nothing over it, so a
+/// frame costs the window no drawing of its own.
 pub(in crate::osr::host) struct DirectPresenter {
     connection: Connection,
     commands: Sender<Command>,
     wake: UnixStream,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
+    hidden: bool,
+    failed: bool,
 }
 
 impl DirectPresenter {
@@ -137,7 +144,23 @@ impl DirectPresenter {
             wake,
             stop,
             worker: Some(worker),
+            hidden: false,
+            failed: false,
         })
+    }
+
+    /// Whether the window's device draws the page instead.
+    pub(in crate::osr::host) fn hidden(&self) -> bool {
+        self.hidden
+    }
+
+    pub(in crate::osr::host) fn failed(&self) -> bool {
+        self.failed
+    }
+
+    /// Stops showing frames here after the compositor could not.
+    pub(in crate::osr::host) fn note_failure(&mut self) {
+        self.failed = true;
     }
 
     pub(in crate::osr::host) fn present(&self, frame: DirectFrame) {
@@ -150,11 +173,32 @@ impl DirectPresenter {
     }
 
     /// Takes the page's subsurface down with the window's next commit, so
-    /// the first frame drawn by the window's own device replaces it.
-    pub(in crate::osr::host) fn hide_with_next_commit(&self) {
+    /// the frame the window's own device draws next replaces it.
+    pub(in crate::osr::host) fn hide_with_next_commit(&mut self) {
         let (done, hidden) = mpsc::sync_channel(1);
         self.send(Command::Hide(done));
-        let _ = hidden.recv_timeout(HIDE_TIMEOUT);
+        let _ = hidden.recv_timeout(COMMAND_TIMEOUT);
+        self.hidden = true;
+    }
+
+    /// Shows `frame` in the subsurface again from the window's next commit,
+    /// which must leave the page out. The frame comes back while the
+    /// compositor still imports its dma-buf.
+    pub(in crate::osr::host) fn reveal_with_next_commit(
+        &mut self,
+        frame: DirectFrame,
+    ) -> Result<(), DirectFrame> {
+        let (done, revealed) = mpsc::sync_channel(1);
+        self.send(Command::Reveal(frame, done));
+        let revealed = revealed.recv_timeout(COMMAND_TIMEOUT).unwrap_or(Ok(()));
+        self.hidden = revealed.is_err();
+        revealed
+    }
+
+    /// Lets the subsurface show frames on its own again, after the window's
+    /// commit that revealed it.
+    pub(in crate::osr::host) fn desync(&self) {
+        self.send(Command::Desync);
     }
 
     fn send(&self, command: Command) {

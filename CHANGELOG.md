@@ -1,3 +1,12 @@
+# Unreleased
+
+- On Linux, a window hands the page's frames straight to the desktop's compositor whenever it
+  draws nothing over the page, instead of drawing every frame again with its own GPU device. A
+  page animating at the display's rate, such as Magpie's music visualizer, takes about 70% less
+  CPU in the window's process, and around a fifth less across the whole app. Popups, guests,
+  tooltips, the context menu, native video and resizes still draw through the window's device,
+  which takes the page over while they're on screen.
+
 # Sabine 0.74
 
 - A fullscreen window no longer has window control or drag areas. Clicks where the close button
