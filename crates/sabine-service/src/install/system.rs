@@ -1,10 +1,20 @@
 use super::*;
 use state::{prune_system_versions_in, versions_dir_in, write_installation_state_in};
 
-/// Copies the service, its daemon and the CEF host into `destination`, laid
-/// out like an installed Sabine version.
-pub fn stage_system_files(destination: &Path, service: &Path, host: &Path) -> ServiceResult<()> {
+/// Copies the service, its daemon, the CEF host and, for a whole Sabine, the
+/// CLI into `destination`, laid out like an installed Sabine version.
+pub fn stage_system_files(
+    destination: &Path,
+    service: &Path,
+    host: &Path,
+    cli: Option<&Path>,
+) -> ServiceResult<()> {
     fs::create_dir_all(destination)?;
+    if let Some(cli) = cli {
+        let target = destination.join(cli_binary_name());
+        fs::copy(cli, &target)?;
+        sabine_runtime::make_executable(&target)?;
+    }
     for source in [service.to_path_buf(), service_daemon_path(service)] {
         if !source.is_file() {
             return Err(ServiceError::Update(format!(
@@ -45,10 +55,15 @@ pub fn stage_system_files(destination: &Path, service: &Path, host: &Path) -> Se
     Ok(())
 }
 
-/// Installs the service, daemon and CEF host for every user of the machine
-/// into `root`, the system Sabine directory or its place in a staging tree.
-/// Returns the installed version.
-pub fn install_system_service(service: &Path, host: &Path, root: &Path) -> ServiceResult<String> {
+/// Installs the service, daemon, CEF host and the CLI of the same version for
+/// every user of the machine into `root`, the system Sabine directory or its
+/// place in a staging tree. Returns the installed version.
+pub fn install_system_service(
+    service: &Path,
+    host: &Path,
+    cli: &Path,
+    root: &Path,
+) -> ServiceResult<String> {
     let version = crate::lifecycle::service_version(service)
         .ok_or_else(|| ServiceError::Update("the Sabine service has no version".into()))?;
     let compatibility = if version == crate::SABINE_VERSION {
@@ -62,7 +77,8 @@ pub fn install_system_service(service: &Path, host: &Path, root: &Path) -> Servi
     sabine_runtime::recover_directory_installs(&versions)?;
     let staging = versions.join(format!("{version}.installing"));
     empty_staging(&staging)?;
-    stage_system_files(&staging, service, host)?;
+    let cli = (version == crate::SABINE_VERSION).then_some(cli);
+    stage_system_files(&staging, service, host, cli)?;
     sabine_runtime::install_directory(&staging, &versions.join(&version))?;
     write_installation_state_in(
         root,

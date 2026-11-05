@@ -1,6 +1,7 @@
 mod bundle;
 mod desktop;
 mod dev;
+mod handover;
 mod install;
 mod project;
 mod release;
@@ -18,6 +19,7 @@ use install::source::InstallOptions;
 use runtime::RuntimeCommand;
 
 fn main() -> ExitCode {
+    handover::to_newer_cli();
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) if error.kind() == clap::error::ErrorKind::DisplayVersion => {

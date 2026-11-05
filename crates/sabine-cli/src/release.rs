@@ -120,16 +120,22 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
     write_output(output, &manifest)
 }
 
-/// Lays out the service, daemon and CEF host of a Sabine system release in
-/// `output`, as every installation unpacks them.
+/// Lays out the service, daemon, CEF host and this CLI of a Sabine system
+/// release in `output`, as every installation unpacks them.
 pub(crate) fn stage_system_release(
     service: &Path,
     host: &Path,
     output: &Path,
 ) -> Result<(), String> {
     sabine_runtime::remove_directory_if_present(output).map_err(|error| error.to_string())?;
-    sabine_service::stage_system_files(output, &absolute_path(service)?, &absolute_path(host)?)
-        .map_err(|error| error.to_string())
+    let cli = std::env::current_exe().map_err(|error| error.to_string())?;
+    sabine_service::stage_system_files(
+        output,
+        &absolute_path(service)?,
+        &absolute_path(host)?,
+        Some(&cli),
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn write_system_manifest(

@@ -1,3 +1,4 @@
+use super::cli::keep_cli_if_it_runs;
 use super::*;
 use sabine_runtime::sabine_data_dir;
 
@@ -23,6 +24,7 @@ pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
             &staging,
             service,
             &source_dir.join(sabine_host_relative_path()),
+            None,
         )?;
         sabine_runtime::install_directory(&staging, &destination)?;
     }
@@ -93,6 +95,7 @@ pub(super) fn install_system_archive(
             "Sabine system bundle has an incomplete native host".into(),
         ));
     }
+    keep_cli_if_it_runs(&staging.join(cli_binary_name()), &manifest.version)?;
     sabine_runtime::install_directory(&staging, install_dir)?;
     let _ = fs::remove_file(archive);
     Ok(())

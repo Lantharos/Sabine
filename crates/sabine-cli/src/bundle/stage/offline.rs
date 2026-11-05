@@ -36,7 +36,7 @@ pub(super) fn stage_offline_runtime(
         .binary
         .parent()
         .ok_or("offline application has no binary directory")?;
-    sabine_service::stage_system_files(binary_dir, &service, &host)
+    sabine_service::stage_system_files(binary_dir, &service, &host, None)
         .map_err(|error| format!("could not stage the offline Sabine service: {error}"))?;
     let manifest_dir = match format.target() {
         BuildTarget::Macos => staged.app_dir.join("Contents/Resources"),

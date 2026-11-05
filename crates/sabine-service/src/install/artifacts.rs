@@ -26,6 +26,14 @@ pub(super) fn sabine_host_relative_path() -> PathBuf {
     }
 }
 
+pub(super) fn cli_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "sabine.exe"
+    } else {
+        "sabine"
+    }
+}
+
 pub(super) fn service_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "sabine-service.exe"

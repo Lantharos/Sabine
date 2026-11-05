@@ -79,6 +79,7 @@ See [Code signing](/docs/distribution/code-signing/) and [Releases and updates](
 | `SABINE_FULL_ACCESS` | App, Linux | When set, the app runs without Sabine's app sandbox even if `Sabine.toml` declares one. A system sets it for an app the person gave full access. |
 | `SABINE_HOST_PATH` | App, CLI | Path to a Sabine host executable to use instead of the one beside the app or in the installed Sabine. |
 | `SABINE_SERVICE_PATH` | App, CLI, Service | Path to a `sabine-service` executable to use instead of the installed one. It is used only when the daemon sits beside it. |
+| `SABINE_CLI_PINNED` | CLI | When set, this `sabine` runs as it is, even when a newer Sabine is installed. For builds that pin a release. |
 | `SABINE_RELEASE_MANIFEST_URL` | Service, CLI | An HTTPS URL of the Sabine release manifest to install from, instead of the published releases. The manifest's signature is still checked. |
 
 <Aside type="caution">

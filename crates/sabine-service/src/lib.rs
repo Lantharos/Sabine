@@ -38,8 +38,9 @@ pub use uninstall::{installer_guid, uninstall_system, uninstall_with_prompt};
 
 pub use app::registry::SabineService;
 pub use install::{
-    ensure_service_executable, find_service_executable, held_system_update, install_system_service,
-    installed_service_version, service_daemon_path, stage_system_files, update_components,
+    CLI_PINNED_ENV, ensure_service_executable, find_service_executable, held_system_update,
+    install_system_service, installed_service_version, newer_installed_cli, service_daemon_path,
+    stage_system_files, update_components,
 };
 #[cfg(target_os = "linux")]
 pub use lifecycle::install_system_unit;

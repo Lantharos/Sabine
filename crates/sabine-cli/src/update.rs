@@ -29,13 +29,18 @@ pub fn run(target: Option<String>, all: bool, force: bool) -> Result<ExitCode, S
 fn update_sabine(force: bool) -> Result<(), String> {
     println!("Checking Sabine components…");
     let mut log = ProgressLog::default();
-    let report =
-        sabine_service::update_components(force, sabine_service::SABINE_VERSION, |progress| {
-            if let Some(line) = log.line(&progress.message, progress.fraction) {
-                println!("{line}");
-            }
-        })
-        .map_err(|error| error.to_string())?;
+    let report = sabine_service::update_components(force, |progress| {
+        if let Some(line) = log.line(&progress.message, progress.fraction) {
+            println!("{line}");
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    if let Some(path) = crate::handover::system_owned_entry() {
+        println!(
+            "{} updates with the system; Sabine's updates leave it alone",
+            path.display()
+        );
+    }
     if report.deferred {
         println!(
             "Sabine {} is waiting for its soak period; use --force to install it now",
@@ -43,15 +48,9 @@ fn update_sabine(force: bool) -> Result<(), String> {
         );
         return Ok(());
     }
-    if let Some(cli) = &report.cli {
-        self_replace::self_replace(cli)
-            .map_err(|error| format!("could not update the CLI: {error}"))?;
-        std::fs::remove_file(cli).map_err(|error| error.to_string())?;
-        println!("Updated Sabine CLI to {}", report.version);
-    }
     match &report.system {
-        Some(version) => println!("Updated Sabine service, daemon and host to {version}"),
-        None if report.held.is_none() => println!("Sabine service and host are current"),
+        Some(version) => println!("Updated Sabine to {version}"),
+        None if report.held.is_none() => println!("Sabine is current"),
         None => {}
     }
     if let Some(held) = &report.held {

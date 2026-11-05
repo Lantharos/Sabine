@@ -66,7 +66,6 @@ pub fn uninstall_system(purge: bool) -> ServiceResult<bool> {
         for path in [
             removed,
             root.join("downloads/system"),
-            root.join("downloads/cli"),
             root.join("executions"),
         ] {
             remove_path(&path)?;

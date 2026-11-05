@@ -1,7 +1,7 @@
 use super::SourceApp;
 
 pub(super) fn launcher_script(app: &SourceApp) -> Result<String, String> {
-    let cli = std::env::current_exe().map_err(|error| error.to_string())?;
+    let cli = crate::handover::entry_path()?;
     let mut arguments = vec![
         cli.to_string_lossy().into_owned(),
         "dev".into(),

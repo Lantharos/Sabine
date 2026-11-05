@@ -80,7 +80,7 @@ sabine install --bundle .         # production app independent of the checkout
 sabine runtime install --system-wide            # Sabine and CEF for every user
 sabine install --bundle --system-wide .         # this app for every user
 sabine bundle .                   # release bundle for this machine
-sabine update                     # CLI, shared components, and CEF
+sabine update                     # shared components and CEF, without waiting for the daemon
 sabine update --force             # skip the release soak, keep integrity checks
 sabine uninstall .                # remove this project's development install
 sabine uninstall com.example.my-app --purge

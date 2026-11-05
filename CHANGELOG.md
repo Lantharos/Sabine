@@ -1,3 +1,17 @@
+# Unreleased
+
+- The `sabine` command is part of Sabine now and updates with it. Each release carries the CLI in
+  the same signed archive as the service and host, installed beside them, switched atomically and
+  rolled back with them. The `sabine` on your `PATH` stays where it is and runs the CLI of the
+  newest Sabine on the machine, the user's or the system's, so a CLI installed once never needs
+  updating by hand, and one that came with a package or an operating system image is never written
+  to. A `sabine` newer than the installed Sabine runs as it is. `sabine update` is still there for
+  not waiting for the daemon; it no longer replaces any file. `SABINE_CLI_PINNED` keeps a `sabine`
+  on its own version, for builds that pin a release.
+- `sabine runtime install --system-wide` installs the CLI with the rest of Sabine, in
+  `bin/versions/<version>/`.
+- `sabine uninstall --system` leaves a `sabine` the system owns in place and says so.
+
 # Sabine 0.76
 
 - On Linux, files and text a page drags reach a window sitting above the app's own window, such as

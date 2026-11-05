@@ -12,6 +12,8 @@ shared runtime on your machine. Install it with Cargo:
 
 <Code code={`cargo install --git https://github.com/Lantharos/Sabine --tag ${tag} sabine-cli`} lang="sh" />
 
+You don't need to update it: it [follows the Sabine on your machine](/docs/concepts/shared-runtime/#the-cli).
+
 Commands that take a project accept its folder as the first argument and default to the current
 one. `sabine help <command>` and `sabine <command> --help` print the flags of a command.
 
@@ -179,7 +181,7 @@ packages are removed with their package manager or uninstaller instead.
 | --- | --- |
 | `[target]` | An app id or project folder; `.` by default. For a project, the development launcher goes first |
 | `--purge` | Also removes Sabine's data for the installation: the install folder and browser profiles |
-| `--system` | Removes Sabine itself, with its runtimes and this CLI, once no apps are registered. Not with a target. With `--purge`, Sabine's whole data folder and every browser profile go too |
+| `--system` | Removes Sabine itself, with its runtimes and this CLI unless the system owns it, once no apps are registered. Not with a target. With `--purge`, Sabine's whole data folder and every browser profile go too |
 
 ## sabine update
 
@@ -204,6 +206,9 @@ sabine update --all
 | `cef` or `runtime` | The CEF runtime, after checking that Chromium starts on it |
 | a project folder | Rebuilds a `sabine install --bundle` install from the checkout, or rewrites a development launcher |
 | an app id | Checks the app's update source and installs a release, rebuilds a `sabine install --bundle` install without one from its checkout, or rewrites a development launcher. An app a store installed is left to the store |
+
+The daemon does the first three on its own; `sabine update` is for not waiting for it. A `sabine`
+that came with the system or a package manager updates with them, and `sabine update` says so.
 
 `sabine update` reports a Sabine release that is still soaking, or one it holds back because it would
 stop an installed app, naming the apps it waits for. For an app whose release comes as a package,

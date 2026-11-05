@@ -15,7 +15,9 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
                 "; app data was kept"
             }
         );
-        if !removed_self {
+        if let Some(path) = crate::handover::system_owned_entry() {
+            println!("{} stays, since the system owns it", path.display());
+        } else if !removed_self {
             self_replace::self_delete().map_err(|error| error.to_string())?;
         }
         return Ok(ExitCode::SUCCESS);

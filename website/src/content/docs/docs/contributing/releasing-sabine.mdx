@@ -67,9 +67,10 @@ Silicon:
 - builds the CLI and service in release mode, and on Windows checks that they need no C runtime
   redistributable and that the daemon is a GUI program that stays up
 - builds the CEF host against the current runtime with `sabine runtime prepare`
-- lays out the service, daemon and host with `sabine system-release-stage`, and checks with
+- lays out the service, daemon, host and CLI with `sabine system-release-stage`, and checks with
   `sabine runtime doctor` that the staged host renders and shuts down
-- packs `sabine-system-<platform>` and `sabine-cli-<platform>` archives, zip on Windows and gzip
+- packs `sabine-system-<platform>`, which holds the CLI too, and `sabine-cli-<platform>`, the CLI by
+  itself for a first install or a CLI from before the system carried one, zip on Windows and gzip
   tarballs elsewhere
 
 It then writes `sabine-release.json` with `sabine system-release-manifest`, signed with Sabine's

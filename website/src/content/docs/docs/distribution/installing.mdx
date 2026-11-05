@@ -77,7 +77,7 @@ sabine runtime install --system-wide --root /image
 sabine install --bundle --system-wide --root /image .
 ```
 
-The first command installs Sabine's service, daemon, CEF host and a CEF runtime; the second installs
+The first command installs Sabine's service, daemon, CEF host, CLI and a CEF runtime; the second installs
 the app. `--root` stages either one under a folder, such as an image being built. Without `--root`
 they write to the running system and need administrator rights.
 
@@ -90,7 +90,8 @@ active version under `bin/versions/<version>`, and `runtimes/cef` holds one runt
   <TabItem label="Linux">
     Sabine goes to `/usr/lib/sabine`, with a systemd user unit at
     `/usr/lib/systemd/user/sabine.service` that starts the daemon for every user at login. When a
-    user's own Sabine is newer, that daemon hands over to it.
+    user's own Sabine is newer, that daemon hands over to it. The CLI is in
+    `/usr/lib/sabine/bin/current/`, which an image can install as `/usr/bin/sabine`.
 
     The app goes where packages put it: `/usr/lib/sabine/<app id>`, a launcher in `/usr/bin`, and
     its desktop entry, icons, AppStream metadata and file types under `/usr/share`.
@@ -130,7 +131,7 @@ stay, and so does the folder until it's empty. App data and browser profiles are
 | Option | Effect |
 | --- | --- |
 | `--purge` | Also removes the whole install folder and the app's browser profiles |
-| `--system` | Removes Sabine itself: its service, daemon, runtimes and the CLI. Uninstall every app first |
+| `--system` | Removes Sabine itself: its service, daemon, runtimes and the CLI, unless the system owns it. Uninstall every app first |
 
 `--system` stops the daemon and turns off starting at login before deleting anything, and keeps app
 data unless you add `--purge`, which also removes Sabine's data folder and every browser profile.

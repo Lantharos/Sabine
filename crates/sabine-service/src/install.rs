@@ -10,6 +10,7 @@ use std::{
 use crate::download::verify_sha256;
 
 mod artifacts;
+mod cli;
 mod hold;
 mod locate;
 mod manual;
@@ -17,6 +18,7 @@ mod payload;
 mod release;
 mod state;
 mod system;
+pub use cli::{CLI_PINNED_ENV, newer_installed_cli};
 pub use hold::held_system_update;
 use hold::installable_release;
 #[cfg(target_os = "linux")]
@@ -38,7 +40,7 @@ use release::{SystemUpdateMode, install_latest_system, install_system_release};
 pub use system::{install_system_service, stage_system_files};
 
 use artifacts::{
-    download_system_artifact, fetch_system_manifest, sabine_host_relative_path,
+    cli_binary_name, download_system_artifact, fetch_system_manifest, sabine_host_relative_path,
     service_binary_name, service_daemon_binary_name, system_asset_name,
 };
 use state::{

@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, FileTree, TabItem, Tabs } from "@astrojs/starlight/components";
 
-Sabine apps don't ship a browser. A machine has one Sabine system, installed by the first Sabine app that runs there, and every app uses it: the Sabine service, a maintenance daemon, the Sabine host, and one or two Chromium runtimes. Your app's installer only carries your app and a small bootstrap, and the Sabine system updates on its own schedule while your app updates on yours.
+Sabine apps don't ship a browser. A machine has one Sabine system, installed by the first Sabine app that runs there, and every app uses it: the Sabine service, a maintenance daemon, the Sabine host, the `sabine` command, and one or two Chromium runtimes. Your app's installer only carries your app and a small bootstrap, and the Sabine system updates on its own schedule while your app updates on yours.
 
 ## What the Sabine system is
 
@@ -16,9 +16,10 @@ Sabine apps don't ship a browser. A machine has one Sabine system, installed by 
 | `sabine-service` | Registers apps, prepares and repairs the system, installs app updates and the apps a [store](/docs/distribution/installing/#app-stores) hands it, and runs maintenance on request |
 | `sabine-service-daemon` | Runs in the background for the user and does the maintenance: runtime updates, Sabine updates, app updates, cleanup |
 | Sabine host | The CEF embedder every app's windows run their pages in. See [Architecture](/docs/concepts/architecture/#the-browser) |
+| `sabine` | The [command line tool](/docs/reference/cli/) for building and packaging apps. See [The CLI](#the-cli) |
 | CEF runtimes | Chromium itself, in CEF's Minimal distribution, one folder per version |
 
-The service, daemon and host are released together as one Sabine release, versioned `MAJOR.BUILD`, such as `0.66`. Cargo and npm write the same release with a trailing `.0`. CEF runtimes are a separate stream that the daemon follows on its own.
+The service, daemon, host and CLI are released together as one Sabine release, versioned `MAJOR.BUILD`, such as `0.66`. Cargo and npm write the same release with a trailing `.0`. CEF runtimes are a separate stream that the daemon follows on its own.
 
 ## First launch
 
@@ -110,7 +111,15 @@ Each Sabine release states its own build and the oldest app build it still runs.
 - **An app newer than the installed Sabine** pulls the Sabine release it needs, as above.
 - **A Sabine release that would stop an installed app** is held. Before installing a release, the service checks its oldest accepted build against every installed app, both those the user installed and those installed for every user. Development builds registered by `sabine dev` never hold a release back. While a release is held, the service installs the newest earlier release that still runs every app, so fixes keep arriving. The held release and the apps it waits for are recorded in `bin/held-update.json`, and it installs on the first check after those apps update or are removed.
 
-`sabine update` does the same from the command line: it checks published releases, verifies them, applies the rollout delay, updates the CLI, service and runtime, and holds a release that would stop an installed app, naming the apps it waits for. `sabine update --force` skips only the rollout delay; signatures, checksums, version ordering and the backoff after a failed release still apply.
+`sabine update` does the same from the command line, without waiting for the daemon: it checks published releases, verifies them, applies the rollout delay, updates Sabine and the runtime, and holds a release that would stop an installed app, naming the apps it waits for. `sabine update --force` skips only the rollout delay; signatures, checksums, version ordering and the backoff after a failed release still apply.
+
+### The CLI
+
+The CLI is part of a Sabine release. It sits beside the service in `bin/versions/<version>/`, so it arrives with the same signed archive, changes with the same atomic switch, and goes back with the same rollback. A CLI that doesn't start on a machine is left out of that machine's update, which goes ahead without it.
+
+The `sabine` you run stays wherever you installed it, and nothing ever writes to it, so it can be running during an update, and a package manager or an operating system image can own it. When it starts, it looks at the active Sabine of the user and of the machine, and if the newest of those is newer than itself, it runs that version's CLI in its place. On Linux and macOS that replaces the process; on Windows it stays as a small parent that passes on the exit code.
+
+So the newest Sabine on the machine always wins, and a newer `sabine` you build or install yourself runs as it is. Debug builds never hand over, and setting `SABINE_CLI_PINNED` keeps any `sabine` on its own version, for a build that pins one.
 
 ### App updates
 
@@ -178,9 +187,11 @@ sabine runtime install --system-wide --root /image
 sabine install --bundle --system-wide --root /image .
 ```
 
-Without `--root`, both write to the running system and need administrator rights. The system folder mirrors the per-user layout, read-only: `bin/current.json` names the active version under `bin/versions/<version>/` with the service, daemon and host, and `runtimes/cef` holds one runtime. On Linux the install also adds `/usr/lib/systemd/user/sabine.service`, which starts the system's daemon for every user at login.
+Without `--root`, both write to the running system and need administrator rights. The system folder mirrors the per-user layout, read-only: `bin/current.json` names the active version under `bin/versions/<version>/` with the service, daemon, host and CLI, and `runtimes/cef` holds one runtime. On Linux the install also adds `/usr/lib/systemd/user/sabine.service`, which starts the system's daemon for every user at login.
 
 Apps and the service prefer the system installation unless it is older than an app needs, or older than the user's own installation, which a newer app or `sabine update` may bring. When a user's installation is newer, the system's daemon hands over to it. Each user still registers apps, runs their own daemon, and keeps logs, browser profiles and app data in their own folders. While the system provides a runtime, a user's daemon validates it instead of downloading its own.
+
+A system's CLI updates with the system. Sabine never writes to it, and `sabine update` says so. An image can put it on `PATH` by installing the file from `bin/current/` as `/usr/bin/sabine`. If a user's own Sabine is newer, the system's CLI hands over to it, like the daemon.
 
 An image build can run `sabine-service check-apps` from the system installation, which fails when that Sabine wouldn't run one of the apps installed for every user.
 

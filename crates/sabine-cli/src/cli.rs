@@ -138,7 +138,7 @@ pub(crate) enum Command {
         #[arg(long)]
         base_url: Option<String>,
     },
-    /// Lay out the service, daemon and CEF host of a Sabine system release.
+    /// Lay out the service, daemon, CEF host and CLI of a Sabine system release.
     #[command(hide = true)]
     SystemReleaseStage {
         #[arg(long)]

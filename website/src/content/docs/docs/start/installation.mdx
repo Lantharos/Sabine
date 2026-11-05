@@ -52,6 +52,9 @@ Install the CLI from the release tag:
 
 <Code code={`cargo install --git https://github.com/Lantharos/Sabine --tag ${tag} sabine-cli`} lang="sh" />
 
+You only do this once: from then on the command follows the Sabine on your machine, which updates
+itself. Your operating system may already include it, as Luft does; check with `sabine -V`.
+
 Projects that `sabine new` creates pin the same release for their Rust crate and TypeScript
 package, so an app always builds against the Sabine it was created with.
 
@@ -127,7 +130,9 @@ with the installed host and checks that it renders a page.
 
 ## Update
 
-`sabine update` updates the CLI, the Sabine service, daemon and host, and the CEF runtime:
+The Sabine daemon keeps the CLI, the service, the host and CEF current on its own. The `sabine` you
+installed stays where it is and hands over to the newest version, so there is nothing to update by
+hand. `sabine update` gets you a release sooner:
 
 ```sh
 sabine update            # the CLI, shared components and CEF
@@ -141,6 +146,5 @@ release can be withdrawn before it reaches anyone. `--force` installs the newest
 away; signatures, checksums and version checks still apply. A release that would stop an installed
 app from running waits until that app updates, and `sabine update` names the apps it waits for.
 
-The daemon keeps the shared components and CEF current on its own; `sabine update` also updates
-the CLI, and gets you a release sooner. Updating the CLI does not change existing projects: each one pins its Sabine release in
+A new CLI does not change existing projects: each one pins its Sabine release in
 `Cargo.toml` and `package.json` until you change it.
