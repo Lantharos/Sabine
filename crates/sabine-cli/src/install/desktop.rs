@@ -1,8 +1,6 @@
 use std::path::Path;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "macos")]
 use std::process::Command;
-#[cfg(target_os = "linux")]
-use std::process::Stdio;
 
 use crate::install::source::SourceApp;
 
@@ -23,9 +21,9 @@ pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
             std::fs::create_dir_all(&packages).map_err(|error| error.to_string())?;
             std::fs::write(packages.join(format!("{}.xml", app.id)), package)
                 .map_err(|error| error.to_string())?;
-            refresh_mime_database(&data.join("mime"));
+            sabine_service::refresh_mime_database(&data.join("mime"));
         }
-        refresh_database(&directory);
+        sabine_service::refresh_desktop_database(&directory);
     }
     #[cfg(target_os = "windows")]
     {
@@ -105,32 +103,6 @@ pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> Str
         listing: &app.listing,
     }
     .render()
-}
-
-#[cfg(target_os = "linux")]
-pub fn refresh_database(applications_dir: &Path) {
-    refresh("update-desktop-database", applications_dir);
-}
-
-#[cfg(target_os = "linux")]
-pub fn refresh_mime_database(mime_dir: &Path) {
-    refresh("update-mime-database", mime_dir);
-}
-
-#[cfg(target_os = "linux")]
-pub fn refresh_icon_cache(theme_dir: &Path) {
-    refresh("gtk-update-icon-cache", theme_dir);
-}
-
-#[cfg(target_os = "linux")]
-fn refresh(tool: &str, directory: &Path) {
-    if sabine_runtime::find_program(tool).is_none() {
-        return;
-    }
-    let _ = Command::new(tool)
-        .arg(directory)
-        .stdin(Stdio::null())
-        .status();
 }
 
 pub fn install_autostart(

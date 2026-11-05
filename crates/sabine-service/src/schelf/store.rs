@@ -1,10 +1,13 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
-use crate::app::desktop::{data_home, desktop_exec, entries::forget_desktop_entries};
+use crate::app::desktop::{
+    caches::{refresh_desktop_database, refresh_icon_cache, refresh_mime_database},
+    data_home, desktop_exec,
+    entries::forget_desktop_entries,
+};
 use crate::app::forget::remove_path;
 use crate::manifest::SabineFile;
 use crate::{
@@ -142,32 +145,39 @@ fn install_desktop_files(id: &str, share: &Path, executable: &Path) -> ServiceRe
         applications.join(format!("{id}.desktop")),
         launching(&entry, executable),
     )?;
-    copy_tree(&share.join("icons/hicolor"), &data.join("icons/hicolor"))?;
+    let icons = data.join("icons/hicolor");
+    copy_tree(&share.join("icons/hicolor"), &icons)?;
+    refresh_icon_cache(&icons);
     let mime_package = share.join("mime/packages").join(format!("{id}.xml"));
     if mime_package.is_file() {
         copy_tree(&share.join("mime/packages"), &data.join("mime/packages"))?;
-        refresh("update-mime-database", &data.join("mime"));
+        refresh_mime_database(&data.join("mime"));
     }
-    refresh("update-desktop-database", &applications);
+    refresh_desktop_database(&applications);
     Ok(())
 }
 
 fn forget_desktop_files(id: &str, install: &Path) -> ServiceResult<()> {
     let data = data_home()?;
     forget_desktop_entries(id, install)?;
-    if let Ok(sizes) = fs::read_dir(data.join("icons/hicolor")) {
-        for size in sizes.flatten() {
+    let icons = data.join("icons/hicolor");
+    if let Ok(sizes) = fs::read_dir(&icons) {
+        for size in sizes.flatten().map(|size| size.path()) {
+            if !size.is_dir() {
+                continue;
+            }
             for extension in ["png", "svg"] {
-                remove_path(&size.path().join("apps").join(format!("{id}.{extension}")))?;
+                remove_path(&size.join("apps").join(format!("{id}.{extension}")))?;
             }
         }
     }
+    refresh_icon_cache(&icons);
     let mime_package = data.join("mime/packages").join(format!("{id}.xml"));
     if mime_package.is_file() {
         fs::remove_file(mime_package)?;
-        refresh("update-mime-database", &data.join("mime"));
+        refresh_mime_database(&data.join("mime"));
     }
-    refresh("update-desktop-database", &data.join("applications"));
+    refresh_desktop_database(&data.join("applications"));
     Ok(())
 }
 
@@ -197,16 +207,6 @@ fn copy_tree(source: &Path, destination: &Path) -> ServiceResult<()> {
         }
     }
     Ok(())
-}
-
-fn refresh(tool: &str, directory: &Path) {
-    if sabine_runtime::find_program(tool).is_some() {
-        let _ = Command::new(tool)
-            .arg(directory)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .status();
-    }
 }
 
 fn invalid(message: &str) -> ServiceError {

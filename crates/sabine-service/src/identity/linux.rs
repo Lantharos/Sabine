@@ -1,13 +1,13 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
-    process::Command,
 };
 
-use sabine_runtime::{configure_background_command, path_in_root};
+use sabine_runtime::path_in_root;
 
 use super::{ICON_NAME, ICON_PNGS, ICON_SVG};
 use crate::app::{
+    desktop::caches::refresh_icon_cache,
     desktop::{data_home, desktop_exec},
     forget::remove_path,
 };
@@ -46,9 +46,7 @@ fn install(share: &Path, daemon: &Path) -> io::Result<()> {
     }
     write_if_changed(&desktop_entry_path(share), desktop_entry(daemon).as_bytes())?;
     if icons_changed && hicolor.join("icon-theme.cache").is_file() {
-        let mut command = Command::new("gtk-update-icon-cache");
-        configure_background_command(&mut command);
-        let _ = command.args(["-q", "-t"]).arg(&hicolor).status();
+        refresh_icon_cache(&hicolor);
     }
     Ok(())
 }

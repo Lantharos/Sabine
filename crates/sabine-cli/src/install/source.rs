@@ -159,7 +159,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
             source_desktop::entry(app, &wrapper, desktop_icon.as_deref()),
         )
         .map_err(|error| error.to_string())?;
-        source_desktop::refresh_database(&desktop_dir);
+        sabine_service::refresh_desktop_database(&desktop_dir);
     }
     #[cfg(target_os = "windows")]
     if desktop {

@@ -1,3 +1,12 @@
+# Unreleased
+
+- On Linux, an app installed by a store shows its icon right away. Installing or removing one
+  through `sabine-service` wrote the icons without rebuilding the icon cache, so a cache already in
+  `~/.local/share/icons/hicolor` kept hiding them. Every install path now rebuilds the cache the
+  same way, and uninstalling does too.
+- Removing an app a store installed no longer fails with "Not a directory" when
+  `~/.local/share/icons/hicolor` has an icon cache.
+
 # Sabine 0.77
 
 - The `sabine` command is part of Sabine now and updates with it. Each release carries the CLI in

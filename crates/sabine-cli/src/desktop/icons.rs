@@ -2,7 +2,6 @@ use std::{
     env, fs,
     io::Cursor,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use image::{DynamicImage, ImageFormat, ImageReader, RgbaImage, imageops};
@@ -18,7 +17,8 @@ pub fn install_user_icon(app_id: &str, icon: Option<&Path>) -> Result<Option<Str
     }
     let hicolor = data_home()?.join("icons/hicolor");
     install_icon_set(app_id, icon, &hicolor)?;
-    refresh_icon_cache(&hicolor);
+    #[cfg(target_os = "linux")]
+    sabine_service::refresh_icon_cache(&hicolor);
     Ok(Some(app_id.to_string()))
 }
 
@@ -252,16 +252,6 @@ fn extension(path: &Path) -> Result<String, String> {
         .and_then(|extension| extension.to_str())
         .map(str::to_string)
         .ok_or_else(|| format!("icon path has no extension: {}", path.display()))
-}
-
-fn refresh_icon_cache(root: &Path) {
-    if !root.exists() {
-        return;
-    }
-    let _ = Command::new("gtk-update-icon-cache")
-        .args(["-q", "-t"])
-        .arg(root)
-        .status();
 }
 
 fn data_home() -> Result<PathBuf, String> {

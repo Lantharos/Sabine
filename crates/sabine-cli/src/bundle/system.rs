@@ -51,10 +51,9 @@ fn place(app: &BundleApp, staged: &StagedBundle, root: Option<&Path>) -> Result<
     remove_directory(&destination.join("usr/lib/sabine").join(&app.id))?;
     merge_tree(&staged.app_dir, &destination).map_err(|error| error.to_string())?;
     if root.is_none() {
-        use crate::install::desktop;
-        desktop::refresh_database(Path::new("/usr/share/applications"));
-        desktop::refresh_mime_database(Path::new("/usr/share/mime"));
-        desktop::refresh_icon_cache(Path::new("/usr/share/icons/hicolor"));
+        sabine_service::refresh_desktop_database(Path::new("/usr/share/applications"));
+        sabine_service::refresh_mime_database(Path::new("/usr/share/mime"));
+        sabine_service::refresh_icon_cache(Path::new("/usr/share/icons/hicolor"));
     }
     Ok(destination.join("usr/bin").join(&staged.executable))
 }

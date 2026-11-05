@@ -24,6 +24,10 @@ pub use app::desktop::autostart::app_autostart_label;
 #[cfg(unix)]
 pub use app::desktop::autostart::app_autostart_path;
 #[cfg(target_os = "linux")]
+pub use app::desktop::caches::{
+    refresh_desktop_database, refresh_icon_cache, refresh_mime_database,
+};
+#[cfg(target_os = "linux")]
 pub use app::desktop::entries::{SHORTCUT_HOST_KEY, forget_desktop_entries};
 #[cfg(windows)]
 pub use app::desktop::native_messaging::native_messaging_registry_keys;

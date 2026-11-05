@@ -1,5 +1,7 @@
 pub(crate) mod autostart;
 #[cfg(target_os = "linux")]
+pub(crate) mod caches;
+#[cfg(target_os = "linux")]
 pub(crate) mod entries;
 pub(crate) mod native_messaging;
 

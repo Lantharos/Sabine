@@ -127,7 +127,7 @@ fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> 
         let mime_package = data.join("mime/packages").join(format!("{id}.xml"));
         if mime_package.is_file() {
             remove_path(&mime_package)?;
-            super::desktop::refresh_mime_database(&data.join("mime"));
+            sabine_service::refresh_mime_database(&data.join("mime"));
         }
         let icons = data.join("icons/hicolor");
         if icons.is_dir() {
@@ -140,8 +140,9 @@ fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> 
                     remove_path(&size.join("apps").join(format!("{id}.{extension}")))?;
                 }
             }
+            sabine_service::refresh_icon_cache(&icons);
         }
-        super::desktop::refresh_database(&applications);
+        sabine_service::refresh_desktop_database(&applications);
     }
     #[cfg(target_os = "macos")]
     {
