@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.76
 
 - On Linux, files and text a page drags reach a window sitting above the app's own window, such as
   a viewer floating over a file manager. A Wayland window can't tell when the pointer is over
