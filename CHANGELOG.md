@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.77
 
 - The `sabine` command is part of Sabine now and updates with it. Each release carries the CLI in
   the same signed archive as the service and host, installed beside them, switched atomically and
