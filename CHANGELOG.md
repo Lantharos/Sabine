@@ -1,3 +1,11 @@
+# Unreleased
+
+- On Linux, files and text a page drags reach a window sitting above the app's own window, such as
+  a viewer floating over a file manager. A Wayland window can't tell when the pointer is over
+  another window, so the drag used to stay in the page until the pointer left the window's own
+  rectangle, and letting go over the other window dropped it back in the page. The desktop now
+  carries a page's drag from the moment it starts, as it does in browsers.
+
 # Sabine 0.75
 
 - On Linux, a window hands the page's frames straight to the desktop's compositor whenever it

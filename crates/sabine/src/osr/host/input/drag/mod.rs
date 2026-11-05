@@ -1,7 +1,9 @@
 mod drop;
 mod image;
 
-use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::time::Duration;
+use std::{path::PathBuf, time::Instant};
 
 use winit::{
     data_transfer::{DataTransferId, DataTransferSendBuilder, SendData, TypeHint},
@@ -16,6 +18,10 @@ const DRAG_OPERATION_COPY: u32 = 1;
 const DRAG_OPERATION_LINK: u32 = 2;
 const DRAG_OPERATION_MOVE: u32 = 16;
 const DRAG_OPERATIONS_ANY: u32 = DRAG_OPERATION_COPY | DRAG_OPERATION_LINK | DRAG_OPERATION_MOVE;
+/// How long a Wayland window waits for the files a page names around the
+/// start of its drag before the desktop takes the drag over.
+#[cfg(target_os = "linux")]
+const FILES_ARRIVE_WITHIN: Duration = Duration::from_millis(50);
 
 /// Drags the page started, and drags from elsewhere passing over the window.
 #[derive(Default)]
@@ -25,13 +31,16 @@ pub(in crate::osr::host) struct DragState {
     pub(super) incoming: Option<drop::IncomingDrag>,
 }
 
-/// A drag that stays inside the window until the pointer leaves it, and then
-/// continues as a drag the desktop carries to other applications.
+/// A drag the page handles itself until the desktop carries it to other
+/// applications: once the pointer leaves the window, and on Wayland right after
+/// it starts, as a window can't tell when the pointer is over another window
+/// above it.
 struct PageDrag {
     content: DragContent,
     operations: u32,
     image: Option<DragImage>,
     outgoing: Option<DataTransferId>,
+    started: Instant,
 }
 
 impl DragState {
@@ -63,6 +72,7 @@ impl OsrNativeHost {
             operations,
             image,
             outgoing: None,
+            started: Instant::now(),
         });
         self.send_drag_position("drag_enter_source", self.cursor_x, self.cursor_y, None);
     }
@@ -98,12 +108,25 @@ impl OsrNativeHost {
         }
         self.cursor_x = x;
         self.cursor_y = y;
-        if x >= 0.0 && y >= 0.0 && x < self.logical_width() && y < self.logical_height() {
+        let inside = x >= 0.0 && y >= 0.0 && x < self.logical_width() && y < self.logical_height();
+        if inside && !self.desktop_takes_drag(drag.started) {
             self.send_drag_position("drag_over", x, y, Some(drag.operations));
         } else {
             self.carry_page_drag_out(event_loop);
         }
         true
+    }
+
+    fn desktop_takes_drag(&self, started: Instant) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            self.clipboard.is_some() && started.elapsed() >= FILES_ARRIVE_WITHIN
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = started;
+            false
+        }
     }
 
     pub(super) fn carry_page_drag_out(&mut self, event_loop: &dyn ActiveEventLoop) {
