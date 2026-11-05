@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.78
 
 - On Linux, an app installed by a store shows its icon right away. Installing or removing one
   through `sabine-service` wrote the icons without rebuilding the icon cache, so a cache already in

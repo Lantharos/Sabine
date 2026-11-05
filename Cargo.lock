@@ -2720,7 +2720,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "sabine"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "ash",
  "base64",
@@ -2784,7 +2784,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-bridge"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2795,7 +2795,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-cli"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "base64",
  "cc",
@@ -2826,7 +2826,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-dialog"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "bytemuck",
  "glyphon",
@@ -2841,7 +2841,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-host"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "sabine-bridge",
  "sabine-runtime",
@@ -2861,7 +2861,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-platform"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "block2",
  "dunce",
@@ -2886,7 +2886,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-runtime"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "bzip2",
  "getrandom 0.4.3",
@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "sabine-service"
-version = "0.77.0"
+version = "0.78.0"
 dependencies = [
  "base64",
  "clap",
