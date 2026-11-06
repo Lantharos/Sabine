@@ -230,6 +230,52 @@ computer yet.
 Package downloads from the store are marked as updates, so the store counts installs and updates
 apart without knowing who made them.
 
+### Moving from GitHub releases
+
+Installed copies keep reading the GitHub release feed they were built with, and they register
+whichever `[updates]` table the version they're running carries. So one release moves them: a build
+with `provider = "schelf"`, offered on GitHub and signed with the key they already trust. No special
+build or helper app is involved.
+
+Publish the release on Schelf first, and wait for its approval, since copies that move read Schelf's
+feed from then on. Then tag the commit it was built from and offer the same packages on GitHub with
+Sabine's handover workflow:
+
+```yaml
+name: Hand over to Schelf
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Publish to Schelf run to hand over
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  handover:
+    uses: Lantharos/Sabine/.github/workflows/handover-to-schelf.yml@v0.79
+    with:
+      run_id: ${{ inputs.run_id }}
+      sabine_version: v0.79
+    secrets:
+      SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+```
+
+Run it on the release's tag:
+
+```sh
+gh workflow run handover.yml --ref v1.6.0 -f run_id=<run id>
+```
+
+The workflow signs the run's packages with `sabine release-manifest --handover-from` and publishes
+them as a GitHub release. Keep `SABINE_UPDATE_SIGNING_KEY` until this is done, even though
+`Sabine.toml` no longer names a public key, and leave that GitHub release as the latest one, so a
+copy that comes back after months still finds its way. Remove the workflow afterwards.
+
 When a publisher deletes an app from Schelf, its feeds answer `410 Gone`. Installed copies keep
 running without updates, Sabine stops reporting a failed update for them, and asks again once a
 week, in case the publisher restores the app during the store's 30 days to do so. Any other

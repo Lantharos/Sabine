@@ -270,7 +270,7 @@ sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.ter
 
 Writes the signed update manifest for one release, signed with `SABINE_UPDATE_SIGNING_KEY`. The app
 needs a GitHub or HTTP update source in `[updates]`; Schelf writes the manifests of apps that update
-from it. An app that updates from GitHub releases has to be the only app in its repository. See
+from it, apart from the one `--handover-from` writes when an app moves there. An app that updates from GitHub releases has to be the only app in its repository. See
 [Release manifests](/docs/distribution/releases-and-updates/#release-manifests).
 
 | Argument or flag | Default | Meaning |
@@ -279,6 +279,7 @@ from it. An app that updates from GitHub releases has to be the only app in its 
 | `--artifact <target>=<path>` | required | A package for an update target, such as `linux-x86_64-deb=dist/artifacts/app.deb`; repeat it for each |
 | `--executable <target>=<path>` | | The program's path inside an archive artifact |
 | `--base-url <url>` | The release's downloads on GitHub | The HTTPS folder you upload the packages to; required with an `http` source |
+| `--handover-from <owner/repository>` | | For an app that moved to Schelf: writes the manifest for that repository's GitHub releases, so copies that still update from it can reach Schelf. See [Moving from GitHub releases](/docs/distribution/releases-and-updates/#moving-from-github-releases) |
 | `--channel <channel>` | `stable` | The release channel; must match `[updates]` |
 | `--output <path>` | `dist/sabine-update.json` | Where the manifest goes |
 

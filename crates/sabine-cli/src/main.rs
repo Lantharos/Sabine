@@ -188,6 +188,7 @@ fn main() -> ExitCode {
             artifact,
             executable,
             base_url,
+            handover_from,
         } => match release::write_manifest(release::ManifestRequest {
             source: &source,
             output: &output,
@@ -195,6 +196,7 @@ fn main() -> ExitCode {
             artifact_specs: &artifact,
             executable_specs: &executable,
             base_url: base_url.as_deref(),
+            handover_from,
         }) {
             Ok(()) => {
                 println!("wrote {}", output.display());

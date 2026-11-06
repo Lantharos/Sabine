@@ -24,6 +24,7 @@ pub(crate) struct ManifestRequest<'a> {
     pub artifact_specs: &'a [String],
     pub executable_specs: &'a [String],
     pub base_url: Option<&'a str>,
+    pub handover_from: Option<String>,
 }
 
 pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
@@ -34,6 +35,7 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
         artifact_specs,
         executable_specs,
         base_url,
+        handover_from,
     } = request;
     let app = resolve_app(source, ConfigOverrides::default())?;
     let updates = app.updates.ok_or_else(|| {
@@ -54,13 +56,14 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
             updates.channel
         ));
     }
-    if matches!(updates.source, AppUpdateSource::Github { .. }) {
+    let source = feed_source(updates.source, handover_from)?;
+    if matches!(source, AppUpdateSource::Github { .. }) {
         repository::ensure_only_app(&app.source_dir)?;
     }
-    let base_url = match (base_url, &updates.source) {
+    let base_url = match (base_url, &source) {
         (_, AppUpdateSource::Schelf) => {
             return Err(
-                "apps that update from Schelf get their update feed from Schelf when a release is published there".to_string(),
+                "apps that update from Schelf get their update feed from Schelf when a release is published there; pass --handover-from to offer the release to copies that still update from GitHub".to_string(),
             );
         }
         (Some(base_url), _) if base_url.starts_with("https://") => {
@@ -118,6 +121,19 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
     };
     sign_app_release(&mut manifest, &signing_key()?).map_err(|error| error.to_string())?;
     write_output(output, &manifest)
+}
+
+/// The feed this manifest is for: the app's own, or the GitHub releases that
+/// copies built before it moved to Schelf still read.
+fn feed_source(
+    source: AppUpdateSource,
+    handover_from: Option<String>,
+) -> Result<AppUpdateSource, String> {
+    match (source, handover_from) {
+        (AppUpdateSource::Schelf, Some(repository)) => Ok(AppUpdateSource::Github { repository }),
+        (_, Some(_)) => Err("--handover-from is for apps that update from Schelf".to_string()),
+        (source, None) => Ok(source),
+    }
 }
 
 /// Lays out the service, daemon, CEF host and this CLI of a Sabine system

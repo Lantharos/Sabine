@@ -137,6 +137,9 @@ pub(crate) enum Command {
         /// The HTTPS folder the packages are uploaded to; GitHub sources default to the release's downloads.
         #[arg(long)]
         base_url: Option<String>,
+        /// The GitHub repository copies still update from, when an app moves from it to Schelf.
+        #[arg(long, value_name = "OWNER/REPOSITORY", conflicts_with = "base_url")]
+        handover_from: Option<String>,
     },
     /// Lay out the service, daemon, CEF host and CLI of a Sabine system release.
     #[command(hide = true)]
