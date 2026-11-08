@@ -1,3 +1,8 @@
+# Unreleased
+
+- A pen's side button that the compositor maps to a click, such as GNOME's and Luft's right click,
+  clicks in the page. The pen sent the mouse button's own code, which Sabine dropped.
+
 # Sabine 0.81
 
 - App ids may use capital letters and underscores, as reverse-DNS ids such as

@@ -99,7 +99,7 @@ impl OsrNativeHost {
             } => self.pen_button(kind, data, pressed, x, y),
             ButtonSource::TabletTool { button, .. } => {
                 if self.pen_barrel_button(button, pressed) {
-                    self.mouse_button(event_loop, button.into(), pressed, x, y);
+                    self.mouse_button(event_loop, pen::pen_mouse_button(button), pressed, x, y);
                 }
             }
             ButtonSource::Mouse(_) | ButtonSource::Unknown(_) if primary => {
