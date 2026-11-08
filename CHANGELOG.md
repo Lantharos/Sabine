@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.82
 
 - A pen's side button that the compositor maps to a click, such as GNOME's and Luft's right click,
   clicks in the page. The pen sent the mouse button's own code, which Sabine dropped.
