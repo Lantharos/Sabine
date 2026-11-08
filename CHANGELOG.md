@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.81
 
 - App ids may use capital letters and underscores, as reverse-DNS ids such as
   `com.example.TextEditor` do. Sabine used to refuse them at startup. The id keeps its case
