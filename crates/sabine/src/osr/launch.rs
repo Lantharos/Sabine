@@ -42,7 +42,7 @@ pub(crate) fn require_app_id(config: &SabineWindowConfig) -> SabineResult<&str> 
     sabine_service::valid_app_id(app_id)
         .then_some(app_id)
         .ok_or_else(|| SabineError::CreationFailed {
-            message: "app_id is required and may contain only lowercase letters, digits, dots, and hyphens"
+            message: "app_id is required and may contain only letters, digits, dots, hyphens, and underscores"
                 .to_string(),
         })
 }

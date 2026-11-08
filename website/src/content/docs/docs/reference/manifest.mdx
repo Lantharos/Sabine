@@ -73,7 +73,7 @@ the app needs at runtime; see [The production manifest](#the-production-manifest
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `id` | string | `dev.sabine.<name>` | The app id: lowercase letters, digits, dots and hyphens, such as `com.example.tern`. Names the app's data folders, browser profile, single-instance lock, desktop entries and packages |
+| `id` | string | `dev.sabine.<name>` | The app id: letters, digits, dots, hyphens and underscores, such as `com.example.Tern`. Case counts, and the desktop entry and icon keep it. Names the app's data folders, browser profile, single-instance lock, desktop entries and packages |
 | `name` | string | The Cargo package name, underscores as spaces | The display name, and the window title unless Rust sets one |
 | `version` | string | The Cargo package version | The app version, in SemVer. Updates compare it |
 | `publisher` | string | The first Cargo author's name, then `name` | Who publishes the app, for the MSI manufacturer and AppStream developer |

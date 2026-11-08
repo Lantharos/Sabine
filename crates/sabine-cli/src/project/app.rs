@@ -130,7 +130,7 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         ));
     }
     if !sabine_service::valid_app_id(&id) {
-        return Err("app id must contain lowercase letters, digits, dots or hyphens and must not be a relative path".to_string());
+        return Err("app id must contain letters, digits, dots, hyphens or underscores and must not be a relative path".to_string());
     }
     for (field, value) in [("name", &name), ("version", &version)] {
         if value.trim().is_empty() || value.chars().any(char::is_control) {

@@ -118,7 +118,7 @@ impl AppManifest {
     pub fn validate(&self) -> ServiceResult<()> {
         if !valid_app_id(&self.id) {
             return Err(ServiceError::InvalidManifest(
-                "id must contain only lowercase letters, digits, dots, and hyphens".to_string(),
+                "id must contain only letters, digits, dots, hyphens, and underscores".to_string(),
             ));
         }
         if self.name.trim().is_empty() {

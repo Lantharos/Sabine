@@ -205,11 +205,17 @@ fn deb_control(
     let (architecture, _) = architecture(binary)?;
     Ok(format!(
         "Package: {}\nVersion: {version}\nSection: utils\nPriority: optional\nArchitecture: {architecture}\nMaintainer: {maintainer}\nInstalled-Size: {}\nDepends: {dependencies}\nDescription: {}\n{}",
-        app.id,
+        debian_package_name(&app.id),
         installed_size_kb.max(1),
         app.name,
         deb_description(app.description.as_deref()),
     ))
+}
+
+/// Debian package names are lowercase and have no underscores, unlike the
+/// app id that names everything the package installs.
+fn debian_package_name(app_id: &str) -> String {
+    app_id.to_ascii_lowercase().replace('_', "-")
 }
 
 /// The extended description below a control file's first line: each line

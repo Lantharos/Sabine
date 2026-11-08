@@ -104,8 +104,13 @@ pub(crate) fn detect_source_app(
     let id = id
         .or(sabine.app.id)
         .unwrap_or_else(|| format!("dev.sabine.{}", sanitize_id(&name)));
+    if !sabine_service::valid_app_id(&id) {
+        return Err(format!(
+            "app id {id:?} may contain only letters, digits, dots, hyphens and underscores"
+        ));
+    }
     Ok(SourceApp {
-        id: sanitize_id(&id),
+        id,
         name,
         version,
         command: command.or(sabine.install.command).or(sabine.app.command),
@@ -210,7 +215,10 @@ impl SourceRecord {
 }
 
 pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {
-    let path = app_dir(&sanitize_id(id))?.join(SOURCE_RECORD);
+    if !sabine_service::valid_app_id(id) {
+        return Err("invalid app identifier".into());
+    }
+    let path = app_dir(id)?.join(SOURCE_RECORD);
     let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let record = toml::from_str::<SourceRecord>(&text)
         .map_err(|error| format!("could not read {}: {error}", path.display()))?;

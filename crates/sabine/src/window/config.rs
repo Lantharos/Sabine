@@ -133,7 +133,7 @@ impl SabineWindowConfig {
         let app_id = self.app_id.as_deref().map(str::trim).unwrap_or_default();
         if !sabine_service::valid_app_id(app_id) {
             return Err(SabineError::CreationFailed {
-                message: "app_id is required and may contain only lowercase letters, digits, dots, and hyphens"
+                message: "app_id is required and may contain only letters, digits, dots, hyphens, and underscores"
                     .to_string(),
             });
         }

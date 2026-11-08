@@ -169,7 +169,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 
 | Method | Does |
 | --- | --- |
-| `app_id(impl Into<String>)` | The app id: lowercase letters, digits, dots and hyphens. Required; usually from `Sabine.toml` |
+| `app_id(impl Into<String>)` | The app id: letters, digits, dots, hyphens and underscores. Required; usually from `Sabine.toml` |
 | `app_version(impl Into<String>)` | The app's version |
 | `title(impl Into<String>)` | The window title; must not be empty |
 | `entry(impl Into<String>)` | A local HTML file, served from its folder at `sabine://app/` |

@@ -76,8 +76,8 @@ path = "ui/src/bindings.ts"
 | `[resources]` | Files and folders shipped beside the app, such as a helper program |
 
 The `id` identifies the app everywhere: its browser profile, its data folders, its registration
-with the Sabine service and the desktop. It may contain lowercase letters, digits, dots and
-hyphens. Pick a reverse domain you control and keep it stable; changing it later makes a different
+with the Sabine service and the desktop. It may contain letters, digits, dots, hyphens and
+underscores, and keeps its case everywhere, so `com.example.Tern` installs `com.example.Tern.desktop`. Pick a reverse domain you control and keep it stable; changing it later makes a different
 app. Without `version`, bundles take the Cargo package's version.
 
 Rust settings take precedence over the manifest. `SabineWindow::main` applies the manifest first and

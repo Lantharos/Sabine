@@ -1,3 +1,13 @@
+# Unreleased
+
+- App ids may use capital letters and underscores, as reverse-DNS ids such as
+  `com.example.TextEditor` do. Sabine used to refuse them at startup. The id keeps its case
+  everywhere it names something: the desktop entry, icons, data and runtime folders, the browser
+  profile, the single-instance socket and Schelf feeds. Only a Debian package's name is
+  lowercased, since Debian requires it.
+- `sabine install` from a source folder keeps the app id as written instead of lowercasing it, and
+  refuses an id it can't use instead of changing it.
+
 # Sabine 0.80
 
 - A finger or palm touching the screen while the pen writes stays a touch of its own. The pen
