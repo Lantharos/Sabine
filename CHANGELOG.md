@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.80
 
 - A finger or palm touching the screen while the pen writes stays a touch of its own. The pen
   shared its touch id with the first finger, so Chromium merged a palm that came down mid-stroke
