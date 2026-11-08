@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.79
 
 - Pages hear about the pen through `events.pen`: whether a pen or its eraser is near the screen,
   touching it, which barrel buttons are held, and how far it tilts. Chromium's pen input has no
