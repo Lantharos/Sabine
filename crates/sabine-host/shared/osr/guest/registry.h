@@ -19,6 +19,11 @@ extern const char kSabineDevToolsGuestId[];
 // nor manage through `sabine.guest`.
 bool IsInternalGuestId(const std::string& id);
 
+struct GuestPoint {
+  double x;
+  double y;
+};
+
 struct GuestView {
   std::string id;
   CefRefPtr<CefBrowser> browser;
@@ -49,7 +54,7 @@ struct GuestView {
   // A rect of the guest's own coordinates, placed in the window's view.
   CefRect ToView(const CefRect& rect) const;
   // A point of the window's view in the guest's own coordinates.
-  CefPoint FromView(int x, int y) const;
+  GuestPoint FromView(double x, double y) const;
 };
 
 /// Guest views keyed by id, with a separate bottom-to-top z-order used for
@@ -62,7 +67,7 @@ class GuestRegistry {
   GuestView* Insert(GuestView guest);
   void Erase(const std::string& id);
   void Raise(const std::string& id);
-  GuestView* TopmostAt(int x, int y);
+  GuestView* TopmostAt(double x, double y);
   std::vector<GuestView*> InZOrder();
   std::vector<const GuestView*> InZOrder() const;
   void SetCovered(bool covered) { covered_ = covered; }

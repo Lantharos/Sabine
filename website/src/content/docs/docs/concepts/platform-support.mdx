@@ -55,7 +55,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | File dialogs | XDG portal | Common item dialog | Sheet |
 | Touch | Yes | Yes | No touchscreens |
 | Touch keyboard | Asks the compositor when a field is focused | Comes up on a touch or pen tap | No |
-| Pen | Pressure, pen and eraser, hover, barrel buttons | Pressure, pen and eraser, hover, barrel buttons | Arrives as mouse input |
+| Pen | Pressure, pen and eraser, hover, barrel buttons, tilt | Pressure, pen and eraser, hover, barrel button, tilt | Arrives as mouse input |
 | Input methods | Yes, with surrounding text | Yes, no surrounding text | Yes, no surrounding text |
 | [Native video](/docs/web/native-video/) | GStreamer, transparent windows | Media Foundation, transparent windows | AVFoundation, transparent windows |
 | [Native messaging](/docs/desktop/native-messaging/) | Yes, including Flatpak and Snap browsers | Yes | Yes |
@@ -107,5 +107,5 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Screen readers.** The off-screen browser's accessibility tree isn't exposed to UI Automation, NSAccessibility or AT-SPI. Semantic HTML still helps keyboard navigation, but Sabine windows aren't accessible to desktop screen readers.
 - **Codecs.** Chromium's runtime has no H.264, HEVC or AAC decoders. Play such media through [native video](/docs/web/native-video/), which needs a transparent window.
 - **Browser permissions.** Camera, microphone and geolocation requests are denied, and there is no API to grant them.
-- **Pen data.** Chromium's touch input carries no tilt, twist or barrel pressure, and no button state while the pen touches the screen.
+- **Pen data.** Chromium's pen input carries no tilt, twist or barrel pressure, and no button state while the pen touches the screen. Tilt and barrel buttons come through [`events.pen`](/docs/reference/javascript-api/#payloads) instead.
 - **Service worker notifications** aren't supported.

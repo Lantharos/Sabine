@@ -110,6 +110,7 @@ pub(super) struct OsrNativeHost {
     pub(super) mouse: MouseButtons,
     pub(super) touch: super::input::TouchState,
     pub(super) wheel_remainder: super::input::WheelRemainder,
+    pub(super) input_latency: Option<super::input::InputLatency>,
     pub(super) last_click: Option<ClickMemory>,
     pub(super) active_click_count: i32,
     pub(super) cursor_x: f32,
@@ -187,6 +188,7 @@ impl OsrNativeHost {
         proxy: EventLoopProxy,
     ) -> Self {
         let relay = ControlRelay::default();
+        let input_latency = super::input::InputLatency::traced(&config);
         start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
         let visible = config.visible;
@@ -262,6 +264,7 @@ impl OsrNativeHost {
             mouse: MouseButtons::default(),
             touch: Default::default(),
             wheel_remainder: Default::default(),
+            input_latency,
             last_click: None,
             active_click_count: 1,
             cursor_x: 0.0,
@@ -394,6 +397,15 @@ impl OsrNativeHost {
         };
         if let Err(error) = writer.send_touch_move(id, line) {
             sabine_runtime::report_error("window", format!("touch send failed: {error}"));
+        }
+    }
+
+    pub(super) fn send_pen_move(&self, line: String) {
+        let Some(writer) = &self.control_writer else {
+            return;
+        };
+        if let Err(error) = writer.send_pen_move(line) {
+            sabine_runtime::report_error("window", format!("pen send failed: {error}"));
         }
     }
 

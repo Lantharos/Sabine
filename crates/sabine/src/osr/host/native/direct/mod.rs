@@ -1,5 +1,6 @@
 mod dispatch;
 mod page;
+mod timing;
 mod worker;
 
 pub(in crate::osr::host) use page::PageRoute;
@@ -24,6 +25,7 @@ use wayland_client::{Connection, Proxy, protocol::wl_surface::WlSurface};
 use winit::window::Window;
 
 use crate::osr::accel::Dmabuf;
+use crate::osr::host::input::{InputLatency, InputStamp};
 
 use worker::State;
 
@@ -39,6 +41,7 @@ pub(in crate::osr::host) struct DirectFrame {
     pub(in crate::osr::host) source: (u32, u32, u32, u32),
     pub(in crate::osr::host) destination: (i32, i32),
     pub(in crate::osr::host) release: Release,
+    pub(in crate::osr::host) inputs: Vec<InputStamp>,
 }
 
 /// What the window shows beneath the page: its background color, and for a
@@ -87,6 +90,7 @@ impl DirectPresenter {
     pub(in crate::osr::host) fn start(
         window: &dyn Window,
         transparent: bool,
+        latency: Option<InputLatency>,
         report: impl Fn(DirectOutcome) + Send + 'static,
     ) -> Option<Self> {
         let (Ok(RawDisplayHandle::Wayland(display)), Ok(RawWindowHandle::Wayland(surface))) = (
@@ -100,6 +104,7 @@ impl DirectPresenter {
                 display.display.as_ptr(),
                 surface.surface.as_ptr(),
                 transparent,
+                latency,
                 report,
             )
         }
@@ -116,6 +121,7 @@ impl DirectPresenter {
         display: *mut c_void,
         surface: *mut c_void,
         transparent: bool,
+        latency: Option<InputLatency>,
         report: impl Fn(DirectOutcome) + Send + 'static,
     ) -> Result<Self, String> {
         let backend = unsafe { Backend::from_foreign_display(display.cast()) };
@@ -130,7 +136,8 @@ impl DirectPresenter {
                 .set_nonblocking(true)
                 .map_err(|error| error.to_string())?;
         }
-        let (queue, state) = State::connect(&connection, parent, transparent, Box::new(report))?;
+        let (queue, state) =
+            State::connect(&connection, parent, transparent, latency, Box::new(report))?;
         let (commands, receiver) = crossbeam_channel::unbounded();
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);

@@ -73,6 +73,7 @@ enum ControlMessage {
         id: i32,
         line: String,
     },
+    PenMove(String),
     Ordered {
         line: String,
         coalescing_key: Option<ControlCoalescingKey>,
@@ -160,6 +161,12 @@ impl ControlWriter {
     /// browser has yet to hear that.
     pub(super) fn send_touch_move(&self, id: i32, line: String) -> Result<(), String> {
         self.finish_send(self.queue.push_touch_move(id, line))
+    }
+
+    /// Sends where the pen moved, keeping every sample a stroke is drawn
+    /// from.
+    pub(super) fn send_pen_move(&self, line: String) -> Result<(), String> {
+        self.finish_send(self.queue.push_pen_move(line))
     }
 
     fn finish_send(&self, result: Result<(), String>) -> Result<(), String> {
@@ -305,8 +312,14 @@ impl ControlQueue {
         Ok(())
     }
 
-    /// Queues input a newer event supersedes, giving way to whatever must
-    /// reach the browser when the queue is full.
+    fn push_pen_move(&self, line: String) -> Result<(), String> {
+        let state = self.lock_open_state()?;
+        self.push_lossy(state, ControlMessage::PenMove(line));
+        Ok(())
+    }
+
+    /// Queues input the browser can do without, giving way to whatever must
+    /// reach it when the queue is full.
     fn push_lossy(
         &self,
         mut state: std::sync::MutexGuard<'_, ControlQueueState>,
@@ -374,6 +387,7 @@ impl ControlMessage {
             Self::Motion(line)
             | Self::Wheel { line, .. }
             | Self::TouchMove { line, .. }
+            | Self::PenMove(line)
             | Self::Ordered { line, .. } => line.len(),
             Self::Relayed(frame) => frame.len(),
         }
@@ -382,7 +396,7 @@ impl ControlMessage {
     fn is_lossy(&self) -> bool {
         matches!(
             self,
-            Self::Motion(_) | Self::Wheel { .. } | Self::TouchMove { .. }
+            Self::Motion(_) | Self::Wheel { .. } | Self::TouchMove { .. } | Self::PenMove(_)
         )
     }
 
@@ -411,6 +425,7 @@ impl ControlMessage {
             Self::Motion(line)
             | Self::Wheel { line, .. }
             | Self::TouchMove { line, .. }
+            | Self::PenMove(line)
             | Self::Ordered { line, .. } => line.into_bytes(),
             Self::Relayed(frame) => frame,
         }

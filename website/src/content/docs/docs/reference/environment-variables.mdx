@@ -18,7 +18,7 @@ Sabine reads a small set of its own variables, all prefixed `SABINE_`, and a num
 
 | Variable | Applies to | What it does |
 | --- | --- | --- |
-| `SABINE_TRACE` | App, host | Prints launch stages with their timings, host and GPU details, and frames dropped on the way to the window, to standard error. Accepts `1`, `true`, `yes`, `on` or `trace`, in any case. |
+| `SABINE_TRACE` | App, host | Prints launch stages with their timings, host and GPU details, frames dropped on the way to the window, and how long pointer, touch and pen moves take to show, to standard error. Accepts `1`, `true`, `yes`, `on` or `trace`, in any case. |
 | `SABINE_CHROMIUM_LOG` | App | A file path. Chromium's browser process writes its own log there at info level. Sandboxed Chromium processes, such as the GPU and renderer processes, can't open the file and keep writing their warnings and errors to the window host's log. |
 | `SABINE_DEVTOOLS_PORT` | App, in development | The remote debugging port for development runs, instead of 9222 or the port the app sets with `.debug(port)`. Use a different port for each app to debug several at once. `0` lets Chromium choose a free port, which it prints as `DevTools listening on ws://…`. Ignored in production. |
 

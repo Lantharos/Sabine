@@ -30,13 +30,17 @@ impl OsrNativeHost {
         let proxy = self.proxy.clone();
         let generation = self.window_generation;
         self.direct_handover_ready = false;
-        self.direct =
-            DirectPresenter::start(window.as_ref(), self.config.transparent, move |outcome| {
+        self.direct = DirectPresenter::start(
+            window.as_ref(),
+            self.config.transparent,
+            self.input_latency.clone(),
+            move |outcome| {
                 let event = OsrHostEvent::DirectPresentation(generation, outcome);
                 if sender.send(event).is_ok() {
                     proxy.wake_up();
                 }
-            });
+            },
+        );
         self.direct.is_some()
     }
 
@@ -126,6 +130,7 @@ impl OsrNativeHost {
                 self.logical_height().round() as i32,
             ),
             release,
+            inputs: self.painted_inputs(),
         })
     }
 

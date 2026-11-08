@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sabine Pen</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Instrument Sans", "Cantarell", sans-serif;
+        background: #16171a;
+        color: #e8e6e1;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        overflow: hidden;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        cursor: crosshair;
+      }
+      aside {
+        background: #1d1e22;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        min-height: 0;
+      }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #9a9890;
+      }
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 14px;
+        font: 13px/1.5 ui-monospace, monospace;
+      }
+      dt {
+        color: #9a9890;
+      }
+      dd {
+        margin: 0;
+      }
+      ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font: 12px/1.6 ui-monospace, monospace;
+        color: #c9c6be;
+        overflow: hidden;
+        flex: 1;
+      }
+      button {
+        align-self: start;
+        font: inherit;
+        font-size: 13px;
+        color: inherit;
+        background: #2a2b30;
+        border: 0;
+        border-radius: 8px;
+        padding: 7px 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="ink"></canvas>
+    <aside>
+      <section>
+        <h2>Pen</h2>
+        <dl id="pen"><dt>state</dt><dd>no pen seen yet</dd></dl>
+      </section>
+      <section>
+        <h2>Last pointer event</h2>
+        <dl id="pointer"><dt>event</dt><dd>none yet</dd></dl>
+      </section>
+      <h2>Events</h2>
+      <ol id="log"></ol>
+      <button id="clear">Clear</button>
+    </aside>
+    <script>
+      const canvas = document.getElementById("ink");
+      const context = canvas.getContext("2d");
+      const log = document.getElementById("log");
+      const strokes = new Map();
+      let pen = null;
+
+      const resize = () => {
+        const ratio = devicePixelRatio;
+        canvas.width = canvas.clientWidth * ratio;
+        canvas.height = canvas.clientHeight * ratio;
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.lineCap = "round";
+        context.lineJoin = "round";
+      };
+      resize();
+      addEventListener("resize", resize);
+
+      const show = (list, entries) => {
+        list.replaceChildren(
+          ...entries.flatMap(([name, value]) => {
+            const term = document.createElement("dt");
+            const detail = document.createElement("dd");
+            term.textContent = name;
+            detail.textContent = String(value);
+            return [term, detail];
+          }),
+        );
+      };
+
+      const note = (text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        log.prepend(item);
+        while (log.childElementCount > 60) log.lastElementChild.remove();
+      };
+
+      const describe = (event) =>
+        `${event.type.replace("pointer", "")} ${event.pointerType} buttons=${event.buttons} ` +
+        `pressure=${event.pressure.toFixed(3)} tilt=${event.tiltX},${event.tiltY}`;
+
+      const showPointer = (event) =>
+        show(document.getElementById("pointer"), [
+          ["event", event.type],
+          ["type", event.pointerType],
+          ["buttons", event.buttons],
+          ["pressure", event.pressure.toFixed(3)],
+          ["tilt", `${event.tiltX}, ${event.tiltY}`],
+          ["at", `${event.clientX.toFixed(2)}, ${event.clientY.toFixed(2)}`],
+        ]);
+
+      const width = (event) =>
+        event.pointerType === "mouse" ? 3 : 1 + 7 * Math.max(event.pressure, 0.05);
+
+      const erasing = (event) =>
+        event.pointerType === "pen" && (event.buttons & 32 || pen?.tool === "eraser" || pen?.buttons & 1);
+
+      canvas.addEventListener("pointerdown", (event) => {
+        canvas.setPointerCapture(event.pointerId);
+        strokes.set(event.pointerId, { x: event.offsetX, y: event.offsetY });
+        showPointer(event);
+        note(describe(event));
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        showPointer(event);
+        const last = strokes.get(event.pointerId);
+        if (!last) return;
+        for (const sample of event.getCoalescedEvents()) {
+          context.strokeStyle = erasing(sample) ? "#16171a" : "#e8e6e1";
+          context.lineWidth = erasing(sample) ? 24 : width(sample);
+          context.beginPath();
+          context.moveTo(last.x, last.y);
+          context.lineTo(sample.offsetX, sample.offsetY);
+          context.stroke();
+          last.x = sample.offsetX;
+          last.y = sample.offsetY;
+        }
+        if (event.buttons !== last.buttons) {
+          last.buttons = event.buttons;
+          note(describe(event));
+        }
+      });
+
+      for (const type of ["pointerup", "pointercancel"]) {
+        canvas.addEventListener(type, (event) => {
+          strokes.delete(event.pointerId);
+          showPointer(event);
+          note(describe(event));
+        });
+      }
+
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+      document.getElementById("clear").addEventListener("click", () => {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        log.replaceChildren();
+      });
+
+      window.sabine?.bridge.listen("pen.state", (state) => {
+        pen = state;
+        show(document.getElementById("pen"), Object.entries(state));
+        note(`pen ${JSON.stringify(state)}`);
+      });
+    </script>
+  </body>
+</html>

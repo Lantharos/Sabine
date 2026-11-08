@@ -10,6 +10,7 @@ members = [
     "crates/sabine-service",
     "crates/sabine-cli",
     "examples/sabine-notes",
+    "examples/sabine-pen",
 ]
 default-members = [
     "crates/sabine-platform",
@@ -21,6 +22,7 @@ default-members = [
     "crates/sabine-service",
     "crates/sabine-cli",
     "examples/sabine-notes",
+    "examples/sabine-pen",
 ]
 
 [workspace.package]
@@ -118,16 +120,16 @@ wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
 wayland-scanner = "0.31.11"
 wgpu = "30.0.1"
-winit = { git = "https://github.com/Lantharos/winit", rev = "b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
+winit = { git = "https://github.com/Lantharos/winit", rev = "a8c732badd94611fef0e9ba3eb5d3d61acdee13d", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
 xdg-mime = "0.4.0"
 windows = "0.62.2"
 windows-core = "0.62.2"
 zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }
 
 [patch.crates-io]
-dpi = { git = "https://github.com/Lantharos/winit", rev = "b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2" }
-winit-common = { git = "https://github.com/Lantharos/winit", rev = "b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2" }
-winit-core = { git = "https://github.com/Lantharos/winit", rev = "b2bc5d40c1d69f76b4d25e62e601e65de7b15ea2" }
+dpi = { git = "https://github.com/Lantharos/winit", rev = "a8c732badd94611fef0e9ba3eb5d3d61acdee13d" }
+winit-common = { git = "https://github.com/Lantharos/winit", rev = "a8c732badd94611fef0e9ba3eb5d3d61acdee13d" }
+winit-core = { git = "https://github.com/Lantharos/winit", rev = "a8c732badd94611fef0e9ba3eb5d3d61acdee13d" }
 
 [profile.release]
 lto = "fat"

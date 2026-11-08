@@ -1,5 +1,6 @@
 mod drag;
 mod keyboard;
+mod latency;
 mod pointer;
 mod surface;
 
@@ -9,11 +10,14 @@ pub(super) use keyboard::InputPanelState;
 pub(super) use keyboard::ShortcutInhibition;
 #[cfg(windows)]
 pub(super) use keyboard::TouchKeyboard;
+#[cfg(target_os = "linux")]
+pub(super) use latency::{FrameEnd, InputStamp};
+pub(super) use latency::{InputKind, InputLatency};
 pub(super) use pointer::{TouchState, WheelRemainder};
 
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{PointerKind, WindowEvent},
     event_loop::ActiveEventLoop,
     keyboard::{Key, NamedKey},
     window::WindowId,
@@ -132,6 +136,10 @@ impl ApplicationHandler for OsrNativeHost {
                 self.set_occluded(false);
                 self.pointer_moved(event_loop, position, source, primary);
             }
+            WindowEvent::PointerEntered {
+                kind: PointerKind::TabletTool(kind),
+                ..
+            } => self.pen_entered(kind),
             WindowEvent::PointerLeft {
                 position,
                 kind,

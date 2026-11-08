@@ -52,6 +52,21 @@ export interface RendererCrashedEvent {
   recovering: boolean;
 }
 
+/** The pen or its eraser end near the screen, sent whenever any of it changes. */
+export interface PenEvent {
+  tool: "pen" | "eraser";
+  /** Whether the tool is close enough to the screen for the window to see it. */
+  near: boolean;
+  /** Whether the tip or eraser touches the screen. */
+  contact: boolean;
+  /** Held barrel buttons: 1 is the barrel button, 2 the second one. */
+  buttons: number;
+  /** Degrees from upright toward the right, from -90 to 90, or `null` when the pen doesn't tell. */
+  tiltX: number | null;
+  /** Degrees from upright toward the user, from -90 to 90, or `null` when the pen doesn't tell. */
+  tiltY: number | null;
+}
+
 type Listen<T> = (callback: (payload: T) => void) => () => void;
 
 export declare const events: {
@@ -62,6 +77,7 @@ export declare const events: {
   singleInstance: Listen<SingleInstanceEvent>;
   rendererCrashed: Listen<RendererCrashedEvent>;
   appearanceChanged: Listen<SystemAppearance>;
+  pen: Listen<PenEvent>;
   guestCreated: Listen<GuestInfo>;
   guestDestroyed: Listen<GuestIdEvent>;
   guestLoading: Listen<GuestLoadingEvent>;

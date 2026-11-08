@@ -67,6 +67,10 @@ void SabineOsrHandler::HandleControlLine(
     dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;
   }
+  if (parts.size() == 2 && parts[0] == "pen") {
+    EmitPrimaryEvent("pen.state", parts[1]);
+    return;
+  }
   if (parts.size() == 3 && parts[0] == "paint_release") {
     ReleaseSharedPaint(
         static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
@@ -82,8 +86,10 @@ void SabineOsrHandler::HandleControlLine(
   CefRefPtr<CefBrowser> target_browser = browser_;
   GuestView* pointer_guest = nullptr;
   double pointer_zoom = 1.0;
-  int pointer_x = parts.size() >= 3 ? std::atoi(parts[1].c_str()) : 0;
-  int pointer_y = parts.size() >= 3 ? std::atoi(parts[2].c_str()) : 0;
+  double pointer_x =
+      parts.size() >= 3 ? std::strtod(parts[1].c_str(), nullptr) : 0;
+  double pointer_y =
+      parts.size() >= 3 ? std::strtod(parts[2].c_str(), nullptr) : 0;
   const bool pointer_event =
       parts[0] == "mouse_move" || parts[0] == "mouse_click" ||
       parts[0] == "mouse_wheel" || parts[0] == "mouse_navigation" ||
@@ -92,7 +98,7 @@ void SabineOsrHandler::HandleControlLine(
     pointer_guest = guests_.TopmostAt(pointer_x, pointer_y);
     if (pointer_guest && pointer_guest->browser) {
       target_browser = pointer_guest->browser;
-      const CefPoint point = pointer_guest->FromView(pointer_x, pointer_y);
+      const GuestPoint point = pointer_guest->FromView(pointer_x, pointer_y);
       pointer_x = point.x;
       pointer_y = point.y;
       pointer_zoom = pointer_guest->page_zoom;
@@ -110,6 +116,8 @@ void SabineOsrHandler::HandleControlLine(
       target_browser = guest->browser;
     }
   }
+  const int mouse_x = static_cast<int>(std::floor(pointer_x));
+  const int mouse_y = static_cast<int>(std::floor(pointer_y));
   CefRefPtr<CefBrowserHost> host = target_browser->GetHost();
   if (parts[0] == "repaint") {
     RepaintAll();
@@ -159,14 +167,14 @@ void SabineOsrHandler::HandleControlLine(
     NotifyGuestScreenInfo();
   } else if (parts[0] == "mouse_move" && parts.size() >= 5) {
     CefMouseEvent event;
-    event.x = pointer_x;
-    event.y = pointer_y;
+    event.x = mouse_x;
+    event.y = mouse_y;
     event.modifiers = std::strtoul(parts[3].c_str(), nullptr, 10);
     host->SendMouseMoveEvent(event, std::atoi(parts[4].c_str()) != 0);
   } else if (parts[0] == "mouse_click" && parts.size() >= 7) {
     CefMouseEvent event;
-    event.x = pointer_x;
-    event.y = pointer_y;
+    event.x = mouse_x;
+    event.y = mouse_y;
     const auto button = MouseButtonFromString(parts[3]);
     event.modifiers = std::strtoul(parts[4].c_str(), nullptr, 10);
     const bool up = std::atoi(parts[5].c_str()) != 0;
@@ -193,16 +201,16 @@ void SabineOsrHandler::HandleControlLine(
       return;
     }
     CefMouseEvent event;
-    event.x = pointer_x;
-    event.y = pointer_y;
+    event.x = mouse_x;
+    event.y = mouse_y;
     event.modifiers = modifiers;
     host->SendMouseWheelEvent(event,
                               static_cast<int>(std::lround(dx / pointer_zoom)),
                               static_cast<int>(std::lround(dy / pointer_zoom)));
   } else if (parts[0] == "touch" && parts.size() >= 8) {
     CefTouchEvent event;
-    event.x = pointer_x;
-    event.y = pointer_y;
+    event.x = static_cast<float>(pointer_x);
+    event.y = static_cast<float>(pointer_y);
     event.id = std::atoi(parts[3].c_str());
     const std::string& phase = parts[4];
     event.type = phase == "pressed"    ? CEF_TET_PRESSED

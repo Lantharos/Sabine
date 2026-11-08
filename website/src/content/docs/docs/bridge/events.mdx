@@ -189,6 +189,7 @@ Pages receive these events without the app sending anything. The `events` object
 | `events.globalShortcutFailed` | `globalShortcut.failed` | `{ id, action, message }` | The desktop refused a global shortcut, for example because another app holds it. |
 | `events.singleInstance` | `singleInstance.activate` | `{ policy, arguments, workingDirectory, activationToken }` | The app is launched again while it runs. `arguments` is the second launch's command line, starting with the program. |
 | `events.openUrlsAvailable` | `app.openUrlsAvailable` | `null` | URLs or documents arrived for the app; take them with `app.takeOpenUrls()`. |
+| `events.pen` | `pen.state` | `{ tool, near, contact, buttons, tiltX, tiltY }` | A pen or its eraser comes near the screen or leaves it, touches or lifts, a barrel button changes, or the pen tilts. See [`PenEvent`](/docs/reference/javascript-api/#payloads). |
 | `events.rendererCrashed` | `runtime.renderer-crashed` | `{ guestId, code, recovering }` | A renderer stopped. `guestId` is empty for the app's own page. Sabine reloads it unless it stopped three times within a minute. |
 | `events.guestCreated` | `guest.created` | `GuestInfo` | A guest finished opening. |
 | `events.guestDestroyed` | `guest.destroyed` | `{ id }` | A guest closed. |

@@ -110,6 +110,15 @@ sabine trace [com.example.notes.dev] +41ms bootstrap.ready
 
 The same stages are available from Rust through `SabineProcess::metrics()`. See [Architecture](/docs/concepts/architecture/#from-launch-to-first-frame) for what each stage means.
 
+While the pointer, a finger or a pen moves over the page, the trace also prints how long those moves took to show, about every two seconds:
+
+```text
+sabine trace [com.example.notes.dev] osr-host input pen 412 moves on screen: p50 11.9ms p95 25.0ms max 47.1ms
+sabine trace [com.example.notes.dev] osr-host input pointer 96 moves handed to the compositor: p50 9.4ms p95 15.2ms max 21.0ms, 3 more painted nothing
+```
+
+Each move is timed from the moment the window hears about it to the first frame of the page that arrives after it. `on screen` ends at the time the compositor reports the frame started to show, which covers the browser, Sabine, the compositor and the wait for the display's refresh, but not the time the display takes to scan the frame out and light its pixels. When the window draws the page itself, or the compositor can't report presentation times, the time ends when Sabine hands the frame over, which leaves the compositor out as well. It also leaves out the time from the hardware to the window, which Wayland doesn't timestamp. Moves that no frame followed within a quarter of a second, such as the pointer passing over a still page, are counted as having painted nothing. The first frame after a move is usually the one that shows it, but a frame Chromium had already started can arrive first, so a page that animates on its own reads a little faster than it is.
+
 ### Chromium's own log
 
 Set `SABINE_CHROMIUM_LOG` to a file path to have Chromium's browser process write its log there at info level:

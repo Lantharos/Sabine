@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use winit::event::{MouseButton, MouseScrollDelta};
 
 use crate::osr::control::Wheel;
+use crate::osr::host::input::InputKind;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     ClickMemory, EVENTFLAG_ALT_DOWN, EVENTFLAG_COMMAND_DOWN, EVENTFLAG_CONTROL_DOWN,
@@ -50,6 +51,7 @@ fn whole_steps(remainder: &mut f64, delta: f64) -> i32 {
 impl OsrNativeHost {
     pub(in crate::osr::host) fn forward_mouse_move(&self) {
         if let Some((x, y)) = self.content_position(self.cursor_x, self.cursor_y) {
+            self.note_input(InputKind::Pointer);
             self.send_mouse_motion(format!(
                 "mouse_move\t{x:.2}\t{y:.2}\t{}\t0\n",
                 self.input_modifiers()

@@ -1,4 +1,5 @@
 mod mouse;
+mod pen;
 mod touch;
 
 pub(in crate::osr::host) use mouse::WheelRemainder;
@@ -96,8 +97,10 @@ impl OsrNativeHost {
                 button: TabletToolButton::Contact,
                 data,
             } => self.pen_button(kind, data, pressed, x, y),
-            ButtonSource::TabletTool { button, .. } if !self.touch.pen_in_contact() => {
-                self.mouse_button(event_loop, button.into(), pressed, x, y);
+            ButtonSource::TabletTool { button, .. } => {
+                if self.pen_barrel_button(button, pressed) {
+                    self.mouse_button(event_loop, button.into(), pressed, x, y);
+                }
             }
             ButtonSource::Mouse(_) | ButtonSource::Unknown(_) if primary => {
                 self.mouse_button(event_loop, button.mouse_button(), pressed, x, y);
@@ -107,7 +110,8 @@ impl OsrNativeHost {
     }
 
     /// A press or release of a mouse button, or of a pen button that acts as
-    /// one while the pen hovers, such as the barrel button's secondary click.
+    /// one when it goes down while the pen hovers, such as the barrel
+    /// button's secondary click.
     fn mouse_button(
         &mut self,
         event_loop: &dyn ActiveEventLoop,

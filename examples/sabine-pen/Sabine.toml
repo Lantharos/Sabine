@@ -1,0 +1,7 @@
+[app]
+id = "com.sabine.pen"
+name = "Sabine Pen"
+version = "0.1.0"
+
+[web]
+entry = "ui/index.html"

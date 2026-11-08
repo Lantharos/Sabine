@@ -29,11 +29,13 @@ impl OsrNativeHost {
         match message {
             OsrMessage::PaintBatch(batch) => {
                 if self.accepts_paint() {
+                    self.note_page_frame();
                     repaint.absorb(self.apply_paint(|host| host.update_paint_batch(batch)));
                 }
             }
             OsrMessage::AccelFrame(frame) => {
                 if self.accepts_paint() {
+                    self.note_page_frame();
                     repaint.absorb(self.apply_paint(|host| host.update_accel_frame(frame)));
                 } else {
                     self.send_control(format!("accel_release\t{}\n", frame.slot_token));

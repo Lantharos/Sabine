@@ -1,3 +1,23 @@
+# Unreleased
+
+- Pages hear about the pen through `events.pen`: whether a pen or its eraser is near the screen,
+  touching it, which barrel buttons are held, and how far it tilts. Chromium's pen input has no
+  tilt and never reports a barrel button while the pen touches the screen, so a notebook can now
+  shade with tilt, turn a barrel button into a temporary eraser and ignore the palm while the pen
+  is near. The event reaches the page well under a millisecond after the window hears about it.
+- Touch and pen positions keep their fractions of a pixel all the way to the page. They were
+  rounded to whole pixels on the way in, so slow pen strokes came out as stairs.
+- Every pen sample reaches the page, even while the browser is busy. A pen move used to replace
+  one the browser had yet to take, which dropped points from strokes.
+- On Linux, the first barrel button of a pen no longer acts as the tip. Pressing it while the pen
+  hovered started a touch, and pressing it while writing ended the stroke. The first button now
+  right-clicks while the pen hovers and the second middle-clicks.
+- `SABINE_TRACE` prints how long pointer, touch and pen moves take to show, as the median, 95th
+  percentile and slowest over about two seconds of movement. On Linux, while the compositor shows
+  the page directly, it measures up to the moment the frame shows.
+- The `sabine-pen` example shows pen, pointer and `events.pen` data and draws with them, for
+  trying a pen with Sabine.
+
 # Sabine 0.78
 
 - On Linux, an app installed by a store shows its icon right away. Installing or removing one

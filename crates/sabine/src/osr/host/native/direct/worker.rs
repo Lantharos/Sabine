@@ -32,8 +32,10 @@ use wayland_protocols::wp::{
     viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
 };
 
+use super::timing::FrameTiming;
 use super::{Backdrop, Command, DirectFrame, DirectOutcome, Release};
 use crate::osr::accel::Dmabuf;
+use crate::osr::host::input::InputLatency;
 
 const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
 const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
@@ -70,6 +72,7 @@ pub(super) struct State {
     shown: bool,
     hidden: bool,
     failed: bool,
+    pub(super) timing: Option<FrameTiming>,
     report: Box<dyn Fn(DirectOutcome) + Send>,
 }
 
@@ -78,6 +81,7 @@ impl State {
         connection: &Connection,
         parent: WlSurface,
         transparent: bool,
+        latency: Option<InputLatency>,
         report: Box<dyn Fn(DirectOutcome) + Send>,
     ) -> Result<(EventQueue<Self>, Self), String> {
         let (globals, mut queue) =
@@ -99,6 +103,7 @@ impl State {
         let viewporter: WpViewporter = globals
             .bind(&handle, 1..=1, ())
             .map_err(|_| missing("viewporter"))?;
+        let timing = latency.map(|latency| FrameTiming::new(latency, &globals, &handle));
         let surface = compositor.create_surface(&handle, ());
         let subsurface = subcompositor.get_subsurface(&surface, &parent, &handle, ());
         subsurface.set_desync();
@@ -128,6 +133,7 @@ impl State {
             shown: false,
             hidden: false,
             failed: false,
+            timing,
             report,
         };
         queue
@@ -171,7 +177,7 @@ impl State {
         self.forget_retired_buffers();
         if self.buffers.contains_key(&frame.resource_id) {
             if let Some(older) = self.waiting.take() {
-                (older.release)();
+                self.drop_waiting(older);
             }
             self.show(frame);
             return;
@@ -181,7 +187,15 @@ impl State {
             return;
         }
         if let Some(replaced) = self.waiting.replace(frame) {
-            (replaced.release)();
+            self.drop_waiting(replaced);
+        }
+    }
+
+    /// Lets go of a frame a newer one replaced before it could show.
+    fn drop_waiting(&mut self, frame: DirectFrame) {
+        (frame.release)();
+        if let Some(timing) = self.timing.as_mut() {
+            timing.carry(frame.inputs);
         }
     }
 
@@ -318,6 +332,9 @@ impl State {
         );
         self.viewport
             .set_destination(destination_width, destination_height);
+        if let Some(timing) = self.timing.as_mut() {
+            timing.track(&self.surface, &self.handle, frame.inputs);
+        }
         self.surface.commit();
         self.attached = true;
         self.map();

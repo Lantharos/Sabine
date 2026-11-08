@@ -35,10 +35,9 @@ CefRect GuestView::ToView(const CefRect& rect) const {
                  zoomed.height);
 }
 
-CefPoint GuestView::FromView(int x, int y) const {
+GuestPoint GuestView::FromView(double x, double y) const {
   const CefRect view = ViewBounds();
-  return CefPoint(static_cast<int>(std::floor((x - view.x) / page_zoom)),
-                  static_cast<int>(std::floor((y - view.y) / page_zoom)));
+  return {(x - view.x) / page_zoom, (y - view.y) / page_zoom};
 }
 
 GuestView* GuestRegistry::Find(const std::string& id) {
@@ -93,7 +92,7 @@ void GuestRegistry::Raise(const std::string& id) {
   z_order_.push_back(id);
 }
 
-GuestView* GuestRegistry::TopmostAt(int x, int y) {
+GuestView* GuestRegistry::TopmostAt(double x, double y) {
   if (covered_) {
     return nullptr;
   }

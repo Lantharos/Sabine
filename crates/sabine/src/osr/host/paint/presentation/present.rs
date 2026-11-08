@@ -78,6 +78,9 @@ impl OsrNativeHost {
             return false;
         }
         self.note_main_frame_presented();
+        if !self.page_in_subsurface() {
+            self.note_window_frame();
+        }
         if self.effect_regions_dirty {
             self.effect_regions_dirty = false;
             self.update_effect_regions();

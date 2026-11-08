@@ -214,6 +214,7 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | `singleInstance` | `SingleInstanceEvent` | The app is launched again while it runs. |
 | `openUrlsAvailable` | `null` | URLs or documents arrived; take them with `app.takeOpenUrls()`. |
 | `rendererCrashed` | `RendererCrashedEvent` | The page's or a guest's renderer stopped. |
+| `pen` | `PenEvent` | A pen or its eraser comes near the screen or leaves it, touches or lifts, a barrel button goes down or up, or the pen tilts. |
 | `guestCreated` | `GuestInfo` | A guest finished opening. |
 | `guestDestroyed` | `GuestIdEvent` | A guest closed. |
 | `guestLoading` | `GuestLoadingEvent` | A guest started or finished loading. |
@@ -259,7 +260,36 @@ interface RendererCrashedEvent {
   code: number;
   recovering: boolean; // false after three crashes within a minute
 }
+
+interface PenEvent {
+  tool: "pen" | "eraser";
+  near: boolean; // close enough to the screen for the window to see it
+  contact: boolean; // the tip or eraser touches the screen
+  buttons: number; // 1 is the barrel button, 2 the second one
+  tiltX: number | null; // degrees toward the right, -90 to 90; null when the pen doesn't tell
+  tiltY: number | null; // degrees toward the user, -90 to 90; null when the pen doesn't tell
+}
 ```
+
+`pen` carries what pointer events can't. Chromium's pen input has no tilt, and its `buttons`
+stays `1` while the pen touches the screen whatever barrel buttons are held, so a drawing app
+reads both from the latest `PenEvent`. It reaches the page well under a millisecond after the
+window hears about the change, and only comes when something changed. `near` makes palm rejection simple: ignore `touch` pointers while it is `true`.
+
+```ts
+let pen: PenEvent | null = null;
+events.pen((state) => (pen = state));
+
+canvas.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch" && pen?.near) return;
+  const erasing = pen?.tool === "eraser" || (pen?.buttons ?? 0) & 1;
+  draw(event.getCoalescedEvents(), { erasing, tilt: [pen?.tiltX ?? 0, pen?.tiltY ?? 0] });
+});
+```
+
+A barrel button pressed while the pen hovers also clicks as a mouse button, as it does in
+browsers: the first one as the right button, the second as the middle one. Cancel `contextmenu`
+to use the first as a tool instead.
 
 The guest payloads are listed under [Guests](#guest-types). The desktop pages explain each event:
 [Tray](/docs/desktop/tray/), [Shortcuts](/docs/desktop/shortcuts/),
