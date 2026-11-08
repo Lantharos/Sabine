@@ -1,9 +1,8 @@
 use winit::event::{TabletToolButton, TabletToolData, TabletToolKind, TabletToolTilt};
 
-use super::touch::TouchPhase;
+use super::touch::{PEN_TOUCH_ID, TouchPhase};
 use crate::osr::host::native::OsrNativeHost;
 
-const PEN_TOUCH_ID: i32 = 0;
 const BARREL_BUTTON: u8 = 1;
 const SECOND_BARREL_BUTTON: u8 = 2;
 

@@ -1,3 +1,9 @@
+# Unreleased
+
+- A finger or palm touching the screen while the pen writes stays a touch of its own. The pen
+  shared its touch id with the first finger, so Chromium merged a palm that came down mid-stroke
+  into the pen's stroke before the page could ignore it.
+
 # Sabine 0.79
 
 - Pages hear about the pen through `events.pen`: whether a pen or its eraser is near the screen,

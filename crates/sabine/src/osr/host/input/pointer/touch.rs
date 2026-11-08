@@ -117,6 +117,10 @@ impl OsrNativeHost {
     }
 }
 
+/// The pen's touch, which no finger shares, so Chromium never takes a palm
+/// for the pen.
+pub(super) const PEN_TOUCH_ID: i32 = i32::MAX;
+
 fn touch_id(finger: FingerId) -> i32 {
-    (finger.into_raw() % i32::MAX as usize) as i32
+    (finger.into_raw() % PEN_TOUCH_ID as usize) as i32
 }
