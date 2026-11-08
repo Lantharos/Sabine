@@ -1,0 +1,22 @@
+---
+interface Props {
+  name: string;
+  title: string;
+}
+
+const { name, title } = Astro.props;
+---
+
+<div data-code-block={name} class="rounded-[1rem] bg-cream-200">
+  <div class="flex items-center justify-between py-2 pr-2 pl-4">
+    <span class="text-[0.92rem] text-navy-500">{title}</span>
+    <button
+      type="button"
+      data-copy
+      class="cursor-pointer rounded-full px-3.5 py-1 text-[0.92rem] text-navy-700 transition hover:bg-navy-900/7 hover:text-navy-900"
+    >
+      Copy
+    </button>
+  </div>
+  <pre class="mono overflow-x-auto px-4 pb-4 text-navy-900"><code></code></pre>
+</div>

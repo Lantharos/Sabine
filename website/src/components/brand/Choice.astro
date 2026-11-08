@@ -1,0 +1,24 @@
+---
+interface Props {
+  name: string;
+  label: string;
+  options: { value: string; label: string }[];
+}
+
+const { name, label, options } = Astro.props;
+---
+
+<div role="group" aria-label={label} data-choice={name} class="inline-flex rounded-full bg-cream-200 p-1">
+  {
+    options.map((option, index) => (
+      <button
+        type="button"
+        data-value={option.value}
+        aria-pressed={index === 0 ? "true" : "false"}
+        class="cursor-pointer rounded-full px-4 py-1.5 text-[0.92rem] text-navy-700 transition hover:text-navy-900 aria-pressed:bg-navy-900 aria-pressed:text-cream-100"
+      >
+        {option.label}
+      </button>
+    ))
+  }
+</div>

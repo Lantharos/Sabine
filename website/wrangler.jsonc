@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sabine-website",
+  "account_id": "2e3bfcbc9512a7ab1ea3a9cb9a474b30",
   "compatibility_date": "2026-11-01",
   "routes": [{ "pattern": "sabine.rs", "custom_domain": true }],
   "assets": {

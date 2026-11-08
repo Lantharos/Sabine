@@ -1,0 +1,18 @@
+---
+interface Props {
+  id: string;
+  title: string;
+}
+
+const { id, title } = Astro.props;
+---
+
+<section class="frame grid grid-cols-12 gap-x-6 py-14 sm:py-20" aria-labelledby={id}>
+  <div class="col-span-12 lg:col-span-4 lg:pr-8">
+    <h2 id={id} class="statement text-[clamp(1.75rem,2.8vw,2.4rem)]">{title}</h2>
+    <div class="mt-4 max-w-md text-navy-700"><slot name="intro" /></div>
+  </div>
+  <div class="col-span-12 mt-10 lg:col-span-8 lg:mt-1.5">
+    <slot />
+  </div>
+</section>

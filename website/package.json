@@ -7,7 +7,8 @@
     "build": "bun --bun astro build",
     "preview": "bun --bun astro preview",
     "check": "bun --bun astro check",
-    "deploy": "bun --bun astro build && wrangler deploy"
+    "deploy": "bun --bun astro build && wrangler deploy",
+    "brand": "bun tools/brand/generate.ts"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.42.8",
@@ -19,6 +20,10 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@fontsource/hanken-grotesk": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/fontkit": "^2.0.9",
+    "fontkit": "^2.0.4",
     "starlight-links-validator": "^0.27.0",
     "typescript": "^7.0.2",
     "wrangler": "^4.156.0"

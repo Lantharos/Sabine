@@ -1,0 +1,61 @@
+---
+import Section from "./Section.astro";
+
+const colours = [
+  { name: "Paper", hex: "#f9f4ea" },
+  { name: "Cream", hex: "#f3ead8" },
+  { name: "Sand", hex: "#e7d9bf" },
+  { name: "Slate", hex: "#47557a" },
+  { name: "Navy", hex: "#1d2a4a" },
+  { name: "Night", hex: "#121a2c" },
+  { name: "Clay", hex: "#9a4a26" },
+  { name: "Olive", hex: "#5f6b3c" },
+];
+---
+
+<Section id="colours" title="Colours">
+  <p slot="intro">
+    Navy and cream carry almost everything. Clay and olive are for small touches, like a link or a highlighted word.
+    Click a colour to copy it.
+  </p>
+  <ul class="swatches grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 lg:grid-cols-4">
+    {
+      colours.map(({ name, hex }) => (
+        <li>
+          <button
+            type="button"
+            data-hex={hex}
+            aria-label={`Copy ${name}, ${hex}`}
+            class="flex w-full cursor-pointer items-center gap-3.5 rounded-2xl p-1.5 pr-3 text-left transition hover:bg-navy-900/5"
+          >
+            <span class="size-12 shrink-0 rounded-xl ring-1 ring-navy-900/10 ring-inset" style={`background: ${hex}`} />
+            <span>
+              <span class="block font-medium">{name}</span>
+              <span class="mono block text-navy-500" data-code>
+                {hex}
+              </span>
+            </span>
+          </button>
+        </li>
+      ))
+    }
+  </ul>
+</Section>
+
+<script>
+  const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+
+  document.querySelector(".swatches")!.addEventListener("click", async (event) => {
+    const button = (event.target as Element).closest<HTMLElement>("[data-hex]");
+    if (!button) return;
+    const hex = button.dataset.hex!;
+    const code = button.querySelector("[data-code]")!;
+    await navigator.clipboard.writeText(hex);
+    code.textContent = "Copied";
+    clearTimeout(timers.get(button));
+    timers.set(
+      button,
+      setTimeout(() => (code.textContent = hex), 1600),
+    );
+  });
+</script>

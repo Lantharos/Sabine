@@ -1,0 +1,30 @@
+---
+import Badges from "../components/brand/Badges.astro";
+import Colours from "../components/brand/Colours.astro";
+import Icon from "../components/brand/Icon.astro";
+import Logos from "../components/brand/Logos.astro";
+import Header from "../components/home/Header.astro";
+import Start from "../components/home/Start.astro";
+import "../components/home/home.css";
+import Site from "../layouts/Site.astro";
+---
+
+<Site title="Brand · Sabine" description="The Sabine logo, its colours and a Built with Sabine badge for your app, ready to download.">
+  <div class="home">
+    <Header />
+    <main class="pb-16 sm:pb-24">
+      <div class="frame pt-8 pb-6 sm:pt-14">
+        <h1 class="display text-[clamp(2.65rem,6vw,5rem)]">Brand</h1>
+        <p class="mt-6 max-w-[34rem] text-[1.12rem] leading-[1.55] text-navy-700">
+          The Sabine logo, its colours and a badge for apps built with it. Use them freely to write about Sabine or to
+          show that your app runs on it, just not in a way that suggests we made or vouch for your app.
+        </p>
+      </div>
+      <Logos />
+      <Icon />
+      <Colours />
+      <Badges />
+    </main>
+    <Start />
+  </div>
+</Site>

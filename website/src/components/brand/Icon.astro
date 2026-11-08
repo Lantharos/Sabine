@@ -1,0 +1,51 @@
+---
+import FileLink from "./FileLink.astro";
+import Section from "./Section.astro";
+
+const icons = [
+  {
+    name: "App icon",
+    note: "For 64 pixels and up.",
+    src: "sabine-icon.svg",
+    size: "size-28",
+    files: [
+      { file: "sabine-icon.svg", format: "SVG" },
+      ...[1024, 512, 256, 128].map((size) => ({ file: `sabine-icon-${size}.png`, format: `${size} PNG` })),
+    ],
+  },
+  {
+    name: "Small app icon",
+    note: "Below 64 pixels, where its bigger swallow still reads.",
+    src: "sabine-icon-small.svg",
+    size: "size-10",
+    files: [
+      { file: "sabine-icon-small.svg", format: "SVG" },
+      { file: "sabine-icon-small-32.png", format: "32 PNG" },
+    ],
+  },
+];
+---
+
+<Section id="icon" title="App icon">
+  <p slot="intro">The swallow on its cream tile, for places where Sabine sits next to other apps and tools.</p>
+  <div class="grid gap-x-6 gap-y-10 sm:grid-cols-2">
+    {
+      icons.map(({ name, note, src, size, files }) => (
+        <figure>
+          <div class="grid aspect-[16/10] place-items-center rounded-[1.25rem] bg-cream-300/70">
+            <img src={`/brand/${src}`} alt="" class={size} />
+          </div>
+          <figcaption class="mt-3 px-1">
+            <span class="block text-navy-900">{name}</span>
+            <span class="block text-[0.95rem] text-navy-500">{note}</span>
+            <span class="mt-3 flex flex-wrap gap-2">
+              {files.map(({ file, format }) => (
+                <FileLink name={name} file={file} format={format} />
+              ))}
+            </span>
+          </figcaption>
+        </figure>
+      ))
+    }
+  </div>
+</Section>

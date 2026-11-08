@@ -45,7 +45,7 @@ export default defineConfig({
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/Lantharos/Sabine" }],
       editLink: { baseUrl: "https://github.com/Lantharos/Sabine/edit/main/website/" },
       customCss: ["./src/styles/docs.css"],
-      plugins: [starlightLinksValidator({ errorOnLocalLinks: false })],
+      plugins: [starlightLinksValidator({ errorOnLocalLinks: false, exclude: ["/brand/#*"] })],
       lastUpdated: true,
       credits: false,
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },

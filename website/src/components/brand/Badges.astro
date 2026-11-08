@@ -1,0 +1,132 @@
+---
+import { BADGE_ALT, badgeFile } from "./brand";
+import Choice from "./Choice.astro";
+import Code from "./Code.astro";
+import FileLink from "./FileLink.astro";
+import Section from "./Section.astro";
+
+const backdrops = [
+  { colour: "dark", name: "Dark badge", class: "bg-cream-200" },
+  { colour: "light", name: "Light badge", class: "bg-navy-950" },
+] as const;
+---
+
+<Section id="badge" title="Built with Sabine">
+  <p slot="intro">
+    Put the badge in your app’s README or on its website to show what it’s made with. It links to sabine.rs. Use the
+    full one on its own and the compact one in a row with other README badges.
+  </p>
+  <div class="badges space-y-5">
+    <div class="flex flex-wrap gap-3">
+      <Choice
+        name="size"
+        label="Badge size"
+        options={[
+          { value: "full", label: "Full" },
+          { value: "compact", label: "Compact" },
+        ]}
+      />
+      <Choice
+        name="theme"
+        label="Badge colour"
+        options={[
+          { value: "dark", label: "Dark" },
+          { value: "light", label: "Light" },
+          { value: "auto", label: "Follow the reader" },
+        ]}
+      />
+    </div>
+
+    <div class="grid overflow-hidden rounded-[1.25rem] sm:grid-flow-col sm:auto-cols-fr">
+      {
+        backdrops.map((backdrop) => (
+          <figure data-colour={backdrop.colour} class:list={["grid min-h-44 place-items-center p-8", backdrop.class]}>
+            <img src={badgeFile("full", backdrop.colour)} alt={BADGE_ALT} />
+          </figure>
+        ))
+      }
+    </div>
+
+    <Code name="markdown" title="Markdown" />
+    <p data-auto-note class="hidden px-1 text-[0.95rem] text-navy-500">
+      This HTML works in Markdown too, GitHub READMEs included, and shows the light badge to readers whose system is
+      dark.
+    </p>
+    <Code name="html" title="HTML" />
+
+    <div class="flex flex-wrap gap-2">
+      {
+        backdrops.flatMap((backdrop) =>
+          (["svg", "png"] as const).map((type) => (
+            <FileLink
+              name={backdrop.name}
+              file={badgeFile("full", backdrop.colour, type).slice("/brand/".length)}
+              format={`${backdrop.colour === "dark" ? "Dark" : "Light"} ${type.toUpperCase()}`}
+              data-download={backdrop.colour}
+              data-type={type}
+            />
+          )),
+        )
+      }
+    </div>
+  </div>
+</Section>
+
+<script>
+  import { type BadgeColour, type BadgeSize, type BadgeTheme, badgeFile, badgeHtml, badgeMarkdown } from "./brand";
+
+  const root = document.querySelector<HTMLElement>(".badges")!;
+  const state = { size: "full" as BadgeSize, theme: "dark" as BadgeTheme };
+  const codes = new Map<string, string>();
+
+  const block = (name: string) => root.querySelector<HTMLElement>(`[data-code-block="${name}"]`)!;
+
+  function setCode(name: string, code: string) {
+    codes.set(name, code);
+    block(name).querySelector("code")!.textContent = code;
+  }
+
+  function render() {
+    const shown = (colour: string) => state.theme === "auto" || state.theme === colour;
+    for (const figure of root.querySelectorAll<HTMLElement>("[data-colour]")) {
+      const colour = figure.dataset.colour as BadgeColour;
+      figure.hidden = !shown(colour);
+      figure.querySelector("img")!.src = badgeFile(state.size, colour);
+    }
+    for (const link of root.querySelectorAll<HTMLAnchorElement>("[data-download]")) {
+      const colour = link.dataset.download as BadgeColour;
+      link.hidden = !shown(colour);
+      const file = badgeFile(state.size, colour, link.dataset.type as "svg" | "png");
+      link.href = file;
+      link.download = file.slice("/brand/".length);
+    }
+    const auto = state.theme === "auto";
+    block("markdown").hidden = auto;
+    root.querySelector<HTMLElement>("[data-auto-note]")!.classList.toggle("hidden", !auto);
+    if (!auto) setCode("markdown", badgeMarkdown(state.size, state.theme as BadgeColour));
+    setCode("html", badgeHtml(state.size, state.theme));
+  }
+
+  for (const group of root.querySelectorAll<HTMLElement>("[data-choice]")) {
+    group.addEventListener("click", (event) => {
+      const button = (event.target as Element).closest<HTMLElement>("[data-value]");
+      if (!button) return;
+      for (const option of group.querySelectorAll("[data-value]")) {
+        option.setAttribute("aria-pressed", String(option === button));
+      }
+      Object.assign(state, { [group.dataset.choice!]: button.dataset.value });
+      render();
+    });
+  }
+
+  for (const copy of root.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+    const name = copy.closest<HTMLElement>("[data-code-block]")!.dataset.codeBlock!;
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(codes.get(name)!);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1600);
+    });
+  }
+
+  render();
+</script>
