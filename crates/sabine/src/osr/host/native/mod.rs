@@ -124,6 +124,8 @@ pub(super) struct OsrNativeHost {
     pub(super) input_panel: super::input::InputPanelState,
     #[cfg(target_os = "linux")]
     pub(super) exported_window: Option<sabine_platform::shell::ParentWindow>,
+    #[cfg(target_os = "linux")]
+    pub(super) foreign_parent: Option<sabine_platform::shell::ForeignParent>,
     #[cfg(windows)]
     pub(super) touch_keyboard: super::input::TouchKeyboard,
     pub(super) occluded: bool,
@@ -278,6 +280,8 @@ impl OsrNativeHost {
             input_panel: Default::default(),
             #[cfg(target_os = "linux")]
             exported_window: None,
+            #[cfg(target_os = "linux")]
+            foreign_parent: None,
             #[cfg(windows)]
             touch_keyboard: Default::default(),
             occluded: false,

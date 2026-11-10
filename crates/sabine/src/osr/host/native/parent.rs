@@ -1,4 +1,5 @@
-use sabine_platform::shell::ParentWindow;
+use sabine_platform::shell::{ForeignParent, ParentWindow};
+use winit::window::Window;
 
 use super::OsrNativeHost;
 
@@ -22,5 +23,19 @@ impl OsrNativeHost {
             .as_ref()
             .map(ParentWindow::identifier)
             .unwrap_or_default()
+    }
+
+    /// Keeps the window over the window of another app it was opened for.
+    pub(super) fn attach_foreign_parent(&mut self, window: &dyn Window) {
+        let Some(parent) = &self.config.parent_window else {
+            return;
+        };
+        match ForeignParent::attach(window, parent, self.config.modal) {
+            Ok(parent) => self.foreign_parent = Some(parent),
+            Err(error) => sabine_runtime::report_error(
+                "window",
+                format!("the window opens without its parent: {error}"),
+            ),
+        }
     }
 }

@@ -70,15 +70,7 @@ impl OsrNativeHost {
                 self.page_drag_exclusion_regions = exclusion;
             }
             OsrMessage::Cursor(cursor) => self.set_page_cursor(event_loop, cursor),
-            OsrMessage::CloseRequested => {
-                self.remember_size();
-                if self.config.hide_on_close {
-                    self.hide_window("close");
-                } else {
-                    self.begin_close(event_loop);
-                    return Flow::Closed;
-                }
-            }
+            OsrMessage::CloseRequested => return self.close_window(event_loop),
             OsrMessage::StartDragRequested => self.start_window_drag(),
             OsrMessage::DragStarted {
                 content,

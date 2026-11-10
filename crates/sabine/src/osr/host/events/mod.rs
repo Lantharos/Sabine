@@ -1,4 +1,5 @@
 mod bridge;
+mod closing;
 mod host_control;
 mod messages;
 

@@ -30,6 +30,8 @@ pub(crate) struct OsrHostConfig {
     pub active: bool,
     pub hide_on_blur: bool,
     pub hide_on_close: bool,
+    /// Someone asking the window to close is the app's to answer.
+    pub asks_before_closing: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
     pub transparent: bool,
@@ -53,6 +55,10 @@ pub(crate) struct OsrHostConfig {
     pub activation_token: Option<String>,
     #[cfg(target_os = "linux")]
     pub shared_runtime: bool,
+    #[cfg(target_os = "linux")]
+    pub parent_window: Option<String>,
+    #[cfg(target_os = "linux")]
+    pub modal: bool,
 }
 
 impl OsrHostConfig {
@@ -138,6 +144,10 @@ impl OsrHostConfig {
                 .get("hide_on_close")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            asks_before_closing: value
+                .get("asks_before_closing")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             skip_taskbar: value
                 .get("skip_taskbar")
                 .and_then(serde_json::Value::as_bool)
@@ -200,6 +210,16 @@ impl OsrHostConfig {
             #[cfg(target_os = "linux")]
             shared_runtime: value
                 .get("shared_runtime")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            #[cfg(target_os = "linux")]
+            parent_window: value
+                .get("parent_window")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
+            #[cfg(target_os = "linux")]
+            modal: value
+                .get("modal")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
         })

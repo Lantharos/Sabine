@@ -1,3 +1,18 @@
+# Unreleased
+
+- An app can keep a window open when someone asks it to close. `on_close_requested` hears the
+  close button, the desktop's close shortcut and its taskbar, and answers whether the window
+  closes, so an app in the middle of work that would be lost can ask first.
+  `BridgeEventEmitter::close_window` closes one window from Rust, and `on_closed` hears once a
+  window has closed.
+- On Linux a window can open as a dialog of another app's window. `parent_window` takes the
+  identifier the desktop portal hands a backend, and `modal` keeps people from using that
+  window while the dialog is open, so a file chooser built with Sabine stays with the app that
+  asked for it.
+- The close button Sabine draws for a control region remembers the window's size and hides a
+  window built with `hide_on_close`, as closing it from the desktop does. It used to close the
+  window without either.
+
 # Sabine 0.82
 
 - A pen's side button that the compositor maps to a click, such as GNOME's and Luft's right click,

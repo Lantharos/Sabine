@@ -121,6 +121,17 @@ impl BridgeEventEmitter {
         self.emit_host_control("focus", "1")
     }
 
+    /// Closes one window as its close button does, without asking
+    /// [`SabineWindow::on_close_requested`](crate::SabineWindow::on_close_requested).
+    /// A window built with `hide_on_close` hides instead.
+    pub fn close_window(&self, window: WindowId) -> bool {
+        self.deliver(
+            Some(window),
+            format!("{HOST_CONTROL_PREFIX}\tclose\t1"),
+            None,
+        )
+    }
+
     /// Replaces the blur, opaque and input regions of every window, for
     /// example to drop a sidebar's blur while the sidebar is hidden.
     pub fn set_regions(&self, regions: &WindowRegions) -> bool {

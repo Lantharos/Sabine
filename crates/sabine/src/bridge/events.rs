@@ -11,7 +11,7 @@ use super::frame::Frame;
 use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher};
 use super::writer::BridgeWriter;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
-use crate::window::WindowListeners;
+use crate::window::{CLOSE_REQUESTED_LINE, WindowListeners};
 
 pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, serde_json::Value) {
     match event {
@@ -93,38 +93,54 @@ pub(crate) fn spawn_bridge_dispatch(
         .take()
         .expect("the window host's output is piped");
     let (ready_sender, ready) = crossbeam_channel::bounded(1);
-    let detach_emitter = emitter.clone();
+    let emitter = emitter.clone();
     let dispatcher =
         BridgeRequestDispatcher::new(bridge_runtime, activity.clone(), emitter.clone(), writer);
     let thread = thread::spawn(move || {
-        read_requests(stdout, window, &dispatcher, &listeners, || {
+        let host = WindowHost {
+            window,
+            dispatcher: &dispatcher,
+            listeners: &listeners,
+            emitter: &emitter,
+        };
+        host.read_requests(stdout, || {
             let _ = ready_sender.try_send(());
         });
         activity.release_window(window);
-        detach_emitter.detach(window);
+        emitter.detach(window);
         listeners.closed(window);
     });
     BridgeDispatch { thread, ready }
 }
 
-fn read_requests(
-    stdout: ChildStdout,
+/// What a window host's lines reach in the app.
+struct WindowHost<'a> {
     window: u32,
-    dispatcher: &BridgeRequestDispatcher,
-    listeners: &WindowListeners,
-    mut ready: impl FnMut(),
-) {
-    let mut reader = BufReader::new(stdout);
-    while let Ok(Some(frame)) = Frame::read(&mut reader) {
-        if frame.line == "SABINE_OSR_READY" {
-            ready();
-            continue;
-        }
-        if listeners.deliver(window, &frame.line) {
-            continue;
-        }
-        if let Some(request) = BridgeIpcRequest::parse(frame, window) {
-            dispatcher.submit(request);
+    dispatcher: &'a BridgeRequestDispatcher,
+    listeners: &'a WindowListeners,
+    emitter: &'a BridgeEventEmitter,
+}
+
+impl WindowHost<'_> {
+    fn read_requests(&self, stdout: ChildStdout, mut ready: impl FnMut()) {
+        let mut reader = BufReader::new(stdout);
+        while let Ok(Some(frame)) = Frame::read(&mut reader) {
+            if frame.line == "SABINE_OSR_READY" {
+                ready();
+                continue;
+            }
+            if frame.line == CLOSE_REQUESTED_LINE {
+                if self.listeners.allows_close(self.window) {
+                    self.emitter.close_window(self.window);
+                }
+                continue;
+            }
+            if self.listeners.deliver(self.window, &frame.line) {
+                continue;
+            }
+            if let Some(request) = BridgeIpcRequest::parse(frame, self.window) {
+                self.dispatcher.submit(request);
+            }
         }
     }
 }
@@ -135,4 +151,68 @@ pub(crate) fn parse_host_control(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((parts.next()?, parts.next().unwrap_or("1")))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::io::BufRead;
+
+    use sabine_bridge::{ActivityRegistry, BridgeHandlers, BridgeRuntime};
+
+    use super::*;
+    use crate::window::CloseRequestListener;
+
+    fn lines_after_close_request(allowed: bool) -> Vec<String> {
+        let mut window = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("cat");
+        let mut host = Command::new("echo")
+            .arg(CLOSE_REQUESTED_LINE)
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("echo");
+        let writer = BridgeWriter::spawn(window.stdin.take().expect("stdin"));
+        let emitter = BridgeEventEmitter::default();
+        emitter.attach(window.id(), writer.clone(), &ActivityRegistry::default());
+        let dispatcher = BridgeRequestDispatcher::new(
+            BridgeRuntime::new(BridgeHandlers::default()),
+            ActivityRegistry::default(),
+            emitter.clone(),
+            writer,
+        );
+        let listeners = WindowListeners {
+            close_request: Some(CloseRequestListener::new(move |_| allowed)),
+            ..WindowListeners::default()
+        };
+        WindowHost {
+            window: window.id(),
+            dispatcher: &dispatcher,
+            listeners: &listeners,
+            emitter: &emitter,
+        }
+        .read_requests(host.stdout.take().expect("stdout"), || {});
+        assert!(emitter.emit_to(window.id(), "end", serde_json::Value::Null));
+        let mut lines = Vec::new();
+        for line in BufReader::new(window.stdout.take().expect("stdout")).lines() {
+            let line = line.expect("line");
+            let last = line.starts_with("SABINE_BRIDGE_EVENT");
+            lines.push(line);
+            if last {
+                break;
+            }
+        }
+        let _ = window.kill();
+        let _ = window.wait();
+        let _ = host.wait();
+        lines
+    }
+
+    #[test]
+    fn a_window_asked_to_close_closes_only_when_the_app_agrees() {
+        let close = format!("{HOST_CONTROL_PREFIX}\tclose\t1");
+        assert_eq!(lines_after_close_request(true).first(), Some(&close));
+        assert_eq!(lines_after_close_request(false).len(), 1);
+    }
 }

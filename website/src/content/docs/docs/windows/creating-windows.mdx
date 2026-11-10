@@ -216,6 +216,80 @@ The page shows and hides its window with `appWindow.show()` and `appWindow.hide(
 Wayland has no standard protocol for either, so on other compositors the window is placed like any
 other, and Sabine records why in its window log.
 
+## Asking before a window closes
+
+People close a window with its close button, a shortcut such as Alt+F4, or from the taskbar.
+`.on_close_requested(...)` hands each such request to the app, which answers `true` to let the
+window close or `false` to keep it open. Use it while closing would lose work, to ask first:
+
+```rust
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+use sabine::prelude::*;
+
+fn main() {
+    let copying = Arc::new(AtomicBool::new(false));
+    let events = Arc::new(std::sync::OnceLock::<BridgeEventEmitter>::new());
+    let asking = Arc::clone(&events);
+    SabineWindow::main_with_process(
+        move |window| {
+            Ok(window.app().on_close_requested(move |window| {
+                if !copying.load(Ordering::Relaxed) {
+                    return true;
+                }
+                if let Some(events) = asking.get() {
+                    events.emit_to(window, "closeAsked", serde_json::Value::Null);
+                }
+                false
+            }))
+        },
+        move |process| {
+            let _ = events.set(process.bridge_event_emitter());
+        },
+    );
+}
+```
+
+The page shows its own question when it hears the event, and closes the window with
+`appWindow.close()` once the person agrees:
+
+```ts
+import { appWindow, listen } from "@lantharos/sabine";
+
+listen("closeAsked", async () => {
+  if (await askToStopCopying()) await appWindow.close();
+});
+```
+
+The listener runs in the app process, on the thread that reads the window's messages, so answer
+quickly and leave the asking to the page. Only requests from the person and the desktop are
+asked about. `appWindow.close()`, `emitter.close_window(window)`, `app.quit()` and the app
+process ending close the window without asking, so a page that asked can always close it.
+
+## Dialogs for other apps' windows
+
+On Linux, a window can open as a dialog of a window that belongs to another app, which is how a
+file chooser or a permission prompt stays with the app that asked for it. `.parent_window(...)`
+takes the other window's identifier in the form the desktop portal passes as `parent_window`,
+`wayland:<handle>`, where the handle is one the other app exported through `xdg_foreign`.
+`.modal(true)` also keeps people from using the parent while the dialog is open:
+
+```rust
+let dialog = SabineWindow::for_current_app()?
+    .app()
+    .title("Choose a file")
+    .parent_window(parent_window)
+    .modal(true);
+```
+
+The compositor keeps the dialog above its parent and moves, minimizes and closes it along with
+the parent. Importing the parent needs `zxdg_importer_v2` and modality needs `xdg_wm_dialog_v1`;
+on a compositor without one of them, or with an identifier that isn't a Wayland handle, the
+window opens on its own and Sabine's window log says why.
+
 ## Background color
 
 The background color is what the window shows before the page has painted: behind the page while
@@ -339,7 +413,7 @@ The options covered on other pages:
 | `autostart` | [Autostart](/docs/desktop/autostart/) |
 | `native_messaging_host` | [Native messaging](/docs/desktop/native-messaging/) |
 | `on_appearance_changed` | [Appearance and shell](/docs/desktop/appearance-and-shell/) |
-| `on_launched` | [Multiple windows](/docs/windows/multiple-windows/) |
+| `on_launched`, `on_closed` | [Multiple windows](/docs/windows/multiple-windows/) |
 
 The rest:
 

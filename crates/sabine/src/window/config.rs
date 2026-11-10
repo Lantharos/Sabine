@@ -44,6 +44,12 @@ pub(crate) struct SabineWindowConfig {
     pub background: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
+    /// Another app's window this one stays over, as the desktop portal names
+    /// it.
+    #[cfg(target_os = "linux")]
+    pub parent_window: Option<String>,
+    #[cfg(target_os = "linux")]
+    pub modal: bool,
     pub transparent: bool,
     pub background_color: Color,
     /// How long a launching window waits for its page before showing Sabine's
@@ -98,6 +104,10 @@ impl Default for SabineWindowConfig {
             background: false,
             skip_taskbar: false,
             always_on_top: false,
+            #[cfg(target_os = "linux")]
+            parent_window: None,
+            #[cfg(target_os = "linux")]
+            modal: false,
             transparent: false,
             background_color: Color::WINDOW,
             splash: None,

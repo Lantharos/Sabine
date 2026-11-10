@@ -28,6 +28,7 @@ impl OsrNativeHost {
             HostControl::SquareCorners(square) => self.set_square_corners(square),
             HostControl::Notify(notification) => self.show_notification(notification),
             HostControl::Print(files) => self.print_files(files),
+            HostControl::Close => return self.close_window(event_loop),
             HostControl::Quit => {
                 self.remember_size();
                 self.begin_close(event_loop);
@@ -48,6 +49,7 @@ pub(in crate::osr::host) fn host_control_from_parts(
         "visible" => bool_control_value(value).map(HostControl::Visible),
         "show" => Some(HostControl::Show),
         "hide" => Some(HostControl::Hide),
+        "close" => Some(HostControl::Close),
         "quit" => Some(HostControl::Quit),
         "focus" => Some(HostControl::Focus(activation_token_value(Some(
             value.to_string(),

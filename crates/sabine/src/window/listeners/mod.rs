@@ -1,3 +1,4 @@
+mod closing;
 mod visibility;
 
 use std::{fmt, sync::Arc};
@@ -6,6 +7,7 @@ use sabine_platform::{Appearance, PlatformEvent};
 
 use crate::desktop::open_urls::OpenUrls;
 use crate::{SabineProcessHandle, WindowId};
+pub(crate) use closing::{CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener};
 pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
@@ -21,6 +23,8 @@ pub(crate) const PAGE_LOST_LINE: &str = "SABINE_PAGE_LOST";
 pub(crate) struct WindowListeners {
     pub(crate) visibility: Option<VisibilityListener>,
     pub(crate) appearance: Option<AppearanceListener>,
+    pub(crate) close_request: Option<CloseRequestListener>,
+    pub(crate) closed: Option<ClosedListener>,
     /// The app's queue of links and documents, which all its windows share.
     pub(crate) open_urls: OpenUrls,
 }
@@ -49,8 +53,15 @@ impl WindowListeners {
         true
     }
 
-    /// Reports a window whose host has exited as hidden, and forgets what
-    /// its pages took from the open queue.
+    /// Whether the app lets a window close that someone asked to close.
+    pub(crate) fn allows_close(&self, window: WindowId) -> bool {
+        self.close_request
+            .as_ref()
+            .is_none_or(|listener| listener.allows(window))
+    }
+
+    /// Reports a window whose host has exited as hidden and closed, and
+    /// forgets what its pages took from the open queue.
     pub(crate) fn closed(&self, window: WindowId) {
         self.open_urls.release(window);
         if let Some(listener) = &self.visibility {
@@ -59,6 +70,9 @@ impl WindowListeners {
                 visible: false,
                 suspended: false,
             });
+        }
+        if let Some(listener) = &self.closed {
+            listener.deliver(window);
         }
     }
 }

@@ -331,6 +331,6 @@ pub(in crate::osr::host) fn activate_control(
     match control {
         TitlebarControl::Minimize => host.minimize_window(),
         TitlebarControl::Maximize => window.set_maximized(!window.is_maximized()),
-        TitlebarControl::Close => host.begin_close(event_loop),
+        TitlebarControl::Close => host.close_requested(event_loop),
     }
 }

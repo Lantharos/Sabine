@@ -4,7 +4,7 @@
 use std::path::Path;
 
 #[cfg(target_os = "linux")]
-pub use crate::linux::ParentWindow;
+pub use crate::linux::{ForeignParent, ParentWindow};
 
 /// Where a request to open something comes from. On Linux the desktop
 /// portal names the app by its id, keeps any dialog it shows over the parent

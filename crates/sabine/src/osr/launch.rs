@@ -222,6 +222,7 @@ pub(crate) fn spawn_osr_host_child(
         "active": config.active,
         "hide_on_blur": config.hide_on_blur,
         "hide_on_close": config.hide_on_close,
+        "asks_before_closing": config.listeners.close_request.is_some(),
         "skip_taskbar": config.skip_taskbar,
         "always_on_top": config.always_on_top,
         "transparent": config.transparent,
@@ -254,6 +255,8 @@ pub(crate) fn spawn_osr_host_child(
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
         body["activation_token"] = activation_token.into();
         body["shared_runtime"] = config.browser.shares_runtime(config.dev_mode()).into();
+        body["parent_window"] = config.parent_window.clone().into();
+        body["modal"] = config.modal.into();
     }
     #[cfg(not(target_os = "linux"))]
     let _ = activation_token;

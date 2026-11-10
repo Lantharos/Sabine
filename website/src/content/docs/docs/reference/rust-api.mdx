@@ -205,6 +205,8 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `hide_on_close(bool)` | Hides the window instead of closing it |
 | `skip_taskbar(bool)` | Off the Windows taskbar, out of the macOS Dock, and out of the taskbar on Wayland compositors with `kestrel_window_v1` |
 | `always_on_top(bool)` | Above other windows on Windows, macOS, and Wayland compositors with `kestrel_window_v1` |
+| `parent_window(impl Into<String>)` | Linux only. Opens the window as a dialog of another app's window, named `wayland:<handle>` as the desktop portal does |
+| `modal(bool)` | Linux only. Keeps people from using the `parent_window` while this window is open, on compositors with `xdg_wm_dialog_v1` |
 
 ### Appearance and chrome
 
@@ -268,11 +270,13 @@ See [Lifecycle](/docs/windows/lifecycle/).
 ```rust
 pub fn on_launched(self, listener: impl Fn(SabineProcessHandle) + Send + Sync + 'static) -> Self;
 pub fn on_visibility_changed(self, listener: impl Fn(WindowVisibility) + Send + Sync + 'static) -> Self;
+pub fn on_close_requested(self, listener: impl Fn(WindowId) -> bool + Send + Sync + 'static) -> Self;
+pub fn on_closed(self, listener: impl Fn(WindowId) + Send + Sync + 'static) -> Self;
 pub fn on_appearance_changed(self, listener: impl Fn(WindowId, Appearance) + Send + Sync + 'static) -> Self;
 pub fn on_desktop_event(self, listener: impl Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed.
 
 ```rust
 pub struct WindowVisibility {
@@ -456,8 +460,11 @@ impl BridgeEventEmitter {
     pub fn set_visible(&self, visible: bool) -> bool;
     pub fn focus_window(&self) -> bool;
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool;
+    pub fn close_window(&self, window: WindowId) -> bool;
 }
 ```
+
+`close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead.
 
 The emitter is `Clone`, `Send` and `Sync`. Events go to every window unless sent with a `_to` variant. Sending waits while a window's pages haven't taken earlier events, so producers run at the pace pages keep up with. Pages receive bytes as a `Uint8Array`.
 

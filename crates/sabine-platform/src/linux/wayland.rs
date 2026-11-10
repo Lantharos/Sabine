@@ -17,9 +17,14 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1,
     zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
 };
+use wayland_protocols::xdg::dialog::v1::client::{
+    xdg_dialog_v1::XdgDialogV1, xdg_wm_dialog_v1::XdgWmDialogV1,
+};
 use wayland_protocols::xdg::foreign::zv2::client::{
     zxdg_exported_v2::{self, ZxdgExportedV2},
     zxdg_exporter_v2::ZxdgExporterV2,
+    zxdg_imported_v2::ZxdgImportedV2,
+    zxdg_importer_v2::ZxdgImporterV2,
 };
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use winit::platform::wayland::WindowExtWayland;
@@ -170,5 +175,9 @@ delegate_noop!(Replies: ignore ExtBackgroundEffectSurfaceV1);
 delegate_noop!(Replies: ignore ZwpKeyboardShortcutsInhibitManagerV1);
 delegate_noop!(Replies: ignore ZwpKeyboardShortcutsInhibitorV1);
 delegate_noop!(Replies: ignore ZxdgExporterV2);
+delegate_noop!(Replies: ignore ZxdgImporterV2);
+delegate_noop!(Replies: ignore ZxdgImportedV2);
+delegate_noop!(Replies: ignore XdgWmDialogV1);
+delegate_noop!(Replies: ignore XdgDialogV1);
 delegate_noop!(Replies: ignore KestrelWindowManagerV1);
 delegate_noop!(Replies: ignore KestrelWindowStateV1);

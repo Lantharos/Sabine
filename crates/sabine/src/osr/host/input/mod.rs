@@ -74,14 +74,7 @@ impl ApplicationHandler for OsrNativeHost {
             return;
         }
         match event {
-            WindowEvent::CloseRequested => {
-                self.remember_size();
-                if self.config.hide_on_close {
-                    self.hide_window("close");
-                } else {
-                    self.begin_close(event_loop);
-                }
-            }
+            WindowEvent::CloseRequested => self.close_requested(event_loop),
             WindowEvent::Destroyed if self.config.visible || self.closing_deadline.is_some() => {
                 self.begin_close(event_loop)
             }

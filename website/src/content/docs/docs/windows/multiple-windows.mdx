@@ -140,14 +140,21 @@ The `BridgeEventEmitter` reaches every window or one:
 | `show()`, `hide()`, `focus_window()` | |
 
 `notify(window, &notification)` shows a notification from one window, and
-`on_visibility_changed` reports which window changed in `WindowVisibility::window`. Keep state that
+`on_visibility_changed` reports which window changed in `WindowVisibility::window`. Listeners set
+on the builder you pass to `open_window`, such as `on_closed`, hear about that window alone. Keep state that
 several windows show in Rust and send changes to every window as events, so the windows never
 disagree. See [Events](/docs/bridge/events/).
 
 ## Closing windows
 
-A page closes its own window with `appWindow.close()`. Rust closes one with
-`process.close_window(window)`, which returns `false` when no such window is open.
+A page closes its own window with `appWindow.close()`. Rust closes one from any thread with
+`emitter.close_window(window)`, as the window's close button does, or with
+`process.close_window(window)`, which ends the window's host at once. Both return `false` when no
+such window is open.
+
+`.on_closed(...)` calls your code with the window's id once the window has closed, however it
+closed. `.on_close_requested(...)` lets the app keep a window open when someone asks it to close;
+see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes).
 
 Closing a window closes only that window, including the first one. `SabineProcess::wait()`, and so
 `SabineWindow::main`, returns once every window has closed, and the app exits with its first
@@ -192,4 +199,21 @@ SabineWindow::main(|window| {
         .background()
         .single_instance(SingleInstancePolicy::FocusExisting))
 });
+```
+
+A background app can also serve windows without ever opening its first one. A service that shows
+a dialog for each request it gets keeps one process running and opens a window per request with
+`handle.open_window(...)`, which takes a few milliseconds instead of an app launch. Each window
+closes independently, and `.on_closed(...)` on its builder tells the service when the person
+closed it without answering:
+
+```rust
+fn show_dialog(process: &SabineProcessHandle, request: u32) -> SabineResult<WindowId> {
+    let window = SabineWindow::for_current_app()?
+        .app()
+        .title("Choose a file")
+        .content_suffix(format!("#request/{request}"))
+        .on_closed(move |_| cancel(request));
+    process.open_window(window)
+}
 ```

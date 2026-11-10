@@ -101,6 +101,7 @@ impl OsrNativeHost {
         #[cfg(target_os = "linux")]
         {
             self.attach_clipboard(window.as_ref());
+            self.attach_foreign_parent(window.as_ref());
             self.place_window(window.as_ref());
             self.resized_from_outside = sabine_platform::resizes_from_outside(window.as_ref());
         }
@@ -217,6 +218,7 @@ impl OsrNativeHost {
         {
             self.direct = None;
             self.exported_window = None;
+            self.foreign_parent = None;
         }
         self.renderer_starting = false;
         #[cfg(windows)]

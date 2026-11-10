@@ -163,6 +163,26 @@ impl SabineWindow {
         self
     }
 
+    /// Linux only: keeps the window over a window of another app, as a
+    /// dialog of it. `identifier` names that window the way the desktop
+    /// portal's `parent_window` argument does, `wayland:<handle>` with a
+    /// handle the other app exported through `xdg_foreign`. Other
+    /// identifiers leave the window on its own.
+    #[cfg(target_os = "linux")]
+    pub fn parent_window(mut self, identifier: impl Into<String>) -> Self {
+        self.config.parent_window = Some(identifier.into());
+        self
+    }
+
+    /// Linux only: keeps people from using the window's
+    /// [`Self::parent_window`] while this one is open, on compositors that
+    /// offer `xdg_wm_dialog_v1`.
+    #[cfg(target_os = "linux")]
+    pub fn modal(mut self, modal: bool) -> Self {
+        self.config.modal = modal;
+        self
+    }
+
     pub fn transparent(mut self, transparent: bool) -> Self {
         self.config.transparent = transparent;
         if !transparent {
@@ -344,6 +364,27 @@ impl SabineWindow {
         listener: impl Fn(super::WindowVisibility) + Send + Sync + 'static,
     ) -> Self {
         self.config.listeners.visibility = Some(super::VisibilityListener::new(listener));
+        self
+    }
+
+    /// Calls `listener` with the window's id when someone asks the window to
+    /// close: with its close button, a shortcut such as Alt+F4, or from the
+    /// taskbar. The window closes when it returns `true` and stays open when
+    /// it returns `false`, for an app that asks first while work would be
+    /// lost. Closing the window from its page or with
+    /// [`BridgeEventEmitter::close_window`](crate::BridgeEventEmitter::close_window)
+    /// doesn't ask.
+    pub fn on_close_requested(
+        mut self,
+        listener: impl Fn(crate::WindowId) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.config.listeners.close_request = Some(super::CloseRequestListener::new(listener));
+        self
+    }
+
+    /// Calls `listener` with the window's id once the window has closed.
+    pub fn on_closed(mut self, listener: impl Fn(crate::WindowId) + Send + Sync + 'static) -> Self {
+        self.config.listeners.closed = Some(super::ClosedListener::new(listener));
         self
     }
 

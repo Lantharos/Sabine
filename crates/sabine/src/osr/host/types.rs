@@ -234,6 +234,7 @@ pub(super) enum HostControl {
     Hide,
     Focus(Option<String>),
     Visible(bool),
+    Close,
     Quit,
     ActivityBegin(HostActivity),
     ActivityEnd(HostActivity),
