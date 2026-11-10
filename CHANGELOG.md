@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.83
 
 - An app can keep a window open when someone asks it to close. `on_close_requested` hears the
   close button, the desktop's close shortcut and its taskbar, and answers whether the window
