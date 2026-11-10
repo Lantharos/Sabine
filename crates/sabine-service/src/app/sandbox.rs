@@ -32,6 +32,9 @@ pub struct SandboxSection {
     filesystems: Option<Vec<String>>,
     devices: Option<Vec<String>>,
     talk: Option<Vec<String>>,
+    x11: Option<bool>,
+    microphone: Option<bool>,
+    camera: Option<bool>,
     #[serde(default)]
     unsandboxed: bool,
     reason: Option<String>,
@@ -45,6 +48,9 @@ pub enum Sandbox {
         filesystems: Vec<String>,
         devices: Vec<String>,
         talk: Vec<String>,
+        x11: bool,
+        microphone: bool,
+        camera: bool,
     },
     Unsandboxed {
         reason: String,
@@ -58,6 +64,9 @@ impl SandboxSection {
                 || self.filesystems.is_some()
                 || self.devices.is_some()
                 || self.talk.is_some()
+                || self.x11.is_some()
+                || self.microphone.is_some()
+                || self.camera.is_some()
             {
                 return Err(
                     "[sandbox] of an unsandboxed app takes only `unsandboxed` and `reason`"
@@ -112,6 +121,9 @@ impl SandboxSection {
             filesystems,
             devices,
             talk,
+            x11: self.x11.unwrap_or(false),
+            microphone: self.microphone.unwrap_or(false),
+            camera: self.camera.unwrap_or(false),
         })
     }
 }
@@ -129,6 +141,9 @@ impl Sandbox {
                 filesystems,
                 devices,
                 talk,
+                x11,
+                microphone,
+                camera,
             } => {
                 let mut table = format!("\n[sandbox]\nnetwork = {network}\n");
                 for (key, values) in [
@@ -143,6 +158,12 @@ impl Sandbox {
                             .collect::<Vec<_>>()
                             .join(", ");
                         table.push_str(&format!("{key} = [{list}]\n"));
+                    }
+                }
+                for (key, wanted) in [("x11", x11), ("microphone", microphone), ("camera", camera)]
+                {
+                    if *wanted {
+                        table.push_str(&format!("{key} = true\n"));
                     }
                 }
                 table
@@ -240,6 +261,17 @@ mod tests {
             }
         );
         assert!(parse("reason = \"x\"").is_err());
+    }
+
+    #[test]
+    fn the_display_and_recording_it_asks_for_reach_the_manifest() {
+        assert_eq!(
+            parse("network = false\nx11 = true\nmicrophone = true\ncamera = false")
+                .unwrap()
+                .manifest(),
+            "\n[sandbox]\nnetwork = false\nx11 = true\nmicrophone = true\n"
+        );
+        assert!(parse("unsandboxed = true\nreason = \"x\"\ncamera = true").is_err());
     }
 
     #[test]

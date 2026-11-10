@@ -252,6 +252,9 @@ platform applies it.
 | `filesystems` | array of strings | `[]` | `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`, optionally ending in `:ro` |
 | `devices` | array of strings | `[]` | `usb`, `serial` or `all` |
 | `talk` | array of strings | `[]` | Session bus names the app calls; a trailing `.*` covers the names below it |
+| `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
+| `microphone` | boolean | `false` | Whether the app records sound |
+| `camera` | boolean | `false` | Whether the app uses cameras |
 | `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox; takes only `reason` beside it |
 | `reason` | string | | Why the app can't run in a sandbox, in one line. Required with `unsandboxed = true` |
 

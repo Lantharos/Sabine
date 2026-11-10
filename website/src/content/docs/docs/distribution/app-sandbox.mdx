@@ -26,6 +26,9 @@ talk = ["org.mpris.MediaPlayer2.notes"]
 | `filesystems` | array of strings | none | Folders the app reaches: `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`. Add `:ro` for read-only access, such as `xdg-download:ro` |
 | `devices` | array of strings | none | `usb`, `serial` or `all` |
 | `talk` | array of strings | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it |
+| `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
+| `microphone` | boolean | `false` | Whether the app records sound |
+| `camera` | boolean | `false` | Whether the app uses cameras |
 | `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox |
 | `reason` | string | | One line, shown to whoever decides, explaining why the app can't run in a sandbox. Only with `unsandboxed = true` |
 
@@ -93,7 +96,9 @@ files through the desktop portal (`shell.openLink` and `shell.showFolder` do thi
 kernel applies what its Landlock version supports; a kernel without Landlock gets only the system
 call filter, and the app records that once in its diagnostics.
 
-The session bus isn't filtered yet, so `talk` is declared but not enforced by Sabine. Apps with
+The session bus isn't filtered yet, so `talk` is declared but not enforced by Sabine. `x11`,
+`microphone` and `camera` are declarations for a system that sandboxes the app, such as Luft;
+Sabine carries them into the bundle's manifest and doesn't enforce them itself. Apps with
 `unsandboxed = true`, apps without a `[sandbox]` table, and apps started with
 `SABINE_FULL_ACCESS` set run unconfined. A system sets `SABINE_FULL_ACCESS` for an app the person
 gave full access.

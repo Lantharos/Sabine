@@ -1,3 +1,9 @@
+# Unreleased
+
+- `[sandbox]` in `Sabine.toml` takes `x11`, `microphone` and `camera`, for an app to say that it
+  opens X11 windows, records sound or uses cameras. They are off unless declared and reach the
+  bundle's manifest with the rest of the declaration, for a system sandbox to act on.
+
 # Sabine 0.83
 
 - An app can keep a window open when someone asks it to close. `on_close_requested` hears the
