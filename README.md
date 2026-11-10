@@ -19,7 +19,7 @@ The shared service registers installed apps and manages runtime and app updates.
 Building an app requires Rust 1.98 or newer and Bun. The installed app does not need either tool.
 
 ```sh
-cargo install --git https://github.com/Lantharos/Sabine --tag v0.83 sabine-cli
+cargo install --git https://github.com/Lantharos/Sabine --tag v0.84 sabine-cli
 sabine new my-app
 cd my-app
 sabine dev
@@ -57,7 +57,7 @@ Generated projects already pin the matching Rust crate and TypeScript helper. Fo
 
 ```toml
 [dependencies]
-sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.83" }
+sabine = { git = "https://github.com/Lantharos/Sabine", tag = "v0.84" }
 specta = { version = "=2.0.0-rc.27", features = ["derive"] }
 
 [profile.release]
@@ -69,7 +69,7 @@ strip = true
 The release profile keeps the app binary small: generated projects use it too.
 
 ```sh
-bun add github:Lantharos/Sabine#v0.83
+bun add github:Lantharos/Sabine#v0.84
 ```
 
 ## Install and maintain

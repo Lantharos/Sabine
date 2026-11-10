@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.84
 
 - `[sandbox]` in `Sabine.toml` takes `x11`, `microphone` and `camera`, for an app to say that it
   opens X11 windows, records sound or uses cameras. They are off unless declared and reach the
