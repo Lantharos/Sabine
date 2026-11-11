@@ -1,3 +1,12 @@
+# Unreleased
+
+- A window can come back with what it showed when the desktop opens it again after signing in, as
+  Luft does after an update restart or a crash. `appWindow.keepState` keeps the open document,
+  folder or page as it changes, and `appWindow.restoredState` gives it back to the window the
+  desktop reopens. Closing the window or quitting the app forgets it. Every window carries a key
+  of its own as its Wayland toplevel tag, and the desktop names the windows it reopens in
+  `SABINE_RESTORE_WINDOWS`. Elsewhere `keepState` does nothing.
+
 # Sabine 0.85
 
 - Nothing an app is started with reaches Chromium. A window host now starts only from the app's

@@ -8,15 +8,31 @@ use crate::linux::wayland::Client;
 
 const MANAGER: &str = "kestrel_window_manager_v1";
 const RESIZES_FROM_OUTSIDE_VERSION: u32 = 2;
+const TAG_MANAGER: &str = "xdg_toplevel_tag_manager_v1";
 
-/// Whether the compositor lets people resize the window from just outside its
-/// edges, as Kestrel does from version 2 of `kestrel_window_v1`, so the window
-/// needs no resize area of its own over its content.
-pub fn resizes_from_outside(window: &dyn Window) -> bool {
-    Client::connect(window)
-        .ok()
-        .and_then(|client| client.version_of(MANAGER))
-        .is_some_and(|version| version >= RESIZES_FROM_OUTSIDE_VERSION)
+/// What the compositor of a window does for it beside the usual.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CompositorSupport {
+    /// People can resize the window from just outside its edges, as Kestrel
+    /// lets them from version 2 of `kestrel_window_v1`, so the window needs no
+    /// resize area of its own over its content.
+    pub resizes_from_outside: bool,
+    /// The compositor tells an app's windows apart by their
+    /// `xdg_toplevel_tag_v1` tag, so it can recognize a window when the app
+    /// opens it again.
+    pub tells_windows_apart: bool,
+}
+
+pub fn compositor_support(window: &dyn Window) -> CompositorSupport {
+    let Ok(client) = Client::connect(window) else {
+        return CompositorSupport::default();
+    };
+    CompositorSupport {
+        resizes_from_outside: client
+            .version_of(MANAGER)
+            .is_some_and(|version| version >= RESIZES_FROM_OUTSIDE_VERSION),
+        tells_windows_apart: client.version_of(TAG_MANAGER).is_some(),
+    }
 }
 
 /// Keeps a Wayland window out of the taskbar and window switcher, or above

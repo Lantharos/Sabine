@@ -7,6 +7,8 @@ mod listeners;
 mod manifest;
 pub(crate) mod origins;
 mod placement;
+#[cfg(target_os = "linux")]
+pub(crate) mod restore;
 pub(crate) mod style;
 
 pub use builder::AppChrome;

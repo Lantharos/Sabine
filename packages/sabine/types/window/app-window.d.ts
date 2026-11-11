@@ -40,6 +40,23 @@ export interface SabineWindowApi {
    */
   activationToken(): Promise<string | null>;
   /**
+   * What the window showed when the session it was open in ended, as it last
+   * passed it to `keepState`, when the desktop opens the window again after
+   * signing in. `null` for every other window, and on desktops that open apps
+   * anew.
+   */
+  restoredState<T = unknown>(): Promise<T | null>;
+  /**
+   * Keeps what the window shows, such as the open document or page, for the
+   * desktop to open the window again with after the session ends while it is
+   * open. Call it whenever that changes; Sabine writes the latest state once
+   * it stops changing for a moment, away from the page. Closing the window or
+   * quitting the app forgets it, and `null` forgets it at once. Keep it small,
+   * at most 256 KiB as JSON, and leave out anything secret: it is saved to the
+   * app's state folder as it is.
+   */
+  keepState(state: unknown): void;
+  /**
    * Keeps the window off screen until `ready` settles, so it first appears
    * with the page's first real view instead of an empty one. Call it while the
    * page starts, before it finishes loading, and settle `ready` once that view

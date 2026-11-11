@@ -4,12 +4,17 @@ mod media;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod paste_gesture;
+mod restore;
 mod shell;
+
+#[cfg(target_os = "linux")]
+pub(super) use restore::window_memory;
 
 use sabine_bridge::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND,
-    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND,
-    PRINT_FILES_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
+    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND, OPEN_LINK_COMMAND,
+    PAGE_ZOOM_COMMAND, PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND, REVEAL_COMMAND,
+    SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -118,6 +123,8 @@ impl OsrNativeHost {
                 );
             }
             ACTIVATION_TOKEN_COMMAND => self.answer_activation_token(&request),
+            RESTORED_STATE_COMMAND => self.answer_restored_state(&request),
+            KEEP_STATE_COMMAND => self.keep_state(&request),
             PRINT_FILES_COMMAND => self.answer_print(&request),
             OPEN_LINK_COMMAND => self.answer_open_link(&request),
             SHOW_FOLDER_COMMAND => self.answer_show_folder(&request),

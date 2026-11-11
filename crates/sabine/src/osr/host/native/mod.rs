@@ -171,7 +171,9 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) placement: Option<sabine_platform::WindowPlacement>,
     #[cfg(target_os = "linux")]
-    pub(super) resized_from_outside: bool,
+    pub(super) compositor: sabine_platform::CompositorSupport,
+    #[cfg(target_os = "linux")]
+    pub(super) memory: Option<crate::window::restore::WindowMemory>,
     pub(super) appearance: sabine_platform::AppearanceWatcher,
     pub(super) published_appearance: Option<sabine_platform::Appearance>,
     pub(super) notifier: Option<sabine_platform::Notifier>,
@@ -190,6 +192,8 @@ impl OsrNativeHost {
         proxy: EventLoopProxy,
     ) -> Self {
         let relay = ControlRelay::default();
+        #[cfg(target_os = "linux")]
+        let memory = crate::osr::host::page::window_memory(&config);
         let input_latency = super::input::InputLatency::traced(&config);
         start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
@@ -319,7 +323,9 @@ impl OsrNativeHost {
             #[cfg(target_os = "linux")]
             placement: None,
             #[cfg(target_os = "linux")]
-            resized_from_outside: false,
+            compositor: Default::default(),
+            #[cfg(target_os = "linux")]
+            memory,
             appearance: sabine_platform::AppearanceWatcher::start(move || {
                 appearance_proxy.wake_up()
             }),

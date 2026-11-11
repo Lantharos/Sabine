@@ -54,7 +54,7 @@ pub(crate) fn launch_process(
     ),
     metrics: LaunchMetrics,
 ) -> SabineResult<SabineProcess> {
-    require_app_id(config)?;
+    let app_id = require_app_id(config)?;
     let runtime_lease = sabine_runtime::RuntimeLease::acquire(runtime_dir).map_err(|error| {
         SabineError::CreationFailed {
             message: format!("failed to lease Sabine runtime: {error}"),
@@ -92,6 +92,7 @@ pub(crate) fn launch_process(
             bridge_handlers: bridge_handlers.clone(),
             primary: config.clone(),
             url: url.to_string(),
+            restoring: restoring_window(app_id),
         },
     };
     if !config.background {
@@ -101,6 +102,16 @@ pub(crate) fn launch_process(
         }
     }
     Ok(process)
+}
+
+#[cfg(target_os = "linux")]
+fn restoring_window(app_id: &str) -> Option<String> {
+    crate::window::restore::launched(app_id)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn restoring_window(_app_id: &str) -> Option<String> {
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -119,6 +130,9 @@ pub(crate) struct WindowContext {
     pub(crate) bridge_handlers: BridgeHandlers,
     pub(crate) primary: SabineWindowConfig,
     pub(crate) url: String,
+    /// The key of the window the desktop asked the first window to open as
+    /// again, until that window opens.
+    pub(crate) restoring: Option<String>,
 }
 
 /// Opens the window the app launches with, again after it closed when the app
@@ -129,7 +143,8 @@ pub(crate) fn open_primary_window(
 ) -> SabineResult<()> {
     let config = process.windows.primary.clone();
     let url = process.windows.url.clone();
-    let (child, ready) = spawn_window(process, &config, &url, activation_token)?;
+    let restoring = process.windows.restoring.take();
+    let (child, ready) = spawn_window(process, &config, &url, activation_token, restoring)?;
     process.primary = Some(PrimaryWindow {
         child,
         ready,
@@ -147,7 +162,7 @@ pub(crate) fn attach_open_window(
     window_config.app_id = process.windows.primary.app_id.clone();
     window_config.bridge = process.windows.primary.bridge.clone();
     window_config.listeners.open_urls = process.open_urls.clone();
-    let (child, _) = spawn_window(process, &window_config, url, None)?;
+    let (child, _) = spawn_window(process, &window_config, url, None, None)?;
     let window_id = child.id();
     process.extra_windows.push(child);
     Ok(window_id)
@@ -158,6 +173,7 @@ fn spawn_window(
     config: &SabineWindowConfig,
     url: &str,
     activation_token: Option<String>,
+    restoring: Option<String>,
 ) -> SabineResult<(ManagedChild, crossbeam_channel::Receiver<()>)> {
     let context = &process.windows;
     let mut child = spawn_osr_host_child(
@@ -166,6 +182,7 @@ fn spawn_window(
         config,
         url,
         activation_token,
+        restoring,
     )?;
     let dispatch = spawn_bridge_dispatch(
         &mut child,
@@ -187,13 +204,15 @@ fn spawn_window(
 }
 
 /// Only a window someone asked for carries an activation token: the one the
-/// launch opens, or the one an activation opens for a background app.
+/// launch opens, or the one an activation opens for a background app. Only
+/// the window the launch opens may open as a window the desktop restores.
 pub(crate) fn spawn_osr_host_child(
     runtime_dir: &Path,
     host_binary: &Path,
     config: &SabineWindowConfig,
     url: &str,
     activation_token: Option<String>,
+    restoring: Option<String>,
 ) -> SabineResult<std::process::Child> {
     let _ = require_app_id(config)?;
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
@@ -251,9 +270,10 @@ pub(crate) fn spawn_osr_host_child(
         body["shared_runtime"] = config.browser.shares_runtime(config.dev_mode()).into();
         body["parent_window"] = config.parent_window.clone().into();
         body["modal"] = config.modal.into();
+        body["restoring"] = restoring.into();
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = activation_token;
+    let _ = (activation_token, restoring);
     let exe = std::env::current_exe().map_err(|error| SabineError::CreationFailed {
         message: error.to_string(),
     })?;
@@ -264,6 +284,8 @@ pub(crate) fn spawn_osr_host_child(
         .env_remove("XDG_ACTIVATION_TOKEN")
         .env_remove("DESKTOP_STARTUP_ID")
         .stderr(Stdio::piped());
+    #[cfg(target_os = "linux")]
+    command.env_remove(crate::window::restore::RESTORE_WINDOWS);
     prepare_bridge_command(&mut command);
     prepare_child_command(&mut command);
     let mut child = command

@@ -11,5 +11,5 @@ pub use controls_overlay::{ControlsOverlay, controls_overlay};
 pub use effect::WindowEffect;
 pub use options::{WindowBackgroundEffect, WindowChrome, WindowOptions};
 #[cfg(target_os = "linux")]
-pub use placement::{WindowPlacement, resizes_from_outside};
+pub use placement::{CompositorSupport, WindowPlacement, compositor_support};
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};

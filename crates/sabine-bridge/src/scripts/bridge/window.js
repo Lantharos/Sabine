@@ -44,6 +44,12 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
   activationToken() {
     return window.sabine.bridge.invoke("sabine.window.activationToken");
   },
+  restoredState() {
+    return window.sabine.bridge.invoke("sabine.window.restoredState");
+  },
+  keepState(state) {
+    window.sabine.bridge.invoke("sabine.window.keepState", { state: state ?? null }).catch(() => {});
+  },
   revealWhen(ready) {
     const reveal = () => requestAnimationFrame(() => {
       window.sabine.bridge.invoke("sabine.window.reveal").catch(() => {});

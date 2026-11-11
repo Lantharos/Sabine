@@ -27,6 +27,7 @@ impl OsrNativeHost {
             self.hide_window("close");
             Flow::Continue
         } else {
+            self.forget_state();
             self.begin_close(event_loop);
             Flow::Closed
         }

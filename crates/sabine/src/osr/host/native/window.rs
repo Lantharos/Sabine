@@ -103,7 +103,7 @@ impl OsrNativeHost {
             self.attach_clipboard(window.as_ref());
             self.attach_foreign_parent(window.as_ref());
             self.place_window(window.as_ref());
-            self.resized_from_outside = sabine_platform::resizes_from_outside(window.as_ref());
+            self.compositor = sabine_platform::compositor_support(window.as_ref());
         }
         self.restore_ime_state();
         if let Err(error) = self.restore_shortcut_inhibitor() {
@@ -150,6 +150,9 @@ impl OsrNativeHost {
         });
         if let Some(token) = token {
             attributes = attributes.with_activation_token(token);
+        }
+        if let Some(memory) = &self.memory {
+            attributes = attributes.with_tag(memory.key());
         }
         attributes
     }
@@ -238,7 +241,7 @@ impl OsrNativeHost {
     /// and so does Kestrel, from just outside them.
     pub(in crate::osr::host) fn resize_edge_under_cursor(&self) -> Option<ResizeDirection> {
         #[cfg(target_os = "linux")]
-        let resized_elsewhere = self.resized_from_outside;
+        let resized_elsewhere = self.compositor.resizes_from_outside;
         #[cfg(not(target_os = "linux"))]
         let resized_elsewhere = cfg!(target_os = "macos");
         let draws_edges = self.config.resizable

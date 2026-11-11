@@ -20,6 +20,12 @@ pub const ACTIVATION_TOKEN_COMMAND: &str = "sabine.window.activationToken";
 /// [`REVEAL_COMMAND`], so the window appears with the page's first view.
 pub const HOLD_REVEAL_COMMAND: &str = "sabine.window.holdReveal";
 pub const REVEAL_COMMAND: &str = "sabine.window.reveal";
+/// What the window showed when the session it was open in ended, for a
+/// window the desktop opens again, and `null` for every other window.
+pub const RESTORED_STATE_COMMAND: &str = "sabine.window.restoredState";
+/// Keeps what the window shows, for the desktop to open it again with after
+/// the session ends while the window is open.
+pub const KEEP_STATE_COMMAND: &str = "sabine.window.keepState";
 /// Sent when the corner the system's window controls cover changes.
 pub const CONTROLS_OVERLAY_EVENT: &str = "window.controlsOverlay";
 pub const APPEARANCE_COMMAND: &str = "sabine.system.appearance";
@@ -39,7 +45,7 @@ pub const OPEN_LINK_COMMAND: &str = "sabine.shell.openLink";
 /// Opens a folder in the person's file manager.
 pub const SHOW_FOLDER_COMMAND: &str = "sabine.shell.showFolder";
 
-const WINDOW_COMMANDS: [&str; 15] = [
+const WINDOW_COMMANDS: [&str; 17] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
@@ -48,6 +54,8 @@ const WINDOW_COMMANDS: [&str; 15] = [
     ACTIVATION_TOKEN_COMMAND,
     HOLD_REVEAL_COMMAND,
     REVEAL_COMMAND,
+    RESTORED_STATE_COMMAND,
+    KEEP_STATE_COMMAND,
     APPEARANCE_COMMAND,
     NOTIFICATION_SHOW_COMMAND,
     NOTIFICATION_CLOSE_COMMAND,

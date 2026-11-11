@@ -1,0 +1,55 @@
+---
+title: Opening again after signing in
+description: Keep what a window shows, so a desktop that reopens apps after a restart brings the window back with it.
+sidebar:
+  order: 6
+---
+
+Some desktops open the apps that were running when the session ended again once you sign back in,
+after an update restart or a crash. Luft does. Each window comes back where it was, and a Sabine
+window can come back with what it showed too: the open document, folder, page or conversation.
+
+The page tells Sabine what it shows, and asks for it back when it starts.
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+const shown = await appWindow.restoredState<{ folder: string }>();
+await openFolder(shown?.folder ?? homeFolder);
+
+function openFolder(folder: string) {
+  appWindow.keepState({ folder });
+  // …
+}
+```
+
+## Keeping state
+
+`appWindow.keepState(state)` takes anything JSON can hold, up to 256 KiB. Call it every time what
+the window shows changes. Calls are cheap: Sabine writes the last state once it has stopped
+changing for half a second, on a thread of its own, so the page never waits for the disk.
+`keepState(null)` forgets it.
+
+Keep it to what brings the view back, such as paths and ids, and never anything secret: passwords,
+tokens and unlocked contents don't belong in it. Sabine saves it as it is, readable by the account,
+in the `windows` folder of the app's state folder, `$XDG_STATE_HOME/<app id>/windows`.
+
+What people close stays closed. Closing the window, with its close button, the desktop or
+`appWindow.close()`, and quitting the app forget its state, so only windows still open when the
+session ended come back with theirs.
+
+## Getting it back
+
+`appWindow.restoredState()` gives the window the state it last kept, when the desktop opens it
+again, and `null` otherwise: for a window people open themselves, for every window the app opens
+after its first, and on desktops that open apps anew. Things the app was asked to open, such as a
+file it was started with, usually go before the restored state.
+
+## Where it works
+
+Sabine keeps state only on desktops that can tell an app's windows apart when it opens again. Each
+window carries a key of its own as its `xdg_toplevel_tag_v1` tag on Wayland. A desktop that
+reopens the app names the keys of the windows it had in `SABINE_RESTORE_WINDOWS`, and the app's
+first window opens as the first of them that left state behind. Two copies of an app never open as
+the same window. On Windows, macOS and Wayland desktops without the tag protocol, `keepState` does
+nothing and `restoredState` is always `null`.

@@ -376,6 +376,19 @@ person asked to. Pass it to the app as `XDG_ACTIVATION_TOKEN` in its environment
 `activation_token` in a portal request. It works only while this window is in front, and is
 `null` where the desktop needs none.
 
+### `restoredState()` and `keepState(state)`
+
+```ts
+restoredState<T = unknown>(): Promise<T | null>;
+keepState(state: unknown): void;
+```
+
+`keepState` keeps what the window shows, at most 256 KiB as JSON, for a desktop that opens the
+window again after the session ends while it is open. Sabine writes the latest state once it stops
+changing, away from the page, and forgets it when the window closes or the app quits, or at once
+for `null`. `restoredState` gives a window the desktop opened again the state it last kept, and
+`null` to every other window. See [Opening again after signing in](/docs/windows/session-restore/).
+
 ### `inhibitShortcuts(enabled)`
 
 ```ts

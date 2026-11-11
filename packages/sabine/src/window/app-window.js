@@ -47,6 +47,12 @@ export const appWindow = {
   activationToken() {
     return requireApi().window.activationToken();
   },
+  restoredState() {
+    return requireApi().window.restoredState();
+  },
+  keepState(state) {
+    requireApi().window.keepState(state);
+  },
   revealWhen(ready) {
     requireApi().window.revealWhen(ready);
   },

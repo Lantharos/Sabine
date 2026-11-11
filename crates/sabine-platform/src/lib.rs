@@ -21,11 +21,11 @@ pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]
 pub use shortcut_inhibit::SystemKey;
 pub use tasks::async_runtime;
+#[cfg(target_os = "linux")]
+pub use window::{CompositorSupport, WindowPlacement, compositor_support};
 #[cfg(target_os = "macos")]
 pub use window::{ControlsOverlay, controls_overlay};
 pub use window::{
     WindowBackgroundEffect, WindowChrome, WindowEffect, WindowOptions, WindowRegion,
     WindowRegionAdaptive, WindowRegionRect, WindowRegions,
 };
-#[cfg(target_os = "linux")]
-pub use window::{WindowPlacement, resizes_from_outside};

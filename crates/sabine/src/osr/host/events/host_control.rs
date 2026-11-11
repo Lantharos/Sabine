@@ -31,6 +31,7 @@ impl OsrNativeHost {
             HostControl::Close => return self.close_window(event_loop),
             HostControl::Quit => {
                 self.remember_size();
+                self.forget_state();
                 self.begin_close(event_loop);
                 return Flow::Closed;
             }
