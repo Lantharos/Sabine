@@ -23,14 +23,11 @@ impl OsrNativeHost {
             .memory
             .as_ref()
             .and_then(WindowMemory::restored)
-            .cloned();
+            .cloned()
+            .unwrap_or(Value::Null);
         #[cfg(not(target_os = "linux"))]
-        let restored = None;
-        self.send_bridge_response(
-            request.browser_id,
-            request.request_id,
-            Ok(restored.unwrap_or(Value::Null)),
-        );
+        let restored = Value::Null;
+        self.send_bridge_response(request.browser_id, request.request_id, Ok(restored));
     }
 
     pub(super) fn keep_state(&mut self, request: &BridgeRequest) {
