@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.86
 
 - A window can come back with what it showed when the desktop opens it again after signing in, as
   Luft does after an update restart or a crash. `appWindow.keepState` keeps the open document,
