@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.85
 
 - Nothing an app is started with reaches Chromium. A window host now starts only from the app's
   own launch and takes its configuration from the app over its input, so starting an installed
