@@ -1,3 +1,4 @@
+use std::io::BufRead;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,11 +73,15 @@ impl OsrHostConfig {
         }
     }
 
-    pub(super) fn read(config_path: PathBuf) -> Result<Self, String> {
-        let text = std::fs::read_to_string(&config_path).map_err(|error| error.to_string())?;
+    /// Reads the configuration the app sends first on the window host's input,
+    /// ahead of the bridge messages that follow it on the same pipe.
+    pub(super) fn read(input: &mut impl BufRead) -> Result<Self, String> {
+        let mut line = String::new();
+        input
+            .read_line(&mut line)
+            .map_err(|error| error.to_string())?;
         let value: serde_json::Value =
-            serde_json::from_str(&text).map_err(|error| error.to_string())?;
-        let _ = std::fs::remove_file(config_path);
+            serde_json::from_str(&line).map_err(|error| error.to_string())?;
         Ok(Self {
             runtime_dir: path_value(&value, "runtime_dir")?,
             host_binary: path_value(&value, "host_binary")?,
@@ -259,4 +264,37 @@ pub(super) fn string_value(value: &serde_json::Value, key: &str) -> Result<Strin
         .and_then(serde_json::Value::as_str)
         .map(ToString::to_string)
         .ok_or_else(|| format!("OSR host config missing {key}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::OsrHostConfig;
+    use crate::bridge::frame::Frame;
+
+    #[test]
+    fn reads_its_configuration_ahead_of_the_bridge_messages() {
+        let config = serde_json::json!({
+            "runtime_dir": "/runtime",
+            "host_binary": "/runtime/sabine-host",
+            "url": "sabine://app/index.html",
+            "app_id": "com.example.notes",
+            "background_color": [0, 0, 0, 255],
+            "bridge_policy": { "enabled": true },
+            "dev_mode": false,
+        });
+        let mut input = Cursor::new(format!("{config}\napp.ready\n"));
+
+        let host = OsrHostConfig::read(&mut input).unwrap();
+
+        assert_eq!(host.url, "sabine://app/index.html");
+        assert_eq!(host.app_id.as_deref(), Some("com.example.notes"));
+        assert!(!host.dev_mode);
+        assert_eq!(host.remote_devtools_port, None);
+        assert_eq!(
+            Frame::read(&mut input).unwrap(),
+            Some(Frame::line("app.ready"))
+        );
+    }
 }

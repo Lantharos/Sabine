@@ -1,8 +1,8 @@
 use std::{
     ffi::OsString,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::bridge::BridgeEventEmitter;
@@ -19,22 +19,18 @@ use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
 pub(crate) const OSR_HOST_ARG: &str = "--sabine-osr-host";
 
-pub(crate) fn run_from_args(args: &[String]) -> bool {
-    let Some(index) = args.iter().position(|arg| arg == OSR_HOST_ARG) else {
-        return false;
-    };
-    let Some(config_path) = args.get(index + 1).map(PathBuf::from) else {
-        sabine_runtime::report_error(
-            "window",
-            "the window host was started without its configuration",
-        );
-        std::process::exit(1);
-    };
-    if let Err(error) = crate::osr::host::run(config_path) {
+/// Whether the app was started as one of its own window hosts: with the
+/// window host switch alone, which only the app's own launch passes. Anything
+/// else on the command line makes it an ordinary launch.
+pub(crate) fn starts_window_host(args: &[String]) -> bool {
+    matches!(args, [_, mode] if mode == OSR_HOST_ARG)
+}
+
+pub(crate) fn run_window_host() {
+    if let Err(error) = crate::osr::host::run() {
         crate::launch::bootstrap::show_failure("The application could not continue", &error);
         std::process::exit(1);
     }
-    true
 }
 
 pub(crate) fn require_app_id(config: &SabineWindowConfig) -> SabineResult<&str> {
@@ -200,8 +196,6 @@ pub(crate) fn spawn_osr_host_child(
     activation_token: Option<String>,
 ) -> SabineResult<std::process::Child> {
     let _ = require_app_id(config)?;
-    let host_config_path =
-        std::env::temp_dir().join(format!("sabine-osr-{}.json", osr_instance_key()));
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut body = serde_json::json!({
         "runtime_dir": runtime_dir,
@@ -260,12 +254,6 @@ pub(crate) fn spawn_osr_host_child(
     }
     #[cfg(not(target_os = "linux"))]
     let _ = activation_token;
-    std::fs::write(&host_config_path, body.to_string()).map_err(|error| {
-        SabineError::CreationFailed {
-            message: format!("failed to write Sabine OSR host config: {error}"),
-        }
-    })?;
-
     let exe = std::env::current_exe().map_err(|error| SabineError::CreationFailed {
         message: error.to_string(),
     })?;
@@ -273,7 +261,6 @@ pub(crate) fn spawn_osr_host_child(
     sabine_runtime::configure_background_command(&mut command);
     command
         .arg(OSR_HOST_ARG)
-        .arg(&host_config_path)
         .env_remove("XDG_ACTIVATION_TOKEN")
         .env_remove("DESKTOP_STARTUP_ID")
         .stderr(Stdio::piped());
@@ -285,6 +272,16 @@ pub(crate) fn spawn_osr_host_child(
             message: format!("failed to launch Sabine OSR host: {error}"),
         })?;
     sabine_runtime::capture_diagnostics(&mut child, "osr");
+    let mut message = body.to_string();
+    message.push('\n');
+    child
+        .stdin
+        .as_mut()
+        .expect("the window host's input is piped")
+        .write_all(message.as_bytes())
+        .map_err(|error| SabineError::CreationFailed {
+            message: format!("failed to configure Sabine OSR host: {error}"),
+        })?;
     Ok(child)
 }
 
@@ -481,10 +478,19 @@ fn browser_profile_key(config: &crate::osr::host::OsrHostConfig) -> String {
         .to_string()
 }
 
-fn osr_instance_key() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    format!("{}-{nanos}", std::process::id())
+#[cfg(test)]
+mod tests {
+    use super::{OSR_HOST_ARG, starts_window_host};
+
+    fn launch(args: &[&str]) -> bool {
+        starts_window_host(&args.iter().map(ToString::to_string).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn only_the_app_s_own_launch_starts_a_window_host() {
+        assert!(launch(&["notes", OSR_HOST_ARG]));
+        assert!(!launch(&["notes"]));
+        assert!(!launch(&["notes", OSR_HOST_ARG, "/tmp/window.json"]));
+        assert!(!launch(&["notes", "report.txt", OSR_HOST_ARG]));
+    }
 }

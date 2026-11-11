@@ -17,8 +17,9 @@ use crate::osr;
 use crate::window::config::SabineWindowConfig;
 
 pub(crate) fn dispatch_host_mode_from_args(args: &[String]) -> bool {
-    if args.iter().any(|arg| arg == osr::launch::OSR_HOST_ARG) {
-        return osr::run_from_args(args);
+    if osr::launch::starts_window_host(args) {
+        osr::launch::run_window_host();
+        return true;
     }
     if args.iter().any(|arg| {
         matches!(

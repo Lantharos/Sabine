@@ -162,16 +162,45 @@ fn amd_debug_without_dcc(existing: Option<&str>) -> String {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(test)]
 mod tests {
-    use super::amd_debug_without_dcc;
+    use std::process::Command;
 
+    #[cfg(target_os = "linux")]
+    use super::amd_debug_without_dcc;
+    use super::{BrowserOptions, apply_browser_launch_args};
+
+    fn switches(options: &BrowserOptions) -> Vec<String> {
+        let mut command = Command::new("sabine-host");
+        apply_browser_launch_args(&mut command, options, false);
+        command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn production_opens_remote_debugging_only_when_the_app_asks() {
+        assert!(
+            !switches(&BrowserOptions::default())
+                .iter()
+                .any(|switch| switch.starts_with("--remote-"))
+        );
+        let debugged = switches(&BrowserOptions {
+            remote_devtools_port: Some(9333),
+            ..BrowserOptions::default()
+        });
+        assert!(debugged.contains(&"--remote-debugging-port=9333".to_string()));
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn turns_off_dcc_for_chromium() {
         assert_eq!(amd_debug_without_dcc(None), "nodcc");
         assert_eq!(amd_debug_without_dcc(Some(" ")), "nodcc");
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn keeps_the_app_s_amd_debug_options() {
         assert_eq!(amd_debug_without_dcc(Some("nohyperz")), "nohyperz,nodcc");

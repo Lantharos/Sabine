@@ -115,7 +115,7 @@ On Linux, every Chromium process stays in the systemd unit the app was started i
 
 <Steps>
 
-1. **Internal modes.** The executable checks its arguments first. A window host, setup window, notice or prompt runs its job and exits; an ordinary launch continues.
+1. **Internal modes.** The executable checks its arguments first. A window host, setup window, notice or prompt runs its job and exits; an ordinary launch continues. A window host starts only when its switch is the sole argument, and reads its configuration from the app over its input.
 
 2. **Configuration.** Sabine finds `Sabine.toml` and applies it, then runs your builder, so settings made in Rust win. When `sabine bindings` started the app, it writes or checks the TypeScript bindings and exits here.
 

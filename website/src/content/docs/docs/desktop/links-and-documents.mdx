@@ -107,6 +107,10 @@ notes --profile work ~/Notes/Ideas.md my-notes://open/42 config.toml
 Here `~/Notes/Ideas.md` and `my-notes://open/42` are queued; `--profile`, `work` and `config.toml`
 are not.
 
+Arguments are only ever the app's to read. Sabine never passes them on to Chromium, so a launch
+with `--remote-debugging-port=9222` or `--proxy-server=…` changes nothing about the app's browser.
+See [Launch arguments](/docs/concepts/security-model/#launch-arguments).
+
 ### Keeping links in one window
 
 On Linux and Windows the desktop opens a link or document by starting the app with it as an

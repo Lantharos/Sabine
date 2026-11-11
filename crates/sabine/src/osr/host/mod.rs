@@ -11,7 +11,6 @@ pub(in crate::osr) mod types;
 mod ui;
 pub(in crate::osr) mod viewport;
 
-use std::path::PathBuf;
 use std::sync::{LazyLock, mpsc};
 use std::time::Instant;
 
@@ -27,9 +26,9 @@ use native::OsrNativeHost;
 
 static STARTED: LazyLock<Instant> = LazyLock::new(Instant::now);
 
-pub(crate) fn run(config_path: PathBuf) -> Result<(), String> {
+pub(crate) fn run() -> Result<(), String> {
     LazyLock::force(&STARTED);
-    let config = OsrHostConfig::read(config_path)?;
+    let config = OsrHostConfig::read(&mut std::io::stdin().lock())?;
     let mut event_loop_builder = EventLoop::builder();
     #[cfg(target_os = "linux")]
     event_loop_builder.with_reconnect(true);

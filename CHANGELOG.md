@@ -1,3 +1,14 @@
+# Unreleased
+
+- Nothing an app is started with reaches Chromium. A window host now starts only from the app's
+  own launch and takes its configuration from the app over its input, so starting an installed
+  app with its window host switch and a file of one's own can no longer open its profile with
+  remote debugging, another page or another program as its browser. Arguments stay the app's to
+  read, and remote debugging opens only in development runs or with `.debug(port)`.
+- A confined app no longer reads home folders kept under `/var`, such as `/var/home` on
+  Fedora Atomic and Luft. Its sandbox lets it read `/var/lib`, `/var/cache`, `/var/opt` and
+  `/var/usrlocal` instead of all of `/var`.
+
 # Sabine 0.84
 
 - `[sandbox]` in `Sabine.toml` takes `x11`, `microphone` and `camera`, for an app to say that it

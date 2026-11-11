@@ -143,8 +143,9 @@ decides what a call may do.
 
 Development runs open Chromium's remote debugging port on `127.0.0.1`, 9222 unless
 `SABINE_DEVTOOLS_PORT` names another, and add `Open DevTools` to the page's context menu.
-Production runs open neither unless the app calls `.debug(port)`. Leave `.debug` out of builds
-you ship: anything on the machine that can reach the port can drive the page.
+Production runs open neither unless the app calls `.debug(port)`, whatever arguments they were
+started with. Leave `.debug` out of builds you ship: anything on the machine that can reach the
+port can drive the page.
 
 A run is a development run when `SABINE_ENV` is `development` or `SABINE_DEV_URL` is set, which
 `sabine dev` does. A build made for production, with `SABINE_ENV=production` while it compiles as

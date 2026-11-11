@@ -14,6 +14,7 @@ A Sabine app combines native code, which can do anything its user can, with web 
 | Browser sandbox | Web content and the operating system | Chromium's sandbox, on every platform |
 | Bridge rules | Pages and your native commands | The Sabine host, before anything reaches your app |
 | Guests | Embedded third-party pages and your app | No bridge, separate storage, explicit policies |
+| Launch arguments | Whoever starts the app and its Chromium | Arguments reach the app as data, never Chromium |
 | Profiles | One app's web data and another's | Separate Chromium profiles per app id |
 | Window connections | A window and anything else on the machine | Per-window sockets, tokens and peer checks |
 | Shared runtime | Apps that share one Chromium on Linux | Executable checks on every request |
@@ -89,6 +90,14 @@ Guests are pages your app embeds, such as a website shown inside the window, and
 - Shortcuts your app intercepts never reach the guest.
 
 See [Guests](/docs/web/guests/).
+
+## Launch arguments
+
+Anything that can start your app can pass it arguments: a desktop entry passes the files and links it opens, and any program can start the executable with whatever it likes. None of them ever reach Chromium. Sabine writes Chromium's command line itself, from your app's configuration, so arguments such as `--remote-debugging-port`, `--renderer-cmd-prefix`, `--load-extension`, `--user-data-dir`, `--no-sandbox`, `--disable-web-security` or `--proxy-server` can't give someone else your app's windows or weaken its browser. The app's arguments are delivered to the app, as [documents and links to open](/docs/desktop/links-and-documents/#command-line-arguments) or as a [single instance](/docs/desktop/single-instance/) activation.
+
+The app's own executable also runs its window hosts. A window host takes its configuration from the app that started it, over its input, and starts only when the command line holds nothing but its own switch, so passing that switch from outside starts an ordinary launch or a window host with nothing to show.
+
+Debugging follows the same rule: Chromium's remote debugging port opens in development runs, or when your app calls `.debug(port)`, and never because of how the app was started. See [DevTools](#devtools).
 
 ## Profiles
 
