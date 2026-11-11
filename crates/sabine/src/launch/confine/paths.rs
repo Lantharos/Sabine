@@ -4,7 +4,7 @@ use landlock::{ABI, Access, AccessFs, BitFlags};
 
 pub(super) const LANDLOCK: ABI = ABI::V9;
 
-const SYSTEM: [&str; 11] = [
+const SYSTEM: [&str; 14] = [
     "/usr",
     "/etc",
     "/opt",
@@ -12,7 +12,10 @@ const SYSTEM: [&str; 11] = [
     "/lib64",
     "/bin",
     "/sbin",
-    "/var",
+    "/var/lib",
+    "/var/cache",
+    "/var/opt",
+    "/var/usrlocal",
     "/sys",
     "/nix/store",
     "/gnu/store",
