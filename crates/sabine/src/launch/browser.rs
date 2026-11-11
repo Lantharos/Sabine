@@ -188,7 +188,10 @@ mod tests {
         );
         let debugged = switches(&BrowserOptions {
             remote_devtools_port: Some(9333),
-            ..BrowserOptions::default()
+            #[cfg(target_os = "linux")]
+            vaapi_hardware_decode: false,
+            #[cfg(target_os = "linux")]
+            separate_runtime: false,
         });
         assert!(debugged.contains(&"--remote-debugging-port=9333".to_string()));
     }
