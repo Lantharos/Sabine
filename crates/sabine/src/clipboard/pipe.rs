@@ -2,7 +2,6 @@ use std::{
     fs::File,
     io::{self, Read, Write},
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
-    sync::Arc,
     thread,
     time::Instant,
 };
@@ -59,15 +58,18 @@ pub(crate) fn read_to_end(fd: OwnedFd, deadline: Instant) -> io::Result<Vec<u8>>
     }
 }
 
-/// Hands `bytes` to a reader on another thread, so a slow reader never
-/// holds up the clipboard.
-pub(crate) fn send(fd: OwnedFd, bytes: Arc<[u8]>) {
+/// Hands what `make` makes to a reader on another thread, so neither making
+/// it nor a slow reader ever holds up the clipboard.
+pub(crate) fn send<B: AsRef<[u8]>>(fd: OwnedFd, make: impl FnOnce() -> Option<B> + Send + 'static) {
     thread::spawn(move || {
+        let Some(bytes) = make() else {
+            return;
+        };
         let mut file = File::from(fd);
         unsafe {
             let flags = libc::fcntl(file.as_raw_fd(), libc::F_GETFL);
             libc::fcntl(file.as_raw_fd(), libc::F_SETFL, flags & !libc::O_NONBLOCK);
         }
-        let _ = file.write_all(&bytes);
+        let _ = file.write_all(bytes.as_ref());
     });
 }

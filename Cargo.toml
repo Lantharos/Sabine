@@ -120,16 +120,16 @@ wayland-client = "0.31.15"
 wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
 wayland-scanner = "0.31.11"
 wgpu = "30.0.1"
-winit = { git = "https://github.com/Lantharos/winit", rev = "72e9b442b93fd8a01c716f5646a521438b9becaa", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
+winit = { git = "https://github.com/Lantharos/winit", rev = "3c3c0c3347e9dedfd29a145ebc4bc8c57f181db1", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita"] }
 xdg-mime = "0.4.0"
 windows = "0.62.2"
 windows-core = "0.62.2"
 zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }
 
 [patch.crates-io]
-dpi = { git = "https://github.com/Lantharos/winit", rev = "72e9b442b93fd8a01c716f5646a521438b9becaa" }
-winit-common = { git = "https://github.com/Lantharos/winit", rev = "72e9b442b93fd8a01c716f5646a521438b9becaa" }
-winit-core = { git = "https://github.com/Lantharos/winit", rev = "72e9b442b93fd8a01c716f5646a521438b9becaa" }
+dpi = { git = "https://github.com/Lantharos/winit", rev = "3c3c0c3347e9dedfd29a145ebc4bc8c57f181db1" }
+winit-common = { git = "https://github.com/Lantharos/winit", rev = "3c3c0c3347e9dedfd29a145ebc4bc8c57f181db1" }
+winit-core = { git = "https://github.com/Lantharos/winit", rev = "3c3c0c3347e9dedfd29a145ebc4bc8c57f181db1" }
 
 [profile.release]
 lto = "fat"

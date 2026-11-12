@@ -243,6 +243,16 @@ impl OsrNativeHost {
 
 fn desktop_transfer(content: &DragContent) -> Box<dyn winit::data_transfer::DataTransferSend> {
     let mut transfer = DataTransferSendBuilder::new(content.clone());
+    #[cfg(target_os = "linux")]
+    if !content.files.is_empty() {
+        use crate::clipboard::transfer;
+        for mime in transfer::TYPES {
+            transfer.add_type(
+                winit::platform::wayland::MimeType::new(mime),
+                |content, _| transfer::key(&content.files).map(SendData::Bytes),
+            );
+        }
+    }
     let mut uris = content
         .files
         .iter()

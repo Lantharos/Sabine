@@ -1,3 +1,10 @@
+# Unreleased
+
+- On Linux, files copied or dragged out of a window reach apps in a sandbox, such as Flatpaks and
+  sandboxed AppImages. The window offers them through the document portal's file transfer next to
+  `text/uri-list`, and registers them only when an app asks, on a thread of its own, with a key
+  that works once.
+
 # Sabine 0.87
 
 - A file someone drops on a confined app's window or opens with the app reaches it outside its

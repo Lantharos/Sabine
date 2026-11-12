@@ -51,13 +51,28 @@ impl ClipboardContent {
         self.items.is_empty()
     }
 
-    /// The types to advertise: every item, plus the older names of plain text.
+    /// The files among the items, from the URIs in `text/uri-list`.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn files(&self) -> Vec<std::path::PathBuf> {
+        self.bytes_for(URI_LIST)
+            .map(|list| super::transfer::files_in(&list))
+            .unwrap_or_default()
+    }
+
+    /// The types to advertise: every item, plus the older names of plain text,
+    /// and first the file transfer when the items carry files, which receivers
+    /// in a sandbox look for.
     #[cfg(target_os = "linux")]
     pub(crate) fn offered_types(&self) -> Vec<String> {
-        let mut types = self
-            .items
+        let transfer: &[&str] = if self.files().is_empty() {
+            &[]
+        } else {
+            &super::transfer::TYPES
+        };
+        let mut types = transfer
             .iter()
-            .map(|(mime, _)| mime.clone())
+            .map(|mime| mime.to_string())
+            .chain(self.items.iter().map(|(mime, _)| mime.clone()))
             .collect::<Vec<_>>();
         if self.items.iter().any(|(mime, _)| mime == TEXT) {
             types.extend(

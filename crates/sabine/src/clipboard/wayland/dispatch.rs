@@ -29,7 +29,18 @@ use wayland_protocols::{
 use super::objects::{Offer, OfferTypes};
 use super::state::State;
 use crate::clipboard::pipe::send;
-use crate::clipboard::{ClipboardContent, Selection};
+use crate::clipboard::{ClipboardContent, Selection, transfer};
+
+/// Answers a receiver with the content in `mime`, registering the files
+/// with the portal first when it asks for a file transfer.
+fn serve(content: &ClipboardContent, mime: &str, fd: std::os::fd::OwnedFd) {
+    if transfer::carries(mime) {
+        let files = content.files();
+        send(fd, move || transfer::key(&files));
+    } else if let Some(bytes) = content.bytes_for(mime) {
+        send(fd, move || Some(bytes));
+    }
+}
 
 delegate_noop!(State: WlDataDeviceManager);
 delegate_noop!(State: ZwpPrimarySelectionDeviceManagerV1);
@@ -156,11 +167,7 @@ impl Dispatch<WlDataSource, ClipboardContent> for State {
         _: &QueueHandle<Self>,
     ) {
         match event {
-            wl_data_source::Event::Send { mime_type, fd } => {
-                if let Some(bytes) = content.bytes_for(&mime_type) {
-                    send(fd, bytes);
-                }
-            }
+            wl_data_source::Event::Send { mime_type, fd } => serve(content, &mime_type, fd),
             wl_data_source::Event::Cancelled => state.release_source(source),
             _ => {}
         }
@@ -212,9 +219,7 @@ impl Dispatch<ZwpPrimarySelectionSourceV1, ClipboardContent> for State {
     ) {
         match event {
             zwp_primary_selection_source_v1::Event::Send { mime_type, fd } => {
-                if let Some(bytes) = content.bytes_for(&mime_type) {
-                    send(fd, bytes);
-                }
+                serve(content, &mime_type, fd)
             }
             zwp_primary_selection_source_v1::Event::Cancelled => state.release_source(source),
             _ => {}
@@ -273,9 +278,7 @@ impl Dispatch<ExtDataControlSourceV1, ClipboardContent> for State {
     ) {
         match event {
             ext_data_control_source_v1::Event::Send { mime_type, fd } => {
-                if let Some(bytes) = content.bytes_for(&mime_type) {
-                    send(fd, bytes);
-                }
+                serve(content, &mime_type, fd)
             }
             ext_data_control_source_v1::Event::Cancelled => state.release_source(source),
             _ => {}

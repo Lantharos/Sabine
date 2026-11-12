@@ -12,6 +12,8 @@ mod macos;
 #[cfg(target_os = "linux")]
 mod pipe;
 #[cfg(target_os = "linux")]
+pub(crate) mod transfer;
+#[cfg(target_os = "linux")]
 mod wayland;
 #[cfg(target_os = "windows")]
 mod windows;
