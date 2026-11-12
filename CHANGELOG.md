@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.87
 
 - A file someone drops on a confined app's window or opens with the app reaches it outside its
   declared `filesystems`. Sabine shares each one the app can't open itself through the document
