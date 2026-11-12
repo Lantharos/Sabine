@@ -96,6 +96,27 @@ files through the desktop portal (`shell.openLink` and `shell.showFolder` do thi
 kernel applies what its Landlock version supports; a kernel without Landlock gets only the system
 call filter, and the app records that once in its diagnostics.
 
+### Files the person hands the app
+
+A file someone drops on a confined app's window or opens with the app reaches it even outside its
+declared `filesystems`, as one picked in a file dialog does in a sandbox. Sabine shares each such
+file the app can't open itself through the document portal and hands over the path where the
+portal shows it, below `$XDG_RUNTIME_DIR/doc`: in a drop's files, which the page reads and sees as
+`file.path`, and in what `app.takeOpenUrls` returns. Files the app can already open keep their
+paths, and so does everything outside a confined app. A dropped or opened folder always goes
+through the portal, since nothing shows whether the app may change it.
+
+An app that reads its own command line, or asks the file chooser portal itself, does the same with
+`sabine::documents::within_reach`, which takes the paths and whether they exist or are to be
+created:
+
+```rust
+use sabine::documents::{Handed, within_reach};
+
+let opened = within_reach(paths, Handed::Existing).await?;
+let save_as = within_reach(vec![chosen], Handed::New).await?;
+```
+
 The session bus isn't filtered yet, so `talk` is declared but not enforced by Sabine. `x11`,
 `microphone` and `camera` are declarations for a system that sandboxes the app, such as Luft;
 Sabine carries them into the bundle's manifest and doesn't enforce them itself. Apps with

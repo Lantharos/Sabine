@@ -121,6 +121,11 @@ impl OsrNativeHost {
                     Flow::Continue
                 }
                 #[cfg(target_os = "linux")]
+                OsrHostEvent::DroppedFilesReached(drag, files) => {
+                    self.dropped_files_reached(drag, files);
+                    Flow::Continue
+                }
+                #[cfg(target_os = "linux")]
                 OsrHostEvent::DirectPresentation(generation, outcome) => {
                     self.direct_presentation_changed(event_loop, generation, outcome);
                     Flow::Continue

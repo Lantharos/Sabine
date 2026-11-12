@@ -177,10 +177,11 @@ impl Paths {
         self.allow(own.runtime, read())
             .allow(own.runtime.join(".leases"), write())
             .allow(own.host, read())
-            .allow(&data, read())
-            .allow(data.join("logs"), write());
-        if std::fs::create_dir_all(&own.profile).is_ok() {
-            self.allow(&own.profile, write());
+            .allow(&data, read());
+        for folder in [data.join("logs"), own.profile.clone()] {
+            if std::fs::create_dir_all(&folder).is_ok() {
+                self.allow(folder, write());
+            }
         }
         self
     }

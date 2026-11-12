@@ -89,6 +89,15 @@ impl OpenUrls {
     }
 }
 
+/// The links and documents a page takes, with the files among them within
+/// reach of a confined app.
+pub(crate) async fn within_reach(urls: Vec<String>) -> Result<Vec<String>, String> {
+    #[cfg(target_os = "linux")]
+    return crate::launch::confine::documents::urls_within_reach(urls).await;
+    #[cfg(not(target_os = "linux"))]
+    Ok(urls)
+}
+
 /// What the app opens from its arguments: URLs with its schemes, and files
 /// of its document types, by extension and, on Linux, by the type the
 /// desktop gives them.

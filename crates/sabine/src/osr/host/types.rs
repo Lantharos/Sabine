@@ -100,6 +100,10 @@ pub(super) enum OsrHostEvent {
     DirectPresentation(u64, super::native::DirectOutcome),
     #[cfg(target_os = "linux")]
     SharedRuntimeOpened(u64, Result<(), String>),
+    /// The files of the drag over the window, by the drag's number, within
+    /// reach of a confined app.
+    #[cfg(target_os = "linux")]
+    DroppedFilesReached(u64, Vec<std::path::PathBuf>),
 }
 
 impl OsrHostEvent {
@@ -118,7 +122,7 @@ impl OsrHostEvent {
             | Self::BrowserExited(..)
             | Self::RendererStarted(..) => None,
             #[cfg(target_os = "linux")]
-            Self::DirectPresentation(..) => None,
+            Self::DirectPresentation(..) | Self::DroppedFilesReached(..) => None,
         }
     }
 }

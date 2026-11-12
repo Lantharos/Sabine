@@ -1,3 +1,13 @@
+# Unreleased
+
+- A file someone drops on a confined app's window or opens with the app reaches it outside its
+  declared `filesystems`. Sabine shares each one the app can't open itself through the document
+  portal, and the drop's files and `app.takeOpenUrls` name it where the portal shows it, so the
+  page, Chromium and the app can all read it. `sabine::documents::within_reach` does the same for
+  paths an app takes from its command line or the file chooser portal.
+- A confined app writes its diagnostics again. Sabine's log folder didn't exist yet when the app
+  was confined, so its rule never applied.
+
 # Sabine 0.86
 
 - A window can come back with what it showed when the desktop opens it again after signing in, as

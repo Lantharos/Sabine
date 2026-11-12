@@ -1,6 +1,7 @@
 //! Holds an app outside an app sandbox to its `[sandbox]` declaration with
 //! Landlock and a system call filter, which every process it starts inherits.
 
+pub mod documents;
 mod paths;
 mod seccomp;
 

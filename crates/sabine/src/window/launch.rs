@@ -4,7 +4,7 @@ use sabine_runtime::RuntimeInfo;
 use super::manifest::development_env;
 use super::origins::{allow_dev_origins, allow_url_origin};
 use super::{SabineWindow, SabineWindowConfig};
-use crate::desktop::open_urls::Openable;
+use crate::desktop::open_urls::{Openable, within_reach};
 use crate::desktop::{DesktopClaim, TRAY_UPDATE_COMMAND};
 use crate::error::{SabineError, SabineResult};
 use crate::host::{SabineProcess, SabineProcessHandle};
@@ -96,12 +96,15 @@ impl SabineWindow {
         let open_urls = self.config.listeners.open_urls.clone();
         let quitting = handle.clone();
         let autostart = handle.clone();
-        self.bridge_handler("app.takeOpenUrls", move |command| {
+        self.bridge_handler_async("app.takeOpenUrls", move |command| {
             let urls = match command.window {
                 Some(window) => open_urls.take_for_page(window),
                 None => open_urls.take(),
             };
-            Ok(BridgeResponse::json(serde_json::json!(urls)))
+            async move {
+                let urls = within_reach(urls).await.map_err(BridgeError::new)?;
+                Ok(BridgeResponse::json(serde_json::json!(urls)))
+            }
         })
         .bridge_handler("app.quit", move |_| {
             quitting.quit();

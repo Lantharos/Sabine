@@ -1,3 +1,6 @@
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use winit::{
     data_transfer::{DataTransferId, TypeHint, TypedData},
     dpi::PhysicalPosition,
@@ -6,16 +9,26 @@ use winit::{
 
 #[cfg(target_os = "linux")]
 use crate::clipboard::DropEvent;
+#[cfg(target_os = "linux")]
+use crate::launch::confine::documents::{self, Handed};
 use crate::osr::host::native::OsrNativeHost;
+#[cfg(target_os = "linux")]
+use crate::osr::host::types::OsrHostEvent;
 use crate::osr::protocol::DragContent;
 
 use super::{DRAG_OPERATIONS_ANY, dnd_actions, drag_cursor};
 
 const FETCHED_TYPES: [TypeHint; 3] = [TypeHint::UriList, TypeHint::Plaintext, TypeHint::Html];
 
+#[cfg(target_os = "linux")]
+static DRAGS: AtomicU64 = AtomicU64::new(0);
+
 /// A drag from the desktop over the window. The page sees it once all of its
-/// content has arrived, as browsers only announce drags with their data.
+/// content has arrived and its files are within the app's reach, as browsers
+/// only announce drags with their data.
 pub(in crate::osr::host) struct IncomingDrag {
+    #[cfg(target_os = "linux")]
+    number: u64,
     id: Option<DataTransferId>,
     content: DragContent,
     pending: usize,
@@ -54,13 +67,8 @@ impl OsrNativeHost {
             return;
         }
         self.drag.incoming = Some(IncomingDrag {
-            id: Some(id),
-            content: DragContent::default(),
             pending,
-            x,
-            y,
-            entered: false,
-            dropped: false,
+            ..IncomingDrag::arrived(Some(id), DragContent::default(), x, y)
         });
     }
 
@@ -93,7 +101,7 @@ impl OsrNativeHost {
         }
         drag.pending = drag.pending.saturating_sub(1);
         if drag.pending == 0 {
-            self.enter_incoming_drag();
+            self.content_arrived();
         }
     }
 
@@ -103,21 +111,14 @@ impl OsrNativeHost {
         position: PhysicalPosition<f64>,
     ) {
         let (x, y) = self.logical_point(position);
-        if self.incoming_drag(id).is_some_and(|drag| drag.entered) {
-            self.move_incoming_drag(x, y);
-        } else if let Some(drag) = self.incoming_drag(id) {
-            drag.x = x;
-            drag.y = y;
+        if self.incoming_drag(id).is_some() {
+            self.incoming_moved(x, y);
         }
     }
 
     pub(in crate::osr::host::input) fn drag_dropped(&mut self, id: DataTransferId) {
-        let Some(drag) = self.incoming_drag(id) else {
-            return;
-        };
-        drag.dropped = true;
-        if drag.entered {
-            self.drop_incoming_drag();
+        if self.incoming_drag(id).is_some() {
+            self.incoming_dropped();
         }
     }
 
@@ -151,20 +152,16 @@ impl OsrNativeHost {
             match event {
                 DropEvent::Enter { content, x, y } => {
                     let (x, y) = (x as f32, y as f32);
-                    let mut drag = IncomingDrag::entered(None, x, y);
                     if self.drag.outgoing().is_some() {
-                        self.drag.incoming = Some(drag);
+                        self.drag.incoming = Some(IncomingDrag::entered(None, x, y));
                         self.send_drag_position("drag_enter_source", x, y, None);
                     } else {
-                        drag.content = content;
-                        self.drag.incoming = Some(drag);
-                        self.enter_incoming_drag();
+                        self.drag.incoming = Some(IncomingDrag::arrived(None, content, x, y));
+                        self.content_arrived();
                     }
                 }
-                DropEvent::Motion { x, y } if self.drag.incoming.is_some() => {
-                    self.move_incoming_drag(x as f32, y as f32);
-                }
-                DropEvent::Drop if self.drag.incoming.is_some() => self.drop_incoming_drag(),
+                DropEvent::Motion { x, y } => self.incoming_moved(x as f32, y as f32),
+                DropEvent::Drop => self.incoming_dropped(),
                 DropEvent::Leave if self.drag.incoming.is_some() => self.leave_incoming_drag(),
                 _ => {}
             }
@@ -189,6 +186,76 @@ impl OsrNativeHost {
             .incoming
             .as_mut()
             .filter(|drag| drag.id == Some(id))
+    }
+
+    /// Brings the files of a drag into a confined app's reach before the page
+    /// sees them, so its Chromium and the app itself can read what's dropped.
+    fn content_arrived(&mut self) {
+        #[cfg(target_os = "linux")]
+        if let Some(drag) = &self.drag.incoming
+            && !drag.content.files.is_empty()
+            && documents::confined()
+        {
+            let (number, files) = (drag.number, drag.content.files.clone());
+            let sender = self.sender.clone();
+            let proxy = self.proxy.clone();
+            sabine_platform::async_runtime().spawn(async move {
+                let reached = documents::within_reach(files.clone(), Handed::Existing)
+                    .await
+                    .unwrap_or_else(|error| {
+                        sabine_runtime::report_error("drag", error);
+                        files
+                    });
+                if sender
+                    .send(OsrHostEvent::DroppedFilesReached(number, reached))
+                    .is_ok()
+                {
+                    proxy.wake_up();
+                }
+            });
+            return;
+        }
+        self.enter_incoming_drag();
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn dropped_files_reached(
+        &mut self,
+        number: u64,
+        files: Vec<std::path::PathBuf>,
+    ) {
+        let Some(drag) = self
+            .drag
+            .incoming
+            .as_mut()
+            .filter(|drag| drag.number == number)
+        else {
+            return;
+        };
+        drag.content.files = files;
+        self.enter_incoming_drag();
+    }
+
+    fn incoming_moved(&mut self, x: f32, y: f32) {
+        let Some(drag) = self.drag.incoming.as_mut() else {
+            return;
+        };
+        if drag.entered {
+            self.move_incoming_drag(x, y);
+        } else {
+            drag.x = x;
+            drag.y = y;
+        }
+    }
+
+    fn incoming_dropped(&mut self) {
+        let Some(drag) = self.drag.incoming.as_mut() else {
+            return;
+        };
+        drag.dropped = true;
+        if drag.entered {
+            self.drop_incoming_drag();
+        }
     }
 
     fn enter_incoming_drag(&mut self) {
@@ -231,15 +298,24 @@ impl OsrNativeHost {
 }
 
 impl IncomingDrag {
-    fn entered(id: Option<DataTransferId>, x: f32, y: f32) -> Self {
+    fn arrived(id: Option<DataTransferId>, content: DragContent, x: f32, y: f32) -> Self {
         Self {
+            #[cfg(target_os = "linux")]
+            number: DRAGS.fetch_add(1, Ordering::Relaxed),
             id,
-            content: DragContent::default(),
+            content,
             pending: 0,
             x,
             y,
-            entered: true,
+            entered: false,
             dropped: false,
+        }
+    }
+
+    fn entered(id: Option<DataTransferId>, x: f32, y: f32) -> Self {
+        Self {
+            entered: true,
+            ..Self::arrived(id, DragContent::default(), x, y)
         }
     }
 }
