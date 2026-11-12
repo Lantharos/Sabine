@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.88
 
 - On Linux, files copied or dragged out of a window reach apps in a sandbox, such as Flatpaks and
   sandboxed AppImages. The window offers them through the document portal's file transfer next to
