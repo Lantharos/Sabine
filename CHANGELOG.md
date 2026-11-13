@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.89
 
 - On Linux, an app keeps opening windows after an update replaced its files while it ran. Store
   installs put each version in a folder of its own under `releases`, with `install` pointing at the
