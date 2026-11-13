@@ -19,10 +19,12 @@ build = subprocess.run(
     cwd=repository, capture_output=True, text=True, check=True,
 )
 artifacts = {}
+folders = set()
 for line in build.stdout.splitlines():
     message = json.loads(line)
     if message.get("reason") == "compiler-artifact":
         for filename in message["filenames"]:
+            folders.add(str(Path(filename).parent))
             if filename.endswith(".rlib"):
                 artifacts[message["target"]["name"]] = filename
 
@@ -93,7 +95,7 @@ fn main() {
 '''.replace("@MODULE@", str(repository / "crates/sabine/src/desktop/macos/app_delegate.rs"))
         .replace("@PID@", str(pidfile)).replace("@OUTPUT@", str(received)))
     command = ["rustc", "--edition=2024", str(source), "-o", str(macos / "url-check")]
-    for folder in sorted({str(Path(filename).parent) for filename in artifacts.values()}):
+    for folder in sorted(folders):
         command.extend(["-L", f"dependency={folder}"])
     for dependency in ["winit", "objc2", "objc2_app_kit", "objc2_foundation", "dispatch2",
                        "crossbeam_channel", "sabine_platform", "serde_json"]:
