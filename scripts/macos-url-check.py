@@ -92,8 +92,9 @@ fn main() {
 }
 '''.replace("@MODULE@", str(repository / "crates/sabine/src/desktop/macos/app_delegate.rs"))
         .replace("@PID@", str(pidfile)).replace("@OUTPUT@", str(received)))
-    command = ["rustc", "--edition=2024", str(source), "-o", str(macos / "url-check"),
-               "-L", f"dependency={repository}/target/debug/deps"]
+    command = ["rustc", "--edition=2024", str(source), "-o", str(macos / "url-check")]
+    for folder in sorted({str(Path(filename).parent) for filename in artifacts.values()}):
+        command.extend(["-L", f"dependency={folder}"])
     for dependency in ["winit", "objc2", "objc2_app_kit", "objc2_foundation", "dispatch2",
                        "crossbeam_channel", "sabine_platform", "serde_json"]:
         command.extend(["--extern", f"{dependency}={artifacts[dependency]}"])
