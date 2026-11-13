@@ -2,23 +2,24 @@ use crate::osr::host::native::OsrNativeHost;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn accelerated_paint(&self) -> bool {
-        if self.software_paint {
-            return false;
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.renderer
-                .as_ref()
-                .is_none_or(crate::render::GpuRenderer::imports_dmabuf)
-        }
-        #[cfg(windows)]
-        {
-            self.renderer.is_some()
-        }
-        #[cfg(target_os = "macos")]
-        {
-            true
-        }
+        !self.software_paint && self.renderer_imports_frames()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn renderer_imports_frames(&self) -> bool {
+        self.renderer
+            .as_ref()
+            .is_none_or(crate::render::GpuRenderer::imports_dmabuf)
+    }
+
+    #[cfg(windows)]
+    fn renderer_imports_frames(&self) -> bool {
+        self.renderer.is_some()
+    }
+
+    #[cfg(target_os = "macos")]
+    fn renderer_imports_frames(&self) -> bool {
+        true
     }
 
     /// Reopen the page with software painting once accelerated frames turn
