@@ -96,12 +96,10 @@ fn update_app(target: &str, force: bool) -> Result<(), String> {
             install.source = std::fs::canonicalize(target).map_err(|error| error.to_string())?;
             return crate::install::rebuild_bundle(&id, install);
         }
-        crate::install::source::update(target)?;
-        return Ok(());
+        return crate::install::source::update(target).map(drop);
     }
     if crate::install::source::read_registered_app(target).is_ok() {
-        crate::install::source::update(target)?;
-        return Ok(());
+        return crate::install::source::update(target).map(drop);
     }
     let service = SabineService::default();
     if service

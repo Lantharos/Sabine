@@ -40,8 +40,8 @@ pub(crate) fn rebuild_bundle(id: &str, install: BundleInstall) -> Result<(), Str
             autostart: install.autostart,
         },
         install.env_files,
-    )?;
-    Ok(())
+    )
+    .map(drop)
 }
 
 pub enum InstallKind {
