@@ -8,6 +8,8 @@ mod download;
 mod error;
 mod files;
 mod install;
+#[cfg(unix)]
+pub mod instance;
 mod lease;
 mod process;
 mod types;

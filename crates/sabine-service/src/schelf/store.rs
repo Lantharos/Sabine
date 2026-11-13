@@ -12,19 +12,20 @@ use crate::app::forget::remove_path;
 use crate::manifest::SabineFile;
 use crate::{
     AppInstallMode, AppManifest, AppUpdateConfig, AppUpdateSource, RegisteredApp, SabineService,
-    SabineVersion, ServiceError, ServiceResult, UpdatePolicy, remove_app_payload,
-    write_install_inventory,
+    SabineVersion, ServiceError, ServiceResult, UpdatePolicy, write_install_inventory,
 };
 
 use super::notices::installed_by_store;
+use super::releases::{launch_release, release_folder, remove_unused_releases};
 
 impl SabineService {
     /// Installs `id` from `archive`, the app's Linux archive (its `portable`
     /// bundle) that a store has downloaded and checked against its own signed
     /// index. Sabine installs it for the current user, adds its launcher entry,
     /// icons and file types, and leaves its updates to the store: installing a
-    /// newer archive the same way updates it, keeping files the app wrote
-    /// beside its own. Refuses a version Schelf has blocked.
+    /// newer archive the same way updates it, beside the version a running
+    /// copy of the app may still use, and moves an app running in the
+    /// background to it. Refuses a version Schelf has blocked.
     pub fn install_store_app(&self, archive: &Path, id: &str) -> ServiceResult<RegisteredApp> {
         if !crate::valid_app_id(id) {
             return Err(invalid("invalid app identifier"));
@@ -37,8 +38,12 @@ impl SabineService {
             self.refuse_blocked_release(id, &bundle.version)?;
             write_install_inventory(&bundle.payload, id, &[])?;
             let install = self.store_install_dir(id);
-            self.install_app_payload(&bundle.payload, &install, bundle.manifest(id), || false)?;
+            let release = release_folder(&install, &bundle.version)?;
+            self.install_app_payload(&bundle.payload, &release, bundle.manifest(id), || false)?;
+            launch_release(&install, &release)?;
             install_desktop_files(id, &bundle.share, &install.join(&bundle.executable))?;
+            crate::app::succession::hand_over(id, &release.join(&bundle.executable));
+            remove_unused_releases(&release, &bundle.executable)?;
             self.app(id)
         })();
         sabine_runtime::remove_directory_if_present(&staging)?;
@@ -54,7 +59,7 @@ impl SabineService {
         }
         let install = self.store_install_dir(id);
         forget_desktop_files(id, &install)?;
-        remove_app_payload(&install, id)?;
+        remove_path(&install)?;
         self.forget_app(id, &install)
     }
 

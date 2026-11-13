@@ -74,6 +74,7 @@ pub(crate) struct SabineWindowConfig {
     pub browser: BrowserOptions,
     pub listeners: super::WindowListeners,
     pub launched: Option<super::LaunchListener>,
+    pub quit: Option<super::QuitListener>,
     pub desktop_events: Option<super::DesktopEventListener>,
 }
 
@@ -128,6 +129,7 @@ impl Default for SabineWindowConfig {
             browser: BrowserOptions::default(),
             listeners: super::WindowListeners::default(),
             launched: None,
+            quit: None,
             desktop_events: None,
         }
     }

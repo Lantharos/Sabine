@@ -63,6 +63,11 @@ development copy and the installed app run side by side without handing launches
 
 `.single_instance_id` only names the instance; set a policy with `.single_instance` to turn it on.
 
+On Linux, a launch of a newer installed version of the app takes the instance over when the
+running app is in the background with no window open: the running app ends, and the launch carries
+on as the app's first one. See
+[Apps that are running](/docs/distribution/releases-and-updates/#apps-that-are-running).
+
 ## Hearing about later launches
 
 Each later launch reaches the running app's pages as `events.singleInstance`:

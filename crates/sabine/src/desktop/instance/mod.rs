@@ -10,10 +10,9 @@ mod platform;
 
 use std::{
     env,
-    io::{self, Read, Write},
-    net::Shutdown,
+    io::{self, Read},
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
@@ -24,7 +23,7 @@ use sabine_platform::{PlatformEvent, SingleInstanceActivation, SingleInstancePol
 use serde_json::Value;
 
 use super::{EventQueue, sanitize_id};
-use crate::{SabineError, SabineResult};
+use crate::{SabineError, SabineProcessHandle, SabineResult};
 #[cfg(target_os = "linux")]
 pub(crate) use platform::startup_activation_token;
 use platform::{Listener, Owner, Peer, Stream};
@@ -35,6 +34,13 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(25);
 const MAX_ACTIVATION_BYTES: u64 = 1024 * 1024;
 const WORKERS: usize = 4;
 const MAX_PENDING_CONNECTIONS: usize = 32;
+/// How long a launch of the app's newly installed copy waits for the running
+/// instance to finish what it is doing and end once it stepped down.
+#[cfg(unix)]
+const STEP_DOWN_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// The running app the instance answers for, once its process has started.
+type Process = Arc<OnceLock<SabineProcessHandle>>;
 
 /// Who holds an app's instance: this process, listening for activations, or
 /// a running one to hand this launch to.
@@ -46,6 +52,7 @@ enum Claim {
 pub(super) struct SingleInstanceGuard {
     owner: Owner,
     running: Arc<AtomicBool>,
+    process: Process,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -60,21 +67,49 @@ impl SingleInstanceGuard {
         let failed = |error: io::Error| SabineError::CreationFailed {
             message: format!("could not check for a running instance: {error}"),
         };
-        match platform::claim(&sanitize_id(id)).map_err(failed)? {
-            Claim::Owner(owner, listener) => {
-                let running = Arc::new(AtomicBool::new(true));
-                let thread = serve(listener, policy, events, Arc::clone(&running));
-                Ok(Self {
-                    owner,
-                    running,
-                    thread: Some(thread),
-                })
-            }
+        let id = sanitize_id(id);
+        match platform::claim(&id).map_err(failed)? {
+            Claim::Owner(owner, listener) => Ok(Self::serve(owner, listener, policy, events)),
             Claim::Running(peer) => {
-                notify(&peer).map_err(failed)?;
+                if notify(&peer).map_err(failed)? {
+                    #[cfg(unix)]
+                    if let Claim::Owner(owner, listener) =
+                        platform::take_over(&id).map_err(failed)?
+                    {
+                        return Ok(Self::serve(owner, listener, policy, events));
+                    }
+                }
                 Err(SabineError::InstanceAlreadyRunning)
             }
         }
+    }
+
+    fn serve(
+        owner: Owner,
+        listener: Listener,
+        policy: SingleInstancePolicy,
+        events: EventQueue,
+    ) -> Self {
+        let running = Arc::new(AtomicBool::new(true));
+        let process = Process::default();
+        let thread = serve(
+            listener,
+            policy,
+            events,
+            Arc::clone(&running),
+            Arc::clone(&process),
+        );
+        Self {
+            owner,
+            running,
+            process,
+            thread: Some(thread),
+        }
+    }
+
+    /// Lets the instance answer for the app's process from now on.
+    pub(super) fn attach(&self, handle: &SabineProcessHandle) {
+        let _ = self.process.set(handle.clone());
     }
 }
 
@@ -93,6 +128,7 @@ fn serve(
     policy: SingleInstancePolicy,
     events: EventQueue,
     running: Arc<AtomicBool>,
+    process: Process,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         let (connections, pending) = crossbeam_channel::bounded::<Stream>(MAX_PENDING_CONNECTIONS);
@@ -101,9 +137,10 @@ fn serve(
                 let pending = pending.clone();
                 let events = events.clone();
                 let gate = listener.gate();
+                let process = Arc::clone(&process);
                 thread::spawn(move || {
                     for stream in pending {
-                        if let Some(activation) = receive(policy, &gate, stream) {
+                        if let Some(activation) = receive(policy, &gate, &process, stream) {
                             let _ = events.send(PlatformEvent::SingleInstance(activation));
                         }
                     }
@@ -125,6 +162,7 @@ fn serve(
 fn receive(
     policy: SingleInstancePolicy,
     gate: &platform::Gate,
+    process: &Process,
     mut stream: Stream,
 ) -> Option<SingleInstanceActivation> {
     stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
@@ -140,7 +178,26 @@ fn receive(
     if !gate.admits(&stream, &value) {
         return None;
     }
+    #[cfg(target_os = "linux")]
+    if steps_down(process, &value) {
+        let _ = io::Write::write_all(&mut stream, sabine_runtime::instance::STEPPING_DOWN);
+        return None;
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = process;
     activation(policy, &value)
+}
+
+/// Whether the app steps down for the copy of it installed while it ran, as
+/// a launch of that copy or its installer asks.
+#[cfg(target_os = "linux")]
+fn steps_down(process: &Process, message: &Value) -> bool {
+    use sabine_runtime::instance::{SUCCESSOR, UPDATED};
+    let launch = message.get(SUCCESSOR).and_then(Value::as_bool) == Some(true);
+    (launch || message.get(UPDATED).is_some())
+        && process
+            .get()
+            .is_some_and(|process| process.step_down(launch))
 }
 
 fn activation(policy: SingleInstancePolicy, value: &Value) -> Option<SingleInstanceActivation> {
@@ -166,24 +223,25 @@ fn activation(policy: SingleInstancePolicy, value: &Value) -> Option<SingleInsta
 }
 
 /// Hands this launch to the running instance, retrying while it is still
-/// starting to listen.
-fn notify(peer: &Peer) -> io::Result<()> {
+/// starting to listen. Answers whether the instance stepped down for this
+/// launch to take over.
+fn notify(peer: &Peer) -> io::Result<bool> {
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     loop {
         match send(peer) {
-            Ok(()) => return Ok(()),
+            Ok(stepping_down) => return Ok(stepping_down),
             Err(_) if Instant::now() < deadline => thread::sleep(RETRY_INTERVAL),
             Err(error) => return Err(error),
         }
     }
 }
 
-fn send(peer: &Peer) -> io::Result<()> {
+fn send(peer: &Peer) -> io::Result<bool> {
     let mut activation = serde_json::json!({
         "arguments": env::args().collect::<Vec<_>>(),
         "cwd": env::current_dir().ok().map(|path| path.display().to_string()),
     });
-    let mut stream = platform::connect(peer, &mut activation)?;
+    let stream = platform::connect(peer, &mut activation)?;
     let body = serde_json::to_vec(&activation).map_err(io::Error::other)?;
     if body.len() as u64 > MAX_ACTIVATION_BYTES {
         return Err(io::Error::new(
@@ -191,7 +249,19 @@ fn send(peer: &Peer) -> io::Result<()> {
             "single-instance activation is too large",
         ));
     }
+    deliver(stream, &body)
+}
+
+#[cfg(unix)]
+fn deliver(stream: Stream, body: &[u8]) -> io::Result<bool> {
+    sabine_runtime::instance::deliver(stream, body, 2 * IO_TIMEOUT)
+}
+
+#[cfg(target_os = "windows")]
+fn deliver(mut stream: Stream, body: &[u8]) -> io::Result<bool> {
+    use std::io::Write;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
-    stream.write_all(&body)?;
-    stream.shutdown(Shutdown::Write)
+    stream.write_all(body)?;
+    stream.shutdown(std::net::Shutdown::Write)?;
+    Ok(false)
 }

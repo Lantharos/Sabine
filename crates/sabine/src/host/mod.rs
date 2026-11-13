@@ -1,9 +1,13 @@
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+#[cfg(target_os = "linux")]
+mod installation;
 mod process;
 mod process_tree;
 
+#[cfg(target_os = "linux")]
+pub(crate) use installation::Installation;
 pub(crate) use process::{PrimaryWindow, ProcessCommand};
 pub use process::{SabineProcess, SabineProcessHandle, WindowId};
 pub(crate) use process_tree::{

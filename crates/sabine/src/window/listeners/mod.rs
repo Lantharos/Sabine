@@ -142,6 +142,27 @@ impl fmt::Debug for LaunchListener {
     }
 }
 
+/// The app's listener for its process ending on its own, to finish or save
+/// what it is doing first.
+#[derive(Clone)]
+pub(crate) struct QuitListener(Arc<dyn Fn() + Send + Sync>);
+
+impl QuitListener {
+    pub(crate) fn new(listener: impl Fn() + Send + Sync + 'static) -> Self {
+        Self(Arc::new(listener))
+    }
+
+    pub(crate) fn deliver(&self) {
+        (self.0)();
+    }
+}
+
+impl fmt::Debug for QuitListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("QuitListener")
+    }
+}
+
 type DesktopEventFn = dyn Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync;
 
 /// The app's listener for tray clicks, global shortcuts, later launches and

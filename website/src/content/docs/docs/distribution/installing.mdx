@@ -200,13 +200,15 @@ sabine-service install-store ~/Downloads/com.example.tern-1.1.0-portable.tar.gz 
 sabine-service remove com.example.tern
 ```
 
-`install-store` installs the app for the current user into
-`~/.local/share/sabine/apps/<app id>/install`, registers it, and adds its launcher entry, icons and
-file types from the archive. It refuses an archive that holds a different app, a version older than
-the installed one, and a version on [Schelf's list of pulled releases](/docs/distribution/releases-and-updates/#pulled-releases).
-Installing a newer archive the same way updates the app in place, keeping files the app wrote beside
-its own; close the app first. Sabine leaves updates to the store, whatever the app's own `[updates]`
-says, but still keeps a pulled version from opening.
+`install-store` installs the app for the current user into a folder of its own under
+`~/.local/share/sabine/apps/<app id>/releases`, points `~/.local/share/sabine/apps/<app id>/install`
+at it, registers it, and adds its launcher entry, icons and file types from the archive. It refuses
+an archive that holds a different app, a version older than the installed one, and a version on
+[Schelf's list of pulled releases](/docs/distribution/releases-and-updates/#pulled-releases).
+Installing a newer archive the same way updates the app, also while it runs: see
+[Apps that are running](/docs/distribution/releases-and-updates/#apps-that-are-running). Sabine leaves
+updates to the store, whatever the app's own `[updates]` says, but still keeps a pulled version from
+opening.
 
 `remove` takes an app a store installed off the computer with its launcher entry, icons and file
 types, and keeps its data. It removes other apps the way uninstalling Sabine does: through the

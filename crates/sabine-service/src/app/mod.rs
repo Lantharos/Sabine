@@ -7,3 +7,5 @@ pub(crate) mod installed;
 pub(crate) mod payload;
 pub(crate) mod registry;
 pub(crate) mod sandbox;
+#[cfg(target_os = "linux")]
+pub(crate) mod succession;

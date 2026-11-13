@@ -340,6 +340,15 @@ impl SabineWindow {
         self
     }
 
+    /// Calls `listener` before the app's process ends on its own: after its
+    /// last window closed, when it quits, or when a background app hands over
+    /// to the copy of it installed while it ran. The process ends once
+    /// `listener` returns, so the app can finish or save what it is doing.
+    pub fn on_quit(mut self, listener: impl Fn() + Send + Sync + 'static) -> Self {
+        self.config.quit = Some(super::QuitListener::new(listener));
+        self
+    }
+
     /// Calls `listener` with each tray click, global shortcut, later launch
     /// and link the desktop hands the app, before its pages hear of it. It
     /// runs whether or not a window is open, so an app built with

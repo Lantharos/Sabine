@@ -20,8 +20,8 @@ pub use config::{
 pub use listeners::WindowVisibility;
 pub(crate) use listeners::{
     AppearanceListener, CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener,
-    DesktopEventListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE, VISIBILITY_LINE,
-    VisibilityListener, WindowListeners, appearance_line,
+    DesktopEventListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE, QuitListener,
+    VISIBILITY_LINE, VisibilityListener, WindowListeners, appearance_line,
 };
 pub use manifest::resource_path;
 #[cfg(not(target_os = "windows"))]

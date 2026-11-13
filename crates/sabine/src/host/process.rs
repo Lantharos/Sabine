@@ -19,12 +19,28 @@ use crate::{SabineResult, SabineWindow};
 /// How long opening another window waits for the app's first window, whose
 /// browser the others join.
 const PRIMARY_READY_TIMEOUT: Duration = Duration::from_secs(20);
+/// How long a launch or the installer waits for the app to answer whether it
+/// steps down for its newly installed copy.
+#[cfg(target_os = "linux")]
+const STEP_DOWN_ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(crate) enum ProcessCommand {
     OpenWindow(PendingWindow),
-    Present { activation_token: Option<String> },
-    PrimaryReady { window: WindowId, ready: bool },
+    Present {
+        activation_token: Option<String>,
+    },
+    PrimaryReady {
+        window: WindowId,
+        ready: bool,
+    },
     Quit,
+    /// A launch of the app's newly installed copy, or its installer, asks the
+    /// app to end so that copy runs instead.
+    #[cfg(target_os = "linux")]
+    StepDown {
+        launch: bool,
+        answer: crossbeam_channel::Sender<bool>,
+    },
 }
 
 /// A window to open once the app's first window is ready.
@@ -70,6 +86,8 @@ pub struct SabineProcess {
     pub(crate) activity: sabine_bridge::ActivityRegistry,
     pub(crate) metrics: LaunchMetrics,
     pub(crate) windows: WindowContext,
+    #[cfg(target_os = "linux")]
+    pub(crate) installation: Option<crate::host::Installation>,
 }
 
 /// Identifier for a window opened via [`SabineProcess::open_window`].
@@ -216,6 +234,9 @@ impl SabineProcess {
             }
         }
 
+        if let Some(listener) = &self.windows.primary.quit {
+            listener.deliver();
+        }
         self.stop_desktop_event_forwarder();
         self.join_bridge_threads();
         if self.quitting {
@@ -253,10 +274,10 @@ impl SabineProcess {
     /// Carries out what app code and pages asked of the process. Once the app
     /// quits, it opens and shows nothing more.
     pub(crate) fn handle_command(&mut self, command: ProcessCommand) {
-        if self.quitting {
-            return;
-        }
         match command {
+            #[cfg(target_os = "linux")]
+            ProcessCommand::StepDown { launch, answer } => self.step_down(launch, answer),
+            _ if self.quitting => {}
             ProcessCommand::OpenWindow(pending) => self.open_when_ready(pending),
             ProcessCommand::Present { activation_token } => self.present(activation_token),
             ProcessCommand::PrimaryReady { window, ready } => self.primary_ready(window, ready),
@@ -268,6 +289,27 @@ impl SabineProcess {
         self.quitting = true;
         self.pending_windows.clear();
         self.bridge_emitter.quit();
+    }
+
+    /// Ends a background app with no window open once a newer copy of it is
+    /// installed, for that copy to take over. A launch that asks while the
+    /// app quits anyway takes over once it ended.
+    #[cfg(target_os = "linux")]
+    fn step_down(&mut self, launch: bool, answer: crossbeam_channel::Sender<bool>) {
+        let steps_down = if self.quitting {
+            launch
+        } else {
+            self.background
+                && self.primary.is_none()
+                && self.extra_windows.is_empty()
+                && self
+                    .installation
+                    .as_ref()
+                    .is_some_and(crate::host::Installation::superseded)
+        };
+        if answer.send(steps_down).is_ok() && steps_down && !self.quitting {
+            self.quit();
+        }
     }
 
     fn present(&mut self, activation_token: Option<String>) {
@@ -454,6 +496,19 @@ impl SabineProcessHandle {
     /// background or hides its window when it closes.
     pub fn quit(&self) -> bool {
         self.command_sender.send(ProcessCommand::Quit).is_ok()
+    }
+
+    /// Asks the app whether it steps down for its newly installed copy, as a
+    /// `launch` of that copy or its installer asks.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn step_down(&self, launch: bool) -> bool {
+        let (answer, answered) = crossbeam_channel::bounded(1);
+        self.command_sender
+            .send(ProcessCommand::StepDown { launch, answer })
+            .is_ok()
+            && answered
+                .recv_timeout(STEP_DOWN_ANSWER_TIMEOUT)
+                .unwrap_or(false)
     }
 
     /// Turns the app's [`SabineWindow::autostart`] entry on or off, as an

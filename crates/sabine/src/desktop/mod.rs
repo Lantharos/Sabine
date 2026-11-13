@@ -135,7 +135,7 @@ impl DesktopClaim {
             autostart,
             tray,
             _shortcuts: shortcuts,
-            _single_instance: self.single_instance,
+            single_instance: self.single_instance,
             #[cfg(target_os = "macos")]
             _app_events: app_events,
             #[cfg(not(target_os = "linux"))]
@@ -151,7 +151,7 @@ pub struct DesktopServiceState {
     autostart: Autostart,
     tray: Option<TrayHandle>,
     _shortcuts: Option<GlobalShortcuts>,
-    _single_instance: Option<SingleInstanceGuard>,
+    single_instance: Option<SingleInstanceGuard>,
     #[cfg(target_os = "macos")]
     _app_events: platform::AppEvents,
     #[cfg(not(target_os = "linux"))]
@@ -175,6 +175,14 @@ impl DesktopServiceState {
 
     pub(crate) fn autostart(&self) -> Autostart {
         self.autostart.clone()
+    }
+
+    /// Lets later launches and the app's installer reach `process` through
+    /// its single instance.
+    pub(crate) fn attach(&self, process: &crate::SabineProcessHandle) {
+        if let Some(instance) = &self.single_instance {
+            instance.attach(process);
+        }
     }
 }
 

@@ -3,6 +3,8 @@
 
 mod keys;
 mod notices;
+#[cfg(target_os = "linux")]
+mod releases;
 mod revocations;
 mod rollout;
 #[cfg(target_os = "linux")]

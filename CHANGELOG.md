@@ -1,3 +1,16 @@
+# Unreleased
+
+- On Linux, an app keeps opening windows after an update replaced its files while it ran. Store
+  installs put each version in a folder of its own under `releases`, with `install` pointing at the
+  current one, and keep a version's folder while a process still runs it; window hosts start from
+  the program the app runs, even when its file is gone.
+- A background app with no window open moves to the version installed while it ran: the installer
+  asks it to step down and starts the new version the way logging in does, and a launch of the new
+  version takes over the running instance with its arguments and activation token. An app with a
+  window open keeps its version until it's closed.
+- `.on_quit(...)` runs before the app's process ends on its own, including before it moves to a new
+  version, so the app can finish what it is doing.
+
 # Sabine 0.88
 
 - On Linux, files copied or dragged out of a window reach apps in a sandbox, such as Flatpaks and

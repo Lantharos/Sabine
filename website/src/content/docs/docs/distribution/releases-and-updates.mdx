@@ -447,6 +447,23 @@ the release. A downloaded package is checked against the installed version again
 offered, and deleted once it's installed. Apps installed through an app store are left to the
 store; see [App stores](/docs/distribution/installing/#app-stores).
 
+### Apps that are running
+
+On Linux, an archive update or a store install puts the new version beside the one that runs, and a
+running app moves to it without anyone closing it:
+
+- An app built with `.background()` that has no window open ends and starts again on the new
+  version, the way logging in starts it: with the `autostart_arguments` from its `Sabine.toml`.
+- An app with a window open keeps running the version it started with until it's closed, and can
+  open more windows meanwhile. Its files stay where they are until no process runs that version.
+- When someone opens an app that still runs an older version in the background, the running app
+  ends, and the launch they started takes its place on the new version, with its files, links and
+  focus.
+
+Before the app ends, Sabine calls its `.on_quit(...)` listener and waits for it to return, so it
+can finish what it is doing: a mail app finishes the message it is sending rather than sending it
+again from the new version. Moving over needs a [single instance](/docs/desktop/single-instance/).
+
 ### What people see
 
 When a downloaded package, or an archive release of an app with `policy = "notify"`, is waiting,

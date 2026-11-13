@@ -1,7 +1,8 @@
 //! A lock file and a Unix socket beside it in the user's runtime directory.
 
+#[cfg(target_os = "linux")]
+use std::env;
 use std::{
-    env,
     fs::{self, File, OpenOptions},
     io,
     os::fd::AsRawFd,
@@ -10,7 +11,11 @@ use std::{
         net::{UnixListener, UnixStream},
     },
     path::{Path, PathBuf},
+    thread,
+    time::{Duration, Instant},
 };
+
+use sabine_runtime::instance::{instance_directory, instance_socket};
 
 use serde_json::Value;
 
@@ -62,12 +67,25 @@ impl Gate {
 pub(super) struct Peer(PathBuf);
 
 pub(super) fn claim(id: &str) -> io::Result<Claim> {
-    let directory = runtime_directory()?;
-    prepare_socket_directory(&directory)?;
-    let socket = directory.join(format!("{id}.sock"));
+    claim_within(id, Duration::ZERO)
+}
+
+/// Claims the instance named `id` from the one running, once it ends after
+/// stepping down.
+pub(super) fn take_over(id: &str) -> io::Result<Claim> {
+    claim_within(id, super::STEP_DOWN_TIMEOUT)
+}
+
+fn claim_within(id: &str, patience: Duration) -> io::Result<Claim> {
+    prepare_socket_directory(&instance_directory()?)?;
+    let socket = instance_socket(id)?;
     let lock = open_lock(&socket.with_extension("lock"))?;
-    if !try_lock(&lock)? {
-        return Ok(Claim::Running(Peer(socket)));
+    let deadline = Instant::now() + patience;
+    while !try_lock(&lock)? {
+        if Instant::now() >= deadline {
+            return Ok(Claim::Running(Peer(socket)));
+        }
+        thread::sleep(super::RETRY_INTERVAL);
     }
     remove_stale_socket(&socket)?;
     let listener = bind_listener(&socket)?;
@@ -82,8 +100,11 @@ pub(super) fn claim(id: &str) -> io::Result<Claim> {
 
 pub(super) fn connect(peer: &Peer, activation: &mut Value) -> io::Result<Stream> {
     #[cfg(target_os = "linux")]
-    if let Some(token) = startup_activation_token() {
-        activation["activationToken"] = token.into();
+    {
+        if let Some(token) = startup_activation_token() {
+            activation["activationToken"] = token.into();
+        }
+        activation[sabine_runtime::instance::SUCCESSOR] = true.into();
     }
     #[cfg(target_os = "macos")]
     let _ = activation;
@@ -101,24 +122,6 @@ pub(crate) fn startup_activation_token() -> Option<String> {
         .ok()
         .map(|token| token.trim().to_string())
         .filter(|token| !token.is_empty())
-}
-
-#[cfg(target_os = "linux")]
-fn runtime_directory() -> io::Result<PathBuf> {
-    Ok(env::var_os("XDG_RUNTIME_DIR")
-        .map(|path| PathBuf::from(path).join("sabine"))
-        .unwrap_or_else(|| env::temp_dir().join(format!("sabine-{}", current_uid()))))
-}
-
-#[cfg(target_os = "macos")]
-fn runtime_directory() -> io::Result<PathBuf> {
-    let home = env::var_os("HOME").ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "HOME is required for macOS desktop integration",
-        )
-    })?;
-    Ok(PathBuf::from(home).join("Library/Caches/sabine"))
 }
 
 fn prepare_socket_directory(path: &Path) -> io::Result<()> {

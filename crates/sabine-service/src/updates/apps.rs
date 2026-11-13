@@ -301,7 +301,10 @@ impl SabineService {
             install_archive(&archive()?, executable, &release_dir)?;
         }
         installers::validate_executable(&installed_executable)?;
-        self.activate_managed_update(id, version, sabine, installed_executable)
+        self.activate_managed_update(id, version, sabine, installed_executable.clone())?;
+        #[cfg(target_os = "linux")]
+        crate::app::succession::hand_over(id, &installed_executable);
+        Ok(())
     }
 
     fn activate_managed_update(

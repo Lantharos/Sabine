@@ -132,6 +132,17 @@ impl SabineService {
             .ok_or_else(|| ServiceError::AppNotFound(id.to_string()))
     }
 
+    /// The program `id` launches now. It reads the registry without its lock,
+    /// which every change replaces whole, so a confined app that may only
+    /// read Sabine's data can ask too.
+    pub fn launched_program(&self, id: &str) -> ServiceResult<PathBuf> {
+        self.load_registry()?
+            .apps
+            .remove(id)
+            .map(|app| app.manifest.executable)
+            .ok_or_else(|| ServiceError::AppNotFound(id.to_string()))
+    }
+
     pub(crate) fn incompatible_apps(&self) -> ServiceResult<Vec<String>> {
         let compatibility = crate::install::system_compatibility_in(&self.root, &self.system_root);
         Ok(self

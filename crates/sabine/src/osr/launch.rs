@@ -63,6 +63,8 @@ pub(crate) fn launch_process(
     let host_binary = crate::host::ensure_host(runtime_dir)
         .map_err(|message| SabineError::CreationFailed { message })?;
     #[cfg(target_os = "linux")]
+    let installation = crate::host::Installation::hold(config);
+    #[cfg(target_os = "linux")]
     crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
@@ -94,6 +96,8 @@ pub(crate) fn launch_process(
             url: url.to_string(),
             restoring: restoring_window(app_id),
         },
+        #[cfg(target_os = "linux")]
+        installation,
     };
     if !config.background {
         open_primary_window(&mut process, launch_activation_token())?;
@@ -274,10 +278,7 @@ pub(crate) fn spawn_osr_host_child(
     }
     #[cfg(not(target_os = "linux"))]
     let _ = (activation_token, restoring);
-    let exe = std::env::current_exe().map_err(|error| SabineError::CreationFailed {
-        message: error.to_string(),
-    })?;
-    let mut command = Command::new(exe);
+    let mut command = window_host_command()?;
     sabine_runtime::configure_background_command(&mut command);
     command
         .arg(OSR_HOST_ARG)
@@ -305,6 +306,28 @@ pub(crate) fn spawn_osr_host_child(
             message: format!("failed to configure Sabine OSR host: {error}"),
         })?;
     Ok(child)
+}
+
+/// The app's own program as a window host. On Linux it runs from the file
+/// this process runs, which stays the same program when an update replaced
+/// the app's files meanwhile.
+#[cfg(target_os = "linux")]
+fn window_host_command() -> SabineResult<Command> {
+    use std::os::unix::process::CommandExt;
+    let mut command = Command::new("/proc/self/exe");
+    if let Ok(program) = std::env::current_exe() {
+        command.arg0(program);
+    }
+    Ok(command)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn window_host_command() -> SabineResult<Command> {
+    std::env::current_exe()
+        .map(Command::new)
+        .map_err(|error| SabineError::CreationFailed {
+            message: error.to_string(),
+        })
 }
 
 pub(crate) struct CefViewport {

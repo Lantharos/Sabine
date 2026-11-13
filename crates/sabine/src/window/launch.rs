@@ -66,6 +66,7 @@ impl SabineWindow {
             &openable,
         );
         let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart());
+        desktop_services.attach(&handle);
         self = self.app_commands(&handle);
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
