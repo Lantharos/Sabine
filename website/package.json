@@ -1,6 +1,7 @@
 {
   "name": "sabine-website",
   "private": true,
+  "packageManager": "bun@1.4.4",
   "type": "module",
   "scripts": {
     "dev": "bun --bun astro dev",
