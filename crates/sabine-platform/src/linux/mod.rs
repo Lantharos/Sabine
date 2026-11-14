@@ -1,5 +1,6 @@
 mod foreign_parent;
 pub(crate) mod kestrel;
+pub(crate) mod kestrel_glass;
 mod parent_window;
 pub mod portal;
 pub(crate) mod wayland;

@@ -34,6 +34,7 @@ use super::kestrel::{
     kestrel_window_manager_v1::KestrelWindowManagerV1,
     kestrel_window_state_v1::KestrelWindowStateV1,
 };
+use super::kestrel_glass::kestrel_glass_manager_v1::KestrelGlassManagerV1;
 
 /// The events Sabine waits for on its own connections.
 #[derive(Default)]
@@ -181,3 +182,4 @@ delegate_noop!(Replies: ignore XdgWmDialogV1);
 delegate_noop!(Replies: ignore XdgDialogV1);
 delegate_noop!(Replies: ignore KestrelWindowManagerV1);
 delegate_noop!(Replies: ignore KestrelWindowStateV1);
+delegate_noop!(Replies: ignore KestrelGlassManagerV1);

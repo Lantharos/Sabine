@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use sabine_platform::{WindowBackgroundEffect, WindowRegionRect, WindowRegions};
+use sabine_platform::{
+    BackdropPreference, BackdropRole, WindowBackdrop, WindowBackgroundEffect, WindowRegionRect,
+    WindowRegions,
+};
 
 use crate::osr::protocol::{
     control_regions_from_json, lifecycle_from_json, rects_from_json, regions_from_json,
@@ -39,6 +42,7 @@ pub(crate) struct OsrHostConfig {
     pub background_color: Color,
     pub splash: Option<Duration>,
     pub background_effect: WindowBackgroundEffect,
+    pub backdrop: WindowBackdrop,
     pub chrome: SabineWindowChrome,
     #[cfg(target_os = "macos")]
     pub titlebar_overlay: bool,
@@ -179,6 +183,18 @@ impl OsrHostConfig {
                 .and_then(serde_json::Value::as_str)
                 .and_then(WindowBackgroundEffect::parse)
                 .unwrap_or(WindowBackgroundEffect::None),
+            backdrop: WindowBackdrop {
+                role: value
+                    .get("backdrop_role")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(BackdropRole::parse)
+                    .unwrap_or_default(),
+                preference: value
+                    .get("backdrop_preference")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(BackdropPreference::parse)
+                    .unwrap_or_default(),
+            },
             chrome: value
                 .get("chrome")
                 .and_then(serde_json::Value::as_str)

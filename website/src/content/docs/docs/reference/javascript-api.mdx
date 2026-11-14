@@ -880,10 +880,12 @@ const system: {
 interface SystemAppearance {
   colorScheme: "light" | "dark";
   accentColor: string | null; // "#rrggbb" where the desktop has one
+  backdrop: "luca" | "maris";
 }
 ```
 
-The desktop's light or dark preference and accent color. Pages also get the accent color as the
+The desktop's light or dark preference and accent color, and the material of the window's glass,
+see [Luca and Maris on Kestrel](/docs/windows/glass-and-effects/#luca-and-maris-on-kestrel). Pages also get the accent color as the
 `--sabine-accent-color` CSS property, and hear about changes through `events.appearanceChanged`.
 
 ## `tray`

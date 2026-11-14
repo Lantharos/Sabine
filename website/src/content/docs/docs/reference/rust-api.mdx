@@ -218,6 +218,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `splash_after(Duration)` | The same, after another delay |
 | `glass()` | `background_effect(WindowBackgroundEffect::Glass)` |
 | `background_effect(WindowBackgroundEffect)` | A desktop material behind the window; any effect makes the window transparent |
+| `backdrop(BackdropRole, BackdropPreference)` | What the glass is for and which material it would like on Kestrel |
 | `app_chrome(AppChrome)` | An app-drawn titlebar with window controls, and glass sidebar regions |
 | `system_chrome()` | The desktop's own decorations, the default |
 | `frameless()` | No system decorations; the page draws everything |

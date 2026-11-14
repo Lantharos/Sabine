@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use sabine_bridge::ContentSecurity;
 use sabine_platform::{
-    AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegion, WindowRegionRect,
-    WindowRegions,
+    AutostartEntry, BackdropPreference, BackdropRole, DeepLinkRegistration,
+    GlobalShortcutRegistration, NativeMessagingHost, SingleInstancePolicy, TrayIcon,
+    WindowBackdrop, WindowBackgroundEffect, WindowRegion, WindowRegionRect, WindowRegions,
 };
 use sabine_runtime::RuntimeConfig;
 
@@ -238,6 +238,16 @@ impl SabineWindow {
         if effect.requires_transparency() {
             self.config.transparent = true;
         }
+        self
+    }
+
+    /// Says what the window's glass is for and which material it would like.
+    /// Kestrel gives glass the material people chose for its kind of surface,
+    /// or the one asked for, and pages hear which through
+    /// `system.appearance().backdrop`. Pages draw no tint of their own over
+    /// Maris glass.
+    pub fn backdrop(mut self, role: BackdropRole, preference: BackdropPreference) -> Self {
+        self.config.backdrop = WindowBackdrop { role, preference };
         self
     }
 

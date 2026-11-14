@@ -1,6 +1,6 @@
-use sabine_platform::WindowEffect;
-
 use std::sync::Arc;
+
+use sabine_platform::WindowEffect;
 
 use crate::render::{
     DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand,
@@ -23,7 +23,12 @@ impl OsrNativeHost {
         // Drop any prior effect before binding a new one; Wayland allows only one
         // `ext_background_effect` resource per surface.
         self.effect = None;
-        self.effect = WindowEffect::new(&window, &self.window_options());
+        let proxy = self.proxy.clone();
+        self.effect = WindowEffect::new(
+            &window,
+            &self.window_options(),
+            Arc::new(move || proxy.wake_up()),
+        );
         self.update_effect_regions();
         if self.config.visible {
             window.set_visible(true);

@@ -16,7 +16,7 @@ use wayland::Backend;
 #[cfg(target_os = "windows")]
 use windows::Backend;
 
-use crate::{WindowOptions, WindowRegionRect};
+use crate::{BackdropMaterial, WindowOptions, WindowRegionRect};
 
 /// A window's background material together with its blur, opaque and input
 /// regions. Regions are given in logical pixels and follow the window size.
@@ -25,8 +25,28 @@ pub struct WindowEffect {
 }
 
 impl WindowEffect {
-    pub fn new(window: &Arc<dyn Window>, options: &WindowOptions) -> Option<Self> {
-        Backend::new(window, options).map(|backend| Self { backend })
+    /// `wake` runs when the material of the window's glass changes.
+    pub fn new(
+        window: &Arc<dyn Window>,
+        options: &WindowOptions,
+        wake: Arc<dyn Fn() + Send + Sync>,
+    ) -> Option<Self> {
+        #[cfg(target_os = "linux")]
+        let backend = Backend::new(window, options, wake);
+        #[cfg(not(target_os = "linux"))]
+        let backend = {
+            drop(wake);
+            Backend::new(window, options)
+        };
+        backend.map(|backend| Self { backend })
+    }
+
+    /// The material the window's glass has.
+    pub fn material(&self) -> BackdropMaterial {
+        #[cfg(target_os = "linux")]
+        return self.backend.material();
+        #[cfg(not(target_os = "linux"))]
+        BackdropMaterial::Luca
     }
 
     /// Reapplies the regions; `transparent_holes` stay out of the blur and

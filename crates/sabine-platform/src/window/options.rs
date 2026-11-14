@@ -1,3 +1,4 @@
+use super::backdrop::WindowBackdrop;
 use super::regions::WindowRegions;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -97,6 +98,7 @@ pub struct WindowOptions {
     pub always_on_top: bool,
     pub transparent: bool,
     pub background_effect: WindowBackgroundEffect,
+    pub backdrop: WindowBackdrop,
     pub regions: WindowRegions,
 }
 
@@ -121,6 +123,7 @@ impl Default for WindowOptions {
             always_on_top: false,
             transparent: false,
             background_effect: WindowBackgroundEffect::None,
+            backdrop: WindowBackdrop::default(),
             regions: WindowRegions::default(),
         }
     }

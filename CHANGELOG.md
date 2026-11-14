@@ -1,3 +1,11 @@
+# Unreleased
+
+- On Kestrel, a window hears which material its glass has: Luca, a blur of what is behind it, or
+  Maris, the desktop's surface colour over a wide blur of the wallpaper, which a page draws no tint
+  over. `system.appearance()` and `events.appearanceChanged` carry it as `backdrop`.
+  `.backdrop(role, preference)` says whether the glass is a window's or a transient surface's,
+  which follows the choice for panels and menus, and can ask for Luca or Maris.
+
 # Sabine 0.89
 
 - On Linux, an app keeps opening windows after an update replaced its files while it ran. Store

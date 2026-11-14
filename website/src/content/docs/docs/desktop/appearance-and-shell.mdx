@@ -28,6 +28,7 @@ events.appearanceChanged(applyAppearance);
 | --- | --- | --- |
 | `colorScheme` | `"light" \| "dark"` | The desktop's preference. |
 | `accentColor` | `string \| null` | The accent color as `#rrggbb`, or `null` where the desktop has none. |
+| `backdrop` | `"luca" \| "maris"` | The material of the window's glass, see [Glass and effects](/docs/windows/glass-and-effects/#luca-and-maris-on-kestrel). |
 
 Changes of the light or dark style and of the accent color arrive as they happen, on every
 desktop. Each window sends `appearanceChanged` only when something actually changed.

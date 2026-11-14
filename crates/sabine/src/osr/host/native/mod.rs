@@ -18,7 +18,8 @@ use std::{
 };
 
 use sabine_platform::{
-    WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect, WindowRegions,
+    BackdropMaterial, WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect,
+    WindowRegions,
 };
 use winit::{
     event_loop::{ActiveEventLoop, EventLoopProxy},
@@ -175,7 +176,7 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "linux")]
     pub(super) memory: Option<crate::window::restore::WindowMemory>,
     pub(super) appearance: sabine_platform::AppearanceWatcher,
-    pub(super) published_appearance: Option<sabine_platform::Appearance>,
+    pub(super) published_appearance: Option<(sabine_platform::Appearance, BackdropMaterial)>,
     pub(super) notifier: Option<sabine_platform::Notifier>,
     pub(super) printing: super::print::Printing,
     #[cfg(target_os = "linux")]
@@ -353,6 +354,7 @@ impl OsrNativeHost {
             always_on_top: self.config.always_on_top,
             transparent: self.config.transparent,
             background_effect: self.config.background_effect,
+            backdrop: self.config.backdrop,
             regions: self.regions(),
         }
     }

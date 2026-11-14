@@ -3,7 +3,8 @@ use std::time::Duration;
 use sabine_bridge::{BridgeRegistry, ContentSecurity};
 use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutRegistration, NativeMessagingHost,
-    SingleInstancePolicy, TrayIcon, WindowBackgroundEffect, WindowRegionRect, WindowRegions,
+    SingleInstancePolicy, TrayIcon, WindowBackdrop, WindowBackgroundEffect, WindowRegionRect,
+    WindowRegions,
 };
 use sabine_runtime::RuntimeConfig;
 use sabine_service::AppUpdateConfig;
@@ -60,6 +61,7 @@ pub(crate) struct SabineWindowConfig {
     /// system's traffic lights.
     pub titlebar_overlay: bool,
     pub background_effect: WindowBackgroundEffect,
+    pub backdrop: WindowBackdrop,
     pub regions: WindowRegions,
     pub drag_regions: Vec<WindowRegionRect>,
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
@@ -115,6 +117,7 @@ impl Default for SabineWindowConfig {
             chrome: SabineWindowChrome::System,
             titlebar_overlay: false,
             background_effect: WindowBackgroundEffect::None,
+            backdrop: WindowBackdrop::default(),
             regions: WindowRegions::default(),
             drag_regions: Vec::new(),
             drag_exclusion_regions: Vec::new(),

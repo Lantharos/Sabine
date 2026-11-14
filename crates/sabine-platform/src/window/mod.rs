@@ -1,3 +1,4 @@
+mod backdrop;
 #[cfg(target_os = "macos")]
 mod controls_overlay;
 mod effect;
@@ -6,6 +7,7 @@ mod options;
 mod placement;
 mod regions;
 
+pub use backdrop::{BackdropMaterial, BackdropPreference, BackdropRole, WindowBackdrop};
 #[cfg(target_os = "macos")]
 pub use controls_overlay::{ControlsOverlay, controls_overlay};
 pub use effect::WindowEffect;

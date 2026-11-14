@@ -99,6 +99,61 @@ Any effect other than `None` turns on transparency, as `.glass()` does.
   </TabItem>
 </Tabs>
 
+## Luca and Maris on Kestrel
+
+Kestrel, the desktop of Luft, draws glass as one of two materials: Luca, a blur of what is behind
+the window or only of the wallpaper, and Maris, the desktop's surface colour over a wide blur of
+the wallpaper, covering most of it. People choose one for app windows and one for panels and
+menus. Maris already is the whole surface, so a page draws no tint of its own over it, while over
+Luca it keeps the translucent backgrounds that make text readable.
+
+Pages hear which material their window's glass has as `backdrop` in
+[`system.appearance()`](/docs/desktop/appearance-and-shell/), and through
+`events.appearanceChanged` whenever it changes:
+
+```ts
+import { events, system, type SystemAppearance } from "@lantharos/sabine";
+
+function applyBackdrop({ backdrop }: SystemAppearance) {
+  document.documentElement.dataset.backdrop = backdrop;
+}
+
+applyBackdrop(await system.appearance());
+events.appearanceChanged(applyBackdrop);
+```
+
+```css
+.sidebar {
+  background: rgb(20 20 24 / 0.35);
+}
+
+[data-backdrop="maris"] .sidebar {
+  background: transparent;
+}
+```
+
+`.backdrop(role, preference)` says what the glass is for and which material the window would like:
+
+```rust
+use sabine::{BackdropPreference, BackdropRole};
+
+window.glass().backdrop(BackdropRole::Transient, BackdropPreference::User)
+```
+
+| Role | Follows |
+| --- | --- |
+| `BackdropRole::Window` | The material people chose for app windows, the default |
+| `BackdropRole::Transient` | The one they chose for panels and menus, for popovers, menus and palettes |
+
+| Preference | Gets |
+| --- | --- |
+| `BackdropPreference::User` | What people chose for the role, the default |
+| `BackdropPreference::Maris` | Maris |
+| `BackdropPreference::Luca` | Luca, which blurs only the wallpaper whenever people's Luca does, such as while the power saver is on |
+
+Sabine speaks Kestrel's `kestrel_glass_v1` protocol for this. On other desktops, and on other
+Wayland compositors, `backdrop` is always `"luca"` and the role and preference change nothing.
+
 ## Regions
 
 A transparent window has three regions, which follow its size as it resizes:

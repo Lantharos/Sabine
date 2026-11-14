@@ -266,39 +266,67 @@ impl OsrNativeHost {
         }
     }
 
-    fn current_appearance(&self) -> Option<sabine_platform::Appearance> {
+    fn current_appearance(
+        &self,
+    ) -> Option<(
+        sabine_platform::Appearance,
+        sabine_platform::BackdropMaterial,
+    )> {
         let window = self.window.as_ref()?;
-        Some(self.appearance.appearance(window.as_ref()))
+        let backdrop = self
+            .effect
+            .as_ref()
+            .map(sabine_platform::WindowEffect::material)
+            .unwrap_or_default();
+        Some((self.appearance.appearance(window.as_ref()), backdrop))
     }
 
-    /// Tells the page and the app when the desktop's appearance changed.
+    /// Tells the page and the app when the desktop's appearance or the
+    /// material of the window's glass changed.
     pub(in crate::osr::host) fn refresh_appearance(&mut self) {
-        let Some(appearance) = self.current_appearance() else {
+        let Some(current) = self.current_appearance() else {
             return;
         };
-        if self.published_appearance == Some(appearance) {
+        let Some(previous) = self.published_appearance.replace(current) else {
+            self.publish_appearance(current, true);
             return;
+        };
+        if previous != current {
+            self.publish_appearance(current, previous.0 != current.0);
         }
-        self.published_appearance = Some(appearance);
+    }
+
+    fn publish_appearance(
+        &mut self,
+        (appearance, backdrop): (
+            sabine_platform::Appearance,
+            sabine_platform::BackdropMaterial,
+        ),
+        desktop_changed: bool,
+    ) {
         self.send_control(format!(
             "SABINE_BRIDGE_EVENT\t\"{}\"\t{}\n",
             sabine_bridge::APPEARANCE_EVENT,
-            appearance_json(&appearance)
+            appearance_json(&appearance, backdrop)
         ));
-        let mut output = std::io::stdout().lock();
-        let _ = writeln!(output, "{}", crate::window::appearance_line(&appearance));
-        let _ = output.flush();
+        if desktop_changed {
+            let mut output = std::io::stdout().lock();
+            let _ = writeln!(output, "{}", crate::window::appearance_line(&appearance));
+            let _ = output.flush();
+        }
     }
 
     pub(in crate::osr::host) fn appearance(&self) -> Option<sabine_platform::Appearance> {
         self.published_appearance
             .or_else(|| self.current_appearance())
+            .map(|(appearance, _)| appearance)
     }
 
     pub(in crate::osr::host) fn appearance_json(&self) -> serde_json::Value {
-        self.appearance()
-            .map_or(serde_json::Value::Null, |appearance| {
-                appearance_json(&appearance)
+        self.published_appearance
+            .or_else(|| self.current_appearance())
+            .map_or(serde_json::Value::Null, |(appearance, backdrop)| {
+                appearance_json(&appearance, backdrop)
             })
     }
 
@@ -354,9 +382,13 @@ impl OsrNativeHost {
     }
 }
 
-fn appearance_json(appearance: &sabine_platform::Appearance) -> serde_json::Value {
+fn appearance_json(
+    appearance: &sabine_platform::Appearance,
+    backdrop: sabine_platform::BackdropMaterial,
+) -> serde_json::Value {
     serde_json::json!({
         "colorScheme": if appearance.dark { "dark" } else { "light" },
         "accentColor": appearance.accent_hex(),
+        "backdrop": backdrop.as_str(),
     })
 }
