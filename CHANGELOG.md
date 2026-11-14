@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.90
 
 - On Kestrel, a window hears which material its glass has: Luca, a blur of what is behind it, or
   Maris, the desktop's surface colour over a wide blur of the wallpaper, which a page draws no tint
