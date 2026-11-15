@@ -443,7 +443,9 @@ What happens next depends on how the app was installed:
 
 For deb and rpm updates, the elevated step copies the package somewhere only the administrator can
 write and checks its SHA-256 there, so the package manager installs exactly the file that matched
-the release. A downloaded package is checked against the installed version again before it's
+the release. A DMG is copied and checked the same way before its app is installed from the copy.
+MSI and setup updates are held open so nothing can change them, and checked, until the installer
+has run. A downloaded package is checked against the installed version again before it's
 offered, and deleted once it's installed. Apps installed through an app store are left to the
 store; see [App stores](/docs/distribution/installing/#app-stores).
 

@@ -6,7 +6,7 @@ use crate::schelf::{Trust, Withdrawal, update_download_url};
 use crate::types::{
     AppArtifact, AppArtifactKind, AppInstallMode, AppReleaseManifest, AppUpdateSource,
     AppUpdateStatus, PendingAppUpdate, SabineVersion, ServiceError, ServiceResult, is_https_url,
-    unix_timestamp, update_artifact_target, version_is_newer,
+    safe_relative_path, unix_timestamp, update_artifact_target, version_is_newer,
 };
 use crate::{release_is_soaked, verify_app_release};
 
@@ -187,15 +187,17 @@ impl SabineService {
         let Some(pending) = self.pending_app_update(id)? else {
             return Ok(false);
         };
-        verify_sha256(&pending.artifact, &pending.sha256)?;
         match &pending.executable {
-            Some(executable) => self.install_managed_release(
-                id,
-                &pending.version,
-                pending.sabine,
-                executable,
-                || Ok(pending.artifact.clone()),
-            )?,
+            Some(executable) => {
+                verify_sha256(&pending.artifact, &pending.sha256)?;
+                self.install_managed_release(
+                    id,
+                    &pending.version,
+                    pending.sabine,
+                    executable,
+                    || Ok(pending.artifact.clone()),
+                )?
+            }
             None => run_package_installer(&pending, install_target)?,
         }
         std::fs::remove_file(pending_path(&self.root, id))?;
@@ -385,7 +387,7 @@ fn validate_artifact(artifact: &AppArtifact) -> ServiceResult<()> {
     if artifact
         .executable
         .as_deref()
-        .is_some_and(|path| !installers::safe_relative_path(path))
+        .is_some_and(|path| !safe_relative_path(path))
     {
         return Err(ServiceError::Update(
             "artifact executable path is unsafe".to_string(),

@@ -11,6 +11,8 @@ use crate::types::{
 };
 
 mod apps;
+#[cfg(target_os = "macos")]
+mod dmg;
 pub(crate) mod installers;
 mod packages;
 
