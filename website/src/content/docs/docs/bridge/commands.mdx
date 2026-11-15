@@ -344,6 +344,6 @@ Ok(window)
 
 <Aside>
 Commands are registered before the window launches. Windows opened later with
-`SabineProcess::open_window` share the first window's commands; handlers registered on those
-windows' builders are ignored.
+`SabineProcess::open_window` share the first window's commands and add the ones registered on
+their own builders, which answer in their place for a command both register.
 </Aside>

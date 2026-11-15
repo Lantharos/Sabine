@@ -1,4 +1,4 @@
-use sabine_bridge::{BridgeError, BridgeResponse};
+use sabine_bridge::{BridgeError, BridgeHandlers, BridgeResponse};
 use sabine_runtime::RuntimeInfo;
 
 use super::manifest::development_env;
@@ -31,14 +31,17 @@ impl SabineWindow {
         self.launch_with_runtime(runtime, claim, metrics)
     }
 
-    /// Resolve entry URL and config for [`SabineProcess::open_window`].
-    /// Does not start desktop services or a second process island.
-    pub(crate) fn into_open_window_parts(mut self) -> SabineResult<(SabineWindowConfig, String)> {
+    /// Resolve entry URL, config and bridge handlers for
+    /// [`SabineProcess::open_window`]. Does not start desktop services or a
+    /// second process island.
+    pub(crate) fn into_open_window_parts(
+        mut self,
+    ) -> SabineResult<(SabineWindowConfig, BridgeHandlers, String)> {
         self.apply_launch_environment();
         self.config.validate()?;
         self.allow_configured_url_origins();
         let url = self.entry_url()?;
-        Ok((self.config, url))
+        Ok((self.config, self.bridge_handlers, url))
     }
 
     fn launch_with_runtime(

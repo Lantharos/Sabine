@@ -1,15 +1,18 @@
 #[cfg(target_os = "linux")]
 use std::path::Path;
 
+mod desktop_events;
+mod handle;
 #[cfg(target_os = "linux")]
 mod installation;
 mod process;
 mod process_tree;
 
+pub use handle::SabineProcessHandle;
 #[cfg(target_os = "linux")]
 pub(crate) use installation::Installation;
 pub(crate) use process::{PrimaryWindow, ProcessCommand};
-pub use process::{SabineProcess, SabineProcessHandle, WindowId};
+pub use process::{SabineProcess, WindowId};
 pub(crate) use process_tree::{ManagedChild, prepare_detachable_child_command, spawn_child};
 #[cfg(debug_assertions)]
 pub(crate) use sabine_host::ensure_host;

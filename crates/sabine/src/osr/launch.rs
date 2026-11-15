@@ -148,7 +148,15 @@ pub(crate) fn open_primary_window(
     let config = process.windows.primary.clone();
     let url = process.windows.url.clone();
     let restoring = process.windows.restoring.take();
-    let (child, ready) = spawn_window(process, &config, &url, activation_token, restoring)?;
+    let handlers = process.windows.bridge_handlers.clone();
+    let (child, ready) = spawn_window(
+        process,
+        &config,
+        handlers,
+        &url,
+        activation_token,
+        restoring,
+    )?;
     process.primary = Some(PrimaryWindow {
         child,
         ready,
@@ -157,16 +165,24 @@ pub(crate) fn open_primary_window(
     Ok(())
 }
 
+/// Opens another window with the first window's app id and commands, and the
+/// commands of its own, which answer in place of the first window's for a
+/// command both register.
 pub(crate) fn attach_open_window(
     process: &mut SabineProcess,
     config: &SabineWindowConfig,
+    own_handlers: BridgeHandlers,
     url: &str,
 ) -> SabineResult<u32> {
     let mut window_config = config.clone();
     window_config.app_id = process.windows.primary.app_id.clone();
-    window_config.bridge = process.windows.primary.bridge.clone();
+    for descriptor in process.windows.primary.bridge.descriptors() {
+        window_config.bridge.register_descriptor(descriptor.clone());
+    }
     window_config.listeners.open_urls = process.open_urls.clone();
-    let (child, _) = spawn_window(process, &window_config, url, None, None)?;
+    let mut handlers = process.windows.bridge_handlers.clone();
+    handlers.extend(own_handlers);
+    let (child, _) = spawn_window(process, &window_config, handlers, url, None, None)?;
     let window_id = child.id();
     process.extra_windows.push(child);
     Ok(window_id)
@@ -175,6 +191,7 @@ pub(crate) fn attach_open_window(
 fn spawn_window(
     process: &mut SabineProcess,
     config: &SabineWindowConfig,
+    handlers: BridgeHandlers,
     url: &str,
     activation_token: Option<String>,
     restoring: Option<String>,
@@ -190,7 +207,7 @@ fn spawn_window(
     )?;
     let dispatch = spawn_bridge_dispatch(
         &mut child,
-        BridgeRuntime::new(context.bridge_handlers.clone()),
+        BridgeRuntime::new(handlers),
         process.activity.clone(),
         &process.bridge_emitter,
         config.listeners.clone(),
