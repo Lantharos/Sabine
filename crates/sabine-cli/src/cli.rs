@@ -10,10 +10,29 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Create a project.
     New {
         name: String,
+        /// `app`, `react`, `svelte`, `vue`, `solid` or `notes`.
         #[arg(long, default_value = "app")]
         template: String,
+        /// The reverse-DNS identifier of the app, such as com.example.tern.
+        #[arg(long)]
+        id: Option<String>,
+    },
+    /// Show the Sabine, runtime, toolchain and project this machine builds with.
+    Info {
+        #[arg(default_value = ".")]
+        source: PathBuf,
+    },
+    /// Generate the app's icons for every platform from one image.
+    Icon {
+        /// The source image; the project's `[app] icon` when absent.
+        image: Option<PathBuf>,
+        #[arg(long, default_value = ".")]
+        source: PathBuf,
+        #[arg(long, default_value = "dist/icons")]
+        out: PathBuf,
     },
     Dev {
         #[arg(default_value = ".")]

@@ -1,13 +1,13 @@
 use std::{
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
 use sabine_service::public_key_from_private;
 
 use super::new_private_key;
-use super::workflow::{WorkflowChange, write_release_workflow};
+use super::workflow::{Release, WorkflowChange, write_release_workflow};
 
 const SECRET: &str = "SABINE_UPDATE_SIGNING_KEY";
 
@@ -23,6 +23,7 @@ pub(crate) fn initialize_github_release(
         return Err("run sabine release-init from the app's project folder".to_string());
     }
     let repository = resolve_repository(repository)?;
+    let release = Release::current()?;
     let mut document = read_manifest(&manifest)?;
     if let Some(existing) = existing_key(&repository, &document)? {
         if !rotate_key {
@@ -35,12 +36,17 @@ pub(crate) fn initialize_github_release(
         );
     }
     let private_key = new_private_key()?;
+    let saved = save_private_key(&repository, &private_key)?;
+    println!(
+        "saved the update signing key to {}; keep it somewhere safe, as installed copies only accept releases signed with it",
+        saved.display()
+    );
     store_secret(&repository, &private_key)?;
     enable_immutable_releases(&repository)?;
     let public_key = public_key_from_private(&private_key).map_err(|error| error.to_string())?;
     configure_updates(&mut document, &repository, &public_key);
     std::fs::write(&manifest, document.to_string()).map_err(|error| error.to_string())?;
-    report_workflow(&project)?;
+    report_workflow(&project, &release)?;
     Ok(public_key)
 }
 
@@ -93,6 +99,34 @@ fn existing_key(
         .and_then(toml_edit::Item::as_str)
         .is_some_and(|key| !key.trim().is_empty());
     Ok(public_key.then(|| "[updates] public_key in Sabine.toml".to_string()))
+}
+
+/// Keeps a copy of the private key that only this user can read, outside the
+/// project so it never ends up in the repository.
+fn save_private_key(repository: &str, private_key: &str) -> Result<PathBuf, String> {
+    let directory = dirs::config_dir()
+        .ok_or("this computer has no configuration folder for the signing key")?
+        .join("sabine-keys");
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let created = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let path = directory.join(format!("{}-{created}.key", repository.replace('/', "-")));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+        .open(&path)
+        .and_then(|mut file| file.write_all(private_key.as_bytes()))
+        .map_err(|error| {
+            format!(
+                "could not save the signing key to {}: {error}",
+                path.display()
+            )
+        })?;
+    Ok(path)
 }
 
 fn store_secret(repository: &str, private_key: &str) -> Result<(), String> {
@@ -148,8 +182,8 @@ fn configure_updates(document: &mut toml_edit::DocumentMut, repository: &str, pu
     updates["public_key"] = toml_edit::value(public_key);
 }
 
-fn report_workflow(project: &Path) -> Result<(), String> {
-    let change = write_release_workflow(project).map_err(|error| error.to_string())?;
+fn report_workflow(project: &Path, release: &Release) -> Result<(), String> {
+    let change = write_release_workflow(project, release).map_err(|error| error.to_string())?;
     match change {
         WorkflowChange::Created => println!("wrote .github/workflows/release.yml"),
         WorkflowChange::Updated => println!(

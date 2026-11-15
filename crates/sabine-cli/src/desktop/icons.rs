@@ -29,6 +29,40 @@ pub fn stage_icon_set(app_id: &str, icon: &Path, destination: &Path) -> Result<(
     install_icon_set(app_id, icon, destination)
 }
 
+/// `sabine icon`: the icon set of the project in `source`, from `image` or
+/// the project's own icon.
+pub fn export(
+    image: Option<PathBuf>,
+    source: &Path,
+    out: &Path,
+) -> Result<std::process::ExitCode, String> {
+    let app = crate::project::read_sabine_file(source)?.app;
+    let image = image
+        .or_else(|| app.icon.map(|icon| source.join(icon)))
+        .or_else(|| crate::project::detect_icon(source))
+        .ok_or("name an image, or set [app] icon in Sabine.toml")?;
+    let id = app.id.unwrap_or_else(|| "icon".to_string());
+    export_icon_set(&id, &image, out)?;
+    println!(
+        "Wrote the icons of {} to {}",
+        image.display(),
+        out.display()
+    );
+    Ok(std::process::ExitCode::SUCCESS)
+}
+
+/// Writes every icon Sabine makes from `image` into `out`: the PNG sizes
+/// in the freedesktop layout, a Windows `.ico` and a macOS `.icns`.
+fn export_icon_set(app_id: &str, image: &Path, out: &Path) -> Result<(), String> {
+    if !image.is_file() {
+        return Err(format!("icon image was not found: {}", image.display()));
+    }
+    let hicolor = out.join("hicolor");
+    install_icon_set(app_id, image, &hicolor)?;
+    stage_windows_icon(app_id, image, &hicolor, &out.join(format!("{app_id}.ico")))?;
+    stage_macos_icon(app_id, &hicolor, &out.join(format!("{app_id}.icns")))
+}
+
 pub fn stage_windows_icon(
     app_id: &str,
     icon: &Path,

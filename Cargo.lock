@@ -2880,6 +2880,7 @@ dependencies = [
  "cc",
  "clap",
  "ctrlc",
+ "dirs",
  "dotenvy",
  "dunce",
  "editpe",

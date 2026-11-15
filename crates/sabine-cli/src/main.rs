@@ -2,6 +2,7 @@ mod bundle;
 mod desktop;
 mod dev;
 mod handover;
+mod info;
 mod install;
 mod project;
 mod release;
@@ -42,7 +43,14 @@ fn main() -> ExitCode {
         Err(error) => error.exit(),
     };
     match cli.command {
-        Command::New { name, template } => template::new_app(&name, &template),
+        Command::New { name, template, id } => report(template::new_app(&name, &template, id)),
+        Command::Info { source } => {
+            info::run(&source);
+            ExitCode::SUCCESS
+        }
+        Command::Icon { image, source, out } => {
+            report(desktop::icons::export(image, &source, &out))
+        }
         Command::Dev {
             source,
             release,

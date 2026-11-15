@@ -1,30 +1,41 @@
-//! Default Vite app template.
+//! Vite app templates.
 
 use std::{fs, path::Path};
 
-use super::cargo_toml;
-use crate::util::sanitize_id;
+use super::{cargo_toml, frontends::Frontend};
 
-pub(super) fn write_app_template(root: &Path, name: &str) -> std::io::Result<()> {
+pub(super) fn write_app_template(
+    root: &Path,
+    name: &str,
+    id: &str,
+    frontend: &Frontend,
+) -> std::io::Result<()> {
     fs::create_dir_all(root.join("src"))?;
     fs::create_dir_all(root.join("ui/src"))?;
     fs::write(root.join("Cargo.toml"), cargo_toml(name))?;
-    fs::write(root.join("Sabine.toml"), app_sabine_toml(name))?;
-    fs::write(root.join("package.json"), app_package_json(name))?;
-    fs::write(root.join("vite.config.ts"), app_vite_config())?;
-    fs::write(root.join("tsconfig.json"), app_tsconfig())?;
-    fs::write(root.join("src/main.rs"), app_main_rs())?;
-    fs::write(root.join("ui/index.html"), app_index_html(name))?;
-    fs::write(root.join("ui/src/main.ts"), app_main_ts())?;
-    fs::write(root.join("ui/src/style.css"), app_style_css())?;
+    fs::write(root.join("Sabine.toml"), app_sabine_toml(name, id))?;
+    fs::write(root.join("package.json"), package_json(name, frontend))?;
+    fs::write(root.join("vite.config.ts"), vite_config(frontend))?;
+    fs::write(root.join("tsconfig.json"), tsconfig(frontend))?;
+    fs::write(root.join("src/main.rs"), MAIN_RS)?;
+    fs::write(root.join("ui/index.html"), index_html(name, frontend))?;
+    fs::write(
+        root.join("ui/src/style.css"),
+        include_str!("frontends/style.css"),
+    )?;
+    for (path, contents) in frontend.files {
+        let file = Path::new(path)
+            .file_name()
+            .expect("template files have names");
+        fs::write(root.join("ui/src").join(file), contents)?;
+    }
     Ok(())
 }
 
-fn app_sabine_toml(name: &str) -> String {
-    let id = sanitize_id(name);
+fn app_sabine_toml(name: &str, id: &str) -> String {
     format!(
         r#"[app]
-id = "dev.sabine.{id}"
+id = "{id}"
 name = "{name}"
 version = "0.1.0"
 icon = "assets/icon.svg"
@@ -42,11 +53,26 @@ path = "ui/src/bindings.ts"
     )
 }
 
-fn app_package_json(name: &str) -> String {
-    let sabine_dependency = format!(
-        "github:Lantharos/Sabine#v{}",
-        sabine_service::SABINE_VERSION
+fn package_json(name: &str, frontend: &Frontend) -> String {
+    let sabine = (
+        "@lantharos/sabine",
+        format!(
+            "github:Lantharos/Sabine#v{}",
+            sabine_service::SABINE_VERSION
+        ),
     );
+    let mut dependencies = frontend
+        .dependencies
+        .iter()
+        .map(|(package, version)| (*package, version.to_string()))
+        .chain([(sabine.0, sabine.1)])
+        .collect::<Vec<_>>();
+    dependencies.sort();
+    let dev_dependencies = frontend
+        .dev_dependencies
+        .iter()
+        .map(|(package, version)| (*package, version.to_string()))
+        .collect::<Vec<_>>();
     format!(
         r#"{{
   "name": "{name}",
@@ -54,58 +80,100 @@ fn app_package_json(name: &str) -> String {
   "type": "module",
   "scripts": {{
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "check": "tsc --noEmit",
+    "build": "{check} && vite build",
+    "check": "{check}",
     "preview": "vite preview"
   }},
   "dependencies": {{
-    "@lantharos/sabine": "{sabine_dependency}"
+{}
   }},
   "devDependencies": {{
-    "typescript": "^7.0.2",
-    "vite": "^8.3.3"
+{}
   }}
 }}
 "#,
+        json_entries(&dependencies),
+        json_entries(&dev_dependencies),
+        check = frontend.check,
     )
 }
 
-fn app_vite_config() -> &'static str {
-    r#"import { defineConfig } from "vite";
-
-export default defineConfig({
-  base: "./",
-  root: "ui",
-  server: {
-    port: 5173,
-    strictPort: true,
-  },
-  build: {
-    outDir: "dist",
-    emptyOutDir: true,
-  },
-});
-"#
+fn json_entries(entries: &[(&str, String)]) -> String {
+    entries
+        .iter()
+        .map(|(key, value)| format!("    \"{key}\": \"{value}\""))
+        .collect::<Vec<_>>()
+        .join(",\n")
 }
 
-fn app_tsconfig() -> &'static str {
-    r#"{
-  "compilerOptions": {
+fn vite_config(frontend: &Frontend) -> String {
+    let (import, plugins) = frontend
+        .plugin
+        .map(|(import, call)| (format!("{import}\n"), format!("  plugins: [{call}],\n")))
+        .unwrap_or_default();
+    format!(
+        r#"import {{ defineConfig }} from "vite";
+{import}
+export default defineConfig({{
+{plugins}  base: "./",
+  root: "ui",
+  server: {{
+    port: 5173,
+    strictPort: true,
+  }},
+  build: {{
+    outDir: "dist",
+    emptyOutDir: true,
+  }},
+}});
+"#
+    )
+}
+
+fn tsconfig(frontend: &Frontend) -> String {
+    let options = frontend
+        .compiler_options
+        .iter()
+        .map(|(option, value)| format!("    \"{option}\": \"{value}\",\n"))
+        .collect::<String>();
+    format!(
+        r#"{{
+  "compilerOptions": {{
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
-  },
+{options}    "types": ["vite/client"]
+  }},
   "include": ["ui/src"]
-}
+}}
 "#
+    )
 }
 
-fn app_main_rs() -> &'static str {
-    r#"#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+fn index_html(name: &str, frontend: &Frontend) -> String {
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{name}</title>
+  </head>
+  <body>
+    {body}
+    <script type="module" src="/src/{entry}"></script>
+  </body>
+</html>
+"#,
+        body = frontend.body.replace("{name}", name),
+        entry = frontend.entry,
+    )
+}
+
+const MAIN_RS: &str = r#"#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use sabine::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -131,92 +199,4 @@ fn main() {
             }))
     });
 }
-"#
-}
-
-fn app_index_html(name: &str) -> String {
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{name}</title>
-  </head>
-  <body>
-    <main>
-      <h1>{name}</h1>
-      <p id="status">Loading Sabine bridge…</p>
-      <button id="version" type="button">App version</button>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-"#
-    )
-}
-
-fn app_main_ts() -> &'static str {
-    r##"import { commands } from "./bindings";
-import "./style.css";
-
-const status = document.querySelector("#status");
-const button = document.querySelector("#version");
-
-if (status instanceof HTMLElement) {
-  status.textContent = "Ready.";
-}
-
-button?.addEventListener("click", async () => {
-  try {
-    const { version } = await commands.appVersion();
-    if (status instanceof HTMLElement) {
-      status.textContent = `Version ${version}`;
-    }
-  } catch (error) {
-    if (status instanceof HTMLElement) {
-      status.textContent = error instanceof Error ? error.message : String(error);
-    }
-  }
-});
-"##
-}
-
-fn app_style_css() -> &'static str {
-    r#":root {
-  color-scheme: light dark;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-}
-
-main {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
-}
-
-h1 {
-  margin: 0 0 0.75rem;
-  font-size: 2rem;
-  font-weight: 600;
-}
-
-button {
-  margin-top: 1rem;
-  border: 0;
-  border-radius: 0.5rem;
-  padding: 0.65rem 1rem;
-  font: inherit;
-  cursor: pointer;
-}
-"#
-}
+"#;
