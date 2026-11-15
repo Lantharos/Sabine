@@ -15,7 +15,7 @@ installs in every page that gets the bridge, with types for all of it.
 <Code code={`bun add github:Lantharos/Sabine#${tag}`} lang="sh" />
 
 Install the tag that matches the Sabine version your app depends on. Every export is a named
-export; the default export is an object holding the same values.
+export, so bundlers leave out the parts a page doesn't import.
 
 ```ts
 import { appWindow, events, invoke } from "@lantharos/sabine";
@@ -946,4 +946,6 @@ await tray.update({
 The package's types also declare the global, so `window.sabine` is typed as
 `SabineApi | undefined` in pages that import the package. It has `bridge`, `window`, `guest`,
 `activity`, `popup`, `system`, `print` and, in the app's own pages, `clipboard`: the objects the
-exports above wrap.
+exports above stand for. `appWindow`, `popup`, `guest`, `activity`, `system`, `print` and
+`clipboard` look up their part of `window.sabine` on each use, so they have the same members;
+`guest.create` alone differs, resolving a [`Guest`](#guest) instead of its `GuestInfo`.

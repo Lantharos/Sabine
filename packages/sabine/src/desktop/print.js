@@ -1,14 +1,4 @@
-import { requireApi } from "../bridge.js";
+import { forward } from "../bridge.js";
 
-/** @type {typeof import("../../types/desktop/print.js").print} */
-export const print = {
-  page() {
-    return requireApi().print.page();
-  },
-  element(element) {
-    return requireApi().print.element(element);
-  },
-  files(paths, options) {
-    return requireApi().print.files(paths, options);
-  },
-};
+/** @type {import("../../types/desktop/print.js").SabinePrintApi} */
+export const print = /* @__PURE__ */ forward((api) => api.print);

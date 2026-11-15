@@ -57,6 +57,9 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
     window.sabine.bridge.invoke("sabine.window.holdReveal").catch(() => {});
     Promise.resolve(ready).then(reveal, reveal);
   },
+  onVisibilityChanged(callback) { return window.sabine.bridge.listen("window.visibility", callback); },
+  onStateChanged(callback) { return window.sabine.bridge.listen("window.state", callback); },
+  onControlsOverlayChanged(callback) { return window.sabine.bridge.listen("window.controlsOverlay", callback); },
 });
 Object.defineProperties(window.sabine.window, {
   visible: { get: () => windowState.visible, configurable: true },

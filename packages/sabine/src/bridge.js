@@ -46,6 +46,23 @@ export function sabine() {
 }
 
 /**
+ * The part of `window.sabine` that `select` picks, with `own` members on top,
+ * looked up whenever a member is used so the package imports anywhere.
+ * @template {object} T
+ * @template {object} [O={}]
+ * @param {(api: SabineApi) => T} select
+ * @param {O} [own]
+ * @returns {Omit<T, keyof O> & O}
+ */
+export function forward(select, own = /** @type {O} */ ({})) {
+  return /** @type {Omit<T, keyof O> & O} */ (
+    new Proxy(own, {
+      get: (own, key) => (key in own ? Reflect.get(own, key) : Reflect.get(select(requireApi()), key)),
+    })
+  );
+}
+
+/**
  * @template [T=unknown]
  * @param {string} name
  * @param {object} [params]
