@@ -65,7 +65,7 @@ pub(crate) fn launch_process(
     #[cfg(target_os = "linux")]
     let installation = crate::host::Installation::hold(config);
     #[cfg(target_os = "linux")]
-    crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
+    let session_bus = crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let mut process = SabineProcess {
@@ -98,6 +98,8 @@ pub(crate) fn launch_process(
         },
         #[cfg(target_os = "linux")]
         installation,
+        #[cfg(target_os = "linux")]
+        _session_bus: session_bus,
     };
     if !config.background {
         open_primary_window(&mut process, launch_activation_token())?;
@@ -502,6 +504,9 @@ fn own_browser_command(
     {
         command.env("LD_LIBRARY_PATH", ld_library_path(binary_dir));
         command.env("AMD_DEBUG", crate::launch::browser::chromium_amd_debug());
+        let display = crate::osr::transport::runtime_ipc_dir(&browser_profile_key(config))
+            .map_err(|error| format!("could not find the app's runtime folder: {error}"))?;
+        command.env(crate::launch::browser::DISPLAY_DIR_ENV, display);
     }
     #[cfg(target_os = "windows")]
     {

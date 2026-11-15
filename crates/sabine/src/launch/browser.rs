@@ -33,6 +33,11 @@ const LINUX_GTK_VERSION: &str = "--gtk-version=3";
 #[cfg(target_os = "linux")]
 const LINUX_AMD_DEBUG_NO_DCC: &str = "nodcc";
 
+/// The folder Chromium serves its own Wayland display in: the app's runtime
+/// folder, or the shared runtime's.
+#[cfg(target_os = "linux")]
+pub(crate) const DISPLAY_DIR_ENV: &str = "SABINE_DISPLAY_DIR";
+
 const DEFAULT_REMOTE_DEVTOOLS_PORT: u16 = 9222;
 const DEVTOOLS_PORT_ENV: &str = "SABINE_DEVTOOLS_PORT";
 /// A file for the browser process's log; sandboxed Chromium processes keep logging to the window

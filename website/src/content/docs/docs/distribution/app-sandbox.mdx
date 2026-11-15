@@ -81,7 +81,12 @@ A confined app:
 - reads the system's programs, libraries and settings, and the person's fonts, icons, themes and
   desktop settings
 - writes the folders named after its app id in the XDG data, config, cache and state folders, its
-  Chromium profile, and the temporary and runtime folders
+  Chromium profile, the temporary folders and a runtime folder of its own
+- reaches the desktop's display and sound server, PipeWire when it declares `microphone` or
+  `camera`, and the cameras with `camera`, but no other socket in your runtime folder, such as the
+  session bus, the service manager or other apps'
+- talks over the session bus only to the names in `talk` and to what Sabine itself uses: the
+  desktop and document portals, notifications and the tray
 - reads its own program, web assets, Sabine's host and the CEF runtime, and writes Sabine's logs
 - reaches the declared `filesystems` and `devices`, and nothing else in your home folder
 - can't reach abstract sockets or signal processes outside the app
@@ -117,9 +122,14 @@ let opened = within_reach(paths, Handed::Existing).await?;
 let save_as = within_reach(vec![chosen], Handed::New).await?;
 ```
 
-The session bus isn't filtered yet, so `talk` is declared but not enforced by Sabine. `x11`,
-`microphone` and `camera` are declarations for a system that sandboxes the app, such as Luft;
-Sabine carries them into the bundle's manifest and doesn't enforce them itself. Apps with
+Sabine filters the session bus with `xdg-dbus-proxy`, which the app starts before it confines
+itself. Without it, a confined app gets no session bus at all, and records that in its diagnostics.
+A confined app never joins the [shared runtime](/docs/concepts/shared-runtime/), which runs outside
+its confinement.
+
+The sound server records as well as plays, so `microphone` decides only whether the app reaches
+PipeWire itself. `x11` is a declaration for a system that sandboxes the app, such as Luft; Sabine
+carries it into the bundle's manifest and doesn't enforce it itself. Apps with
 `unsandboxed = true`, apps without a `[sandbox]` table, and apps started with
 `SABINE_FULL_ACCESS` set run unconfined. A system sets `SABINE_FULL_ACCESS` for an app the person
 gave full access.

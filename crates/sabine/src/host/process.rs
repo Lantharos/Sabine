@@ -80,6 +80,10 @@ pub struct SabineProcess {
     pub(crate) windows: WindowContext,
     #[cfg(target_os = "linux")]
     pub(crate) installation: Option<crate::host::Installation>,
+    /// The filtered session bus of an app Sabine confines, which ends with
+    /// the app.
+    #[cfg(target_os = "linux")]
+    pub(crate) _session_bus: Option<crate::launch::confine::SessionBus>,
 }
 
 /// Identifier for a window opened via [`SabineProcess::open_window`].
@@ -372,8 +376,8 @@ impl SabineProcess {
     }
 
     pub fn begin_activity_with(&self, options: ActivityOptions) -> SabineActivityLease {
-        let emitter = Arc::new(self.bridge_emitter.clone())
-            as Arc<dyn sabine_bridge::ActivityEventEmitter>;
+        let emitter =
+            Arc::new(self.bridge_emitter.clone()) as Arc<dyn sabine_bridge::ActivityEventEmitter>;
         self.activity.lease(options, Some(emitter))
     }
 

@@ -1,21 +1,26 @@
 //! Holds an app outside an app sandbox to its `[sandbox]` declaration with
-//! Landlock and a system call filter, which every process it starts inherits.
+//! Landlock, a system call filter and a filtered session bus, which every
+//! process it starts inherits.
 
+mod bus;
 pub mod documents;
 mod paths;
 mod seccomp;
 
-use std::path::Path;
+use std::os::unix::fs::DirBuilderExt;
+use std::path::{Path, PathBuf};
 
 use landlock::{
     Access, AccessFs, AccessNet, NetPort, PathBeneath, PathFd, RestrictSelfAttr, RestrictionStatus,
     Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetError, RulesetStatus, Scope,
 };
+use sabine_platform::SingleInstancePolicy;
 use sabine_service::Sandbox;
 
 use crate::error::{SabineError, SabineResult};
 use crate::window::config::SabineWindowConfig;
-use paths::{LANDLOCK, Own, Paths};
+pub(crate) use bus::SessionBus;
+use paths::{LANDLOCK, Own, Paths, Runtime};
 
 const FULL_ACCESS: &str = "SABINE_FULL_ACCESS";
 
@@ -63,22 +68,59 @@ pub(crate) fn applies(config: &SabineWindowConfig) -> bool {
         && std::env::var_os(FULL_ACCESS).is_none()
 }
 
+/// The socket later launches of a single-instance app hand it their
+/// arguments through, which it wakes itself through as it ends.
+fn instance_socket(config: &SabineWindowConfig, app_id: &str) -> Option<PathBuf> {
+    let services = &config.desktop_services;
+    services
+        .single_instance_policy
+        .filter(|policy| *policy != SingleInstancePolicy::AllowMultiple)?;
+    let id = services.single_instance_id.as_deref().unwrap_or(app_id);
+    sabine_runtime::instance::instance_socket(&crate::desktop::sanitize_id(id)).ok()
+}
+
+/// The app's own runtime folder, which only it and the processes it starts
+/// use.
+fn own_runtime_folder(app_id: &str) -> SabineResult<PathBuf> {
+    crate::osr::transport::runtime_ipc_dir(app_id)
+        .and_then(|folder| {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&folder)
+                .map(|()| folder)
+        })
+        .map_err(|error| SabineError::CreationFailed {
+            message: format!("could not create the app's runtime folder: {error}"),
+        })
+}
+
 /// Confines the app to what its `[sandbox]` declares, when [`applies`] says
-/// Sabine does.
-pub(crate) fn apply(config: &SabineWindowConfig, runtime: &Path, host: &Path) -> SabineResult<()> {
+/// Sabine does, and hands back its filtered session bus, which runs while
+/// the app holds it.
+pub(crate) fn apply(
+    config: &SabineWindowConfig,
+    runtime: &Path,
+    host: &Path,
+) -> SabineResult<Option<SessionBus>> {
     let Some(Sandbox::Confined {
         network,
         filesystems,
         devices,
+        talk,
+        microphone,
+        camera,
         ..
     }) = &config.sandbox
     else {
-        return Ok(());
+        return Ok(None);
     };
     if !applies(config) {
-        return Ok(());
+        return Ok(None);
     }
     let app_id = crate::osr::launch::require_app_id(config)?;
+    let own_folder = own_runtime_folder(app_id)?;
+    let bus = bus::filter(talk, &own_folder);
     let program = std::env::current_exe()
         .ok()
         .and_then(|program| program.parent().map(Path::to_path_buf));
@@ -96,7 +138,15 @@ pub(crate) fn apply(config: &SabineWindowConfig, runtime: &Path, host: &Path) ->
         .system()
         .desktop()
         .own(&own)
+        .runtime(&Runtime {
+            own: own_folder,
+            instance: instance_socket(config, app_id),
+            media: *microphone || *camera,
+        })
         .declared(filesystems, devices);
+    if *camera {
+        paths.cameras();
+    }
     let ports = (!network).then(|| Ports {
         connect: dev_port(config),
         bind: config.effective_remote_devtools_port(),
@@ -111,5 +161,6 @@ pub(crate) fn apply(config: &SabineWindowConfig, runtime: &Path, host: &Path) ->
             "this kernel has no Landlock, so the app's [sandbox] limits only its system calls",
         );
     }
-    seccomp::apply().map_err(|error| failed(&error))
+    seccomp::apply().map_err(|error| failed(&error))?;
+    Ok(bus)
 }

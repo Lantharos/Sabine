@@ -153,5 +153,5 @@ Remote debugging gives full control over a browser, so it is off unless you ask 
 ## What Sabine doesn't protect against
 
 - **Other programs running as the same user.** They can read the same files your app can, including web storage and its profile. Use the operating system's keychain or credential store for secrets.
-- **The session bus.** The Linux app sandbox doesn't filter D-Bus.
+- **The session bus of unconfined apps.** An app that Sabine doesn't confine to a `[sandbox]` reaches every service on the session bus.
 - **Your own commands.** A bridge command that runs whatever a page sends it gives every allowed page that power. Validate parameters in Rust, and keep remote origins to the minimum your app needs.
