@@ -1,4 +1,7 @@
-use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
+use std::{
+    os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd},
+    sync::{Arc, Mutex},
+};
 
 use ash::{khr, vk};
 use wgpu::hal::api::Vulkan;
@@ -78,9 +81,41 @@ fn imports_sync_files(adapter: &wgpu::hal::vulkan::Adapter) -> bool {
 /// for that fence on the GPU.
 pub(in crate::render::gpu) struct ProducerWaits {
     queue: wgpu::Queue,
-    device: ash::Device,
     sync_files: Option<khr::external_semaphore_fd::Device>,
+    semaphores: Arc<SemaphorePool>,
     staged: Vec<vk::Semaphore>,
+}
+
+/// Semaphores whose waits the GPU finished, to import the next fences into.
+/// Each import is temporary, so a semaphore is empty again once waited on.
+struct SemaphorePool {
+    device: ash::Device,
+    free: Mutex<Vec<vk::Semaphore>>,
+}
+
+impl SemaphorePool {
+    fn take(&self) -> Option<vk::Semaphore> {
+        if let Some(semaphore) = self.free.lock().unwrap().pop() {
+            return Some(semaphore);
+        }
+        unsafe {
+            self.device
+                .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+        }
+        .ok()
+    }
+
+    fn give_back(&self, semaphores: impl IntoIterator<Item = vk::Semaphore>) {
+        self.free.lock().unwrap().extend(semaphores);
+    }
+}
+
+impl Drop for SemaphorePool {
+    fn drop(&mut self) {
+        for semaphore in self.free.get_mut().unwrap().drain(..) {
+            unsafe { self.device.destroy_semaphore(semaphore, None) };
+        }
+    }
 }
 
 impl ProducerWaits {
@@ -97,8 +132,11 @@ impl ProducerWaits {
             });
         Some(Self {
             queue: queue.clone(),
-            device: hal_device.raw_device().clone(),
             sync_files,
+            semaphores: Arc::new(SemaphorePool {
+                device: hal_device.raw_device().clone(),
+                free: Mutex::new(Vec::new()),
+            }),
             staged: Vec::new(),
         })
     }
@@ -110,10 +148,7 @@ impl ProducerWaits {
         let Some(fence) = export_write_fence(dmabuf) else {
             return;
         };
-        let Ok(semaphore) = (unsafe {
-            self.device
-                .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
-        }) else {
+        let Some(semaphore) = self.semaphores.take() else {
             return;
         };
         let import = vk::ImportSemaphoreFdInfoKHR::default()
@@ -122,7 +157,7 @@ impl ProducerWaits {
             .handle_type(vk::ExternalSemaphoreHandleTypeFlags::SYNC_FD)
             .fd(fence.as_raw_fd());
         if unsafe { sync_files.import_semaphore_fd(&import) }.is_err() {
-            unsafe { self.device.destroy_semaphore(semaphore, None) };
+            self.semaphores.give_back([semaphore]);
             return;
         }
         let _ = fence.into_raw_fd();
@@ -132,19 +167,16 @@ impl ProducerWaits {
         self.staged.push(semaphore);
     }
 
-    /// Frees the semaphores a submission just made after waiting on them,
+    /// Hands the semaphores a submission just waited on back for reuse,
     /// once the GPU finished it. Returns whether any waits for that.
     pub(in crate::render::gpu) fn submitted(&mut self) -> bool {
         if self.staged.is_empty() {
             return false;
         }
         let semaphores = std::mem::take(&mut self.staged);
-        let device = self.device.clone();
-        self.queue.on_submitted_work_done(move || {
-            for semaphore in semaphores {
-                unsafe { device.destroy_semaphore(semaphore, None) };
-            }
-        });
+        let pool = Arc::clone(&self.semaphores);
+        self.queue
+            .on_submitted_work_done(move || pool.give_back(semaphores));
         true
     }
 }
@@ -161,13 +193,12 @@ impl GpuRenderer {
 
 impl Drop for ProducerWaits {
     fn drop(&mut self) {
-        let hal_queue = unsafe { self.queue.as_hal::<Vulkan>() };
-        for semaphore in self.staged.drain(..) {
-            if let Some(hal_queue) = &hal_queue {
-                hal_queue.remove_wait_semaphore(semaphore);
+        if let Some(hal_queue) = unsafe { self.queue.as_hal::<Vulkan>() } {
+            for semaphore in &self.staged {
+                hal_queue.remove_wait_semaphore(*semaphore);
             }
-            unsafe { self.device.destroy_semaphore(semaphore, None) };
         }
+        self.semaphores.give_back(self.staged.drain(..));
     }
 }
 
