@@ -3,9 +3,10 @@
 /** @typedef {import("../../types/media/native-video.js").NativeVideoCue} NativeVideoCue */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoError} NativeVideoError */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoAttachOptions} NativeVideoAttachOptions */
+/** @typedef {import("./layout.js").Placement} Placement */
 /** @typedef {{ id: number, type: string, [field: string]: any }} MediaEvent */
 
-import { LayoutTracker } from "./layout.js";
+import { HIDDEN, LayoutTracker, samePlacement } from "./layout.js";
 
 const EVENT = "sabine.media";
 const CREATE = "sabine.media.create";
@@ -110,7 +111,8 @@ export class NativeVideo extends EventTarget {
   #cueTimer = 0;
   /** @type {LayoutTracker | null} */
   #layout = null;
-  #rect = "";
+  /** @type {Placement | null} */
+  #placement = null;
   #destroyed = false;
 
   /**
@@ -290,7 +292,7 @@ export class NativeVideo extends EventTarget {
     if (!this.#layout) return;
     this.#layout.stop();
     this.#layout = null;
-    this.#place({ x: 0, y: 0, width: 0, height: 0, visible: false });
+    this.#place(HIDDEN);
   }
 
   /** Re-reads the attached element's position, e.g. during a transform animation. */
@@ -434,12 +436,11 @@ export class NativeVideo extends EventTarget {
     }, Math.max(16, remaining * 1000));
   }
 
-  /** @param {Record<string, unknown>} rect */
-  #place(rect) {
-    const key = JSON.stringify(rect);
-    if (key === this.#rect || this.#destroyed) return;
-    this.#rect = key;
-    this.#send("setRect", rect);
+  /** @param {Placement} placement */
+  #place(placement) {
+    if (this.#destroyed || (this.#placement && samePlacement(placement, this.#placement))) return;
+    this.#placement = placement;
+    this.#send("setRect", placement);
   }
 
   /**
