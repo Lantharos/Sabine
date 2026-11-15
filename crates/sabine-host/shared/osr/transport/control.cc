@@ -35,13 +35,18 @@ int ViewPixels(int dips, float scale) {
 }  // namespace
 
 void SabineOsrHandler::StartCommandReader() {
-  CefRefPtr<SabineOsrHandler> self(this);
-  std::thread([self]() mutable {
-    self->ReadControls();
-    CefPostTask(TID_UI,
-                base::BindOnce(&SabineOsrHandler::CloseFromNativeDisconnect,
-                               std::move(self)));
+  command_reader_ = this;
+  std::thread([this] {
+    ReadControls();
+    CefPostTask(TID_UI, base::BindOnce(&SabineOsrHandler::CommandReaderStopped,
+                                       base::Unretained(this)));
   }).detach();
+}
+
+void SabineOsrHandler::CommandReaderStopped() {
+  CEF_REQUIRE_UI_THREAD();
+  const CefRefPtr<SabineOsrHandler> self = std::move(command_reader_);
+  CloseFromNativeDisconnect();
 }
 
 void SabineOsrHandler::ReadControls() {

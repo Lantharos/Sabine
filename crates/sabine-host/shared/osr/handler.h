@@ -364,6 +364,7 @@ class SabineOsrHandler : public CefClient,
   // End of accelerated paint.
 
   void StartCommandReader();
+  void CommandReaderStopped();
   void ReadControls();
   bool DispatchControl(std::string line,
                        std::optional<std::string> body,
@@ -507,6 +508,9 @@ class SabineOsrHandler : public CefClient,
   const std::string endpoint_;
   const std::string authentication_token_;
   sabine_osr::Socket socket_;
+  // Keeps the handler while its command reader runs, so the reader thread
+  // never lets go of the last reference.
+  CefRefPtr<SabineOsrHandler> command_reader_;
   sabine_osr::ControlQueue controls_;
   sabine_osr::PendingResize resize_;
 
