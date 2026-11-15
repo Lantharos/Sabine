@@ -3,6 +3,7 @@
 //! ones Sabine itself talks to, so the app can't ask the service manager or
 //! anything else on the bus to run a program outside its confinement.
 
+use super::accessibility;
 use std::{
     fs::File,
     io::{self, Read},
@@ -35,12 +36,17 @@ pub(crate) struct SessionBus {
     _running: File,
 }
 
-/// Starts the app's filtered bus in its own runtime folder and points the
-/// app and everything it starts at it. Without `xdg-dbus-proxy`, the app and
-/// its children reach no session bus at all.
+/// Starts the app's filtered session and accessibility buses in its own
+/// runtime folder and points the app and everything it starts at them.
+/// Without `xdg-dbus-proxy`, the app and its children reach neither.
 pub(super) fn filter(talk: &[String], folder: &Path) -> Option<SessionBus> {
     let (bus, address) = match start(talk, folder) {
-        Ok((bus, socket)) => (Some(bus), format!("unix:path={}", socket.display())),
+        Ok((bus, socket, accessibility)) => {
+            if let Some(accessibility) = accessibility {
+                accessibility::point_at(&accessibility);
+            }
+            (Some(bus), format!("unix:path={}", socket.display()))
+        }
         Err(error) => {
             sabine_runtime::report_error(
                 "sandbox",
@@ -55,7 +61,7 @@ pub(super) fn filter(talk: &[String], folder: &Path) -> Option<SessionBus> {
     bus
 }
 
-fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf)> {
+fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf, Option<PathBuf>)> {
     let upstream = std::env::var_os(ADDRESS)
         .filter(|address| !address.is_empty())
         .or_else(|| {
@@ -64,7 +70,11 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf)> {
         })
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "there is no session bus"))?;
     let socket = folder.join(format!("bus-{}", std::process::id()));
-    let _ = std::fs::remove_file(&socket);
+    let accessibility_socket = folder.join(format!("a11y-bus-{}", std::process::id()));
+    for socket in [&socket, &accessibility_socket] {
+        let _ = std::fs::remove_file(socket);
+    }
+    let accessibility = accessibility::filtered(&accessibility_socket);
     let (running, ready) = pipe()?;
     let ready_fd = ready.as_raw_fd();
     let mut command = Command::new(PROXY);
@@ -80,6 +90,8 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf)> {
                 .chain(talk.iter().map(String::as_str))
                 .map(|name| format!("--talk={name}")),
         )
+        .args(accessibility::STATUS_RULES)
+        .args(accessibility.iter().flatten())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .process_group(0);
@@ -95,7 +107,11 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf)> {
         return Err(io::Error::other(format!("{PROXY} ended: {status}")));
     }
     std::thread::spawn(move || proxy.wait());
-    Ok((SessionBus { _running: running }, socket))
+    Ok((
+        SessionBus { _running: running },
+        socket,
+        accessibility.map(|_| accessibility_socket),
+    ))
 }
 
 /// A pipe whose read end the app keeps and whose write end the proxy gets,

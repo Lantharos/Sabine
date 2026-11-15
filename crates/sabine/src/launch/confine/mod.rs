@@ -2,6 +2,7 @@
 //! Landlock, a system call filter and a filtered session bus, which every
 //! process it starts inherits.
 
+mod accessibility;
 mod bus;
 pub mod documents;
 mod paths;
