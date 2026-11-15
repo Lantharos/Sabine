@@ -19,6 +19,9 @@ const OPEN_DEADLINE: Duration = Duration::from_secs(10);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 const SOCKET_DELAY: Duration = Duration::from_millis(5);
+/// Where the runtime apps installed for every user share keeps the crash
+/// reports of its browser, which no app's upload URL applies to.
+const CRASH_FOLDER: &str = "crashes";
 
 /// A window's browser in a shared runtime: the one Chromium that holds the
 /// shared profiles, or this app alone when it isn't installed for every user,
@@ -53,10 +56,21 @@ impl SharedLaunch {
         let socket_directory =
             PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join(SOCKET_DIRECTORY);
         let profiles = sabine_service::browser_profiles_root();
-        let user_data = if installed_for_every_user(app_id) {
+        let shared = installed_for_every_user(app_id);
+        let user_data = if shared {
             sabine_service::shared_browser_profiles_root()
         } else {
             sabine_service::own_runtime_profiles_root(app_id)
+        };
+        let crashes = if shared {
+            crate::launch::browser::crash_environment(user_data.join(CRASH_FOLDER), None)
+        } else {
+            crate::launch::browser::crash_environment(
+                crate::diagnostics::CrashReports::for_app(app_id)
+                    .folder()
+                    .to_path_buf(),
+                options.crash_upload_url.as_deref(),
+            )
         };
         let mut global = Command::new(host);
         sabine_host::apply_runtime_resource_args(&mut global, runtime_dir);
@@ -84,6 +98,9 @@ impl SharedLaunch {
         ];
         if let Ok(display) = std::env::var("WAYLAND_DISPLAY") {
             environment.push(format!("WAYLAND_DISPLAY={display}"));
+        }
+        for (name, value) in crashes {
+            environment.push(format!("{name}={}", value.to_str()?));
         }
         let expandable = |text: &OsStr| {
             text.as_encoded_bytes()

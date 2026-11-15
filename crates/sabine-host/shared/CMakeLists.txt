@@ -51,9 +51,12 @@ if(OS_WINDOWS)
   list(REMOVE_ITEM SABINE_HOST_SOURCES osr/paint/shared_memory_posix.cc)
 endif()
 
+# Chromium reads its crash reporting setup next to the executable, or from the
+# app bundle's resources on macOS.
 if(OS_MAC)
-  list(APPEND SABINE_HOST_SOURCES macos/sabine.icns)
-  set_source_files_properties(macos/sabine.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  list(APPEND SABINE_HOST_SOURCES macos/sabine.icns crash_reporter.cfg)
+  set_source_files_properties(macos/sabine.icns crash_reporter.cfg
+    PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 endif()
 
 if(OS_WINDOWS)
@@ -102,6 +105,12 @@ endif()
 set_target_properties(sabine-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${SABINE_HOST_OUTPUT_DIR}")
 set_target_properties(sabine-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${SABINE_HOST_OUTPUT_DIR}")
 set_target_properties(sabine-host PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${SABINE_HOST_OUTPUT_DIR}")
+
+if(NOT OS_MAC)
+  add_custom_command(TARGET sabine-host POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/crash_reporter.cfg" "${SABINE_HOST_OUTPUT_DIR}/crash_reporter.cfg"
+    VERBATIM)
+endif()
 
 if(OS_WINDOWS)
   add_custom_command(TARGET sabine-host POST_BUILD

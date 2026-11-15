@@ -41,6 +41,7 @@ pub fn smoke_test_runtime(host: &Path, runtime_dir: &Path) -> Result<(), String>
     command
         .arg("--sabine-runtime-smoke-test")
         .arg(format!("--root-cache-path={}", cache_dir.display()))
+        .env(crate::CRASH_FOLDER_ENV, cache_dir.join("crashes"))
         .current_dir(&binary_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

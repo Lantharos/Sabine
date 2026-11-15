@@ -258,6 +258,7 @@ fn spawn_osr_host_child(
         "lifecycle": crate::osr::protocol::lifecycle_to_json(&config.lifecycle),
         "dev_mode": config.dev_mode(),
         "remote_devtools_port": config.effective_remote_devtools_port(),
+        "crash_upload_url": if config.dev_mode() { None } else { config.crash_upload_url.as_deref() },
     });
     #[cfg(target_os = "linux")]
     {

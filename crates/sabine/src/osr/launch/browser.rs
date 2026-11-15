@@ -147,18 +147,21 @@ fn own_browser_command(
     let mut command = Command::new(host_binary);
     sabine_runtime::configure_background_command(&mut command);
     sabine_host::apply_runtime_resource_args(&mut command, runtime_dir);
+    let options = config.browser_options();
     command
         .args(window)
+        .envs(crate::launch::browser::crash_environment(
+            crate::diagnostics::CrashReports::for_app(&browser_profile_key(config))
+                .folder()
+                .to_path_buf(),
+            options.crash_upload_url.as_deref(),
+        ))
         .arg(format!("--root-cache-path={}", cache_dir.display()))
         .arg(format!(
             "--cache-path={}",
             cache_dir.join("browser").display()
         ));
-    crate::launch::browser::apply_browser_launch_args(
-        &mut command,
-        &config.browser_options(),
-        config.dev_mode,
-    );
+    crate::launch::browser::apply_browser_launch_args(&mut command, &options, config.dev_mode);
     crate::host::prepare_detachable_child_command(&mut command);
     command.current_dir(binary_dir);
     #[cfg(target_os = "linux")]

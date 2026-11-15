@@ -66,10 +66,32 @@ pub fn ensure_host(runtime_dir: &Path) -> Result<PathBuf, String> {
 
 pub fn host_is_complete(path: &Path) -> bool {
     path.is_file()
+        && crash_reporter_config(path).is_file()
         && (!cfg!(windows)
             || (path.with_extension("dll").is_file()
                 && path.with_file_name("chrome_elf.dll").is_file()))
 }
+
+/// The file that turns on Chromium's crash reporting for `host`: beside it, or
+/// in its app bundle's resources on macOS.
+pub fn crash_reporter_config(host: &Path) -> PathBuf {
+    const NAME: &str = "crash_reporter.cfg";
+    if cfg!(target_os = "macos") {
+        host.parent()
+            .and_then(Path::parent)
+            .unwrap_or(host)
+            .join("Resources")
+            .join(NAME)
+    } else {
+        host.with_file_name(NAME)
+    }
+}
+
+/// Where Chromium writes crash reports, which every browser it starts keeps
+/// in its own folder.
+pub const CRASH_FOLDER_ENV: &str = "BREAKPAD_DUMP_LOCATION";
+/// Where Chromium sends crash reports. Without it, reports stay on disk.
+pub const CRASH_UPLOAD_ENV: &str = "CEF_CRASH_REPORTER_SERVER_URL";
 
 pub fn available_host(runtime_dir: &Path) -> Option<PathBuf> {
     installed::prebuilt_host_path().or_else(|| {

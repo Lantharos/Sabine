@@ -55,6 +55,7 @@ pub(crate) struct OsrHostConfig {
     pub lifecycle: SabineLifecyclePolicy,
     pub dev_mode: bool,
     pub remote_devtools_port: Option<u16>,
+    pub crash_upload_url: Option<String>,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
     #[cfg(target_os = "linux")]
@@ -77,6 +78,7 @@ impl OsrHostConfig {
     pub(crate) fn browser_options(&self) -> crate::launch::browser::BrowserOptions {
         crate::launch::browser::BrowserOptions {
             remote_devtools_port: self.remote_devtools_port,
+            crash_upload_url: self.crash_upload_url.clone(),
             #[cfg(target_os = "linux")]
             vaapi_hardware_decode: self.vaapi_hardware_decode,
             #[cfg(target_os = "linux")]
@@ -230,6 +232,10 @@ impl OsrHostConfig {
                 .get("remote_devtools_port")
                 .and_then(serde_json::Value::as_u64)
                 .and_then(|port| u16::try_from(port).ok()),
+            crash_upload_url: value
+                .get("crash_upload_url")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
             #[cfg(target_os = "linux")]
             vaapi_hardware_decode: value
                 .get("vaapi_hardware_decode")

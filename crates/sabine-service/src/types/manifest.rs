@@ -20,6 +20,8 @@ pub struct SabineFile {
     pub updates: Option<AppUpdatesSection>,
     pub sandbox: Option<SandboxSection>,
     #[serde(default)]
+    pub crash: CrashSection,
+    #[serde(default)]
     pub resources: BTreeMap<String, String>,
     #[serde(default)]
     pub install: InstallSection,
@@ -93,6 +95,13 @@ pub struct WindowSection {
     #[serde(default)]
     pub splash: bool,
     pub splash_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct CrashSection {
+    /// Where Chromium sends the app's crash reports. Without it, reports stay
+    /// in the app's data folder.
+    pub upload_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

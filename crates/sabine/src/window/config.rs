@@ -75,6 +75,7 @@ pub(crate) struct SabineWindowConfig {
     pub security: ContentSecurity,
     pub local_files: bool,
     pub browser: BrowserOptions,
+    pub crash_upload_url: Option<String>,
     pub listeners: super::WindowListeners,
     pub launched: Option<super::LaunchListener>,
     pub quit: Option<super::QuitListener>,
@@ -132,6 +133,7 @@ impl Default for SabineWindowConfig {
             security: ContentSecurity::default(),
             local_files: false,
             browser: BrowserOptions::default(),
+            crash_upload_url: None,
             listeners: super::WindowListeners::default(),
             launched: None,
             quit: None,
@@ -198,6 +200,15 @@ impl SabineWindowConfig {
                 });
             }
             _ => {}
+        }
+        if self
+            .crash_upload_url
+            .as_deref()
+            .is_some_and(|url| url::Url::parse(url).map_or(true, |url| url.scheme() != "https"))
+        {
+            return Err(SabineError::CreationFailed {
+                message: "crash reports upload only to an https URL".to_string(),
+            });
         }
         crate::window::origins::check(self)
     }

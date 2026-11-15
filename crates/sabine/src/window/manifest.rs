@@ -105,6 +105,9 @@ impl SabineWindow {
                 .transpose()
                 .map_err(|message| SabineError::CreationFailed { message })?;
         }
+        if let Some(url) = file.crash.upload_url {
+            self = self.crash_upload_url(url);
+        }
         if let Some(entry) = file.web.entry {
             let entry_path = base.join(&entry);
             self = self.entry(entry_path.display().to_string());

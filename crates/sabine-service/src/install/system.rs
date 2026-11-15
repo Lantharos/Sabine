@@ -45,6 +45,10 @@ pub fn stage_system_files(
     let target = destination.join(sabine_host_relative_path());
     fs::copy(host, &target)?;
     sabine_runtime::make_executable(&target)?;
+    fs::copy(
+        sabine_host::crash_reporter_config(host),
+        sabine_host::crash_reporter_config(&target),
+    )?;
     if cfg!(windows) {
         fs::copy(host.with_extension("dll"), target.with_extension("dll"))?;
         fs::copy(

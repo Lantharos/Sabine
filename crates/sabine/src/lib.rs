@@ -1,6 +1,7 @@
 mod bridge;
 mod clipboard;
 mod desktop;
+mod diagnostics;
 mod error;
 mod host;
 mod launch;
@@ -12,6 +13,7 @@ mod window;
 
 pub use bridge::BridgeEventEmitter;
 pub use desktop::TrayHandle;
+pub use diagnostics::{CrashReport, CrashReports};
 pub use error::{SabineError, SabineResult};
 pub use host::{SabineProcess, SabineProcessHandle, WindowId};
 #[cfg(target_os = "linux")]

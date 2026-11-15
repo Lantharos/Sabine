@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{ffi::OsString, path::PathBuf, process::Command};
 
 pub(crate) const HOST_CONTROL_PREFIX: &str = "SABINE_HOST_CONTROL";
 
@@ -48,6 +48,8 @@ const CHROMIUM_LOG_ENV: &str = "SABINE_CHROMIUM_LOG";
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct BrowserOptions {
     pub remote_devtools_port: Option<u16>,
+    /// Where the browser sends crash reports, which it otherwise only keeps.
+    pub crash_upload_url: Option<String>,
     #[cfg(target_os = "linux")]
     pub vaapi_hardware_decode: bool,
     /// Runs the app's pages in a Chromium of its own instead of the runtime
@@ -162,7 +164,6 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--disable-domain-reliability")
         .arg("--disable-extensions")
         .arg("--disable-sync")
-        .arg("--disable-breakpad")
         .arg("--metrics-recording-only")
         .arg("--no-default-browser-check")
         .arg("--no-first-run");
@@ -187,6 +188,32 @@ pub(crate) fn apply_browser_launch_args(
             .arg(log_file)
             .arg("--log-severity=info");
     }
+}
+
+/// The environment that has a browser keep its crash reports in `folder`,
+/// within Sabine's limits, and send them where the app asks.
+pub(crate) fn crash_environment(
+    folder: PathBuf,
+    upload_url: Option<&str>,
+) -> Vec<(&'static str, OsString)> {
+    let reports = crate::diagnostics::CrashReports::at(folder);
+    if let Err(error) = std::fs::create_dir_all(reports.folder()).and_then(|()| reports.prune()) {
+        sabine_runtime::report_error(
+            "crash",
+            format!(
+                "could not tidy the crash reports in {}: {error}",
+                reports.folder().display()
+            ),
+        );
+    }
+    let mut environment = vec![(
+        sabine_host::CRASH_FOLDER_ENV,
+        reports.folder().as_os_str().to_owned(),
+    )];
+    if let Some(url) = upload_url {
+        environment.push((sabine_host::CRASH_UPLOAD_ENV, url.into()));
+    }
+    environment
 }
 
 /// `AMD_DEBUG` for Chromium, keeping whatever the app was started with.
@@ -239,6 +266,7 @@ mod tests {
         );
         let debugged = switches(&BrowserOptions {
             remote_devtools_port: Some(9333),
+            crash_upload_url: None,
             #[cfg(target_os = "linux")]
             vaapi_hardware_decode: false,
             #[cfg(target_os = "linux")]

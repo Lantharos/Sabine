@@ -16,6 +16,7 @@ pub(super) fn prepare(host: &Path, runtime: &Path) -> Result<PathBuf, String> {
         (binaries.join("bootstrap.exe"), "sabine-host.exe"),
         (binaries.join("chrome_elf.dll"), "chrome_elf.dll"),
         (host.with_extension("dll"), "sabine-host.dll"),
+        (crate::crash_reporter_config(host), "crash_reporter.cfg"),
     ];
     let mut fingerprint = sabine_runtime::Fingerprint::default();
     for source in files.iter().map(|(source, _)| source) {
