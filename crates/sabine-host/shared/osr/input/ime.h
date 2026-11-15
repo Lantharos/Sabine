@@ -24,6 +24,8 @@ struct ImeState {
   std::map<int, CefRefPtr<CefFrame>> frames;
 
   void Forget(int browser_id);
+  // Drops the surrounding text |frame| reported, and returns whether it had.
+  bool ForgetFrame(int browser_id, CefRefPtr<CefFrame> frame);
 };
 
 #endif

@@ -13,6 +13,10 @@ void SabineOsrHandler::OnRenderProcessTerminated(
   CEF_REQUIRE_UI_THREAD();
   if (closing_ || close_requested_)
     return;
+  ime_.Forget(browser->GetIdentifier());
+  media_.Forget(browser->GetIdentifier());
+  ReportMediaPlaying();
+  SendFocusedImeState();
   const auto now = std::chrono::steady_clock::now();
   auto& crashes = renderer_crashes_[browser->GetIdentifier()];
   while (!crashes.empty() &&
@@ -49,4 +53,15 @@ void SabineOsrHandler::OnRenderProcessTerminated(
                 static_cast<uint32_t>(message.size()));
   }
   browser->GetHost()->CloseBrowser(true);
+}
+
+void SabineOsrHandler::OnFrameDetached(CefRefPtr<CefBrowser> browser,
+                                       CefRefPtr<CefFrame> frame) {
+  CEF_REQUIRE_UI_THREAD();
+  const int browser_id = browser->GetIdentifier();
+  media_.playing_frames.erase({browser_id, frame->GetIdentifier().ToString()});
+  ReportMediaPlaying();
+  if (ime_.ForgetFrame(browser_id, frame)) {
+    SendFocusedImeState();
+  }
 }

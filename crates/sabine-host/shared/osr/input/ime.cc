@@ -57,6 +57,17 @@ void ImeState::Forget(int browser_id) {
   frames.erase(browser_id);
 }
 
+bool ImeState::ForgetFrame(int browser_id, CefRefPtr<CefFrame> frame) {
+  const auto reported = frames.find(browser_id);
+  if (reported == frames.end() ||
+      reported->second->GetIdentifier() != frame->GetIdentifier()) {
+    return false;
+  }
+  frames.erase(reported);
+  surrounding.erase(browser_id);
+  return true;
+}
+
 void SabineOsrHandler::OnImeCompositionRangeChanged(
     CefRefPtr<CefBrowser> browser,
     const CefRange& selected_range,
