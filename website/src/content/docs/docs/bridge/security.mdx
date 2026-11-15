@@ -54,21 +54,17 @@ window.allowed_origin("https://accounts.example.com")
 ```
 
 An origin is a scheme, host and optional port, with no path, query or fragment:
-`https://example.com` or `http://localhost:8080`. Entries with a path are ignored. Only `http` and
-`https` origins can be allowed. An allowed origin gets the whole bridge, the same as the app's own
-pages.
+`https://example.com` or `http://localhost:8080`. It has to use `https`; `http` is allowed only on
+`localhost`, `127.0.0.1` and `[::1]`, since anyone on the network between a page and the window
+can change a plain `http` page. The same goes for `.url(..)` and for a command's own origins. A
+path, a wildcard such as `*` or `https://*.example.com`, or any other scheme is an error when the
+window is configured. An allowed origin gets the whole bridge, the same as the app's own pages.
 
 `.url(..)` allows its own URL's origin, and a development run allows the development server's
 origin on every loopback name, so neither needs an `allowed_origins` entry. `sabine dev` hands the
 development server's URL to the app in `SABINE_DEV_URL` as it starts it. Builds made by
 `sabine bundle` ignore that variable, so nobody can point an installed app at another page by
 setting it.
-
-<Aside type="caution">
-An entry of `"*"` allows every `http` and `https` origin. Any site the window ends up on, through a
-link, a redirect or an injected script, can then call every command. Name the origins you serve
-instead.
-</Aside>
 
 ### Commands for one more origin
 

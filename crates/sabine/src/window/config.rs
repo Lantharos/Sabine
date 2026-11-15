@@ -190,7 +190,7 @@ impl SabineWindowConfig {
             }
             _ => {}
         }
-        Ok(())
+        crate::window::origins::check(self)
     }
 
     /// Directory served at `sabine://app/` when the window shows a local entry.
