@@ -1,6 +1,8 @@
 use std::time::Instant;
 
-use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
+use crate::render::{
+    DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
+};
 use crate::window::style::Color;
 
 use super::loading_messages::loading_message;
@@ -43,6 +45,7 @@ impl OsrNativeHost {
             line_height: 20.0,
             color: Color::TEXT.opacity(0.78 * opacity),
             align: TextAlign::Center,
+            weight: TextWeight::Regular,
         });
         let track_width = (width - 48.0).clamp(1.0, 112.0).min(width.max(1.0));
         let track_x = (width - track_width) * 0.5;

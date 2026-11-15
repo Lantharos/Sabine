@@ -89,6 +89,8 @@ pub(crate) enum OsrMessage {
     ContextMenu {
         x: i32,
         y: i32,
+        /// Whether a guest's page asks, which shows none of the app's items.
+        guest: bool,
         items: Vec<ContextMenuItem>,
     },
     ContextMenuDismissed,
@@ -97,6 +99,13 @@ pub(crate) enum OsrMessage {
     /// Chromium took back a permission request, as when its page went away.
     PermissionWithdrawn(u32),
     FileDialog(FileDialogRequest),
+    /// A page called `alert`, `confirm` or `prompt`, or asks before it is left.
+    JsDialog(JsDialogRequest),
+    /// Chromium dropped a JavaScript dialog the window still shows, as when
+    /// its page navigated away.
+    JsDialogClosed(u32),
+    /// The page left a key unhandled that is the accelerator of a menu item.
+    MenuAccelerator(String),
     /// A page asked to print, and Chromium waits for the print dialog's answer.
     #[cfg(target_os = "linux")]
     PrintDialog(PrintDialogRequest),
@@ -209,6 +218,36 @@ pub(crate) struct PermissionAsk {
     pub app: bool,
     pub guest: Option<String>,
     pub permissions: Vec<String>,
+}
+
+/// A JavaScript dialog Chromium waits on the answer of.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct JsDialogRequest {
+    pub id: u32,
+    pub kind: JsDialogKind,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub origin: String,
+    /// Whether one of the window's guests asks, rather than its own page.
+    pub guest: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum JsDialogKind {
+    Alert,
+    Confirm,
+    Prompt,
+    BeforeUnload,
+    BeforeReload,
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct JsDialogClosed {
+    pub id: u32,
 }
 
 /// A page's request to choose files, as Chromium describes its file input.

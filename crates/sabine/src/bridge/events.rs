@@ -7,17 +7,23 @@ use std::{
 
 use sabine_platform::{PlatformEvent, PowerEvent, PowerSource, SingleInstancePolicy};
 
+use super::dialogs::DIALOG_ANSWER_LINE;
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
 use super::listeners::WindowReports;
+use super::menus::APP_MENU_LINE;
 use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher, REQUEST_PREFIX};
 use super::writer::BridgeWriter;
 use crate::desktop::IdleWatches;
+use crate::host::SabineProcessHandle;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
 use crate::window::{DISPLAYS_LINE, PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowListeners};
 
 /// A window host writes this when people move focus to its window.
 pub(crate) const FOCUSED_LINE: &str = "SABINE_WINDOW_FOCUSED";
+/// A window host writes this when someone chose to quit the app from its
+/// menus.
+pub(crate) const QUIT_REQUESTED_LINE: &str = "SABINE_QUIT_REQUESTED";
 
 /// The event every page of the app hears, if any: a window's pages hear
 /// about its notifications from the window itself.
@@ -109,6 +115,7 @@ pub(crate) fn spawn_bridge_dispatch(
     idle: IdleWatches,
     emitter: &BridgeEventEmitter,
     listeners: WindowListeners,
+    process: SabineProcessHandle,
 ) -> BridgeDispatch {
     let writer = BridgeWriter::spawn(
         child
@@ -140,6 +147,9 @@ pub(crate) fn spawn_bridge_dispatch(
             listeners: &listeners,
             reports: &reports,
             emitter: &emitter,
+            quit: &|| {
+                process.quit();
+            },
         };
         host.read_requests(stdout, || {
             let _ = ready_sender.try_send(());
@@ -161,6 +171,8 @@ struct WindowHost<'a> {
     listeners: &'a WindowListeners,
     reports: &'a WindowReports,
     emitter: &'a BridgeEventEmitter,
+    /// Ends the app, as someone chose to from the window's menus.
+    quit: &'a dyn Fn(),
 }
 
 impl WindowHost<'_> {
@@ -179,6 +191,12 @@ impl WindowHost<'_> {
                 .and_then(|line| line.strip_prefix('\t'))
             {
                 self.displays_reported(displays);
+            } else if line == QUIT_REQUESTED_LINE {
+                (self.quit)();
+            } else if line.starts_with(DIALOG_ANSWER_LINE) {
+                self.emitter.answer_dialog(line);
+            } else if let Some(items) = line.strip_prefix(APP_MENU_LINE) {
+                self.emitter.share_app_menu(self.window, items.trim_start());
             } else if line.starts_with(REQUEST_PREFIX) {
                 if let Some(request) = BridgeIpcRequest::parse(frame, self.window) {
                     self.dispatcher.submit(request);
@@ -249,6 +267,7 @@ mod tests {
             listeners: &listeners,
             reports: &reports,
             emitter: &emitter,
+            quit: &|| {},
         }
         .read_requests(host.stdout.take().expect("stdout"), || {});
         let (answered, answer) = crossbeam_channel::bounded(1);

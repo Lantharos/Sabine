@@ -18,6 +18,20 @@ const std::string* MatchInterceptedShortcut(
     const std::string& key,
     uint32_t modifiers);
 
+// The key and modifiers of a menu item's accelerator, which the window sends
+// as `Control+Alt+Shift+Meta+Key` with the modifiers it holds.
+struct KeyChord {
+  uint32_t modifiers;
+  int key_code;
+  std::string accelerator;
+};
+
+std::vector<KeyChord> ParseKeyChords(
+    const std::vector<std::string>& accelerators);
+const KeyChord* MatchKeyChord(const std::vector<KeyChord>& chords,
+                              uint32_t modifiers,
+                              int key_code);
+
 bool IsPredominantlyHorizontalWheel(double delta_x, double delta_y);
 
 #endif

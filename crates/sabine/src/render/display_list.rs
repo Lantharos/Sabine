@@ -70,6 +70,13 @@ pub enum TextAlign {
     Right,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextWeight {
+    #[default]
+    Regular,
+    Semibold,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextCommand {
     pub text: Arc<str>,
@@ -81,6 +88,7 @@ pub struct TextCommand {
     pub line_height: f32,
     pub color: Color,
     pub align: TextAlign,
+    pub weight: TextWeight,
 }
 
 /// A browser surface the window shows: the page, or one of the overlays

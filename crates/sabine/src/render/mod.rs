@@ -11,7 +11,7 @@ pub(crate) use bgra::{BgraImage, BgraRect};
 pub(crate) use composition::Composition;
 pub use display_list::{
     DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand, TextAlign,
-    TextCommand,
+    TextCommand, TextWeight,
 };
 pub(crate) use gpu::ExternalSlot;
 pub use gpu::{GpuRenderer, RendererError};

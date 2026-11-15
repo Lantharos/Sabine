@@ -43,6 +43,7 @@ impl OsrNativeHost {
         self.cancel_context_menu();
         self.surface_size = size;
         self.scale_factor = scale;
+        self.lay_out_sheet();
         self.effect_regions_dirty = true;
         self.relayout_media();
         self.sync_accessibility_window();

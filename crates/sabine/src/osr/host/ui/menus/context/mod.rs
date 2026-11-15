@@ -1,22 +1,42 @@
 pub(in crate::osr::host::ui) mod draw;
+mod items;
 mod panel;
+mod popup;
 
 use winit::keyboard::{Key, NamedKey};
 
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::protocol::ContextMenuItem;
+use crate::{MenuItem, MenuKind};
+pub(in crate::osr::host) use items::Command;
+use items::PanelItem;
 use panel::MenuPanel;
 
 const ARMING_DISTANCE: f32 = 3.0;
 const CANCELLED: i32 = -1;
 
-/// The page's context menu, drawn by the window over the page so it matches
-/// the desktop instead of Chromium's own menus, which offscreen pages lack.
-/// Each open submenu adds a panel beside the entry that opened it.
+/// A menu the window draws over the page: the page's context menu, so it
+/// matches the desktop instead of Chromium's own menus, which offscreen
+/// pages lack, or a menu a page showed. Each open submenu adds a panel
+/// beside the entry that opened it.
 pub(in crate::osr::host) struct ContextMenu {
     panels: Vec<OpenPanel>,
     opened_at: (f32, f32),
     armed: bool,
+    origin: MenuOrigin,
+    /// The app's items the menu shows, which say what each of them does.
+    app_items: Vec<MenuItem>,
+}
+
+/// Who waits to hear what was chosen.
+enum MenuOrigin {
+    /// Chromium, for the page's context menu.
+    Chromium,
+    /// A page's `menu.popup` call.
+    Popup {
+        browser_id: String,
+        request_id: String,
+    },
 }
 
 struct OpenPanel {
@@ -41,31 +61,64 @@ impl ContextMenu {
             .panel
     }
 
-    fn command_at(&self, level: usize, index: usize) -> Option<i32> {
+    fn command_at(&self, level: usize, index: usize) -> Option<Command> {
         let entry = &self.panels[level].panel.entries[index];
-        (!entry.opens_submenu()).then_some(entry.item.id)
+        (!entry.opens_submenu()).then(|| entry.item.command.clone())
     }
 }
 
 impl OsrNativeHost {
+    /// Shows Chromium's context menu, followed by the app's own items on
+    /// the app's page.
     pub(in crate::osr::host) fn open_context_menu(
         &mut self,
         x: i32,
         y: i32,
+        guest: bool,
         items: Vec<ContextMenuItem>,
     ) {
-        self.close_context_menu(CANCELLED);
-        let Some(renderer) = self.renderer.as_mut() else {
-            self.send_control(format!("context_menu\t{CANCELLED}\n"));
-            return;
+        let app_items = if guest {
+            Vec::new()
+        } else {
+            self.config.context_menu.clone()
         };
-        let mut panel = MenuPanel::new(items, renderer);
-        if !panel.selectable() {
-            self.send_control(format!("context_menu\t{CANCELLED}\n"));
-            return;
+        let mut entries = items
+            .into_iter()
+            .map(PanelItem::from_chromium)
+            .collect::<Vec<_>>();
+        let own = items::app_items(&app_items, &self.config.title);
+        if !entries.is_empty() && !own.is_empty() {
+            entries.push(PanelItem::separator());
         }
+        entries.extend(own);
         let anchor = (x as f32, y as f32 + self.titlebar_height());
-        let leftward = panel.place(anchor, anchor, self.menu_bounds(), false);
+        if !self.show_menu(anchor, entries, MenuOrigin::Chromium, app_items) {
+            self.send_control(format!("context_menu\t{CANCELLED}\n"));
+        }
+    }
+
+    /// Opens a menu at `anchor` in the window. Returns false when it has
+    /// nothing to choose, or the window can't draw it yet.
+    fn show_menu(
+        &mut self,
+        anchor: (f32, f32),
+        entries: Vec<PanelItem>,
+        origin: MenuOrigin,
+        app_items: Vec<MenuItem>,
+    ) -> bool {
+        self.close_context_menu(None);
+        if self.sheets.is_open() {
+            return false;
+        }
+        let bounds = self.menu_bounds();
+        let Some(renderer) = self.renderer.as_mut() else {
+            return false;
+        };
+        let mut panel = MenuPanel::new(entries, renderer);
+        if !panel.selectable() {
+            return false;
+        }
+        let leftward = panel.place(anchor, anchor, bounds, false);
         self.context_menu = Some(ContextMenu {
             panels: vec![OpenPanel {
                 panel,
@@ -74,23 +127,57 @@ impl OsrNativeHost {
             }],
             opened_at: (self.cursor_x, self.cursor_y),
             armed: false,
+            origin,
+            app_items,
         });
         self.set_native_cursor(winit::cursor::CursorIcon::Default);
         self.request_menu_redraw();
+        true
     }
 
-    /// Closes the menu, running `command` unless it is the cancellation id.
-    pub(in crate::osr::host) fn close_context_menu(&mut self, command: i32) {
-        if self.context_menu.take().is_none() {
+    /// Closes the menu, running `choice` unless it is `None`.
+    pub(in crate::osr::host) fn close_context_menu(&mut self, choice: Option<Command>) {
+        let Some(menu) = self.context_menu.take() else {
             return;
+        };
+        let app_choice = match &choice {
+            Some(Command::App(id)) => Some(id.as_ref()),
+            _ => None,
+        };
+        let kind = match menu.origin {
+            MenuOrigin::Chromium => {
+                let command = match choice {
+                    Some(Command::Chromium(command)) => command,
+                    _ => CANCELLED,
+                };
+                self.send_control(format!("context_menu\t{command}\n"));
+                MenuKind::Context
+            }
+            MenuOrigin::Popup {
+                browser_id,
+                request_id,
+            } => {
+                self.send_bridge_response(
+                    &browser_id,
+                    &request_id,
+                    Ok(serde_json::json!(app_choice)),
+                );
+                MenuKind::Popup
+            }
+        };
+        if let Some(id) = app_choice {
+            self.choose_menu_item(&menu.app_items, id, kind);
         }
-        self.send_control(format!("context_menu\t{command}\n"));
         self.clear_native_cursor();
         self.request_menu_redraw();
     }
 
     pub(in crate::osr::host) fn dismiss_context_menu(&mut self) {
-        if self.context_menu.take().is_some() {
+        if self
+            .context_menu
+            .take_if(|menu| matches!(menu.origin, MenuOrigin::Chromium))
+            .is_some()
+        {
             self.clear_native_cursor();
             self.request_menu_redraw();
         }
@@ -128,7 +215,7 @@ impl OsrNativeHost {
         if menu.panel_at(x, y).is_some() {
             menu.armed = true;
         } else {
-            self.close_context_menu(CANCELLED);
+            self.close_context_menu(None);
         }
         true
     }
@@ -143,7 +230,7 @@ impl OsrNativeHost {
             .and_then(|level| Some((level, menu.panels[level].panel.entry_at(x, y)?)));
         if let Some((level, index)) = chosen {
             match menu.command_at(level, index) {
-                Some(command) => self.close_context_menu(command),
+                Some(command) => self.close_context_menu(Some(command)),
                 None => self.hover_menu_entry(level, Some(index), true),
             }
         }
@@ -160,7 +247,7 @@ impl OsrNativeHost {
         if activates || matches!(key, Key::Named(NamedKey::ArrowRight)) {
             if let Some(index) = menu.deepest().hovered {
                 match menu.command_at(level, index) {
-                    Some(command) if activates => self.close_context_menu(command),
+                    Some(command) if activates => self.close_context_menu(Some(command)),
                     Some(_) => {}
                     None => self.enter_submenu(level, index),
                 }
@@ -185,7 +272,7 @@ impl OsrNativeHost {
                 return true;
             }
             Key::Named(NamedKey::Escape | NamedKey::Tab) => {
-                self.close_context_menu(CANCELLED);
+                self.close_context_menu(None);
                 return true;
             }
             _ => return true,
@@ -195,7 +282,7 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn cancel_context_menu(&mut self) {
-        self.close_context_menu(CANCELLED);
+        self.close_context_menu(None);
     }
 
     /// Hovers an entry of the panel at `level`, closing submenus of other

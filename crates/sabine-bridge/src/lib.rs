@@ -32,7 +32,7 @@ pub use commands::{
     INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND, NOTIFICATION_CLOSE_COMMAND,
     NOTIFICATION_COMMAND_PREFIX, NOTIFICATION_SHOW_COMMAND, OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND,
     POWER_STATE_COMMAND, PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND, REVEAL_COMMAND,
-    SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND, clipboard, media,
+    SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND, clipboard, media, menu,
     page_commands,
 };
 pub use guest::{
@@ -50,6 +50,7 @@ pub const INSTALL_SCRIPT: &str = concat!(
     include_str!("scripts/bridge/drag.js"),
     include_str!("scripts/bridge/activity.js"),
     include_str!("scripts/bridge/power.js"),
+    include_str!("scripts/bridge/menus.js"),
     include_str!("scripts/bridge/guest.js"),
     include_str!("scripts/bridge/page.js"),
     "})();\n",

@@ -242,11 +242,32 @@ impl GpuRenderer {
 
     /// The width `text` takes on one line at `size` logical pixels.
     pub(crate) fn measure_text(&mut self, text: &str, size: f32) -> f32 {
-        self.text
-            .get_or_insert_with(|| {
-                TextRendererState::new(&self.device, &self.queue, self.surface_config.format)
-            })
-            .measure(text, size)
+        self.text_state().measure(text, size)
+    }
+
+    /// The height `text` takes wrapped to `width` logical pixels.
+    pub(crate) fn measure_text_height(
+        &mut self,
+        text: &str,
+        size: f32,
+        line_height: f32,
+        width: f32,
+        weight: crate::render::TextWeight,
+    ) -> f32 {
+        self.text_state()
+            .measure_height(text, size, line_height, width, weight)
+    }
+
+    /// Where each character of `text` starts on one line, by byte offset,
+    /// ending with the text's length and width.
+    pub(crate) fn measure_text_offsets(&mut self, text: &str, size: f32) -> Vec<(usize, f32)> {
+        self.text_state().measure_offsets(text, size)
+    }
+
+    fn text_state(&mut self) -> &mut TextRendererState {
+        self.text.get_or_insert_with(|| {
+            TextRendererState::new(&self.device, &self.queue, self.surface_config.format)
+        })
     }
 
     fn check_device(&self) -> Result<(), RendererError> {

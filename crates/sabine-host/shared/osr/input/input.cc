@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "common/json.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/browser/screen.h"
 #include "osr/common/strings.h"
@@ -98,8 +99,21 @@ void SabineOsrHandler::HandleControlLine(
         parts[2] == "1");
     return;
   }
+  if (parts.size() >= 3 && parts[0] == "js_dialog") {
+    dialogs_->FinishJsDialog(parts);
+    return;
+  }
   if (parts.size() == 2 && parts[0] == "context_menu") {
     dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
+    return;
+  }
+  if (parts.size() == 2 && parts[0] == "context_menu_items") {
+    dialogs_->SetAppContextItems(parts[1] == "1");
+    return;
+  }
+  if (parts.size() == 2 && parts[0] == "menu_accelerators") {
+    menu_accelerators_ =
+        ParseKeyChords(JsonObject::Parse(parts[1]).Strings("accelerators"));
     return;
   }
   if (parts.size() == 2 && parts[0] == "pen") {
@@ -144,7 +158,8 @@ void SabineOsrHandler::HandleControlLine(
       guests_.DismissPopup();
       guests_.Focus(std::string());
     }
-  } else if ((parts[0] == "key" || parts[0].rfind("ime_", 0) == 0) &&
+  } else if ((parts[0] == "key" || parts[0] == "edit" ||
+              parts[0].rfind("ime_", 0) == 0) &&
              !guests_.focused_id().empty()) {
     GuestView* guest = guests_.Focused();
     if (guest && guest->browser) {
@@ -154,6 +169,10 @@ void SabineOsrHandler::HandleControlLine(
   const int mouse_x = static_cast<int>(std::floor(pointer_x));
   const int mouse_y = static_cast<int>(std::floor(pointer_y));
   CefRefPtr<CefBrowserHost> host = target_browser->GetHost();
+  if (parts[0] == "edit" && parts.size() == 2) {
+    RunMenuEdit(target_browser, parts[1]);
+    return;
+  }
   if (parts[0] == "repaint") {
     RepaintAll();
     return;

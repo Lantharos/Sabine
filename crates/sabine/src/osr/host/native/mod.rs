@@ -154,6 +154,8 @@ pub(super) struct OsrNativeHost {
     pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
     pub(super) permissions: super::page::PagePermissions,
     pub(super) permission_prompt: Option<super::ui::permission_prompt::PermissionPrompt>,
+    pub(super) sheets: super::ui::sheet::Sheets,
+    pub(super) menus: super::ui::app_menu::Menus,
     #[cfg(target_os = "linux")]
     pub(super) pending_activation_token: Option<winit::window::ActivationToken>,
     pub(super) drag: super::input::DragState,
@@ -321,6 +323,8 @@ impl OsrNativeHost {
             context_menu: None,
             permissions,
             permission_prompt: None,
+            sheets: Default::default(),
+            menus: Default::default(),
             #[cfg(target_os = "linux")]
             pending_activation_token: None,
             drag: Default::default(),

@@ -65,6 +65,7 @@ impl OsrNativeHost {
             return false;
         }
         let scale = self.scale() as f32;
+        self.lay_out_sheet();
         let mut list = std::mem::take(&mut self.display_list);
         self.fill_display_list(
             &mut list,
@@ -188,6 +189,7 @@ impl OsrNativeHost {
             self.draw_loading(list, fade.loading, width, height, opacity);
         }
         self.draw_tooltip(list, width, height);
+        self.draw_sheet(list, width, height);
         self.draw_permission_prompt(list);
         self.draw_context_menu(list);
     }

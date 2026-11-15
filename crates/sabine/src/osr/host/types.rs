@@ -90,6 +90,8 @@ pub(super) enum OsrHostEvent {
     Disconnected(u64),
     IncompatibleHost(u64),
     FileDialogClosed(u64, u32, Option<Vec<std::path::PathBuf>>),
+    /// The clipboard's text, for the field of the dialog over the page.
+    SheetPaste(String),
     /// The window's own Chromium of a connection exited.
     BrowserExited(u64, std::process::ExitStatus),
     RendererStarted(
@@ -118,6 +120,7 @@ impl OsrHostEvent {
             #[cfg(target_os = "linux")]
             Self::SharedRuntimeOpened(generation, _) => Some(*generation),
             Self::HostControl(_)
+            | Self::SheetPaste(_)
             | Self::FrozenPageMessaged
             | Self::BrowserExited(..)
             | Self::RendererStarted(..) => None,
@@ -252,6 +255,11 @@ pub(super) enum HostControl {
     Progress(sabine_platform::AppProgress),
     /// The app decided a page's permission request it was asked about.
     Permission(u32, crate::PermissionDecision),
+    /// A dialog the app shows over the page, by the number its answer
+    /// carries back.
+    Dialog(u64, crate::MessageDialog),
+    ContextMenu(Vec<crate::MenuItem>),
+    AppMenu(Vec<crate::MenuItem>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -158,6 +158,10 @@ impl OsrNativeHost {
             command if command.starts_with(sabine_bridge::clipboard::COMMAND_PREFIX) => {
                 self.answer_clipboard(&request)
             }
+            command if command.starts_with(sabine_bridge::menu::COMMAND_PREFIX) => {
+                self.answer_menu(&request)
+            }
+            sabine_bridge::menu::DIALOG_COMMAND => self.show_page_dialog(&request),
             _ => return false,
         }
         true

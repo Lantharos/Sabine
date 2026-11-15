@@ -4,6 +4,7 @@
 pub(crate) mod activity;
 pub mod clipboard;
 pub mod media;
+pub mod menu;
 pub(crate) mod window;
 
 pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
@@ -110,6 +111,7 @@ pub fn page_commands(mut commands: Vec<String>, native_media: bool) -> Vec<Strin
         .chain(&WINDOW_COMMANDS)
         .chain(&DOWNLOAD_COMMANDS)
         .chain(&SPELLCHECK_COMMANDS)
+        .chain(&menu::COMMANDS)
         .chain(&crate::guest::COMMANDS)
         .chain(media);
     for command in builtin {

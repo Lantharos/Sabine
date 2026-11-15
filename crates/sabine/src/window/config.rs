@@ -67,6 +67,11 @@ pub(crate) struct SabineWindowConfig {
     pub drag_regions: Vec<WindowRegionRect>,
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
     pub control_regions: Vec<SabineWindowControlRegion>,
+    /// The app's items in the window's context menu, after Chromium's.
+    pub context_menu: Vec<crate::MenuItem>,
+    /// The app menu bar, which the window that launches the app starts every
+    /// window with.
+    pub app_menu: Vec<crate::MenuItem>,
     pub desktop_services: DesktopServiceConfig,
     pub documents: DocumentTypes,
     pub lifecycle: SabineLifecyclePolicy,
@@ -129,6 +134,8 @@ impl Default for SabineWindowConfig {
             drag_regions: Vec::new(),
             drag_exclusion_regions: Vec::new(),
             control_regions: Vec::new(),
+            context_menu: Vec::new(),
+            app_menu: Vec::new(),
             desktop_services: DesktopServiceConfig::default(),
             documents: DocumentTypes::default(),
             lifecycle: SabineLifecyclePolicy::default(),
@@ -178,6 +185,9 @@ impl SabineWindowConfig {
                 ),
             });
         }
+        crate::menu::check(&self.context_menu)
+            .and_then(|()| crate::menu::check(&self.app_menu))
+            .map_err(|message| SabineError::CreationFailed { message })?;
         if self.title.trim().is_empty() {
             return Err(SabineError::CreationFailed {
                 message: "window title cannot be empty".to_string(),

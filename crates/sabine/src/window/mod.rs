@@ -19,9 +19,9 @@ pub use config::{
 };
 pub(crate) use listeners::{
     AppearanceListener, CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener, DISPLAYS_LINE,
-    DesktopEventListener, DisplaysListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE,
-    PERMISSION_REQUEST_LINE, PermissionListener, QuitListener, VISIBILITY_LINE, VisibilityListener,
-    WindowListeners, appearance_line,
+    DesktopEventListener, DisplaysListener, LaunchListener, MenuItemListener, PAGE_LOST_LINE,
+    PAGE_STARTED_LINE, PERMISSION_REQUEST_LINE, PermissionListener, QuitListener, VISIBILITY_LINE,
+    VisibilityListener, WindowListeners, appearance_line, menu_item_line,
 };
 pub use listeners::{
     Download, DownloadControl, DownloadDecision, DownloadState, PermissionDecision,

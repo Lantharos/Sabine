@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::{BUTTON_HEIGHT, LINE_HEIGHT, PADDING, TEXT_SIZE};
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::ui::context_menu::draw::{MenuPalette, RADIUS};
-use crate::render::{DisplayList, RoundedRectCommand, TextAlign, TextCommand};
+use crate::render::{DisplayList, RoundedRectCommand, TextAlign, TextCommand, TextWeight};
 use crate::window::style::Color;
 
 const BUTTON_RADIUS: f32 = 7.0;
@@ -46,6 +46,7 @@ impl OsrNativeHost {
             line_height: LINE_HEIGHT,
             color: palette.text,
             align: TextAlign::Left,
+            weight: TextWeight::Regular,
         });
         for (index, button) in prompt.buttons.iter().enumerate() {
             let area = prompt.button_frame(frame, index);
@@ -85,6 +86,7 @@ impl OsrNativeHost {
                 line_height: LINE_HEIGHT,
                 color: text,
                 align: TextAlign::Center,
+                weight: TextWeight::Regular,
             });
         }
     }

@@ -21,6 +21,9 @@ pub struct BridgeEventEmitter {
     displays: Arc<Mutex<Vec<Display>>>,
     #[cfg(target_os = "windows")]
     pub(super) taskbar: Arc<Mutex<super::taskbar::TaskbarShown>>,
+    /// The app menu bar's control, held the same way.
+    pub(super) app_menu: Arc<Mutex<Option<String>>>,
+    pub(super) dialogs: Arc<Mutex<super::dialogs::PendingDialogs>>,
 }
 
 #[derive(Default)]
@@ -105,6 +108,10 @@ impl BridgeEventEmitter {
         }
         #[cfg(target_os = "windows")]
         let _taskbar = self.send_taskbar(&writer);
+        let app_menu = lock(&self.app_menu);
+        if let Some(control) = app_menu.as_deref() {
+            writer.send(Frame::shared(control, None));
+        }
         let mut targets = lock(&self.targets);
         targets.windows.retain(|target| target.window != window);
         for activity in activities
@@ -119,6 +126,7 @@ impl BridgeEventEmitter {
     }
 
     pub(crate) fn detach(&self, window: WindowId) {
+        lock(&self.dialogs).window_closed(window);
         let mut targets = lock(&self.targets);
         targets.windows.retain(|target| target.window != window);
         if targets.focused == Some(window) {
@@ -331,12 +339,30 @@ impl BridgeEventEmitter {
         self.host_control(Some(window), command, answer)
     }
 
-    fn host_control(&self, window: Option<WindowId>, command: &str, value: &str) -> bool {
+    pub(super) fn host_control(
+        &self,
+        window: Option<WindowId>,
+        command: &str,
+        value: &str,
+    ) -> bool {
         self.deliver(
             window,
             format!("{HOST_CONTROL_PREFIX}\t{command}\t{value}"),
             None,
         )
+    }
+
+    /// Sends a line to every window but one.
+    pub(super) fn deliver_to_others(&self, window: WindowId, line: &str) {
+        let others = lock(&self.targets)
+            .windows
+            .iter()
+            .map(|target| target.window)
+            .filter(|other| *other != window)
+            .collect::<Vec<_>>();
+        for other in others {
+            self.deliver(Some(other), line.to_string(), None);
+        }
     }
 
     fn front_control(&self, command: &str, value: &str) -> bool {

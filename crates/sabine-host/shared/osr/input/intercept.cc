@@ -5,8 +5,20 @@
 #include <vector>
 
 #include "include/base/cef_build.h"
+#include "osr/common/strings.h"
+#include "osr/input/key_codes.h"
 
 namespace {
+
+int AcceleratorKeyCode(const std::string& key) {
+  if (key == "Plus" || key == "Equal") {
+    return sabine_osr::kKeyCodeEquals;
+  }
+  if (key == "Minus") {
+    return sabine_osr::kKeyCodeMinus;
+  }
+  return sabine_osr::KeyCodeForName(key);
+}
 
 std::string ToLowerAscii(std::string value) {
   for (char& c : value) {
@@ -97,6 +109,46 @@ const std::string* MatchInterceptedShortcut(
     }
     if (required_key == normalized_key && required_mods == pressed) {
       return &accelerator;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<KeyChord> ParseKeyChords(
+    const std::vector<std::string>& accelerators) {
+  std::vector<KeyChord> chords;
+  for (const std::string& accelerator : accelerators) {
+    std::vector<std::string> parts = sabine_osr::Split(accelerator, '+');
+    if (parts.empty()) {
+      continue;
+    }
+    KeyChord chord{0, AcceleratorKeyCode(parts.back()), accelerator};
+    parts.pop_back();
+    for (const std::string& modifier : parts) {
+      if (modifier == "Control") {
+        chord.modifiers |= kGuestModControl;
+      } else if (modifier == "Alt") {
+        chord.modifiers |= kGuestModAlt;
+      } else if (modifier == "Shift") {
+        chord.modifiers |= kGuestModShift;
+      } else if (modifier == "Meta") {
+        chord.modifiers |= kGuestModCommand;
+      }
+    }
+    if (chord.key_code != 0) {
+      chords.push_back(std::move(chord));
+    }
+  }
+  return chords;
+}
+
+const KeyChord* MatchKeyChord(const std::vector<KeyChord>& chords,
+                              uint32_t modifiers,
+                              int key_code) {
+  for (const KeyChord& chord : chords) {
+    if (chord.key_code == key_code &&
+        chord.modifiers == (modifiers & kGuestModMask)) {
+      return &chord;
     }
   }
   return nullptr;

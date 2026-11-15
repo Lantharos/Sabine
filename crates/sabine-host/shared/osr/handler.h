@@ -33,6 +33,7 @@
 #include "osr/guest/guests.h"
 #include "osr/input/drag.h"
 #include "osr/input/ime.h"
+#include "osr/input/intercept.h"
 #include "osr/page/clipboard.h"
 #include "osr/page/media_state.h"
 #include "osr/page/permissions.h"
@@ -81,6 +82,9 @@ class SabineOsrHandler : public CefClient,
     return dialogs_;
   }
   CefRefPtr<CefDialogHandler> GetDialogHandler() override { return dialogs_; }
+  CefRefPtr<CefJSDialogHandler> GetJSDialogHandler() override {
+    return dialogs_;
+  }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override {
     return downloads_;
@@ -307,6 +311,7 @@ class SabineOsrHandler : public CefClient,
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
   void ApplyHostControl(const std::string& command, const std::string& value);
+  void RunMenuEdit(CefRefPtr<CefBrowser> browser, const std::string& command);
   void UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             const std::string& state);
@@ -359,6 +364,7 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefBrowser> devtools_inspected_;
   CefRefPtr<CefRegistration> devtools_registration_;
 
+  std::vector<KeyChord> menu_accelerators_;
   std::set<std::string> bridge_commands_;
   CefRefPtr<CefDictionaryValue> bridge_policy_;
   ImeState ime_;

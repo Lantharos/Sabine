@@ -51,5 +51,8 @@ constexpr uint32_t kAccessibilityTree = 52;
 constexpr uint32_t kAccessibilityLocations = 53;
 constexpr uint32_t kPermissionRequest = 54;
 constexpr uint32_t kPermissionWithdrawn = 55;
+constexpr uint32_t kJsDialog = 56;
+constexpr uint32_t kJsDialogClosed = 57;
+constexpr uint32_t kMenuAccelerator = 58;
 
 #endif

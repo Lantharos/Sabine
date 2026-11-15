@@ -13,6 +13,10 @@ use crate::osr::protocol::encode_component;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn forward_ime(&mut self, ime: Ime) {
+        if self.sheets.holds_ime() {
+            self.sheet_ime(ime);
+            return;
+        }
         match ime {
             Ime::Enabled => {}
             Ime::Disabled => self.cancel_preedit(),
@@ -94,6 +98,9 @@ impl OsrNativeHost {
     ) {
         self.ime_surrounding =
             prepare_surrounding(text, cursor_utf16, anchor_utf16, base_utf16).unwrap_or_default();
+        if self.sheets.holds_ime() {
+            return;
+        }
         let Some(purpose) = ime_purpose(self.ime_mode) else {
             return;
         };
@@ -116,6 +123,9 @@ impl OsrNativeHost {
         }
         let was_enabled = ime_purpose(self.ime_mode).is_some();
         self.ime_mode = mode;
+        if self.sheets.holds_ime() {
+            return;
+        }
         let Some(window) = self.window.as_ref() else {
             return;
         };
@@ -156,6 +166,9 @@ impl OsrNativeHost {
         height: u32,
     ) {
         self.ime_cursor_area = (x, y, width.max(1), height.max(1));
+        if self.sheets.holds_ime() {
+            return;
+        }
         let Some(purpose) = ime_purpose(self.ime_mode) else {
             return;
         };
@@ -193,6 +206,51 @@ impl OsrNativeHost {
         }
     }
 
+    /// Hands the input method from the page to a field the window draws,
+    /// with its caret at `area` in the window, or moves it there once the
+    /// field holds it.
+    pub(in crate::osr::host) fn lend_ime(
+        &self,
+        (x, y, width, height): (f32, f32, f32, f32),
+        lent: bool,
+    ) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let data = ImeRequestData::default()
+            .with_hint_and_purpose(ImeHint::NONE, ImePurpose::Normal)
+            .with_cursor_area(
+                LogicalPosition::new(f64::from(x), f64::from(y)).into(),
+                LogicalSize::new(f64::from(width), f64::from(height)).into(),
+            );
+        if lent {
+            report_ime(window.request_ime_update(ImeRequest::Update(data)), "move");
+            return;
+        }
+        if ime_purpose(self.ime_mode).is_some() {
+            report_ime(window.request_ime_update(ImeRequest::Disable), "disable");
+        }
+        let capabilities = ImeCapabilities::new()
+            .with_hint_and_purpose()
+            .with_cursor_area();
+        let enable = ImeEnableRequest::new(capabilities, data)
+            .expect("Sabine IME capabilities and initial data must match");
+        report_ime(
+            window.request_ime_update(ImeRequest::Enable(enable)),
+            "enable",
+        );
+    }
+
+    /// Gives the input method back to the page once the window's field is
+    /// gone.
+    pub(in crate::osr::host) fn return_ime(&self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        report_ime(window.request_ime_update(ImeRequest::Disable), "disable");
+        self.restore_ime_state();
+    }
+
     fn ime_request_data(&self, purpose: ImePurpose) -> ImeRequestData {
         let (x, y, width, height) = self.ime_cursor_area;
         let surrounding = ImeSurroundingText::new(
@@ -226,6 +284,15 @@ impl OsrNativeHost {
         let content_x = position.x;
         let content_y = position.y + (titlebar as f64 * scale).round() as i32;
         self.send_control(format!("screen_origin\t{content_x}\t{content_y}\n"));
+    }
+}
+
+fn report_ime(result: Result<(), winit::window::ImeRequestError>, action: &str) {
+    if let Err(error) = result {
+        sabine_runtime::report_error(
+            "input",
+            format!("could not {action} the input method: {error}"),
+        );
     }
 }
 

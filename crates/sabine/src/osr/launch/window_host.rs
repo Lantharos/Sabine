@@ -73,6 +73,9 @@ pub(crate) fn launch_process(
         #[cfg(target_os = "linux")]
         _session_bus: session_bus,
     };
+    if !config.app_menu.is_empty() {
+        process.bridge_emitter.set_app_menu(&config.app_menu);
+    }
     if !config.background {
         open_primary_window(&mut process, launch_activation_token())?;
         if let Some(id) = process.id() {
@@ -189,6 +192,7 @@ fn spawn_window(
         process.idle.clone(),
         &process.bridge_emitter,
         config.listeners.clone(),
+        process.handle.clone(),
     );
     process
         .bridge_threads
@@ -252,6 +256,7 @@ fn spawn_osr_host_child(
         "drag_regions": crate::osr::protocol::rects_to_json(&config.drag_regions),
         "drag_exclusion_regions": crate::osr::protocol::rects_to_json(&config.drag_exclusion_regions),
         "control_regions": crate::osr::protocol::control_regions_to_json(&config.control_regions),
+        "context_menu": config.context_menu,
         "lifecycle": crate::osr::protocol::lifecycle_to_json(&config.lifecycle),
         "dev_mode": config.dev_mode(),
         "remote_devtools_port": config.effective_remote_devtools_port(),

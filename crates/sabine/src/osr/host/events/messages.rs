@@ -83,8 +83,13 @@ impl OsrNativeHost {
                 operations,
                 image,
             } => self.begin_page_drag(content, operations, image),
-            OsrMessage::ContextMenu { x, y, items } => self.open_context_menu(x, y, items),
+            OsrMessage::ContextMenu { x, y, guest, items } => {
+                self.open_context_menu(x, y, guest, items);
+            }
             OsrMessage::FileDialog(request) => self.show_file_dialog(request),
+            OsrMessage::JsDialog(request) => self.show_js_dialog(request),
+            OsrMessage::JsDialogClosed(id) => self.drop_js_dialog(id),
+            OsrMessage::MenuAccelerator(accelerator) => self.run_menu_accelerator(&accelerator),
             #[cfg(target_os = "linux")]
             OsrMessage::PrintDialog(request) => self.show_page_print_dialog(request),
             #[cfg(target_os = "linux")]

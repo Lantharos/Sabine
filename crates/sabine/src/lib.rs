@@ -6,12 +6,13 @@ mod error;
 mod host;
 mod launch;
 mod media;
+mod menu;
 mod osr;
 mod render;
 mod storage;
 mod window;
 
-pub use bridge::BridgeEventEmitter;
+pub use bridge::{BridgeEventEmitter, DialogAnswer, DialogInput, DialogReply, MessageDialog};
 pub use desktop::TrayHandle;
 pub use diagnostics::{CrashReport, CrashReports, Logging};
 pub use error::{SabineError, SabineResult};
@@ -20,6 +21,7 @@ pub use host::{SabineProcess, SabineProcessHandle, WindowId};
 pub use launch::confine::documents;
 pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
 pub use log;
+pub use menu::{MenuActivation, MenuItem, MenuKind, MenuRole};
 pub use sabine_bridge::{
     ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
     BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,

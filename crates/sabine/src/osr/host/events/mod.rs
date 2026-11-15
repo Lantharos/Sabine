@@ -107,6 +107,10 @@ impl OsrNativeHost {
                     self.finish_file_dialog(id, paths);
                     Flow::Continue
                 }
+                OsrHostEvent::SheetPaste(text) => {
+                    self.paste_sheet_text(&text);
+                    Flow::Continue
+                }
                 OsrHostEvent::BrowserExited(generation, status) => {
                     self.browser_exited(event_loop, generation, status);
                     Flow::Continue
@@ -185,6 +189,7 @@ impl OsrNativeHost {
         self.send_window_state();
         self.send_toplevel_state();
         self.accessibility_browser_connected();
+        self.send_menu_state();
         self.send_control(if self.focused {
             "focus\t1\n"
         } else {
@@ -195,6 +200,7 @@ impl OsrNativeHost {
     fn browser_disconnected(&mut self) {
         self.abandon_printing();
         self.forget_permission_requests();
+        self.drop_page_sheets();
         self.page_media_playing = false;
         self.clear_media();
         self.drop_connection();

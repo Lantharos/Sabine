@@ -6,7 +6,9 @@ use super::panel::{
 };
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::protocol::MenuMark;
-use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
+use crate::render::{
+    DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
+};
 use crate::window::style::Color;
 
 pub(in crate::osr::host::ui) const RADIUS: f32 = 8.0;
@@ -86,6 +88,7 @@ fn draw_entry(list: &mut DisplayList, panel: &MenuPanel, entry: &MenuEntry, pale
         line_height: LINE_HEIGHT,
         color,
         align,
+        weight: TextWeight::Regular,
     };
     if let Some(mark) = mark_glyph(entry) {
         list.push(text(
@@ -134,10 +137,10 @@ fn mark_glyph(entry: &MenuEntry) -> Option<&'static str> {
 pub(in crate::osr::host::ui) struct MenuPalette {
     pub(in crate::osr::host::ui) background: Color,
     pub(in crate::osr::host::ui) border: Color,
-    separator: Color,
+    pub(in crate::osr::host::ui) separator: Color,
     pub(in crate::osr::host::ui) highlight: Color,
     pub(in crate::osr::host::ui) text: Color,
-    disabled: Color,
+    pub(in crate::osr::host::ui) disabled: Color,
 }
 
 impl MenuPalette {

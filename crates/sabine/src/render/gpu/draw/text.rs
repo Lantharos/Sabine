@@ -2,11 +2,11 @@ use crate::render::{DisplayCommand, DisplayList};
 use crate::window::style::Color;
 use glyphon::{
     Attrs, Buffer, Cache, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea,
-    TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
+    TextAtlas, TextBounds, TextRenderer, Viewport, Weight, Wrap,
 };
 
 use crate::render::RendererError;
-use crate::render::{TextAlign, TextCommand};
+use crate::render::{TextAlign, TextCommand, TextWeight};
 use glyphon::cosmic_text::Align;
 
 pub(in crate::render::gpu) struct TextRendererState {
@@ -79,7 +79,7 @@ impl TextRendererState {
             buffer.set_wrap(Wrap::WordOrGlyph);
             buffer.set_text(
                 &command.text,
-                &Attrs::new().family(Family::SansSerif),
+                &attrs(command.weight),
                 Shaping::Advanced,
                 Some(match command.align {
                     TextAlign::Left => Align::Left,
@@ -139,24 +139,73 @@ impl TextRendererState {
 
     /// The width `text` takes on one line at `size` logical pixels.
     pub(in crate::render::gpu) fn measure(&mut self, text: &str, size: f32) -> f32 {
-        let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size, size));
-        buffer.set_size(None, None);
-        buffer.set_text(
-            text,
-            &Attrs::new().family(Family::SansSerif),
-            Shaping::Advanced,
-            None,
-        );
-        buffer.shape_until_scroll(&mut self.font_system, false);
-        buffer
+        self.shape(text, size, size, None, TextWeight::Regular)
             .layout_runs()
             .map(|run| run.line_w)
             .fold(0.0, f32::max)
     }
 
+    /// The height `text` takes wrapped to `width`.
+    pub(in crate::render::gpu) fn measure_height(
+        &mut self,
+        text: &str,
+        size: f32,
+        line_height: f32,
+        width: f32,
+        weight: TextWeight,
+    ) -> f32 {
+        self.shape(text, size, line_height, Some(width), weight)
+            .layout_runs()
+            .count() as f32
+            * line_height
+    }
+
+    /// Where each character of `text` starts on one line, by its byte
+    /// offset, ending with the offset and width of the whole text.
+    pub(in crate::render::gpu) fn measure_offsets(
+        &mut self,
+        text: &str,
+        size: f32,
+    ) -> Vec<(usize, f32)> {
+        let buffer = self.shape(text, size, size, None, TextWeight::Regular);
+        let mut offsets = Vec::with_capacity(text.len() + 1);
+        let mut end = 0.0_f32;
+        for glyph in buffer.layout_runs().flat_map(|run| run.glyphs.iter()) {
+            offsets.push((glyph.start, glyph.x));
+            end = end.max(glyph.x + glyph.w);
+        }
+        offsets.sort_by_key(|(start, _)| *start);
+        offsets.dedup_by_key(|(start, _)| *start);
+        offsets.push((text.len(), end));
+        offsets
+    }
+
+    fn shape(
+        &mut self,
+        text: &str,
+        size: f32,
+        line_height: f32,
+        width: Option<f32>,
+        weight: TextWeight,
+    ) -> Buffer {
+        let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size, line_height));
+        buffer.set_size(width, None);
+        buffer.set_wrap(Wrap::WordOrGlyph);
+        buffer.set_text(text, &attrs(weight), Shaping::Advanced, None);
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        buffer
+    }
+
     pub(in crate::render::gpu) fn trim(&mut self) {
         self.atlas.trim();
     }
+}
+
+fn attrs(weight: TextWeight) -> Attrs<'static> {
+    Attrs::new().family(Family::SansSerif).weight(match weight {
+        TextWeight::Regular => Weight::NORMAL,
+        TextWeight::Semibold => Weight::SEMIBOLD,
+    })
 }
 
 fn text_areas(text_buffers: &[TextBufferEntry], scale: f32) -> impl Iterator<Item = TextArea<'_>> {

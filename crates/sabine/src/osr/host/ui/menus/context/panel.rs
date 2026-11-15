@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::osr::protocol::{ContextMenuItem, MenuMark};
+use super::items::PanelItem;
+use crate::osr::protocol::MenuMark;
 use crate::render::GpuRenderer;
 
 pub(super) const MENU_PADDING: f32 = 5.0;
@@ -27,7 +28,7 @@ pub(super) struct MenuPanel {
 }
 
 pub(super) struct MenuEntry {
-    pub(super) item: ContextMenuItem,
+    pub(super) item: PanelItem,
     pub(super) label: Arc<str>,
     pub(super) shortcut: Option<Arc<str>>,
     pub(super) top: f32,
@@ -36,7 +37,7 @@ pub(super) struct MenuEntry {
 
 impl MenuPanel {
     /// Lays the entries out, at the origin until the panel is placed.
-    pub(super) fn new(items: Vec<ContextMenuItem>, renderer: &mut GpuRenderer) -> Self {
+    pub(super) fn new(items: Vec<PanelItem>, renderer: &mut GpuRenderer) -> Self {
         let mut top = MENU_PADDING;
         let mut label_width = 0.0_f32;
         let mut trailing_width = 0.0_f32;
@@ -50,7 +51,7 @@ impl MenuPanel {
                     ITEM_HEIGHT
                 };
                 let label: Arc<str> = item.label.as_str().into();
-                let shortcut = shortcut_for(item.id).map(Arc::<str>::from);
+                let shortcut = item.shortcut.clone();
                 if !item.separator {
                     label_width = label_width.max(renderer.measure_text(&label, TEXT_SIZE));
                 }
@@ -177,33 +178,5 @@ impl MenuEntry {
 
     pub(super) fn opens_submenu(&self) -> bool {
         !self.item.items.is_empty()
-    }
-}
-
-/// The keyboard shortcut shown beside a CEF edit command, in the desktop's
-/// own notation.
-fn shortcut_for(command: i32) -> Option<&'static str> {
-    let shortcuts: [&str; 6] = if cfg!(target_os = "macos") {
-        ["⌘Z", "⇧⌘Z", "⌘X", "⌘C", "⌘V", "⌘A"]
-    } else if cfg!(windows) {
-        ["Ctrl+Z", "Ctrl+Y", "Ctrl+X", "Ctrl+C", "Ctrl+V", "Ctrl+A"]
-    } else {
-        [
-            "Ctrl+Z",
-            "Ctrl+Shift+Z",
-            "Ctrl+X",
-            "Ctrl+C",
-            "Ctrl+V",
-            "Ctrl+A",
-        ]
-    };
-    match command {
-        110 => Some(shortcuts[0]),
-        111 => Some(shortcuts[1]),
-        112 => Some(shortcuts[2]),
-        113 => Some(shortcuts[3]),
-        114 => Some(shortcuts[4]),
-        117 => Some(shortcuts[5]),
-        _ => None,
     }
 }

@@ -102,6 +102,8 @@ impl OsrNativeHost {
         self.window_generation = self.window_generation.wrapping_add(1);
         self.window = Some(window.clone());
         self.attach_accessibility();
+        #[cfg(not(target_os = "linux"))]
+        self.install_app_menu();
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
             sabine_runtime::report_error("media", error);
         }

@@ -30,6 +30,8 @@ pub struct SabineFile {
     #[serde(default)]
     pub install: InstallSection,
     pub bindings: Option<BindingsSection>,
+    #[serde(default)]
+    pub menu: Vec<MenuEntry>,
 }
 
 impl SabineFile {
@@ -158,6 +160,20 @@ pub struct CrashSection {
     /// Where Chromium sends the app's crash reports. Without it, reports stay
     /// in the app's data folder.
     pub upload_url: Option<String>,
+}
+
+/// One `[[menu]]` of the app menu bar, or an item of one.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct MenuEntry {
+    pub id: String,
+    pub label: String,
+    pub role: Option<String>,
+    pub accelerator: Option<String>,
+    pub enabled: Option<bool>,
+    pub checked: Option<bool>,
+    pub separator: bool,
+    pub items: Vec<MenuEntry>,
 }
 
 #[derive(Debug, Deserialize)]

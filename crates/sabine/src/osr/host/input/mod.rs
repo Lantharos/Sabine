@@ -63,6 +63,7 @@ impl ApplicationHandler for OsrNativeHost {
         self.deliver_clipboard_drops();
         self.refresh_appearance();
         self.handle_accessibility_requests();
+        self.run_menu_requests(event_loop);
         self.process_osr_events(event_loop);
     }
 
@@ -98,7 +99,11 @@ impl ApplicationHandler for OsrNativeHost {
                 self.note_paste_key(&event);
                 let pressed = event.state.is_pressed();
                 let escape = event.logical_key == Key::Named(NamedKey::Escape);
-                if self.context_menu.is_some() {
+                if self.sheets.is_open() {
+                    if pressed {
+                        self.sheet_key_pressed(&event);
+                    }
+                } else if self.context_menu.is_some() {
                     if pressed {
                         self.menu_key_pressed(&event.logical_key);
                     }
@@ -154,7 +159,8 @@ impl ApplicationHandler for OsrNativeHost {
                 self.set_occluded(false);
                 self.pointer_button(event_loop, state, position, button, primary);
             }
-            WindowEvent::MouseWheel { .. } if self.context_menu.is_some() => {}
+            WindowEvent::MouseWheel { .. }
+                if self.context_menu.is_some() || self.sheets.is_open() => {}
             WindowEvent::MouseWheel { delta, .. } => self.forward_mouse_wheel(delta),
             WindowEvent::PinchGesture { delta, .. } => self.forward_pinch(delta),
             WindowEvent::DragEntered { id, position } if !self.clipboard_owns_drops() => {

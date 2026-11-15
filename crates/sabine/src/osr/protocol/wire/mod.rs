@@ -15,7 +15,7 @@ use std::io::{self, Read};
 
 #[cfg(target_os = "macos")]
 use crate::osr::accel::SurfaceRegistry;
-use crate::osr::protocol::OsrMessage;
+use crate::osr::protocol::{JsDialogClosed, OsrMessage};
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 
@@ -248,12 +248,21 @@ impl WireReader {
             KIND_CONTEXT_MENU => OsrMessage::ContextMenu {
                 x,
                 y,
+                guest: width != 0,
                 items: parse_json(&payload)?,
             },
             KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
             KIND_PERMISSION_REQUEST => OsrMessage::PermissionRequest(parse_json(&payload)?),
             KIND_PERMISSION_WITHDRAWN => OsrMessage::PermissionWithdrawn(width),
             KIND_FILE_DIALOG => OsrMessage::FileDialog(parse_json(&payload)?),
+            KIND_JS_DIALOG => OsrMessage::JsDialog(parse_json(&payload)?),
+            KIND_JS_DIALOG_CLOSED => {
+                OsrMessage::JsDialogClosed(parse_json::<JsDialogClosed>(&payload)?.id)
+            }
+            KIND_MENU_ACCELERATOR => OsrMessage::MenuAccelerator(
+                String::from_utf8(payload)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
             #[cfg(target_os = "linux")]
             KIND_PRINT_DIALOG => OsrMessage::PrintDialog(parse_json(&payload)?),
             #[cfg(target_os = "linux")]

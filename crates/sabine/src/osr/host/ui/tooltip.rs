@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::render::{DisplayList, RoundedRectCommand, TextAlign, TextCommand};
+use crate::render::{DisplayList, RoundedRectCommand, TextAlign, TextCommand, TextWeight};
 use crate::window::style::Color;
 
 use crate::osr::host::native::OsrNativeHost;
@@ -68,6 +68,7 @@ impl OsrNativeHost {
             line_height: 18.0,
             color: Color::rgb8(245, 245, 246),
             align: TextAlign::Center,
+            weight: TextWeight::Regular,
         });
     }
 }

@@ -42,6 +42,9 @@ impl OsrNativeHost {
             HostControl::ActivityBegin(activity) => self.begin_activity(activity),
             HostControl::ActivityEnd(activity) => self.end_activity(activity),
             HostControl::Permission(id, decision) => self.app_decided_permission(id, decision),
+            HostControl::Dialog(id, dialog) => self.show_app_dialog(id, dialog),
+            HostControl::ContextMenu(items) => self.set_context_menu_items(items),
+            HostControl::AppMenu(items) => self.set_app_menu(items),
         }
         Flow::Continue
     }
@@ -76,6 +79,18 @@ pub(in crate::osr::host) fn host_control_from_parts(
         }),
         "square-corners" => bool_control_value(value).map(HostControl::SquareCorners),
         "permission" => permission_control_value(value),
+        "dialog" => {
+            let dialog = serde_json::from_str::<serde_json::Value>(value).ok()?;
+            let id = dialog.get("id")?.as_u64()?;
+            Some(HostControl::Dialog(
+                id,
+                serde_json::from_value(dialog).ok()?,
+            ))
+        }
+        "context-menu" => serde_json::from_str(value)
+            .ok()
+            .map(HostControl::ContextMenu),
+        "app-menu" => serde_json::from_str(value).ok().map(HostControl::AppMenu),
         _ => None,
     }
 }

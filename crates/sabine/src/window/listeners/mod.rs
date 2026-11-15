@@ -1,5 +1,6 @@
 mod closing;
 mod downloads;
+mod menu;
 mod permissions;
 mod visibility;
 
@@ -14,6 +15,7 @@ use crate::{SabineProcessHandle, WindowId};
 pub(crate) use closing::{CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener};
 pub(crate) use downloads::{DOWNLOAD_LINE, DownloadListeners};
 pub use downloads::{Download, DownloadControl, DownloadDecision, DownloadState};
+pub(crate) use menu::{MENU_ITEM_LINE, MenuItemListener, menu_item_line};
 pub(crate) use permissions::{PERMISSION_REQUEST_LINE, PermissionListener};
 pub use permissions::{PermissionDecision, PermissionRequest};
 pub use visibility::WindowVisibility;
@@ -39,6 +41,7 @@ pub(crate) struct WindowListeners {
     pub(crate) displays: Option<DisplaysListener>,
     pub(crate) permission: Option<PermissionListener>,
     pub(crate) downloads: DownloadListeners,
+    pub(crate) menu_item: Option<MenuItemListener>,
     /// The app's queue of links and documents, which all its windows share.
     pub(crate) open_urls: OpenUrls,
     /// Where the app hears what happened to its windows' notifications.
@@ -51,6 +54,12 @@ impl WindowListeners {
     pub(crate) fn deliver(&self, window: WindowId, line: &str) -> bool {
         if line.starts_with(VISIBILITY_LINE) {
             if let Some(listener) = &self.visibility {
+                listener.deliver(window, line);
+            }
+            return true;
+        }
+        if line.starts_with(MENU_ITEM_LINE) {
+            if let Some(listener) = &self.menu_item {
                 listener.deliver(window, line);
             }
             return true;

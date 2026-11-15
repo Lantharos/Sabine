@@ -53,6 +53,9 @@ void KeepEditCommands(CefRefPtr<CefMenuModel> model) {
 
 constexpr int kOpenDevToolsCommand = MENU_ID_USER_FIRST;
 constexpr int kCloseDevToolsCommand = MENU_ID_USER_FIRST + 1;
+// Holds the place of the app's own items, which the window adds, so Chromium
+// opens a menu where it offers nothing of its own.
+constexpr int kAppItemsCommand = MENU_ID_USER_FIRST + 2;
 
 std::string MenuLabel(const std::string& label) {
   std::string text;
@@ -102,16 +105,19 @@ void PageDialogs::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
                                       CefRefPtr<CefMenuModel> model) {
   CEF_REQUIRE_UI_THREAD();
   KeepEditCommands(model);
-  if (!owner_->dev_mode_) {
-    return;
+  if (owner_->dev_mode_) {
+    if (model->GetCount() > 0) {
+      model->AddSeparator();
+    }
+    if (owner_->devtools_inspected_) {
+      model->AddItem(kCloseDevToolsCommand, "Close DevTools");
+    } else {
+      model->AddItem(kOpenDevToolsCommand, "Open DevTools");
+    }
   }
-  if (model->GetCount() > 0) {
-    model->AddSeparator();
-  }
-  if (owner_->devtools_inspected_) {
-    model->AddItem(kCloseDevToolsCommand, "Close DevTools");
-  } else {
-    model->AddItem(kOpenDevToolsCommand, "Open DevTools");
+  if (model->GetCount() == 0 && app_context_items_ &&
+      !owner_->guests_.ForBrowser(browser)) {
+    model->AddItem(kAppItemsCommand, "Sabine");
   }
 }
 
@@ -123,12 +129,13 @@ bool PageDialogs::RunContextMenu(
     CefRefPtr<CefRunContextMenuCallback> callback) {
   CEF_REQUIRE_UI_THREAD();
   CefRect point(params->GetXCoord(), params->GetYCoord(), 0, 0);
-  if (const GuestView* guest = owner_->guests_.ForBrowser(browser)) {
+  const GuestView* guest = owner_->guests_.ForBrowser(browser);
+  if (guest) {
     point = guest->ToView(point);
   }
+  model->Remove(kAppItemsCommand);
   const std::string items = MenuItemsJson(model);
-  if (model->GetCount() == 0 ||
-      !owner_->transport_.Send(kContextMenu, 0, 0, point.x, point.y,
+  if (!owner_->transport_.Send(kContextMenu, guest ? 1 : 0, 0, point.x, point.y,
                                items.data(),
                                static_cast<uint32_t>(items.size()))) {
     callback->Cancel();

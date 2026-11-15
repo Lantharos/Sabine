@@ -107,7 +107,7 @@ windows = { version = "0.62.2", features = [
 accesskit_macos.workspace = true
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSBezierPath", "NSColor", "NSDockTile", "NSImage", "NSMenu", "NSMenuItem", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSBezierPath", "NSColor", "NSDockTile", "NSEvent", "NSImage", "NSMenu", "NSMenuItem", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true

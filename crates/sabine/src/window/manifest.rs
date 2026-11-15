@@ -139,6 +139,13 @@ impl SabineWindow {
                 None => self.splash(true),
             };
         }
+        if !file.menu.is_empty() {
+            self.config.app_menu = crate::menu::from_manifest(file.menu).map_err(|message| {
+                SabineError::CreationFailed {
+                    message: format!("[[menu]] in {}: {message}", path.display()),
+                }
+            })?;
+        }
         self = self.local_files(file.web.local_files);
         for origin in file.web.allowed_origins {
             self = self.allowed_origin(origin);

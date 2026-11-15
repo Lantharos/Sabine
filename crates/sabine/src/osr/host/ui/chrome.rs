@@ -7,7 +7,9 @@ use winit::{
 };
 
 use crate::SabineWindowControlRegion;
-use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
+use crate::render::{
+    DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
+};
 use crate::window::style::Color;
 
 use super::chrome_hits::ChromeHits;
@@ -56,6 +58,7 @@ impl OsrNativeHost {
             line_height: 20.0,
             color: Color::TEXT,
             align: TextAlign::Center,
+            weight: TextWeight::Regular,
         });
         for control in [
             TitlebarControl::Minimize,
