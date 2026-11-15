@@ -90,7 +90,7 @@ From the browser to the window, messages are binary, each starting with the vers
 
 - Surface sizes, inline payloads and shared mappings are checked before anything is allocated or mapped.
 - The window's paint queue holds at most 256 MiB. Merged paints keep every dirty rectangle, up to 256 rectangles and 64 MiB per batch, and larger batches apply backpressure instead of dropping damage.
-- Control queues hold 256 messages and 64 MiB on each side. Pointer motion, wheel turns and finger moves merge with newer ones of the same kind; clicks, keys and the pointer leaving the page are always delivered in order. An ordered command that would overflow closes the connection rather than being lost.
+- Control queues hold 256 messages and 64 MiB on each side. Pointer motion, wheel turns and finger moves merge with newer ones of the same kind; clicks, keys and the pointer leaving the page are always delivered in order. An ordered command that finds the queue full waits for room rather than being lost, and the frame slots the window hands back never wait in line. The window sends everything queued in one write.
 - Socket writes have a five-second deadline.
 
 Frames themselves don't travel on the socket. The socket carries a handle to GPU memory: a dma-buf file descriptor on Linux, an NT handle duplicated into the window's process on Windows, and an IOSurface sent as a Mach port on macOS. Software paints use shared memory. See [Rendering](/docs/concepts/rendering/).

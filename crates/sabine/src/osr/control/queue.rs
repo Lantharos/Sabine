@@ -1,63 +1,31 @@
 use std::{
     collections::VecDeque,
+    fmt::Write as _,
     io::{self, Write},
-    sync::{
-        Arc, Condvar, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
+    sync::{Condvar, Mutex, MutexGuard},
 };
 
-use super::transport::IpcStream;
+use super::Wheel;
 
 const MAX_QUEUED_CONTROLS: usize = 256;
 const MAX_QUEUED_BYTES: usize = 64 * 1024 * 1024;
 const MAX_RELAYED_CONTROLS: usize = MAX_QUEUED_CONTROLS / 2;
 const MAX_RELAYED_BYTES: usize = MAX_QUEUED_BYTES / 2;
+/// Messages at least this long go to the browser as they are, instead of
+/// being copied into the batch the writer sends.
+const UNBATCHED_BYTES: usize = 64 * 1024;
 
-pub(crate) struct ControlWriter {
-    queue: Arc<ControlQueue>,
-    stream: IpcStream,
-}
-
-struct ControlQueue {
+pub(super) struct ControlQueue {
     state: Mutex<ControlQueueState>,
     ready: Condvar,
     space: Condvar,
 }
 
-/// Carries the app's bridge messages to the current browser connection from
-/// the thread that reads them, waiting while the browser catches up.
-#[derive(Clone, Default)]
-pub(crate) struct ControlRelay {
-    writer: Arc<Mutex<Option<Arc<ControlWriter>>>>,
-    page_frozen: Arc<AtomicBool>,
-}
-
-impl ControlRelay {
-    pub(crate) fn connect(&self, writer: Option<Arc<ControlWriter>>) {
-        if let Ok(mut current) = self.writer.lock() {
-            *current = writer;
-        }
-    }
-
-    pub(crate) fn set_page_frozen(&self, frozen: bool) {
-        self.page_frozen.store(frozen, Ordering::Release);
-    }
-
-    /// Forwards a message to the page, and returns whether the page is
-    /// frozen and has to thaw to take it.
-    pub(crate) fn forward(&self, frame: Vec<u8>) -> bool {
-        let writer = self.writer.lock().ok().and_then(|current| current.clone());
-        if let Some(writer) = writer {
-            let _ = writer.finish_send(writer.queue.push_relayed(frame));
-        }
-        self.page_frozen.swap(false, Ordering::AcqRel)
-    }
-}
-
 struct ControlQueueState {
     messages: VecDeque<ControlMessage>,
+    /// The frame slots the window let go of, which the browser takes back
+    /// whatever else waits. They never count against the queue's limits.
+    releases: String,
     closed: bool,
     bytes: usize,
     error: Option<String>,
@@ -81,42 +49,6 @@ enum ControlMessage {
     Relayed(Vec<u8>),
 }
 
-/// A wheel turn the page has yet to receive, which later turns with the same
-/// modifiers add to while it waits.
-#[derive(Clone, Copy)]
-pub(crate) struct Wheel {
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) dx: i32,
-    pub(crate) dy: i32,
-    pub(crate) modifiers: u32,
-}
-
-impl Wheel {
-    fn line(&self) -> String {
-        let Self {
-            x,
-            y,
-            dx,
-            dy,
-            modifiers,
-        } = self;
-        format!("mouse_wheel\t{x:.2}\t{y:.2}\t{dx}\t{dy}\t{modifiers}\n")
-    }
-
-    fn add(&mut self, newer: Self) -> bool {
-        if self.modifiers != newer.modifiers {
-            return false;
-        }
-        *self = Self {
-            dx: self.dx.saturating_add(newer.dx),
-            dy: self.dy.saturating_add(newer.dy),
-            ..newer
-        };
-        true
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ControlCoalescingKey {
     Focus,
@@ -124,76 +56,39 @@ enum ControlCoalescingKey {
     Resize,
 }
 
-impl ControlWriter {
-    pub(super) fn start(mut stream: IpcStream) -> io::Result<Self> {
-        stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
-        let owned = stream.try_clone()?;
-        let queue = Arc::new(ControlQueue::new());
-        let worker_queue = Arc::clone(&queue);
-        thread::spawn(move || {
-            while let Some(message) = worker_queue.next() {
-                if let Err(error) = stream.write_all(&message.into_bytes()) {
-                    worker_queue.fail(error);
-                    let _ = stream.shutdown(std::net::Shutdown::Both);
-                    break;
-                }
-            }
-        });
-        Ok(Self {
-            queue,
-            stream: owned,
-        })
-    }
-
-    pub(super) fn send(&self, line: String) -> Result<(), String> {
-        self.finish_send(self.queue.push_ordered(line))
-    }
-
-    pub(super) fn send_motion(&self, line: String) -> Result<(), String> {
-        self.finish_send(self.queue.push_motion(line))
-    }
-
-    pub(super) fn send_wheel(&self, wheel: Wheel) -> Result<(), String> {
-        self.finish_send(self.queue.push_wheel(wheel))
-    }
-
-    /// Sends where a finger moved, replacing where it had moved to if the
-    /// browser has yet to hear that.
-    pub(super) fn send_touch_move(&self, id: i32, line: String) -> Result<(), String> {
-        self.finish_send(self.queue.push_touch_move(id, line))
-    }
-
-    /// Sends where the pen moved, keeping every sample a stroke is drawn
-    /// from.
-    pub(super) fn send_pen_move(&self, line: String) -> Result<(), String> {
-        self.finish_send(self.queue.push_pen_move(line))
-    }
-
-    fn finish_send(&self, result: Result<(), String>) -> Result<(), String> {
-        if let Err(error) = &result {
-            self.queue.fail(io::Error::other(error.clone()));
-            let _ = self.stream.shutdown(std::net::Shutdown::Both);
-        }
-        result
-    }
+/// Everything the writer sends to the browser in one go.
+#[derive(Default)]
+pub(super) struct Batch {
+    messages: VecDeque<ControlMessage>,
+    releases: String,
+    bytes: Vec<u8>,
 }
 
-impl Drop for ControlWriter {
-    fn drop(&mut self) {
-        if let Ok(mut state) = self.queue.state.lock() {
-            state.closed = true;
+impl Batch {
+    pub(super) fn write_to(&mut self, stream: &mut impl Write) -> io::Result<()> {
+        self.bytes.clear();
+        self.bytes.extend_from_slice(self.releases.as_bytes());
+        self.releases.clear();
+        for message in self.messages.drain(..) {
+            let bytes = message.bytes();
+            if bytes.len() < UNBATCHED_BYTES {
+                self.bytes.extend_from_slice(bytes);
+                continue;
+            }
+            stream.write_all(&self.bytes)?;
+            self.bytes.clear();
+            stream.write_all(bytes)?;
         }
-        self.queue.ready.notify_one();
-        self.queue.space.notify_all();
-        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+        stream.write_all(&self.bytes)
     }
 }
 
 impl ControlQueue {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             state: Mutex::new(ControlQueueState {
                 messages: VecDeque::new(),
+                releases: String::new(),
                 closed: false,
                 bytes: 0,
                 error: None,
@@ -203,18 +98,12 @@ impl ControlQueue {
         }
     }
 
-    fn push_relayed(&self, frame: Vec<u8>) -> Result<(), String> {
+    pub(super) fn push_relayed(&self, frame: Vec<u8>) -> Result<(), String> {
         let mut state = self.lock_open_state()?;
         while state.messages.len() >= MAX_RELAYED_CONTROLS
             || (state.bytes > 0 && state.bytes + frame.len() > MAX_RELAYED_BYTES)
         {
-            state = self
-                .space
-                .wait(state)
-                .map_err(|_| "control queue lock was poisoned".to_string())?;
-            if state.closed {
-                return Err("control writer is closed".to_string());
-            }
+            state = self.wait_for_space(state)?;
         }
         state.bytes += frame.len();
         state.messages.push_back(ControlMessage::Relayed(frame));
@@ -223,7 +112,9 @@ impl ControlQueue {
         Ok(())
     }
 
-    fn push_ordered(&self, line: String) -> Result<(), String> {
+    /// Queues a message the browser must receive, after making room by
+    /// dropping input it can do without or by waiting for the writer.
+    pub(super) fn push_ordered(&self, line: String) -> Result<(), String> {
         if line.len() > MAX_QUEUED_BYTES {
             return Err("control message exceeds 64 MiB".to_string());
         }
@@ -244,11 +135,13 @@ impl ControlQueue {
         while state.messages.len() >= MAX_QUEUED_CONTROLS
             || state.bytes + line.len() > MAX_QUEUED_BYTES
         {
-            let Some(index) = state.messages.iter().position(ControlMessage::is_lossy) else {
-                return Err("control queue is full".to_string());
-            };
-            if let Some(removed) = state.messages.remove(index) {
-                state.bytes -= removed.len();
+            match state.messages.iter().position(ControlMessage::is_lossy) {
+                Some(index) => {
+                    if let Some(removed) = state.messages.remove(index) {
+                        state.bytes -= removed.len();
+                    }
+                }
+                None => state = self.wait_for_space(state)?,
             }
         }
         state.bytes += line.len();
@@ -261,7 +154,19 @@ impl ControlQueue {
         Ok(())
     }
 
-    fn push_motion(&self, line: String) -> Result<(), String> {
+    pub(super) fn push_release(&self, release: std::fmt::Arguments<'_>) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        if state.closed {
+            return;
+        }
+        let _ = state.releases.write_fmt(release);
+        drop(state);
+        self.ready.notify_one();
+    }
+
+    pub(super) fn push_motion(&self, line: String) -> Result<(), String> {
         let mut state = self.lock_open_state()?;
         if matches!(state.messages.back(), Some(ControlMessage::Motion(_)))
             && let Some(removed) = state.messages.pop_back()
@@ -272,7 +177,7 @@ impl ControlQueue {
         Ok(())
     }
 
-    fn push_wheel(&self, wheel: Wheel) -> Result<(), String> {
+    pub(super) fn push_wheel(&self, wheel: Wheel) -> Result<(), String> {
         let mut state = self.lock_open_state()?;
         let queue = &mut *state;
         if let Some(ControlMessage::Wheel {
@@ -291,7 +196,7 @@ impl ControlQueue {
         Ok(())
     }
 
-    fn push_touch_move(&self, id: i32, line: String) -> Result<(), String> {
+    pub(super) fn push_touch_move(&self, id: i32, line: String) -> Result<(), String> {
         let mut state = self.lock_open_state()?;
         let queue = &mut *state;
         let pending = queue
@@ -312,7 +217,7 @@ impl ControlQueue {
         Ok(())
     }
 
-    fn push_pen_move(&self, line: String) -> Result<(), String> {
+    pub(super) fn push_pen_move(&self, line: String) -> Result<(), String> {
         let state = self.lock_open_state()?;
         self.push_lossy(state, ControlMessage::PenMove(line));
         Ok(())
@@ -320,11 +225,7 @@ impl ControlQueue {
 
     /// Queues input the browser can do without, giving way to whatever must
     /// reach it when the queue is full.
-    fn push_lossy(
-        &self,
-        mut state: std::sync::MutexGuard<'_, ControlQueueState>,
-        message: ControlMessage,
-    ) {
+    fn push_lossy(&self, mut state: MutexGuard<'_, ControlQueueState>, message: ControlMessage) {
         let len = message.len();
         if (state.messages.len() >= MAX_QUEUED_CONTROLS || state.bytes + len > MAX_QUEUED_BYTES)
             && let Some(index) = state.messages.iter().position(ControlMessage::is_lossy)
@@ -340,40 +241,66 @@ impl ControlQueue {
         self.ready.notify_one();
     }
 
-    fn lock_open_state(&self) -> Result<std::sync::MutexGuard<'_, ControlQueueState>, String> {
+    fn lock_open_state(&self) -> Result<MutexGuard<'_, ControlQueueState>, String> {
         let state = self
             .state
             .lock()
             .map_err(|_| "control queue lock was poisoned".to_string())?;
-        if state.closed {
-            return Err(state
-                .error
-                .clone()
-                .unwrap_or_else(|| "control writer is closed".to_string()));
-        }
+        state.open()?;
         Ok(state)
     }
 
-    fn next(&self) -> Option<ControlMessage> {
-        let mut state = self.state.lock().ok()?;
+    fn wait_for_space<'a>(
+        &self,
+        state: MutexGuard<'a, ControlQueueState>,
+    ) -> Result<MutexGuard<'a, ControlQueueState>, String> {
+        let state = self
+            .space
+            .wait(state)
+            .map_err(|_| "control queue lock was poisoned".to_string())?;
+        state.open()?;
+        Ok(state)
+    }
+
+    /// Waits for what the browser has yet to receive and moves all of it
+    /// into `batch`. Returns false once the queue closed.
+    pub(super) fn take(&self, batch: &mut Batch) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
         loop {
             if state.closed {
-                return None;
+                return false;
             }
-            if let Some(message) = state.messages.pop_front() {
-                state.bytes -= message.len();
+            if !state.messages.is_empty() || !state.releases.is_empty() {
+                std::mem::swap(&mut state.messages, &mut batch.messages);
+                std::mem::swap(&mut state.releases, &mut batch.releases);
+                state.bytes = 0;
+                drop(state);
                 self.space.notify_all();
-                return Some(message);
+                return true;
             }
-            state = self.ready.wait(state).ok()?;
+            let Ok(waited) = self.ready.wait(state) else {
+                return false;
+            };
+            state = waited;
         }
     }
 
-    fn fail(&self, error: io::Error) {
+    pub(super) fn close(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.closed = true;
+        }
+        self.ready.notify_one();
+        self.space.notify_all();
+    }
+
+    pub(super) fn fail(&self, error: io::Error) {
         if let Ok(mut state) = self.state.lock() {
             state.closed = true;
             state.error = Some(error.to_string());
             state.messages.clear();
+            state.releases.clear();
             state.bytes = 0;
         }
         self.ready.notify_all();
@@ -381,15 +308,31 @@ impl ControlQueue {
     }
 }
 
+impl ControlQueueState {
+    fn open(&self) -> Result<(), String> {
+        if !self.closed {
+            return Ok(());
+        }
+        Err(self
+            .error
+            .clone()
+            .unwrap_or_else(|| "control writer is closed".to_string()))
+    }
+}
+
 impl ControlMessage {
     fn len(&self) -> usize {
+        self.bytes().len()
+    }
+
+    fn bytes(&self) -> &[u8] {
         match self {
             Self::Motion(line)
             | Self::Wheel { line, .. }
             | Self::TouchMove { line, .. }
             | Self::PenMove(line)
-            | Self::Ordered { line, .. } => line.len(),
-            Self::Relayed(frame) => frame.len(),
+            | Self::Ordered { line, .. } => line.as_bytes(),
+            Self::Relayed(frame) => frame,
         }
     }
 
@@ -418,17 +361,6 @@ impl ControlMessage {
                 ..
             } if *pending == key
         )
-    }
-
-    fn into_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Motion(line)
-            | Self::Wheel { line, .. }
-            | Self::TouchMove { line, .. }
-            | Self::PenMove(line)
-            | Self::Ordered { line, .. } => line.into_bytes(),
-            Self::Relayed(frame) => frame,
-        }
     }
 }
 

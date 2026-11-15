@@ -179,7 +179,7 @@ pub(super) fn start_socket_reader(
                 Ok(Some(message)) => {
                     let queued = messages.push(message);
                     if let Some(slot) = queued.replaced_slot {
-                        let _ = control.send(format!("accel_release\t{slot}\n"));
+                        control.release_accel(slot);
                     }
                     if queued.wake {
                         if !state.send(
