@@ -2,7 +2,8 @@
 
 use std::{fs, path::Path};
 
-use super::{cargo_toml, sanitize_id};
+use super::cargo_toml;
+use crate::util::sanitize_id;
 
 pub(super) fn write_app_template(root: &Path, name: &str) -> std::io::Result<()> {
     fs::create_dir_all(root.join("src"))?;

@@ -10,7 +10,8 @@ use std::{
 use crate::{
     desktop::{entry::Listing, icons, types::Associations},
     install::{assets::stage_icon, desktop as source_desktop},
-    project::{CargoPackage, absolute_path, detect_icon, read_sabine_file, sanitize_id},
+    project::{CargoPackage, detect_icon, read_sabine_file},
+    util::{existing_path, sanitize_id},
 };
 
 #[derive(Debug)]
@@ -84,7 +85,7 @@ pub(crate) fn detect_source_app(
     command: Option<String>,
     autostart: bool,
 ) -> Result<SourceApp, String> {
-    let source = absolute_path(source)?;
+    let source = existing_path(source)?;
     let sabine = read_sabine_file(&source)?;
     let listing = Listing::of(&sabine.app);
     listing.validate()?;

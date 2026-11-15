@@ -16,7 +16,7 @@ use std::{
 
 pub use bindings::run_bindings;
 
-use crate::runtime;
+use crate::{runtime, util::shell_command};
 use process_tree::ProcessTree;
 use web_detect::DevProject;
 
@@ -306,19 +306,4 @@ fn wait_child(
 
 fn exit_code(status: std::process::ExitStatus) -> ExitCode {
     ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8)
-}
-
-fn shell_command(command: &str) -> Command {
-    #[cfg(target_os = "windows")]
-    {
-        let mut process = Command::new("cmd");
-        process.args(["/C", command]);
-        process
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mut process = Command::new("sh");
-        process.args(["-c", command]);
-        process
-    }
 }

@@ -8,6 +8,7 @@ mod release;
 mod runtime;
 mod template;
 mod update;
+mod util;
 
 use std::process::ExitCode;
 

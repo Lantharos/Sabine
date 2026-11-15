@@ -90,7 +90,7 @@ fn register_with_launch_services(bundle: &Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-use crate::desktop::macos::xml;
+use crate::util::xml;
 
 #[cfg(target_os = "linux")]
 pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> String {

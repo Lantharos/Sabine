@@ -4,7 +4,8 @@ use std::{fs, path::Path};
 
 use serde_json::{Value, json};
 
-use super::{cargo_toml, sanitize_id};
+use super::cargo_toml;
+use crate::util::sanitize_id;
 
 macro_rules! example {
     ($path:literal) => {

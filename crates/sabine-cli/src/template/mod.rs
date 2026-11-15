@@ -57,18 +57,6 @@ fn write_default_icon(root: &std::path::Path) -> std::io::Result<()> {
     )
 }
 
-pub(crate) fn sanitize_id(name: &str) -> String {
-    name.chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' {
-                character.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-}
-
 fn is_valid_name(name: &str) -> bool {
     !name.is_empty()
         && name

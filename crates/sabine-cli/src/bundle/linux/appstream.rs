@@ -1,4 +1,4 @@
-use crate::project::BundleApp;
+use crate::{project::BundleApp, util::xml};
 
 /// AppStream metadata that lets software centers describe the app, written
 /// for apps that appear in launchers and name a homepage.
@@ -90,12 +90,4 @@ fn release_timestamp() -> u64 {
                 .expect("the system clock is after 1970")
                 .as_secs()
         })
-}
-
-fn xml(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }

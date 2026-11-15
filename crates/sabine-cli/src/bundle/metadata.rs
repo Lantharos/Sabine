@@ -1,4 +1,4 @@
-use crate::project::BundleApp;
+use crate::{project::BundleApp, util::xml};
 use sabine_service::{AppArtifactKind, AppInstallMode, AppUpdateSource};
 
 pub(super) fn runtime_manifest(
@@ -164,14 +164,6 @@ pub(super) fn sanitize_path(value: &str) -> String {
 fn quote(value: &str) -> String {
     let encoded = serde_json::to_string(value).expect("string serialization");
     encoded[1..encoded.len() - 1].to_string()
-}
-
-fn xml(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 fn windows_version(version: &str) -> String {

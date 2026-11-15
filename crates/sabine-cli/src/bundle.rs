@@ -17,7 +17,10 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 
-use crate::project::{BundleApp, ConfigOverrides, environment};
+use crate::{
+    project::{BundleApp, ConfigOverrides, environment},
+    util::shell_command,
+};
 use format::{BuildTarget, BundleFormat};
 use package::package_bundle;
 use stage::{binary_path, stage_bundle};
@@ -173,31 +176,6 @@ fn configure_windows_linking(command: &mut Command) {
     command.env("RUSTFLAGS", flags);
 }
 
-fn shell_command(command: &str) -> Command {
-    #[cfg(target_os = "windows")]
-    {
-        let mut process = Command::new("cmd");
-        process.args(["/C", command]);
-        process
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mut process = Command::new("sh");
-        process.args(["-c", command]);
-        process
-    }
-}
-
-fn absolute_path(path: PathBuf) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        Ok(path)
-    } else {
-        Ok(std::env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(path))
-    }
-}
-
 fn bundle_json(
     app: &BundleApp,
     format: BundleFormat,
@@ -227,7 +205,7 @@ fn prepare_bundle(
     if options.offline && format.target().as_str() != std::env::consts::OS {
         return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
     }
-    let out = absolute_path(options.out)?;
+    let out = std::path::absolute(options.out).map_err(|error| error.to_string())?;
     let mut app = crate::project::resolve_app(
         &options.source,
         ConfigOverrides {
@@ -259,7 +237,7 @@ fn prepare_bundle(
         build_web(&app, &web_environment)?;
     }
     let binary = if let Some(binary) = options.binary {
-        absolute_path(binary)?
+        std::path::absolute(binary).map_err(|error| error.to_string())?
     } else if options.no_build {
         binary_path(&app, format, options.release)
     } else {
