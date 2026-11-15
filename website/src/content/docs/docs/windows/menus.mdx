@@ -1,0 +1,180 @@
+---
+title: Menus
+description: Add your own items to the context menu, show menus from buttons your page draws, and give the app a menu bar.
+sidebar:
+  order: 7
+---
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine draws the window's menus itself, in the desktop's light or dark colors. Your app can add
+items to the context menu, open a menu anywhere on the page, and set a menu bar, which macOS and
+Windows show natively.
+
+## Menu items
+
+Every menu takes the same items, in Rust, in `Sabine.toml` and from your pages:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Reported when the item is chosen |
+| `label` | The text the menu shows |
+| `role` | Makes the item do something on its own, such as quitting. See [Roles](#roles) |
+| `accelerator` | Keys that choose the item, such as `Primary+Shift+S`. The menu shows them beside the label |
+| `enabled` | `false` greys the item out. Defaults to `true` |
+| `checked` | Draws a check mark, on when `true` |
+| `separator` | `true` makes the item a line between groups |
+| `items` | Turns the item into a submenu of these items |
+
+```rust
+use sabine::{MenuItem, MenuRole};
+
+let items = vec![
+    MenuItem::new("pin", "Pin Note").accelerator("Primary+P"),
+    MenuItem::new("archive", "Archive").enabled(false),
+    MenuItem::separator(),
+    MenuItem::submenu("Move To", vec![MenuItem::new("work", "Work"), MenuItem::new("home", "Home")]),
+];
+```
+
+### Accelerators
+
+An accelerator is modifiers and a key joined by `+`. `Primary` is Command on macOS and Control
+elsewhere; `Control`, `Alt`, `Shift` and `Meta` name the others. Keys are single characters,
+`F1` to `F24`, or `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`,
+`End`, `PageUp`, `PageDown`, the `ArrowUp` family, `Plus`, `Minus` and `Equal`.
+
+The page sees every key first. An accelerator chooses its item only when the page leaves the key
+unhandled, so an editor that takes `Primary+B` for bold keeps it. Edit roles stay with the page,
+which already copies, pastes and undoes in its own fields.
+
+### Roles
+
+| Role | Does |
+| --- | --- |
+| `quit` | Ends the app, also one that runs in the background |
+| `close` | Asks the window to close, as its close button does |
+| `minimize`, `zoom`, `fullscreen` | Minimizes, maximizes or restores, and enters or leaves full screen |
+| `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll` | Edits the focused field of the page |
+| `about` | Shows the standard About panel on macOS. Elsewhere it is reported like any item, for your own |
+| `hide`, `hideOthers`, `showAll`, `services` | The macOS app menu's items. Left out elsewhere |
+| `window` | Marks the submenu macOS lists the window in |
+
+Role items take the role's label and accelerator unless you give them their own, and report the
+role's name when they have no `id`.
+
+## The context menu
+
+The window's context menu keeps the edit and spelling items Chromium offers where the page was
+clicked. Your items follow them, and open a menu of their own where Chromium offers nothing:
+
+```rust
+window
+    .context_menu(vec![MenuItem::new("pin", "Pin Note")])
+    .on_menu_item(|chosen| println!("{} chose {}", chosen.window, chosen.id))
+```
+
+Pages replace the items with `menu.setContextMenu`, and the app with
+`BridgeEventEmitter::set_context_menu`. Guests' context menus keep only Chromium's items.
+
+## Menus from the page
+
+`menu.popup` opens a menu at a point of the page, such as under a button the page draws, and
+resolves with the id chosen, or `null` when the menu closes without a choice:
+
+```ts
+import { menu } from "@lantharos/sabine";
+
+const button = document.querySelector("#more")!;
+button.addEventListener("click", async () => {
+  const { left, bottom } = button.getBoundingClientRect();
+  const chosen = await menu.popup(
+    [{ id: "rename", label: "Rename" }, { id: "duplicate", label: "Duplicate" }],
+    { x: left, y: bottom },
+  );
+  if (chosen === "rename") rename();
+});
+```
+
+The menu takes the keyboard while it is open: arrows move, Enter chooses and Escape closes it.
+
+## The app menu bar
+
+Set the menu bar in Rust, or in `Sabine.toml`:
+
+<Tabs>
+  <TabItem label="Rust">
+    ```rust
+    window.app_menu(vec![
+        MenuItem::submenu("File", vec![
+            MenuItem::new("new", "New Note").accelerator("Primary+N"),
+            MenuItem::separator(),
+            MenuItem::role(MenuRole::Quit),
+        ]),
+        MenuItem::submenu("Edit", vec![
+            MenuItem::role(MenuRole::Undo),
+            MenuItem::role(MenuRole::Redo),
+            MenuItem::separator(),
+            MenuItem::role(MenuRole::Cut),
+            MenuItem::role(MenuRole::Copy),
+            MenuItem::role(MenuRole::Paste),
+        ]),
+    ])
+    ```
+  </TabItem>
+  <TabItem label="Sabine.toml">
+    ```toml
+    [[menu]]
+    label = "File"
+    items = [
+      { id = "new", label = "New Note", accelerator = "Primary+N" },
+      { separator = true },
+      { role = "quit" },
+    ]
+    ```
+  </TabItem>
+</Tabs>
+
+Every window of the app shows the same menu bar. `BridgeEventEmitter::set_app_menu` and the
+page's `menu.setAppMenu` replace it in all of them, also in windows opened later.
+
+| Desktop | The menu bar |
+| --- | --- |
+| macOS | The app's main menu. Its first menu is the one macOS names after the app. An app that sets none gets the standard app, Edit, View and Window menus |
+| Windows | A menu bar under the system titlebar, with Alt and F10 reaching it. Windows whose page draws its titlebar leave the menu to the page |
+| Linux | Wayland has no menu bar of its own, so the page draws it |
+
+Accelerators work on every desktop, also where the page draws the menu.
+
+### Drawing the menu bar in the page
+
+`menu.appMenu()` returns the menu bar with each item's label, accelerator and id filled in, and
+`menu.onAppMenuChanged` tells you when it changes. Each menu of the bar can open with
+`menu.popup` under its button, which runs the roles of the items chosen and tells the app of the
+rest:
+
+```ts
+import { menu } from "@lantharos/sabine";
+
+const bar = await menu.appMenu();
+for (const entry of bar) {
+  const button = document.createElement("button");
+  button.textContent = entry.label ?? "";
+  button.onclick = () => {
+    const { left, bottom } = button.getBoundingClientRect();
+    menu.popup(entry.items ?? [], { x: left, y: bottom });
+  };
+  titlebar.append(button);
+}
+```
+
+A page that draws the menus in HTML instead chooses an item with `menu.activate(id)`, which does
+what choosing it from a native menu bar does.
+
+## Hearing what was chosen
+
+`SabineWindow::on_menu_item` hears every item chosen from the context menu, a page's menu or the
+menu bar, unless the item has a role. `MenuActivation` carries the window, the item's id, and
+`menu`: `Context`, `Popup` or `App`. Pages hear the context menu and the menu bar through
+`menu.onSelect`; a page's own menus answer it through `menu.popup` instead.
+
+Only the app's own pages, and origins the app allows, can use `menu`.

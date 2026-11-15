@@ -39,6 +39,8 @@ in code that also runs in a browser.
 | `activity` | object | [Activity](#activity) |
 | `NativeVideo` | class | [Native video](#nativevideo) |
 | `clipboard` | object | [Clipboard](#clipboard) |
+| `menu` | object | [Menus](#menu) |
+| `dialog` | object | [Dialogs](#dialog) |
 | `downloads` | object | [Downloads](#downloads) |
 | `spellcheck` | object | [Spellcheck](#spellcheck) |
 | `print` | object | [Printing](#print) |
@@ -952,6 +954,65 @@ await clipboard.write({ "text/uri-list": "file:///home/ana/notes.txt\r\n" });
 const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
 ```
 
+## `menu`
+
+```ts
+const menu: {
+  setContextMenu(items: MenuItem[]): Promise<void>;
+  popup(items: MenuItem[], at: { x: number; y: number }): Promise<string | null>;
+  setAppMenu(items: MenuItem[]): Promise<void>;
+  appMenu(): Promise<MenuItem[]>;
+  activate(id: string): Promise<void>;
+  onSelect(callback: (selection: { id: string; menu: "context" | "app" }) => void): () => void;
+  onAppMenuChanged(callback: (items: MenuItem[]) => void): () => void;
+};
+
+interface MenuItem {
+  id?: string;
+  label?: string;
+  role?: MenuRole;
+  accelerator?: string; // such as "Primary+Shift+S"
+  enabled?: boolean; // default true
+  checked?: boolean;
+  separator?: boolean;
+  items?: MenuItem[];
+}
+```
+
+`setContextMenu` replaces the app's items in the window's context menu. `popup` shows a menu at a
+point of the page in CSS pixels and resolves with the id chosen, or `null`. `setAppMenu` replaces
+the menu bar of every window; `appMenu` reads it with labels, accelerators and ids filled in, for
+pages that draw it, and `activate` chooses one of its items. `onSelect` hears the items chosen from
+the context menu and the menu bar. Available to the app's own pages; elsewhere the methods throw.
+See [Menus](/docs/windows/menus/).
+
+## `dialog`
+
+```ts
+const dialog: {
+  message(options: {
+    title?: string;
+    message?: string;
+    buttons?: string[]; // default ["OK"]
+    defaultButton?: number; // default the last
+    cancelButton?: number; // default the first
+  }): Promise<number>;
+  confirm(options: { title?: string; message?: string; okLabel?: string; cancelLabel?: string }): Promise<boolean>;
+  prompt(options: {
+    title?: string;
+    message?: string;
+    value?: string;
+    placeholder?: string;
+    okLabel?: string;
+    cancelLabel?: string;
+  }): Promise<string | null>;
+};
+```
+
+Shows a dialog over the page and resolves with the button picked, whether OK was picked, or the
+text entered, `null` when cancelled. Available to the app's own pages; elsewhere the methods
+throw. See [Dialogs](/docs/windows/dialogs/).
+
 ## `downloads`
 
 ```ts
@@ -1167,6 +1228,7 @@ await tray.update({
 The package's types also declare the global, so `window.sabine` is typed as
 `SabineApi | undefined` in pages that import the package. It has `bridge`, `window`, `guest`,
 `activity`, `popup`, `system`, `print`, `downloads`, `spellcheck` and, in the app's own pages,
-`clipboard`: the objects the exports above stand for. `appWindow`, `popup`, `guest`, `activity`,
-`system`, `print`, `downloads`, `spellcheck` and `clipboard` look up their part of `window.sabine` on each use, so they have the same members;
+`clipboard`, `menu` and `dialog`: the objects the exports above stand for. `appWindow`, `popup`,
+`guest`, `activity`, `system`, `print`, `downloads`, `spellcheck`, `clipboard`, `menu` and
+`dialog` look up their part of `window.sabine` on each use, so they have the same members;
 `guest.create` alone differs, resolving a [`Guest`](#guest) instead of its `GuestInfo`.

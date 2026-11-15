@@ -1,0 +1,77 @@
+---
+title: Dialogs
+description: Show messages and questions over the page, and how alert, confirm, prompt and leave-page prompts look.
+sidebar:
+  order: 8
+---
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Sabine draws dialogs over the page, in the same look as its menus. The page behind them dims
+and takes no input until someone answers.
+
+## JavaScript dialogs
+
+`alert`, `confirm` and `prompt` work as in a browser, and so does the prompt `beforeunload` shows
+when someone reloads or leaves a page with unsaved changes. The app's own page titles them with
+the window's title; a guest's with its site.
+
+## Message dialogs
+
+The app shows its own dialogs with custom buttons, from Rust or from its pages. Buttons sit in a
+row in the order given. Enter picks the default button, which is drawn in the desktop's accent
+color, and Escape picks the cancel button. Tab and the arrow keys move between the buttons.
+
+<Tabs>
+  <TabItem label="Rust">
+    ```rust
+    use sabine::MessageDialog;
+
+    let reply = emitter.show_message(
+        window,
+        &MessageDialog::new("Discard this draft?")
+            .message("The draft has changes you haven't saved.")
+            .buttons(["Keep Editing", "Discard"]),
+    );
+    sabine::async_runtime().spawn(async move {
+        if reply.await.button == 1 {
+            discard_draft();
+        }
+    });
+    ```
+  </TabItem>
+  <TabItem label="TypeScript">
+    ```ts
+    import { dialog } from "@lantharos/sabine";
+
+    const button = await dialog.message({
+      title: "Discard this draft?",
+      message: "The draft has changes you haven't saved.",
+      buttons: ["Keep Editing", "Discard"],
+    });
+    if (button === 1) discardDraft();
+    ```
+  </TabItem>
+</Tabs>
+
+`MessageDialog::buttons` makes the last button the default and the first the cancel button;
+`default_button` and `cancel_button` choose others. A dialog without buttons has a single OK. When
+the window closes before anyone answers, the reply resolves with the cancel button.
+
+`emitter.confirm(window, title, message)` and `dialog.confirm` ask with Cancel and OK and resolve
+to whether OK was picked; pages can rename both buttons.
+
+## Asking for text
+
+A dialog with an input asks for a line of text. The field takes typing, the input method,
+selection with the pointer or Shift, and copying and pasting.
+
+```ts
+const name = await dialog.prompt({ title: "Rename note", value: "Untitled" });
+if (name !== null) rename(name);
+```
+
+In Rust, `MessageDialog::input(value, placeholder)` adds the field, and the answer's `value` holds
+the text unless the cancel button was picked.
+
+Several dialogs never show at once: the next one opens when the one before it is answered. Only
+the app's own pages, and origins the app allows, can use `dialog`.

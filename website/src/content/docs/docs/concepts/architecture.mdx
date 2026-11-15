@@ -41,7 +41,7 @@ Your process never touches Chromium or the GPU. If it exits or crashes, its wind
 
 ### Window hosts
 
-Each window runs in a window host: your own executable, started again by Sabine with an internal argument. A window host owns everything native about one window: the window itself, its GPU device and compositor, keyboard, pointer, touch and pen input, the input method, context menus and tooltips, native video, and on Linux the clipboard and printing. It starts the window's browser and composes the pages it paints.
+Each window runs in a window host: your own executable, started again by Sabine with an internal argument. A window host owns everything native about one window: the window itself, its GPU device and compositor, keyboard, pointer, touch and pen input, the input method, menus, dialogs and tooltips, the app menu bar, native video, and on Linux the clipboard and printing. It starts the window's browser and composes the pages it paints.
 
 Because the window host is your executable, it needs no separate install, and a custom `main` has to let Sabine run it before doing anything else. See [Rust API](/docs/reference/rust-api/#entry-points).
 

@@ -50,6 +50,10 @@ microphone = "Tern records voice notes"
 
 [spellcheck]
 languages = ["en-US", "de-DE"]
+
+[[menu]]
+label = "File"
+items = [{ id = "new", label = "New Note", accelerator = "Primary+N" }, { role = "quit" }]
 ```
 
 Every table is optional, and a project without a `Sabine.toml` uses the defaults. Paths are relative
@@ -310,6 +314,29 @@ location. [Permissions](/docs/web/permissions/) lists them and explains who may 
 
 Each launch applies these to the app's profile, over what its pages set. See
 [Spellcheck](/docs/web/spellcheck/).
+
+## `[[menu]]`
+
+Each `[[menu]]` is a menu of the app menu bar, in order. It and its items take the keys of a
+[menu item](/docs/windows/menus/#menu-items): `id`, `label`, `role`, `accelerator`, `enabled`,
+`checked`, `separator` and `items`.
+
+```toml
+[[menu]]
+label = "File"
+items = [
+  { id = "new", label = "New Note", accelerator = "Primary+N" },
+  { separator = true },
+  { role = "quit" },
+]
+
+[[menu]]
+label = "Edit"
+items = [{ role = "undo" }, { role = "redo" }, { separator = true }, { role = "copy" }, { role = "paste" }]
+```
+
+An unknown role or accelerator stops the app from starting, naming it. `SabineWindow::app_menu`
+replaces the menu bar the manifest sets. See [Menus](/docs/windows/menus/#the-app-menu-bar).
 
 ## The production manifest
 

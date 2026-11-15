@@ -274,6 +274,10 @@ See [Lifecycle](/docs/windows/lifecycle/).
 | `native_messaging_host(NativeMessagingHost)` | A browser extension host |
 | `single_instance(SingleInstancePolicy)` | What a second launch does |
 | `single_instance_id(impl Into<String>)` | Names the instance, instead of the app id |
+| `context_menu(Vec<MenuItem>)` | The app's items in the window's context menu |
+| `app_menu(Vec<MenuItem>)` | The app menu bar; `[[menu]]` in `Sabine.toml` sets it too |
+
+See [Menus](/docs/windows/menus/).
 
 ### Logs and crash reports
 
@@ -298,9 +302,10 @@ pub fn on_quit(self, listener: impl Fn() + Send + Sync + 'static) -> Self;
 pub fn on_permission_request(self, listener: impl Fn(&PermissionRequest) -> PermissionDecision + Send + Sync + 'static) -> Self;
 pub fn on_download(self, listener: impl Fn(&Download) -> DownloadDecision + Send + Sync + 'static) -> Self;
 pub fn on_download_updated(self, listener: impl Fn(&Download) + Send + Sync + 'static) -> Self;
+pub fn on_menu_item(self, listener: impl Fn(MenuActivation) + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, what happens to every window's notifications, and the system's sleep, lock and power source changes, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_permission_request` decides the pages' requests for declared permissions before people are asked, see [Permissions](/docs/web/permissions/#deciding-in-rust). `on_download` decides where the downloads the page starts go, and `on_download_updated` hears how each one goes, see [Downloads](/docs/web/downloads/). `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, what happens to every window's notifications, and the system's sleep, lock and power source changes, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_permission_request` decides the pages' requests for declared permissions before people are asked, see [Permissions](/docs/web/permissions/#deciding-in-rust). `on_download` decides where the downloads the page starts go, and `on_download_updated` hears how each one goes, see [Downloads](/docs/web/downloads/). `on_menu_item` hears each item without a role chosen from the context menu, a page's menu or the menu bar, see [Menus](/docs/windows/menus/#hearing-what-was-chosen). `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
 
 ```rust
 pub struct WindowVisibility {
@@ -514,6 +519,11 @@ impl BridgeEventEmitter {
     pub fn set_spellcheck(&self, window: WindowId, spellcheck: &Spellcheck) -> bool;
     pub fn add_spellcheck_word(&self, window: WindowId, word: &str) -> bool;
 
+    pub fn show_message(&self, window: WindowId, dialog: &MessageDialog) -> DialogReply;
+    pub fn confirm(&self, window: WindowId, title: &str, message: &str) -> impl Future<Output = bool>;
+    pub fn set_context_menu(&self, window: WindowId, items: &[MenuItem]) -> bool;
+    pub fn set_app_menu(&self, items: &[MenuItem]) -> bool;
+
     pub fn show(&self) -> bool;
     pub fn hide(&self) -> bool;
     pub fn set_visible(&self, visible: bool) -> bool;
@@ -531,6 +541,8 @@ impl BridgeEventEmitter {
 ```
 
 `show`, `hide`, `set_visible` and `focus_window` act on the app's window: the one people focused last, or the first one open. `show_window`, `hide_window` and `activate_window` act on the window you name; `activate_window` shows and focuses it. `close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead. `download_control` pauses, resumes or cancels a download of the window's page with `DownloadControl::Pause`, `Resume` or `Cancel`. `set_spellcheck` changes what a `Spellcheck { enabled, languages }` sets, leaving what it leaves `None`, and `add_spellcheck_word` adds a word to the app's custom dictionary.
+
+`show_message` shows a `MessageDialog` over one window's page; its `DialogReply` resolves to a `DialogAnswer` with the button picked and the text entered, or the cancel button once the window closes. `confirm` asks with Cancel and OK. See [Dialogs](/docs/windows/dialogs/). `set_context_menu` replaces one window's context menu items, and `set_app_menu` the menu bar of every window, also those opened later.
 
 `control_window` changes one open window. A change the desktop can't make, such as keeping a window above others on a Wayland compositor without `kestrel_window_v1`, goes to the app's diagnostics.
 
@@ -869,6 +881,59 @@ pub type SabineResult<T> = Result<T, SabineError>;
 | `InstanceAlreadyRunning` | The launch was handed to the running instance |
 
 `SabineWindow::main` handles all of these itself: it exits quietly for `SetupCancelled` and `InstanceAlreadyRunning` and shows a notice for the others.
+
+## Menus and dialogs
+
+```rust
+pub struct MenuItem {
+    pub id: String,
+    pub label: String,
+    pub role: Option<MenuRole>,
+    pub accelerator: Option<String>,
+    pub enabled: bool,
+    pub checked: Option<bool>,
+    pub separator: bool,
+    pub items: Vec<MenuItem>,
+}
+
+impl MenuItem {
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self;
+    pub fn separator() -> Self;
+    pub fn submenu(label: impl Into<String>, items: Vec<MenuItem>) -> Self;
+    pub fn role(role: MenuRole) -> Self;
+    pub fn accelerator(self, accelerator: impl Into<String>) -> Self;
+    pub fn enabled(self, enabled: bool) -> Self;
+    pub fn checked(self, checked: bool) -> Self;
+    pub fn items(self, items: Vec<MenuItem>) -> Self;
+    pub fn label(self, label: impl Into<String>) -> Self;
+}
+
+pub struct MenuActivation { pub window: WindowId, pub id: String, pub menu: MenuKind }
+pub enum MenuKind { Context, Popup, App }
+
+pub struct MessageDialog {
+    pub title: String,
+    pub message: String,
+    pub buttons: Vec<String>,
+    pub default_button: usize,
+    pub cancel_button: usize,
+    pub input: Option<DialogInput>,
+}
+
+impl MessageDialog {
+    pub fn new(title: impl Into<String>) -> Self;
+    pub fn message(self, message: impl Into<String>) -> Self;
+    pub fn buttons(self, labels: impl IntoIterator<Item = impl Into<String>>) -> Self;
+    pub fn default_button(self, index: usize) -> Self;
+    pub fn cancel_button(self, index: usize) -> Self;
+    pub fn input(self, value: impl Into<String>, placeholder: impl Into<String>) -> Self;
+}
+
+pub struct DialogInput { pub value: String, pub placeholder: String }
+pub struct DialogAnswer { pub button: usize, pub value: Option<String> }
+```
+
+`MenuRole` is one of `About`, `Hide`, `HideOthers`, `ShowAll`, `Services`, `Quit`, `Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `SelectAll`, `Minimize`, `Zoom`, `Fullscreen`, `Close` and `Window`. See [Menus](/docs/windows/menus/#roles).
 
 ## Platform types
 

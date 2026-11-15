@@ -1,5 +1,16 @@
 # Unreleased
 
+- `alert`, `confirm`, `prompt` and leave-page prompts work in every window, drawn over the page
+  in the context menu's look instead of returning at once.
+- Apps show their own dialogs with custom buttons and a text field: `show_message` and `confirm`
+  on the emitter, `dialog.message`, `dialog.confirm` and `dialog.prompt` from the app's pages.
+- Apps add items to the context menu with `context_menu` and `menu.setContextMenu`, and pages
+  open menus anywhere with `menu.popup`. Rust hears the items chosen through `on_menu_item`, pages
+  through `menu.onSelect`.
+- An app menu bar, set with `app_menu`, `[[menu]]` in `Sabine.toml` or `menu.setAppMenu`, with
+  roles such as quit, copy and fullscreen and accelerators that work wherever the page leaves the
+  keys alone. macOS shows it as the main menu, with a standard one when the app sets none; Windows
+  as the window's menu bar; Linux pages draw it from `menu.appMenu`.
 - The app's Dock or taskbar icon shows a badge and a progress bar: `app.setBadge` and
   `app.setProgress` from pages, `set_badge` and `set_progress` on the process handle. Linux docks
   that follow `com.canonical.Unity.LauncherEntry` show counts and progress, Windows draws them on
