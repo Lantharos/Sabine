@@ -474,6 +474,7 @@ class SabineOsrHandler : public CefClient,
                                       CefRefPtr<CefRequestContext> context);
   bool CancelPendingGuest(const std::string& id);
   bool HasPendingGuest(const std::string& id) const;
+  size_t PopupGuestCount() const;
   void DestroyGuest(const std::string& id);
   void FocusGuest(const std::string& id);
   void DismissPopupGuest();

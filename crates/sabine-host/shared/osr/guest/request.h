@@ -35,6 +35,7 @@ struct GuestCreateRequest {
   bool intercept_horizontal_wheel = false;
   bool visible = true;
   GuestPopupPolicy popup_policy = GuestPopupPolicy::kDeny;
+  bool opened_by_popup = false;
   std::string background_color;
 };
 

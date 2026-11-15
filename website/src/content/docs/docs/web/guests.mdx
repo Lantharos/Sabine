@@ -171,8 +171,8 @@ opens a new window:
 | Policy | Effect |
 | --- | --- |
 | `"deny"` | Nothing opens, and the page receives `guestNewWindow` with the URL and how the page asked to open it, for example to open the link in a new tab of its own or with `shell.openLink`. |
-| `"navigateSame"` | The guest loads the URL itself. |
-| `"openGuest"` | Sabine opens the URL in a new guest with the same partition, bounds, popup policy and download setting. The page learns about it from `guestCreated`. |
+| `"navigateSame"` | The guest loads the URL itself, when it is an `http` or `https` URL. |
+| `"openGuest"` | Sabine opens the URL in a new guest with the same partition, bounds, popup policy and download setting. The page learns about it from `guestCreated`. Only `http` and `https` URLs the person opened with a click or key press open, and a window holds at most 16 guests opened this way. |
 
 ```ts
 import { events, shell } from "@lantharos/sabine";
