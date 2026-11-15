@@ -6,7 +6,6 @@
 
 #include "common/bridge_policy.h"
 #include "common/json.h"
-#include "include/cef_command_line.h"
 #include "include/wrapper/cef_helpers.h"
 #include "renderer/bridge.h"
 #include "renderer/clipboard.h"
@@ -45,16 +44,8 @@ void SabineRenderer::ReportRenderer(CefRefPtr<CefFrame> frame,
       !policy->GetBool(sabine_bridge::kReportRendererKey)) {
     return;
   }
-  const CefString client_id =
-      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue(
-          "renderer-client-id");
-  if (client_id.empty()) {
-    return;
-  }
-  CefRefPtr<CefProcessMessage> message =
-      CefProcessMessage::Create(sabine_bridge::kRendererMessage);
-  message->GetArgumentList()->SetString(0, client_id);
-  frame->SendProcessMessage(PID_BROWSER, message);
+  frame->SendProcessMessage(
+      PID_BROWSER, CefProcessMessage::Create(sabine_bridge::kRendererMessage));
   renderer_reported_ = true;
 }
 

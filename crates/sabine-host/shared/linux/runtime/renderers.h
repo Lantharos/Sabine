@@ -3,12 +3,14 @@
 
 #include <string>
 
+#include "include/cef_frame.h"
+
 namespace sabine_runtime {
 
-// Moves the renderer Chromium knows by |client_id| into |cgroup|, the unit
-// of the app it draws for, so the app's memory and out-of-memory handling
-// include its pages.
-void AdoptRenderer(const std::string& client_id, const std::string& cgroup);
+// Moves the renderer running |frame| into |cgroup|, the unit of the app it
+// draws for, so the app's memory and out-of-memory handling include its
+// pages. Each renderer moves once.
+void AdoptRenderer(CefRefPtr<CefFrame> frame, const std::string& cgroup);
 
 }  // namespace sabine_runtime
 

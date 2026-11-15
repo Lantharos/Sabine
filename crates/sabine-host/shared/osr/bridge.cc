@@ -32,6 +32,13 @@ bool SabineOsrHandler::OnProcessMessageReceived(
                            std::string_view(bytes.body, bytes.body_size));
     return true;
   }
+#if defined(OS_LINUX)
+  if (message->GetName() == sabine_bridge::kRendererMessage) {
+    if (frame->IsMain() && !profile_.renderer_cgroup.empty())
+      sabine_runtime::AdoptRenderer(frame, profile_.renderer_cgroup);
+    return true;
+  }
+#endif
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
   if (!arguments || arguments->GetSize() < 1) {
     return true;
@@ -41,14 +48,6 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       return true;
     }
   }
-#if defined(OS_LINUX)
-  if (message->GetName() == sabine_bridge::kRendererMessage) {
-    if (!profile_.renderer_cgroup.empty())
-      sabine_runtime::AdoptRenderer(arguments->GetString(0),
-                                    profile_.renderer_cgroup);
-    return true;
-  }
-#endif
   if (message->GetName() == "sabine.clipboard") {
     if (arguments->GetSize() == 1)
       ForwardClipboardRequest(browser, frame, arguments->GetString(0));
