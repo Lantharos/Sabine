@@ -19,6 +19,7 @@ authors.workspace = true
 readme = "README.md"
 
 [dependencies]
+accesskit.workspace = true
 sabine-runtime.workspace = true
 sabine-bridge.workspace = true
 sabine-host.workspace = true
@@ -51,6 +52,7 @@ serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+accesskit_unix.workspace = true
 ash.workspace = true
 glow.workspace = true
 khronos-egl.workspace = true
@@ -64,6 +66,7 @@ xdg-mime.workspace = true
 zbus = { workspace = true, features = ["proxy", "service"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+accesskit_windows.workspace = true
 global-hotkey.workspace = true
 tray-icon.workspace = true
 uds_windows.workspace = true
@@ -101,6 +104,7 @@ windows = { version = "0.62.2", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+accesskit_macos.workspace = true
 shell-words = "1.1.1"
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSApplication", "NSBezierPath", "NSColor", "NSDockTile", "NSImage", "NSMenu", "NSMenuItem", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }

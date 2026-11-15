@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "app/profile.h"
+#include "include/cef_accessibility_handler.h"
 #include "include/base/cef_build.h"
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
@@ -26,6 +27,7 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_values.h"
 #include "osr/accelerated/paint.h"
+#include "osr/accessibility/page_accessibility.h"
 #include "osr/dialogs/dialogs.h"
 #include "osr/dialogs/downloads.h"
 #include "osr/guest/guests.h"
@@ -94,6 +96,9 @@ class SabineOsrHandler : public CefClient,
     return this;
   }
   CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
+  CefRefPtr<CefAccessibilityHandler> GetAccessibilityHandler() override {
+    return accessibility_;
+  }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
 #if defined(OS_LINUX)
   CefRefPtr<CefPrintHandler> GetPrintHandler() override {
@@ -342,6 +347,7 @@ class SabineOsrHandler : public CefClient,
   ImeState ime_;
   ClipboardRequests clipboard_;
   MediaState media_;
+  CefRefPtr<PageAccessibility> accessibility_;
   DragSession drag_;
   CefRefPtr<PageDialogs> dialogs_;
   CefRefPtr<Downloads> downloads_;

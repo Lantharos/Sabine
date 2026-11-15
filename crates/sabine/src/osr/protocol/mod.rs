@@ -1,3 +1,4 @@
+pub(crate) mod accessibility;
 mod config_json;
 mod encode;
 mod notification_json;
@@ -124,6 +125,8 @@ pub(crate) enum OsrMessage {
         anchor_utf16: usize,
         base_utf16: usize,
     },
+    AccessibilityTree(accessibility::AxTreeChange),
+    AccessibilityLocations(accessibility::AxLocationChange),
     /// Full `SABINE_BRIDGE_REQUEST\t...` line from the owning CEF handler.
     BridgeRequest(crate::bridge::frame::Frame),
 }

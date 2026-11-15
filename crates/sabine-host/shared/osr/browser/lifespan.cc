@@ -97,6 +97,7 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   } else if (browser_ && browser_->IsSame(browser)) {
     guests_.DestroyAll();
     ClosePrintDocuments();
+    accessibility_->Forget();
     browser_ = nullptr;
   }
   browsers_.remove_if([&](const CefRefPtr<CefBrowser>& entry) {

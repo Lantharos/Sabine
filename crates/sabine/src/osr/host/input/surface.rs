@@ -45,6 +45,7 @@ impl OsrNativeHost {
         self.scale_factor = scale;
         self.effect_regions_dirty = true;
         self.relayout_media();
+        self.sync_accessibility_window();
         #[cfg(target_os = "macos")]
         if let (Some(renderer), Some(window)) = (self.renderer.as_mut(), self.window.as_ref()) {
             renderer.set_fullscreen(window.fullscreen().is_some());
@@ -61,6 +62,8 @@ impl OsrNativeHost {
         self.sync_active_frame_rate();
         let focused = focused && self.config.visible;
         self.focused = focused;
+        #[cfg(not(windows))]
+        self.accessibility_focus_changed(focused);
         if focused {
             self.refresh_appearance();
             report_focus();

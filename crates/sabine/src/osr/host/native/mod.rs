@@ -167,6 +167,7 @@ pub(super) struct OsrNativeHost {
     #[cfg(target_os = "macos")]
     pub(super) surface_broker: Option<crate::osr::accel::SurfaceBroker>,
     pub(super) media: crate::media::MediaHost,
+    pub(super) accessibility: super::accessibility::Accessibility,
     pub(super) clipboard: Option<crate::clipboard::SystemClipboard>,
     #[cfg(target_os = "linux")]
     pub(super) placement: Option<sabine_platform::WindowPlacement>,
@@ -325,6 +326,7 @@ impl OsrNativeHost {
             #[cfg(target_os = "macos")]
             surface_broker: None,
             media: Default::default(),
+            accessibility: Default::default(),
             clipboard: None,
             #[cfg(target_os = "linux")]
             placement: None,

@@ -1,3 +1,4 @@
+mod accessibility;
 mod config;
 mod events;
 mod input;

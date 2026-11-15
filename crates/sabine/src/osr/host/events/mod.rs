@@ -184,6 +184,7 @@ impl OsrNativeHost {
         self.send_current_lifecycle();
         self.send_window_state();
         self.send_toplevel_state();
+        self.accessibility_browser_connected();
         self.send_control(if self.focused {
             "focus\t1\n"
         } else {
@@ -196,6 +197,7 @@ impl OsrNativeHost {
         self.page_media_playing = false;
         self.clear_media();
         self.drop_connection();
+        self.accessibility_browser_lost();
         self.awaiting_connection = false;
         self.connection_deadline = None;
         if self.closing_deadline.is_none() {

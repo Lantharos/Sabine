@@ -152,6 +152,14 @@ void SabineOsrHandler::HandleControlLine(
     RepaintAll();
     return;
   }
+  if (parts[0] == "accessibility" && parts.size() == 2) {
+    accessibility_->Enable(browser_, parts[1] == "1");
+    return;
+  }
+  if (parts[0] == "accessibility_action") {
+    accessibility_->Perform(browser_, parts);
+    return;
+  }
   if (parts[0] == "capture_lost") {
     host->SendCaptureLostEvent();
     return;

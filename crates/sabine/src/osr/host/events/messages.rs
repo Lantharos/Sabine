@@ -120,6 +120,8 @@ impl OsrNativeHost {
             OsrMessage::HideRequested => self.hide_window("hide"),
             OsrMessage::FocusRequested(token) => self.activate_window(event_loop, token),
             OsrMessage::BridgeRequest(frame) => self.relay_bridge_request(frame),
+            OsrMessage::AccessibilityTree(change) => self.apply_accessibility_tree(change),
+            OsrMessage::AccessibilityLocations(change) => self.move_accessibility_nodes(change),
             OsrMessage::MainLoadStarted { page_lost } => {
                 crate::osr::host::trace_host(&self.config, "browser.load_started");
                 if page_lost {

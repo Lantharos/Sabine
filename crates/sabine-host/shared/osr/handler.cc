@@ -77,6 +77,7 @@ SabineOsrHandler::SabineOsrHandler(std::string endpoint,
       bridge_policy_(bridge_policy),
       clipboard_(transport_),
       media_(transport_),
+      accessibility_(new PageAccessibility(transport_)),
       dialogs_(new PageDialogs(this)),
       downloads_(new Downloads(this)),
 #if defined(OS_LINUX)

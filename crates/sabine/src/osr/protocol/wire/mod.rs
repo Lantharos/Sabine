@@ -1,4 +1,5 @@
 mod accel;
+mod accessibility;
 mod header;
 mod kinds;
 mod page;
@@ -279,6 +280,12 @@ impl WireReader {
                 OsrMessage::TitleChanged(String::from_utf8(payload).unwrap_or_default())
             }
             KIND_IME_SURROUNDING_CHANGED => parse_ime_surrounding(&payload)?,
+            KIND_ACCESSIBILITY_TREE => {
+                OsrMessage::AccessibilityTree(accessibility::parse_tree_change(&payload)?)
+            }
+            KIND_ACCESSIBILITY_LOCATIONS => {
+                OsrMessage::AccessibilityLocations(accessibility::parse_location_change(&payload)?)
+            }
             KIND_BRIDGE_REQUEST => {
                 OsrMessage::BridgeRequest(crate::bridge::frame::Frame::decode(&payload)?)
             }

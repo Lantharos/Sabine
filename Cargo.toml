@@ -45,6 +45,10 @@ sabine-host = { path = "crates/sabine-host", version = "0.90.0" }
 sabine = { path = "crates/sabine", version = "0.90.0" }
 sabine-service = { path = "crates/sabine-service", version = "0.90.0" }
 
+accesskit = "0.25.2"
+accesskit_macos = "0.27.2"
+accesskit_unix = "0.24.1"
+accesskit_windows = "0.35.2"
 ash = "0.38.0"
 bzip2 = "0.6.1"
 flate2 = "1.1.10"

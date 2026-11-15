@@ -101,6 +101,7 @@ impl OsrNativeHost {
         self.occluded = false;
         self.window_generation = self.window_generation.wrapping_add(1);
         self.window = Some(window.clone());
+        self.attach_accessibility();
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
             sabine_runtime::report_error("media", error);
         }
@@ -234,6 +235,7 @@ impl OsrNativeHost {
         self.renderer_starting = false;
         #[cfg(windows)]
         self.touch_keyboard.forget_window();
+        self.detach_accessibility();
         self.window = None;
         self.renderer = None;
         self.effect = None;

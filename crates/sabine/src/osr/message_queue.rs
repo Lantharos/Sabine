@@ -5,6 +5,7 @@ use std::{
 
 use super::protocol::{
     ContextMenuItem, FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect,
+    accessibility::AxLocation,
 };
 
 const MAX_QUEUED_MESSAGES: usize = 256;
@@ -295,6 +296,10 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
                 + image.as_ref().map_or(0, |image| image.rgba.capacity())
         }
         OsrMessage::ImeSurroundingChanged { text, .. } => text.capacity(),
+        OsrMessage::AccessibilityTree(change) => change.retained_bytes(),
+        OsrMessage::AccessibilityLocations(change) => {
+            change.locations.capacity() * std::mem::size_of::<(i32, AxLocation)>()
+        }
         _ => 0,
     }
 }

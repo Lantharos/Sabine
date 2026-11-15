@@ -62,6 +62,7 @@ impl ApplicationHandler for OsrNativeHost {
         #[cfg(target_os = "linux")]
         self.deliver_clipboard_drops();
         self.refresh_appearance();
+        self.handle_accessibility_requests();
         self.process_osr_events(event_loop);
     }
 
@@ -114,6 +115,8 @@ impl ApplicationHandler for OsrNativeHost {
             #[cfg(not(target_os = "windows"))]
             WindowEvent::ThemeChanged(_) => self.refresh_appearance(),
             WindowEvent::Moved(_) => {
+                #[cfg(target_os = "linux")]
+                self.accessibility_window_moved();
                 self.send_screen_origin();
                 self.sync_active_frame_rate();
             }
