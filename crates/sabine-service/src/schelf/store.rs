@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -43,7 +43,7 @@ impl SabineService {
             launch_release(&install, &release)?;
             install_desktop_files(id, &bundle.share, &install.join(&bundle.executable))?;
             crate::app::succession::hand_over(id, &release.join(&bundle.executable));
-            remove_unused_releases(&release, &bundle.executable)?;
+            remove_unused_releases(&install, &release, &bundle.executable)?;
             self.app(id)
         })();
         sabine_runtime::remove_directory_if_present(&staging)?;
@@ -90,11 +90,17 @@ impl StoreBundle {
             return Err(invalid(&format!("the archive isn't {id}")));
         }
         let missing = |key: &str| invalid(&format!("the archive's manifest has no app {key}"));
+        let version = app.version.ok_or_else(|| missing("version"))?;
+        if !crate::types::valid_version(&version) {
+            return Err(invalid(
+                "the archive's app version isn't a semantic version",
+            ));
+        }
         Ok(Self {
             executable: bundle_executable(root)?,
             share: root.join("usr/share"),
             name: app.name.ok_or_else(|| missing("name"))?,
-            version: app.version.ok_or_else(|| missing("version"))?,
+            version,
             sabine: app
                 .sabine
                 .as_deref()
@@ -151,11 +157,12 @@ fn install_desktop_files(id: &str, share: &Path, executable: &Path) -> ServiceRe
         launching(&entry, executable),
     )?;
     let icons = data.join("icons/hicolor");
-    copy_tree(&share.join("icons/hicolor"), &icons)?;
+    install_app_icons(id, &share.join("icons/hicolor"), &icons)?;
     refresh_icon_cache(&icons);
-    let mime_package = share.join("mime/packages").join(format!("{id}.xml"));
-    if mime_package.is_file() {
-        copy_tree(&share.join("mime/packages"), &data.join("mime/packages"))?;
+    let mime_package = Path::new("mime/packages").join(format!("{id}.xml"));
+    if share.join(&mime_package).is_file() {
+        fs::create_dir_all(data.join("mime/packages"))?;
+        fs::copy(share.join(&mime_package), data.join(&mime_package))?;
         refresh_mime_database(&data.join("mime"));
     }
     refresh_desktop_database(&applications);
@@ -166,15 +173,8 @@ fn forget_desktop_files(id: &str, install: &Path) -> ServiceResult<()> {
     let data = data_home()?;
     forget_desktop_entries(id, install)?;
     let icons = data.join("icons/hicolor");
-    if let Ok(sizes) = fs::read_dir(&icons) {
-        for size in sizes.flatten().map(|size| size.path()) {
-            if !size.is_dir() {
-                continue;
-            }
-            for extension in ["png", "svg"] {
-                remove_path(&size.join("apps").join(format!("{id}.{extension}")))?;
-            }
-        }
+    for icon in app_icons(id, &icons)? {
+        remove_path(&icons.join(icon))?;
     }
     refresh_icon_cache(&icons);
     let mime_package = data.join("mime/packages").join(format!("{id}.xml"));
@@ -186,6 +186,44 @@ fn forget_desktop_files(id: &str, install: &Path) -> ServiceResult<()> {
     Ok(())
 }
 
+/// Copies the app's own icons, and nothing else the archive's theme holds.
+fn install_app_icons(id: &str, source: &Path, destination: &Path) -> ServiceResult<()> {
+    for icon in app_icons(id, source)? {
+        if !source.join(&icon).is_file() {
+            continue;
+        }
+        let target = destination.join(&icon);
+        fs::create_dir_all(target.parent().expect("an icon sits in its size folder"))?;
+        fs::copy(source.join(&icon), target)?;
+    }
+    Ok(())
+}
+
+/// Where the app's icons go in each size of the icon theme at `theme`,
+/// relative to it.
+fn app_icons(id: &str, theme: &Path) -> ServiceResult<Vec<PathBuf>> {
+    let sizes = match fs::read_dir(theme) {
+        Ok(sizes) => sizes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut icons = Vec::new();
+    for size in sizes {
+        let size = size?;
+        if !size.file_type()?.is_dir() {
+            continue;
+        }
+        for extension in ["png", "svg"] {
+            icons.push(
+                Path::new(&size.file_name())
+                    .join("apps")
+                    .join(format!("{id}.{extension}")),
+            );
+        }
+    }
+    Ok(icons)
+}
+
 /// The bundle's launcher entry, starting the installed program.
 fn launching(entry: &str, executable: &Path) -> String {
     entry
@@ -195,23 +233,6 @@ fn launching(entry: &str, executable: &Path) -> String {
             None => format!("{line}\n"),
         })
         .collect()
-}
-
-fn copy_tree(source: &Path, destination: &Path) -> ServiceResult<()> {
-    let Ok(entries) = fs::read_dir(source) else {
-        return Ok(());
-    };
-    fs::create_dir_all(destination)?;
-    for entry in entries {
-        let entry = entry?;
-        let target = destination.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_tree(&entry.path(), &target)?;
-        } else {
-            fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
 }
 
 fn invalid(message: &str) -> ServiceError {

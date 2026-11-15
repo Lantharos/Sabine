@@ -16,7 +16,7 @@ const RELEASES: &str = "releases";
 /// A new folder for `version` of the app installed at `install`, also when
 /// the same version is installed again.
 pub(super) fn release_folder(install: &Path, version: &str) -> io::Result<PathBuf> {
-    let releases = install.with_file_name(RELEASES);
+    let releases = releases_of(install);
     let folder = releases.join(version);
     if fs::symlink_metadata(&folder).is_err() {
         return Ok(folder);
@@ -43,12 +43,26 @@ pub(super) fn launch_release(install: &Path, release: &Path) -> io::Result<()> {
     sync_directory(install.parent().expect("an installation has a folder"))
 }
 
-/// Removes every release but `current` whose `program` no process runs.
-pub(super) fn remove_unused_releases(current: &Path, program: &Path) -> io::Result<()> {
-    let releases = current
-        .parent()
-        .expect("a release sits in the releases folder");
-    for entry in fs::read_dir(releases)? {
+/// Removes every release of the app installed at `install` but `current`
+/// whose `program` no process runs. Refuses a `current` outside the app's
+/// releases folder.
+pub(super) fn remove_unused_releases(
+    install: &Path,
+    current: &Path,
+    program: &Path,
+) -> io::Result<()> {
+    let releases = releases_of(install);
+    if current.parent() != Some(releases.as_path()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{} isn't a release of {}",
+                current.display(),
+                install.display()
+            ),
+        ));
+    }
+    for entry in fs::read_dir(&releases)? {
         let entry = entry?;
         let path = entry.path();
         if path == current
@@ -63,8 +77,38 @@ pub(super) fn remove_unused_releases(current: &Path, program: &Path) -> io::Resu
     Ok(())
 }
 
+fn releases_of(install: &Path) -> PathBuf {
+    install.with_file_name(RELEASES)
+}
+
 /// Whether a process runs `program`: every Sabine app holds a shared lock on
 /// the program it runs.
 fn running(program: &Path) -> bool {
     File::open(program).is_ok_and(|file| file.try_lock().is_err())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_apps_own_releases_are_removed() {
+        let base = tempfile::tempdir().unwrap();
+        let install = base.path().join("app/install");
+        let elsewhere = base.path().join("elsewhere");
+        fs::create_dir_all(elsewhere.join("current")).unwrap();
+        fs::create_dir_all(elsewhere.join("other")).unwrap();
+        assert!(
+            remove_unused_releases(&install, &elsewhere.join("current"), Path::new("app")).is_err()
+        );
+        assert!(elsewhere.join("other").is_dir());
+
+        let current = release_folder(&install, "1.1.0").unwrap();
+        let old = release_folder(&install, "1.0.0").unwrap();
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&old).unwrap();
+        remove_unused_releases(&install, &current, Path::new("app")).unwrap();
+        assert!(current.is_dir());
+        assert!(!old.exists());
+    }
 }

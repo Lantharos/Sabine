@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::types::{AppArtifactKind, ServiceError, ServiceResult};
+use crate::types::{AppArtifactKind, ServiceError, ServiceResult, safe_relative_path};
 
 /// Unpacks a verified release archive into `release_dir`, checking that it
 /// holds `executable`.
@@ -88,12 +88,4 @@ pub(super) fn artifact_extension(kind: AppArtifactKind) -> &'static str {
 
 pub(super) fn pending_path(root: &Path, id: &str) -> PathBuf {
     root.join("apps").join(id).join("pending-update.json")
-}
-
-pub(crate) fn safe_relative_path(path: &Path) -> bool {
-    !path.as_os_str().is_empty()
-        && !path.is_absolute()
-        && path
-            .components()
-            .all(|component| matches!(component, std::path::Component::Normal(_)))
 }

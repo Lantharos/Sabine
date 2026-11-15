@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use super::{
     SabineVersion, ServiceError, ServiceResult, SystemRequirement, is_https_url, unix_timestamp,
-    valid_app_id,
+    valid_app_id, valid_version,
 };
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -126,9 +126,9 @@ impl AppManifest {
                 "name is required".to_string(),
             ));
         }
-        if self.version.trim().is_empty() {
+        if !valid_version(&self.version) {
             return Err(ServiceError::InvalidManifest(
-                "version is required".to_string(),
+                "version must be a semantic version".to_string(),
             ));
         }
         if self.executable.as_os_str().is_empty() {

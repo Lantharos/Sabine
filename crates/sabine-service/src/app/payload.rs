@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use sabine_runtime::sync_directory;
@@ -365,13 +365,7 @@ fn collect_user_files(
 }
 
 fn validate_relative_path(path: &Path) -> ServiceResult<()> {
-    if path.as_os_str().is_empty()
-        || path == Path::new(INVENTORY)
-        || !path
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-        || path.as_os_str().to_string_lossy().contains(':')
-    {
+    if path == Path::new(INVENTORY) || !crate::types::safe_relative_path(path) {
         return Err(invalid("installer inventory contains an unsafe path"));
     }
     Ok(())
