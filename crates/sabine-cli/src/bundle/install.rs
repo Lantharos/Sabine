@@ -1,4 +1,4 @@
-use super::{BuildTarget, stage_portable};
+use super::stage_portable;
 use crate::install::{
     desktop,
     source::{InstallOptions, SourceApp},
@@ -13,7 +13,7 @@ pub fn install_bundle(
     let (app, staged) = stage_portable(&options, env_files.clone(), temporary.path(), false)?;
     let service = sabine_service::SabineService::default();
     let directory = service.root().join("apps").join(&app.id);
-    let macos = BuildTarget::host() == BuildTarget::Macos;
+    let macos = cfg!(target_os = "macos");
     let release = if macos {
         directory.join("install").join(format!("{}.app", app.id))
     } else {

@@ -87,6 +87,7 @@ pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
         }
         return Ok(ExitCode::SUCCESS);
     }
+    crate::project::updates::require_public_key(build.app.updates.as_ref())?;
     for format in formats {
         let staged = stage_bundle(&build.app, format, &build.binary, &out, offline)?;
         signing.sign_payload(format, &staged)?;

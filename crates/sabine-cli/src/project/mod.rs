@@ -2,7 +2,7 @@ mod app;
 mod cargo;
 pub(crate) mod environment;
 mod file;
-mod updates;
+pub(crate) mod updates;
 mod web;
 
 pub(crate) use app::{BundleApp, ConfigOverrides, detect_icon, resolve_app};

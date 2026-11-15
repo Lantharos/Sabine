@@ -39,8 +39,18 @@ pub(crate) fn resolve_updates(
         }
         update.public_key = public_key;
     }
-    if std::env::var_os("GITHUB_ACTIONS").is_some() && update.public_key.trim().is_empty() {
+    Ok(Some(update))
+}
+
+/// Release bundles built in GitHub Actions have to accept the updates they
+/// will be offered.
+pub(crate) fn require_public_key(updates: Option<&AppUpdateConfig>) -> Result<(), String> {
+    if std::env::var_os("GITHUB_ACTIONS").is_some()
+        && updates.is_some_and(|update| {
+            update.source != AppUpdateSource::Schelf && update.public_key.trim().is_empty()
+        })
+    {
         return Err("SABINE_UPDATE_SIGNING_KEY is required for release bundles".to_string());
     }
-    Ok(Some(update))
+    Ok(())
 }
