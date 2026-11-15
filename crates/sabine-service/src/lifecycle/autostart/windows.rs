@@ -15,21 +15,19 @@ const TASK_NAME: &str = "Sabine Service";
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Sabine";
 
 pub(super) fn install(executable: &Path, daemon: &Path) -> ServiceResult<bool> {
-    let daemon_literal = daemon.to_string_lossy().replace('\'', "''");
     let script = format!(
         "$identity=[Security.Principal.WindowsIdentity]::GetCurrent();\
-         $action=New-ScheduledTaskAction -Execute '{daemon_literal}';\
+         $action=New-ScheduledTaskAction -Execute $env:SABINE_DAEMON;\
          $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity.Name;\
          $principal=New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited;\
          $settings=New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1);\
          Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null"
     );
-    run_checked(background_command("powershell.exe").args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        &script,
-    ]))?;
+    run_checked(
+        background_command("powershell.exe")
+            .env("SABINE_DAEMON", daemon)
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script]),
+    )?;
     for (name, value) in [
         ("DisplayName", "Sabine".to_string()),
         ("DisplayVersion", crate::SABINE_VERSION.to_string()),

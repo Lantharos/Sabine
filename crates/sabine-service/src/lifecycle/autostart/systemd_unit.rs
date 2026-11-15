@@ -23,7 +23,7 @@ pub(super) fn system_unit_installed() -> bool {
 pub fn install_system_unit(root: Option<&Path>) -> ServiceResult<()> {
     let units = path_in_root(root, Path::new(SYSTEM_UNIT_DIR));
     let daemon = system_dir().join("bin/current/sabine-service-daemon");
-    let exec = format!("ExecStart={}\n", systemd_quote(&daemon.to_string_lossy()));
+    let exec = format!("ExecStart={}\n", exec_argument(&daemon));
     fs::create_dir_all(&units)?;
     fs::write(units.join(UNIT), service_contents(&exec))?;
     let wants = units.join("default.target.wants");
@@ -42,7 +42,7 @@ pub(super) fn user_unit_contents(daemon: &Path) -> String {
     let daemon = stable_daemon_path(daemon).unwrap_or_else(|| daemon.to_path_buf());
     let service = format!(
         "ExecStart={}\n{}",
-        systemd_quote(&daemon.to_string_lossy()),
+        exec_argument(&daemon),
         systemd_environment()
     );
     format!(
@@ -85,6 +85,12 @@ pub(super) fn user_wants_path(config_home: &Path) -> PathBuf {
     config_home
         .join("systemd/user/default.target.wants")
         .join(UNIT)
+}
+
+/// `path` as one `ExecStart=` argument, which systemd also expands `$`
+/// variables in.
+fn exec_argument(path: &Path) -> String {
+    systemd_quote(&path.to_string_lossy().replace('$', "$$"))
 }
 
 fn systemd_quote(value: &str) -> String {
@@ -159,5 +165,13 @@ mod tests {
         assert!(!is_sabine_user_unit(&own));
         assert!(!is_sabine_user_unit(&mask));
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn the_daemon_path_reaches_systemd_unexpanded() {
+        assert_eq!(
+            exec_argument(Path::new("/home/a$HOME/100%/sabine-service-daemon")),
+            "\"/home/a$$HOME/100%%/sabine-service-daemon\""
+        );
     }
 }
