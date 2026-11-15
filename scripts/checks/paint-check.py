@@ -13,7 +13,7 @@ WINDOWS = sys.platform == "win32"
 if not (MACOS or WINDOWS):
     raise SystemExit("This check requires macOS or Windows")
 
-repository = Path(__file__).resolve().parent.parent
+repository = Path(__file__).resolve().parents[2]
 output = Path(os.environ.get("SABINE_PAINT_CHECK_OUTPUT", repository / "paint-check"))
 executable_suffix = ".exe" if WINDOWS else ""
 paint_path = "accelerated IOSurface" if MACOS else "accelerated D3D12"

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from release_versions import current_version, git, normalize_version, prepare_changes
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "Lantharos/Sabine"
 
 
@@ -95,7 +95,7 @@ def main():
     for name, content in changes.items():
         (ROOT / name).write_text(content)
     check_sources()
-    run("python3", "-B", "scripts/release_notes.py", tag, capture=True)
+    run("python3", "-B", "scripts/release/release_notes.py", tag, capture=True)
     run("git", "diff", "--check")
     if args.prepare:
         print(f"Prepared {tag}. Review and commit the changes; no tag or release was created.")

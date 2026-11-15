@@ -110,4 +110,4 @@ jobs:
       - run: cargo test --workspace --locked
       - name: Open URLs and documents through macOS LaunchServices
         if: runner.os == 'macOS'
-        run: python3 scripts/macos-url-check.py
+        run: python3 scripts/checks/macos-url-check.py

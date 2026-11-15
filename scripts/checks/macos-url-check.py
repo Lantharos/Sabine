@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlsplit
 if sys.platform != "darwin":
     raise SystemExit("This check requires macOS")
 
-repository = Path(__file__).resolve().parent.parent
+repository = Path(__file__).resolve().parents[2]
 build = subprocess.run(
     ["cargo", "build", "--locked", "-p", "sabine", "--message-format=json"],
     cwd=repository, capture_output=True, text=True, check=True,

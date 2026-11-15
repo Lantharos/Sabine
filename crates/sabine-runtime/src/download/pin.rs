@@ -9,7 +9,7 @@ use crate::error::RuntimeError;
 const CEF_BUILDS: &str = "https://cef-builds.spotifycdn.com";
 
 /// The CEF build this Sabine installs, with the size and SHA-256 of each
-/// platform's Minimal archive. `scripts/pin-cef.py` moves it to a newer build.
+/// platform's Minimal archive. `scripts/cef/pin-cef.py` moves it to a newer build.
 const PINNED_BUILD: &str = include_str!("cef.json");
 
 #[derive(Deserialize)]

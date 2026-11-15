@@ -397,7 +397,7 @@ jobs:
             if ($null -eq $daemon) {
               throw "Sabine $expectedSabineVersion did not finish clean first-run setup with a live daemon"
             }
-            . ./.sabine-release/scripts/windows-browser-check.ps1
+            . ./.sabine-release/scripts/checks/windows-browser-check.ps1
             Wait-SabineAppFrame $app $appLog
             Test-SabineBrowser
             if ($app.HasExited) { throw "Installed application exited with code $($app.ExitCode)" }

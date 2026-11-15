@@ -35,7 +35,7 @@ jobs:
         if: runner.os == 'Windows'
         run: Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, AdapterCompatibility
       - name: Paint an animated page through the native window
-        run: ${{ matrix.python }} scripts/paint-check.py
+        run: ${{ matrix.python }} scripts/checks/paint-check.py
       - uses: actions/upload-artifact@v7
         if: always()
         with:

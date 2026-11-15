@@ -7,7 +7,7 @@ from pathlib import Path
 
 def main() -> None:
     version = sys.argv[1].removeprefix("v")
-    lines = (Path(__file__).resolve().parent.parent / "CHANGELOG.md").read_text().splitlines()
+    lines = (Path(__file__).resolve().parents[2] / "CHANGELOG.md").read_text().splitlines()
     heading = f"# Sabine {version}"
     try:
         start = lines.index(heading)

@@ -11,7 +11,7 @@ on:
       - crates/sabine-cli/src/runtime.rs
       - crates/sabine-cli/src/runtime/**
       - Cargo.lock
-      - scripts/cef-cache.py
+      - scripts/cef/cef-cache.py
       - .github/workflows/native-host.yml
   pull_request:
     paths: *host-paths
@@ -51,7 +51,7 @@ jobs:
         run: cargo build --locked -p sabine-cli -p sabine-service
       - name: Find the current CEF runtime
         id: cef
-        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/cef-cache.py
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/cef/cef-cache.py
       - name: Restore the CEF runtime and host
         id: cef-cache
         uses: actions/cache/restore@v6

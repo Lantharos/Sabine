@@ -12,7 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 PIN = ROOT / "crates/sabine-runtime/src/download/cef.json"
 BUILDS = "https://cef-builds.spotifycdn.com"
 PLATFORMS = ["linux64", "linuxarm64", "windows64", "windowsarm64", "macosarm64"]

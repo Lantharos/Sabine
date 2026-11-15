@@ -212,7 +212,7 @@ Manual workflows cover what tests can't:
 | Package smoke test | Builds each package format with signed update metadata, checks the macOS bundle, and installs, launches, repairs and uninstalls the Windows packages |
 | Published Windows runtime checks | Compares a published release on several CEF versions |
 
-On an Apple Silicon Mac or a Windows PC, `python3 scripts/paint-check.py` runs the paint check
+On an Apple Silicon Mac or a Windows PC, `python3 scripts/checks/paint-check.py` runs the paint check
 locally and writes its log, report and screenshots to `paint-check/`.
 
 Some files carry warning banners about Windows-specific Chromium, GPU and process behaviour. Keep

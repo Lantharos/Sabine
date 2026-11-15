@@ -11,7 +11,7 @@ PLATFORMS = {
     ("macOS", "ARM64"): "macosarm64",
 }
 
-root = Path(__file__).resolve().parent.parent
+root = Path(__file__).resolve().parents[2]
 pin = json.loads((root / "crates/sabine-runtime/src/download/cef.json").read_text())
 cef_version = pin["version"]
 platform = PLATFORMS[os.environ["RUNNER_OS"], os.environ["RUNNER_ARCH"]]

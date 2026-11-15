@@ -1,6 +1,6 @@
 ---
 title: Releasing Sabine
-description: Publish a Sabine release with scripts/publish.sh, and how releases reach installed machines.
+description: Publish a Sabine release with scripts/release/publish.sh, and how releases reach installed machines.
 sidebar:
   order: 2
 ---
@@ -14,7 +14,7 @@ fundamental break in Sabine's contract advances the major.
 ## Moving to a newer Chromium
 
 Each release installs the CEF build pinned in `crates/sabine-runtime/src/download/cef.json`, with
-the size and SHA-256 of every platform's archive. Run `scripts/pin-cef.py` before preparing a
+the size and SHA-256 of every platform's archive. Run `scripts/cef/pin-cef.py` before preparing a
 release to move to the newest stable build, or pass it a CEF version to pin that one. It downloads
 each archive to hash it and checks it against the SHA-1 the CEF build index lists.
 
@@ -23,9 +23,9 @@ each archive to hash it and checks it against the SHA-1 the CEF build index list
 Release from a clean `main` branch that matches `origin/main`, with the GitHub CLI signed in:
 
 ```sh
-scripts/publish.sh --dry-run
-scripts/publish.sh --prepare
-scripts/publish.sh
+scripts/release/publish.sh --dry-run
+scripts/release/publish.sh --prepare
+scripts/release/publish.sh
 ```
 
 | Mode | Does |
@@ -129,7 +129,7 @@ directly, and applies the soak unless you pass `--force`.
 is no `# Unreleased` section and no section for the version, preparation writes one from the commit
 subjects since the last tag.
 
-Each GitHub release shows only its own section. `scripts/release_notes.py <tag>` prints it, and fails
+Each GitHub release shows only its own section. `scripts/release/release_notes.py <tag>` prints it, and fails
 when the section is missing or empty, which stops the release.
 
 Write entries about behaviour people notice, in the present tense: what an app, a page or the person
