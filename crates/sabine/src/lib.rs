@@ -7,6 +7,7 @@ mod launch;
 mod media;
 mod osr;
 mod render;
+mod storage;
 mod window;
 
 pub use bridge::BridgeEventEmitter;
@@ -32,6 +33,7 @@ pub use sabine_platform::{
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 pub use sabine_service::AppEnvironment;
+pub use storage::{Secrets, Store, StoreChange};
 pub use window::{
     AppChrome, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
     SabineWindowControlAction, SabineWindowControlRegion, WindowVisibility, resource_path,

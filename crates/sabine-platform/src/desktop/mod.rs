@@ -1,6 +1,7 @@
 mod appearance;
 mod integration;
 mod notifications;
+pub mod secrets;
 pub mod shell;
 
 pub use appearance::{Appearance, AppearanceWatcher};

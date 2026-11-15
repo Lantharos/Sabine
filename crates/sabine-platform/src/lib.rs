@@ -14,7 +14,7 @@ pub use desktop::{
     GlobalShortcutFailure, GlobalShortcutRegistration, NativeMessagingHost, Notification,
     NotificationEvent, NotificationEvents, Notifier, PlatformEvent, Shortcut, ShortcutModifiers,
     SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
-    TrayMenuItemKind, Urgency, shell,
+    TrayMenuItemKind, Urgency, secrets, shell,
 };
 pub use display::{Display, DisplayRect, DisplayWatcher, displays};
 #[cfg(target_os = "linux")]

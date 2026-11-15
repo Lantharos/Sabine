@@ -1,4 +1,5 @@
 import type { Display, SystemAppearance } from "./desktop/system.js";
+import type { StoreChangedEvent } from "./storage/store.js";
 import type {
   GuestDownloadEvent,
   GuestFaviconEvent,
@@ -91,6 +92,7 @@ export declare const events: {
    * disconnected, or changes its bounds, work area, scale or refresh rate.
    */
   displaysChanged: Listen<Display[]>;
+  storeChanged: Listen<StoreChangedEvent>;
   pen: Listen<PenEvent>;
   notificationClick: Listen<NotificationEvent>;
   notificationClose: Listen<NotificationEvent>;

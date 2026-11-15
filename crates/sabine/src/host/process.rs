@@ -263,6 +263,7 @@ impl SabineProcess {
         }
         self.stop_desktop_event_forwarder();
         self.join_bridge_threads();
+        crate::storage::flush_all();
         if self.quitting {
             return Ok(ExitStatus::default());
         }
@@ -438,5 +439,6 @@ impl Drop for SabineProcess {
             let _ = primary.child.terminate();
         }
         self.join_bridge_threads();
+        crate::storage::flush_all();
     }
 }

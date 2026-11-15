@@ -11,6 +11,7 @@ use crate::host::{SabineProcess, SabineProcessHandle};
 use crate::launch::metrics::LaunchMetrics;
 use crate::launch::{bootstrap, dev_server, local_entry, metrics_label};
 use crate::osr;
+use crate::storage::{Secrets, Store};
 
 impl SabineWindow {
     pub fn launch(mut self) -> SabineResult<SabineProcess> {
@@ -71,6 +72,9 @@ impl SabineWindow {
         let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart());
         desktop_services.attach(&handle);
         self = self.app_commands(&handle);
+        let app_id = osr::launch::require_app_id(&self.config)?.to_string();
+        let store = Store::open(&app_id);
+        self = self.storage_commands(&store, &Secrets::new(&app_id));
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
         if self.config.dev_url.is_some() {
@@ -86,6 +90,7 @@ impl SabineWindow {
             (handle, commands),
             metrics.clone(),
         )?;
+        crate::storage::forward_store_changes(&store, process.bridge_event_emitter());
         process.desktop_services = Some(desktop_services);
         if let Some(listener) = &self.config.launched {
             listener.deliver(process.handle());
