@@ -189,6 +189,12 @@ port, waits up to 30 seconds for one to start, and stops only servers it started
 | `splash` | boolean | `false` | Shows Sabine's loading screen when the page takes longer than 1.5 seconds to appear, and 120 milliseconds into a reload. Without it, a window appears with its page's first frame |
 | `splash_delay_ms` | integer | `1500` | How long a launch takes before the loading screen shows, in milliseconds. Only with `splash = true` |
 
+## `[crash]`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `upload_url` | string | | The HTTPS URL Chromium posts the app's crash reports to, at most five a day. Without it, reports stay in the app's data folder. See [Crash reports and logs](/docs/distribution/crash-reports-and-logs/) |
+
 ## `[bindings]`
 
 | Key | Type | Meaning |

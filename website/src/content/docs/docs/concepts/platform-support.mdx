@@ -27,6 +27,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | --- | --- |
 | XDG desktop portal | File dialogs, global shortcuts, printing, appearance, opening links and folders, notifications without a notification server |
 | `org.freedesktop.Notifications` | Notifications, when a notification server runs |
+| `org.freedesktop.secrets` | Secrets, and the key Chromium encrypts cookies with |
 | StatusNotifierWatcher | The tray icon |
 | A user systemd instance | The shared Chromium runtime, and starting the Sabine daemon |
 | GStreamer with `playbin3` | Native video, loaded only when a page first plays one |
@@ -63,6 +64,9 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | Input methods | Yes, with surrounding text | Yes, no surrounding text | Yes, no surrounding text |
 | [Native video](/docs/web/native-video/) | GStreamer, transparent windows | Media Foundation, transparent windows | AVFoundation, transparent windows |
 | [Native messaging](/docs/desktop/native-messaging/) | Yes, including Flatpak and Snap browsers | Yes | Yes |
+| [Secrets](/docs/web/store-and-secrets/#secrets) | Secret Service | Credential Manager | Login keychain |
+| Cookie and password encryption | Secret Service, or KWallet on KDE | DPAPI | Login keychain for bundled apps, a fixed key in development |
+| [Crash reports](/docs/distribution/crash-reports-and-logs/) | Yes | Yes | Yes |
 | Screen readers | No | No | No |
 | [Shared Chromium process](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux) | Apps installed for every user | No, one per app | No, one per app |
 | Browser sandbox | Namespaces and seccomp | Restricted processes | Seatbelt |
@@ -87,6 +91,8 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Touch keyboard.** When a field gains focus, Sabine asks the compositor to show its on-screen keyboard through the text input protocol, where the compositor supports it.
 - **Window focus.** Compositors give focus only with an activation token. An app's first window carries the token its launcher handed it, and clicked notifications, shortcuts and single-instance activations pass theirs on.
 - **AppArmor.** Ubuntu and similar distributions need an AppArmor profile for Chromium hosts in a user's home. See [Security model](/docs/concepts/security-model/#the-browser-sandbox).
+- **Secrets** need a Secret Service, such as GNOME Keyring, KWallet or KeePassXC. Without one, secrets calls fail, and Chromium encrypts cookies with a fixed key. A confined app reaches it only when its `[sandbox]` talks to `org.freedesktop.secrets`.
+- **Crash reports** of the Chromium that apps installed for every user share stay with the shared process and are never sent.
 - **Flatpak packaging** isn't a bundle target. Apps that run inside a Flatpak-style sandbox start their own Chromium through Zypak.
 
 ### Windows
@@ -95,12 +101,14 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Glass regions.** DWM can't blur only part of a window, so the material covers the whole window and the page's transparency decides where it shows. The input region shapes the window instead: outside it, the window neither draws nor takes clicks.
 - **Out of sight.** Windows doesn't report when a window is covered, so only a minimized window counts as out of sight.
 - **Input methods** get no text around the caret and can't delete around it.
+- **Secrets** are up to 2560 bytes each.
 - **Foreground.** A second launch of a single-instance app lets the running app take the foreground, which Windows otherwise grants only to the process the person just started.
 
 ### macOS
 
 - **Apple Silicon only.** Bundles require a native arm64 executable.
 - **Notifications** need a bundled app; macOS asks for permission the first time.
+- **Keychain.** Bundled apps keep Chromium's cookie key in the login keychain. Chromium runs from a bundle Sabine signs on each Mac, which changes with each runtime or Sabine update, so the keychain may ask for the person's password once after an update. Development runs use a fixed key instead.
 - **URL schemes and document types** must be declared in the bundle before it is signed, so test them with the bundled app rather than a development run.
 - **The tray** shows only the image in the menu bar, not the title. Black-and-white icons, and icons marked as templates, follow the menu bar's appearance.
 - **Tray icons and shortcuts** need the main thread's event loop. `SabineWindow::main` and `SabineProcess::wait()` run it; call `wait()` on the main thread when you manage the process yourself.

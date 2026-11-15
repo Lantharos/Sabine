@@ -103,7 +103,7 @@ Debugging follows the same rule: Chromium's remote debugging port opens in devel
 
 Every app id gets a Chromium profile of its own, so cookies, storage, caches and renderers are never shared between apps, even when apps share a browser process on Linux. Development runs use the `.dev` app id and so a separate profile from the installed app.
 
-Chromium protects its cookie and password key with DPAPI on Windows and the desktop keyring on Linux. On macOS it uses a fixed key instead of the login keychain: Sabine's launch bundle is signed ad hoc on each Mac, so its code identity changes with every runtime or host update, and the keychain would ask for the login password each time.
+Chromium protects its cookie and password key with DPAPI on Windows, and with the Secret Service on Linux, or KWallet on KDE. An app Sabine confines without access to the Secret Service, or a Linux desktop without one, gets a fixed key. On macOS, bundled apps keep the key in the login keychain; Sabine's launch bundle is signed ad hoc on each Mac, so its code identity changes with every runtime or host update, and the keychain may ask for the login password after one. Development runs use a fixed key, since they change with every build.
 
 <Aside type="caution">
   Chromium never encrypts web storage such as `localStorage` or IndexedDB. Keep secrets that must
@@ -152,6 +152,6 @@ Remote debugging gives full control over a browser, so it is off unless you ask 
 
 ## What Sabine doesn't protect against
 
-- **Other programs running as the same user.** They can read the same files your app can, including web storage and its profile. Use the operating system's keychain or credential store for secrets.
+- **Other programs running as the same user.** They can read the same files your app can, including web storage and its profile. Keep secrets with [`Secrets`](/docs/web/store-and-secrets/#secrets), in the operating system's credential store.
 - **The session bus of unconfined apps.** An app that Sabine doesn't confine to a `[sandbox]` reaches every service on the session bus.
 - **Your own commands.** A bridge command that runs whatever a page sends it gives every allowed page that power. Validate parameters in Rust, and keep remote origins to the minimum your app needs.

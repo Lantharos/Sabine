@@ -96,6 +96,7 @@ Sabine follows the platform's own variables for folders, sessions and launches.
 | Variable | Applies to | What it does |
 | --- | --- | --- |
 | `XDG_DATA_HOME` | App, CLI, Service, Linux | Sabine's data folder, `$XDG_DATA_HOME/sabine`, and the app's data folder. Default `~/.local/share`. |
+| `XDG_STATE_HOME` | App, Linux | The app's log folder, `$XDG_STATE_HOME/<app id>/logs`. Default `~/.local/state`. |
 | `XDG_CACHE_HOME` | App, Service, Linux | Browser profiles, under `$XDG_CACHE_HOME/sabine/profiles`. Default `~/.cache`. |
 | `XDG_CONFIG_HOME` | App, Service, Linux | Autostart entries, `mimeapps.list` and the daemon's systemd unit. Default `~/.config`. |
 | `XDG_STATE_HOME` | App, Linux | Where `.remember_size()` keeps the window's size and windows keep what they show. |

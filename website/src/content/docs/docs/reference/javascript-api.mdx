@@ -215,6 +215,7 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | `singleInstance` | `SingleInstanceEvent` | The app is launched again while it runs. |
 | `openUrlsAvailable` | `null` | URLs or documents arrived; take them with `app.takeOpenUrls()`. |
 | `rendererCrashed` | `RendererCrashedEvent` | The page's or a guest's renderer stopped. |
+| `storeChanged` | `StoreChangedEvent` | A key of the [store](#store) changed, from any window or the app's Rust side. |
 | `pen` | `PenEvent` | A pen or its eraser comes near the screen or leaves it, touches or lifts, a barrel button goes down or up, or the pen tilts. |
 | `notificationClick` | `NotificationEvent` | A desktop notification the window showed was clicked. |
 | `notificationClose` | `NotificationEvent` | One of its notifications was dismissed or closed. |
@@ -928,6 +929,39 @@ See [Appearance and shell](/docs/desktop/appearance-and-shell/).
 ```ts
 await shell.openLink("https://example.com/help");
 ```
+
+## `store`
+
+```ts
+const store: {
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  set(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  entries(): Promise<Record<string, unknown>>;
+  clear(): Promise<void>;
+};
+
+interface StoreChangedEvent {
+  key: string;
+  value: unknown; // null once deleted
+}
+```
+
+The app's JSON values, shared with every window and its Rust side, and kept between runs.
+`delete` resolves to whether the store held the key. See [Store and secrets](/docs/web/store-and-secrets/).
+
+## `secrets`
+
+```ts
+const secrets: {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<boolean>;
+};
+```
+
+Text in the system's credential store, under keys of 1 to 256 bytes. Calls can wait while the
+system asks the person to unlock it, and reject where no credential store is available.
 
 ## `system`
 

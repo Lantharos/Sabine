@@ -1,0 +1,61 @@
+---
+title: Crash reports and logs
+description: Where an app's crash reports and log go, how to send reports to your server, and how to read them from Rust.
+sidebar:
+  order: 6
+---
+
+## Crash reports
+
+When the browser, a page, the GPU or another Chromium process of the app crashes, Chromium writes
+a minidump to the `crashes` folder of the
+[app data folder](/docs/web/resources-and-files/#the-app-data-folder). Sabine keeps the newest ten,
+up to 20 MB.
+
+To have them sent to a crash server, name its URL:
+
+```toml
+[crash]
+upload_url = "https://crashes.example.com/submit"
+```
+
+Chromium posts each report as a multipart form, at most five a day. The URL must use HTTPS, and
+development runs never send reports. Without `upload_url`, reports only stay on disk.
+
+The app lists and deletes them from Rust:
+
+```rust
+use sabine::CrashReports;
+
+let reports = CrashReports::for_app("com.example.notes");
+for report in reports.list()? {
+    println!("{} at {:?}, {} bytes", report.id, report.created, report.size);
+    reports.delete(&report.id)?;
+}
+```
+
+Pages hear about their own renderer crashing through
+[`events.rendererCrashed`](/docs/reference/javascript-api/#events).
+
+On Linux, apps installed for every user can share a Chromium process. Its reports, its pages'
+included, stay with the shared process's data and are never sent.
+
+## Logs
+
+Apps that use the [`log`](https://docs.rs/log) crate can send its records to a file:
+
+```rust
+use sabine::{Logging, log::LevelFilter};
+
+SabineWindow::main(|window| {
+    Ok(window.logging(Logging::new().level(LevelFilter::Debug).page_console(true)))
+});
+```
+
+The log is `app.log` in the app's log folder: `$XDG_STATE_HOME/<app id>/logs` on Linux,
+`~/Library/Logs/<app id>` on macOS and `%LOCALAPPDATA%\<app id>\logs` on Windows. At 4 MB it
+starts over, keeping the two files before it as `app.1.log` and `app.2.log`. Development runs also
+print every record to the terminal.
+
+With `page_console(true)`, what the app's pages write to their console lands in the log too, under
+the `page` target. Guests' consoles never do.

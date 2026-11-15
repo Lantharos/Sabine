@@ -86,7 +86,9 @@ A confined app:
   `camera`, and the cameras with `camera`, but no other socket in your runtime folder, such as the
   session bus, the service manager or other apps'
 - talks over the session bus only to the names in `talk` and to what Sabine itself uses: the
-  desktop and document portals, notifications and the tray
+  desktop and document portals, notifications and the tray. An app that keeps
+  [secrets](/docs/web/store-and-secrets/#secrets) adds `org.freedesktop.secrets`, which also lets
+  Chromium keep its cookie key in the keyring instead of using a fixed one
 - reads its own program, web assets, Sabine's host and the CEF runtime, and writes Sabine's logs
 - reaches the declared `filesystems` and `devices`, and nothing else in your home folder
 - can't reach abstract sockets or signal processes outside the app

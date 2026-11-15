@@ -267,6 +267,15 @@ See [Lifecycle](/docs/windows/lifecycle/).
 | `single_instance(SingleInstancePolicy)` | What a second launch does |
 | `single_instance_id(impl Into<String>)` | Names the instance, instead of the app id |
 
+### Logs and crash reports
+
+| Method | Does |
+| --- | --- |
+| `logging(Logging)` | Sends the app's `log` records to its log file |
+| `crash_upload_url(impl Into<String>)` | Sends crash reports to this HTTPS URL; `[crash] upload_url` in `Sabine.toml` sets it too |
+
+See [Crash reports and logs](/docs/distribution/crash-reports-and-logs/).
+
 ### Listeners
 
 ```rust
@@ -663,6 +672,7 @@ impl AppEnvironment {
     pub fn as_str(self) -> &'static str;
     pub fn app_id(self, id: &str) -> String;
     pub fn app_data_dir(self, app_id: &str) -> PathBuf;
+    pub fn app_log_dir(self, app_id: &str) -> PathBuf;
     pub fn data_dir(self, production: impl AsRef<Path>) -> PathBuf;
 }
 ```
@@ -671,6 +681,7 @@ impl AppEnvironment {
 - `production_build` says whether this binary was built for production. Such builds ignore the variables that point a development run at its project.
 - `app_id` appends `.dev` in development.
 - `app_data_dir` is the folder an app keeps its files in: the app id below `%APPDATA%`, `~/Library/Application Support` or `$XDG_DATA_HOME`, with the `.dev` id in development. It is the folder Sabine's app sandbox lets the app write.
+- `app_log_dir` is the folder an app keeps its logs in: `$XDG_STATE_HOME/<app id>/logs`, `~/Library/Logs/<app id>` or `%LOCALAPPDATA%\<app id>\logs`.
 - `data_dir` keeps an existing production location and puts development data in a `development` folder below it. Neither creates folders.
 
 ```rust
@@ -680,6 +691,74 @@ let notes = AppEnvironment::current()
     .app_data_dir("com.example.notes")
     .join("notes.json");
 ```
+
+### Store
+
+```rust
+impl Store {
+    pub fn open(app_id: &str) -> Self;
+    pub fn path(&self) -> &Path;
+    pub fn get(&self, key: &str) -> Option<serde_json::Value>;
+    pub fn get_as<T: DeserializeOwned>(&self, key: &str) -> serde_json::Result<Option<T>>;
+    pub fn entries(&self) -> serde_json::Map<String, serde_json::Value>;
+    pub fn set(&self, key: impl Into<String>, value: impl Serialize) -> serde_json::Result<()>;
+    pub fn delete(&self, key: &str) -> bool;
+    pub fn clear(&self);
+    pub fn on_change(&self, listener: impl Fn(&StoreChange) + Send + Sync + 'static);
+    pub fn flush(&self) -> std::io::Result<()>;
+}
+
+pub struct StoreChange {
+    pub key: String,
+    pub value: Option<serde_json::Value>, // None once deleted
+}
+```
+
+The app's JSON values, in `store.json` in its data folder, shared with its pages. `open` returns the same store for the same app while one is in use, and reads the file the first time a value is used. Setting the value a key already holds changes nothing. Changes are written shortly after they're made and when the app ends; `flush` writes them now. See [Store and secrets](/docs/web/store-and-secrets/).
+
+### Secrets
+
+```rust
+impl Secrets {
+    pub fn new(app_id: &str) -> Self;
+    pub async fn set(&self, key: &str, value: &str) -> Result<(), String>;
+    pub async fn get(&self, key: &str) -> Result<Option<String>, String>;
+    pub async fn delete(&self, key: &str) -> Result<bool, String>;
+}
+```
+
+Text in the Secret Service, the login keychain or the Credential Manager. Keys are 1 to 256 bytes without control characters. `delete` returns whether there was a value. Synchronous code waits with `async_runtime().block_on(...)`.
+
+### Crash reports
+
+```rust
+impl CrashReports {
+    pub fn for_app(app_id: &str) -> Self;
+    pub fn folder(&self) -> &Path;
+    pub fn list(&self) -> std::io::Result<Vec<CrashReport>>; // newest first
+    pub fn delete(&self, id: &str) -> std::io::Result<bool>;
+    pub fn clear(&self) -> std::io::Result<()>;
+}
+
+pub struct CrashReport {
+    pub id: String,
+    pub path: PathBuf, // the minidump
+    pub created: SystemTime,
+    pub size: u64,
+}
+```
+
+### Logging
+
+```rust
+impl Logging {
+    pub fn new() -> Self;                                  // Info, without page consoles
+    pub fn level(self, level: log::LevelFilter) -> Self;
+    pub fn page_console(self, enabled: bool) -> Self;
+}
+```
+
+Passed to `SabineWindow::logging`, which installs it as the `log` crate's logger when the app launches. `sabine::log` re-exports the crate.
 
 ### resource_path
 
