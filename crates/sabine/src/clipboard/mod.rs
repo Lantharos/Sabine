@@ -20,7 +20,7 @@ mod windows;
 #[cfg(not(target_os = "linux"))]
 mod worker;
 
-pub(crate) use content::{ClipboardContent, Selection};
+pub(crate) use content::{ClipboardContent, MAX_READ_BYTES, Selection};
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{DropEvent, SystemClipboard, Waker};
 #[cfg(not(target_os = "linux"))]

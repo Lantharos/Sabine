@@ -57,7 +57,9 @@ tray-icon = "assets/tray.png"
 ```
 
 Without an image, or when the file can't be read, every desktop shows a plain grey dot so the app
-stays reachable. A file that can't be read is also recorded in the app's diagnostics.
+stays reachable. A file that can't be read is also recorded in the app's diagnostics. Images up to
+8 MiB are read, and ones larger than 128 pixels across are scaled down to that, the most any tray
+draws.
 
 ### `TrayIcon`
 
@@ -233,7 +235,7 @@ await tray.update({
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `icon` | `string \| null` | Path to an image, or `null` for the plain dot. |
+| `icon` | `string \| ArrayBuffer \| ArrayBufferView \| Blob \| null` | The name of one of the app's [resources](/docs/web/resources-and-files/), the image itself, or `null` for the plain dot. |
 | `template` | `boolean` | Draw `icon` as a macOS template image. Applies only together with `icon`. |
 | `tooltip` | `string \| null` | The tooltip, or `null` to show the title. |
 | `menu` | `TrayMenuItem[]` | Replaces the whole menu. |

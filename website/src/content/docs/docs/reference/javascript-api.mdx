@@ -909,7 +909,7 @@ const tray: {
 };
 
 interface TrayUpdate {
-  icon?: string | null; // a path to the image, or null for a plain dot
+  icon?: string | ArrayBuffer | ArrayBufferView | Blob | null; // a resource name, the image, or null for a plain dot
   template?: boolean; // a macOS template image, tinted to match the menu bar
   tooltip?: string | null;
   menu?: TrayMenuItem[];

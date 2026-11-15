@@ -35,14 +35,21 @@ pub(crate) fn wait_readable(fd: &impl AsRawFd, deadline: Instant) -> io::Result<
     }
 }
 
-/// Reads a non-blocking pipe to its end, giving up at `deadline`.
-pub(crate) fn read_to_end(fd: OwnedFd, deadline: Instant) -> io::Result<Vec<u8>> {
+/// Reads a non-blocking pipe to its end, giving up at `deadline` or once it
+/// carries more than `limit` bytes.
+pub(crate) fn read_to_end(fd: OwnedFd, deadline: Instant, limit: usize) -> io::Result<Vec<u8>> {
     let mut file = File::from(fd);
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     loop {
         match file.read(&mut chunk) {
             Ok(0) => return Ok(bytes),
+            Ok(read) if bytes.len() + read > limit => {
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    "the clipboard holds more than a read takes",
+                ));
+            }
             Ok(read) => bytes.extend_from_slice(&chunk[..read]),
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                 if !wait_readable(&file, deadline)? {

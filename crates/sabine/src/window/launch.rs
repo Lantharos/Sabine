@@ -54,7 +54,7 @@ impl SabineWindow {
         metrics.mark("desktop_services.ready");
         if let Some(tray) = desktop_services.tray() {
             self = self.bridge_handler(TRAY_UPDATE_COMMAND, move |command| {
-                tray.update_from_page(command.params)
+                tray.update_from_page(command)
                     .map(|()| BridgeResponse::json(serde_json::Value::Null))
                     .map_err(BridgeError::new)
             });

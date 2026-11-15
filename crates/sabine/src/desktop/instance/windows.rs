@@ -1,8 +1,9 @@
 // ☢️ WARNING: RADIOACTIVE WINDOWS SLOP BELOW ☢️
 //
 // A named mutex per session holds the instance, and a loopback socket takes
-// activations. Its port and a random token sit in the user's registry, so
-// only launches by the same user, which can read them, get through.
+// activations. Its port, a random token and the instance's process id sit in
+// the user's registry, so only launches by the same user, which can read
+// them, get through, and a launch lends the foreground to that process alone.
 
 use std::{
     io,
@@ -21,7 +22,7 @@ use windows::{
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{CreateMutexW, GetCurrentProcessId},
         },
-        UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow},
+        UI::WindowsAndMessaging::AllowSetForegroundWindow,
     },
     core::HSTRING,
 };
@@ -108,7 +109,12 @@ pub(super) fn claim(id: &str) -> io::Result<Claim> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
     owner.port = listener.local_addr()?.port();
     let token = authentication_token()?;
-    let endpoint = serde_json::json!({ "port": owner.port, "token": token }).to_string();
+    let endpoint = serde_json::json!({
+        "port": owner.port,
+        "token": token,
+        "process": unsafe { GetCurrentProcessId() },
+    })
+    .to_string();
     set_current_user_value(&owner.endpoint_key, ENDPOINT_VALUE, &endpoint)?;
     Ok(Claim::Owner(owner, Listener { listener, token }))
 }
@@ -116,15 +122,25 @@ pub(super) fn claim(id: &str) -> io::Result<Claim> {
 /// Connects to the running instance and lets it take the foreground, which
 /// Windows grants only to the process the person just launched.
 pub(super) fn connect(peer: &Peer, activation: &mut Value) -> io::Result<Stream> {
-    let (port, token) = read_endpoint(&peer.0)?;
+    let Endpoint {
+        port,
+        token,
+        process,
+    } = read_endpoint(&peer.0)?;
     activation["token"] = token.into();
     unsafe {
-        let _ = AllowSetForegroundWindow(ASFW_ANY);
+        let _ = AllowSetForegroundWindow(process);
     }
     TcpStream::connect_timeout(&loopback(port), CONNECT_TIMEOUT)
 }
 
-fn read_endpoint(endpoint_key: &str) -> io::Result<(u16, String)> {
+struct Endpoint {
+    port: u16,
+    token: String,
+    process: u32,
+}
+
+fn read_endpoint(endpoint_key: &str) -> io::Result<Endpoint> {
     let invalid = |message: &str| io::Error::new(io::ErrorKind::InvalidData, message.to_string());
     let body = current_user_value(endpoint_key, ENDPOINT_VALUE).ok_or_else(|| {
         io::Error::new(
@@ -144,7 +160,17 @@ fn read_endpoint(endpoint_key: &str) -> io::Result<(u16, String)> {
         .and_then(Value::as_str)
         .filter(|token| token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .ok_or_else(|| invalid("single-instance endpoint has an invalid token"))?;
-    Ok((port, token.to_string()))
+    let process = value
+        .get("process")
+        .and_then(Value::as_u64)
+        .and_then(|process| u32::try_from(process).ok())
+        .filter(|process| *process != 0)
+        .ok_or_else(|| invalid("single-instance endpoint has an invalid process id"))?;
+    Ok(Endpoint {
+        port,
+        token: token.to_string(),
+        process,
+    })
 }
 
 fn loopback(port: u16) -> SocketAddr {

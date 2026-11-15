@@ -7,7 +7,10 @@ impl OsrNativeHost {
     /// Answers the page's bridge requests the window can answer itself, and
     /// passes the rest on to the app.
     pub(super) fn relay_bridge_request(&mut self, frame: Frame) {
-        let answered = frame.body.is_none() && self.answer_window_bridge_request(&frame.line);
+        let answered = match &frame.body {
+            None => self.answer_window_bridge_request(&frame.line),
+            Some(body) => self.answer_clipboard_write(&frame.line, body),
+        };
         if !frame.line.is_empty() && !answered {
             let mut output = std::io::stdout();
             let _ = output.write_all(&frame.to_bytes());
@@ -35,4 +38,18 @@ pub(in crate::osr::host) fn bridge_response_line(
         Err(message) => ("error", serde_json::json!({ "message": message })),
     };
     format!("SABINE_BRIDGE_RESPONSE\t{browser_id}\t{request_id}\t{status}\t{payload}\n")
+}
+
+/// A successful answer carrying bytes, which the page receives beside
+/// `payload`.
+pub(in crate::osr::host) fn bridge_bytes_response(
+    browser_id: &str,
+    request_id: &str,
+    payload: &serde_json::Value,
+    body: &[u8],
+) -> Vec<u8> {
+    Frame::encode(
+        &format!("SABINE_BRIDGE_RESPONSE\t{browser_id}\t{request_id}\tok\t{payload}"),
+        Some(body),
+    )
 }

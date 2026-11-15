@@ -13,8 +13,11 @@ export interface TrayMenuItem {
 
 /** Changes to the tray icon. Fields left out stay as they are. */
 export interface TrayUpdate {
-  /** Path to the icon image, or `null` for a plain dot. */
-  icon?: string | null;
+  /**
+   * The name of one of the app's resources, the image's bytes, or `null` for
+   * a plain dot.
+   */
+  icon?: string | ArrayBuffer | ArrayBufferView | Blob | null;
   /** Draw the icon as a macOS template image, tinted to match the menu bar. */
   template?: boolean;
   tooltip?: string | null;

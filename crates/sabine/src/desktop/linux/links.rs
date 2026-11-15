@@ -1,10 +1,14 @@
-use std::{collections::BTreeSet, fs, io, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use sabine_platform::{AutostartEntry, DeepLinkRegistration};
 use sabine_service::SHORTCUT_HOST_KEY;
 
 use super::util::*;
-use crate::desktop::sanitize_id;
+use crate::desktop::{sanitize_id, write_if_changed};
 
 /// Rewrites the login entry only when its contents changed, and leaves one
 /// the person turned off in their desktop's settings off.
@@ -21,11 +25,10 @@ pub(super) fn write_autostart_entry(entry: &AutostartEntry) -> io::Result<()> {
     if current.as_deref().is_some_and(turned_off) {
         return Ok(());
     }
-    let contents = desktop_entry(&entry.id, &entry.name, &entry.command);
-    if current.as_deref() == Some(contents.as_str()) {
-        return Ok(());
-    }
-    write_file(path, &contents)
+    write_if_changed(
+        &path,
+        &desktop_entry(&entry.id, &entry.name, &entry.command),
+    )
 }
 
 /// Desktops turn a login entry off by marking it instead of removing it.
@@ -50,8 +53,8 @@ pub(super) fn ensure_shortcut_host_entry(app_id: &str, name: &str) -> io::Result
         .any(|path| path.is_file() && !is_shortcut_host_entry(&path));
     if !installed {
         let command = desktop_exec(&utf8_executable()?);
-        return write_file(
-            own,
+        return write_if_changed(
+            &own,
             &format!(
                 "{}{SHORTCUT_HOST_KEY}\n",
                 desktop_entry(app_id, name, &command)
@@ -93,29 +96,62 @@ pub(super) fn register_deep_links(registration: &DeepLinkRegistration) -> io::Re
         stand_in_id.clone()
     };
     let config = config_home()?;
+    let path = resolved(&config.join("mimeapps.list"))?;
+    let own = [installed_id.as_str(), stand_in_id.as_str()];
+    let defaults = |content: &str| -> io::Result<String> {
+        let mut content = content.to_string();
+        for scheme in &schemes {
+            let replaceable = match mime_default(&content, scheme) {
+                Some(chosen) => own.contains(&chosen) || find_entry(chosen)?.is_none(),
+                None => true,
+            };
+            if replaceable {
+                content = set_mime_default(&content, scheme, &handler);
+            }
+        }
+        Ok(content)
+    };
+    let current = read_or_empty(&path)?;
+    if defaults(&current)? == current {
+        return Ok(());
+    }
     let _lock = sabine_runtime::FileLock::acquire(
         &config.join("sabine/mimeapps.lock"),
         std::time::Duration::from_secs(5),
         |_| {},
     )?;
-    let path = config.join("mimeapps.list");
-    let mut content = match fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(error),
-    };
-    let own = [installed_id.as_str(), stand_in_id.as_str()];
-    for scheme in schemes {
-        let replaceable = match mime_default(&content, &scheme) {
-            Some(chosen) => own.contains(&chosen) || find_entry(chosen)?.is_none(),
-            None => true,
-        };
-        if replaceable {
-            content = set_mime_default(&content, &scheme, &handler);
-        }
+    let current = read_or_empty(&path)?;
+    replace_if_changed(&path, &defaults(&current)?)
+}
+
+/// The file `path` names, past any symbolic links, as people who keep their
+/// settings elsewhere link `mimeapps.list` there.
+fn resolved(path: &Path) -> io::Result<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(target) => Ok(target),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(path.to_path_buf()),
+        Err(error) => Err(error),
     }
-    write_file(path.with_extension("list.sabine-tmp"), &content)?;
-    fs::rename(path.with_extension("list.sabine-tmp"), path)
+}
+
+fn read_or_empty(path: &Path) -> io::Result<String> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(content),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Replaces `path` with `contents` all at once through a file beside it,
+/// unless it already holds them.
+fn replace_if_changed(path: &Path, contents: &str) -> io::Result<()> {
+    if fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
+        return Ok(());
+    }
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".sabine-tmp");
+    write_if_changed(Path::new(&temporary), contents)?;
+    fs::rename(temporary, path)
 }
 
 fn write_stand_in(
@@ -135,8 +171,7 @@ fn write_stand_in(
         desktop_value(&executable),
         desktop_exec(&executable)
     );
-    write_file(path.with_extension("desktop.tmp"), &desktop)?;
-    fs::rename(path.with_extension("desktop.tmp"), path)
+    replace_if_changed(path, &desktop)
 }
 
 fn utf8_executable() -> io::Result<String> {
@@ -192,13 +227,6 @@ fn desktop_exec(value: &str) -> String {
         .replace('$', "\\$")
         .replace('%', "%%");
     format!("\"{}\"", escaped.replace('\\', "\\\\"))
-}
-
-fn write_file(path: PathBuf, contents: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, contents)
 }
 
 fn desktop_entry(id: &str, name: &str, command: &str) -> String {

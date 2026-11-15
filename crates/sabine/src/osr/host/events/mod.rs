@@ -14,7 +14,7 @@ use crate::osr::transport::IpcStream;
 use super::native::OsrNativeHost;
 use super::types::OsrHostEvent;
 
-pub(super) use bridge::bridge_response_line;
+pub(super) use bridge::{bridge_bytes_response, bridge_response_line};
 pub(super) use host_control::host_control_from_parts;
 
 const HOST_EVENT_DISPATCH_BUDGET: usize = 16;

@@ -93,7 +93,7 @@ impl Playback {
         unsafe {
             player.setActionAtItemEnd(AVPlayerActionAtItemEnd::None);
             player.setAppliesMediaSelectionCriteriaAutomatically(false);
-            player.setVolume(options.volume.clamp(0.0, 1.0) as f32);
+            player.setVolume(options.volume as f32);
             player.setMuted(options.muted);
         }
         let playback = Rc::new_cyclic(|weak: &Weak<Self>| {
@@ -198,9 +198,7 @@ impl Playback {
                     unsafe { self.player.setRate(rate as f32) };
                 }
             }
-            Command::Volume(volume) => unsafe {
-                self.player.setVolume(volume.clamp(0.0, 1.0) as f32)
-            },
+            Command::Volume(volume) => unsafe { self.player.setVolume(volume as f32) },
             Command::Muted(muted) => unsafe { self.player.setMuted(muted) },
             Command::Loop(looping) => self.state.borrow_mut().looping = looping,
             Command::Tracks(request) => {

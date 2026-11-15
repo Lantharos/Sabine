@@ -1,7 +1,9 @@
-use std::{fs, io, path::PathBuf};
+use std::{io, path::PathBuf};
 
 use sabine_platform::NativeMessagingHost;
 use sabine_service::NativeMessagingBrowser;
+
+use super::write_if_changed;
 
 pub(super) fn write_manifests(
     host: &NativeMessagingHost,
@@ -10,9 +12,8 @@ pub(super) fn write_manifests(
     sabine_service::native_messaging_manifest_dirs()?
         .into_iter()
         .map(|(browser, directory)| {
-            fs::create_dir_all(&directory)?;
             let path = directory.join(format!("{}.json", host.id));
-            fs::write(&path, manifests.for_browser(browser))?;
+            write_if_changed(&path, manifests.for_browser(browser))?;
             Ok((browser, path))
         })
         .collect()

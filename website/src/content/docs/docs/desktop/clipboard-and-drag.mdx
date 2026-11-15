@@ -56,12 +56,12 @@ them, plus one image: PNG when it is offered, otherwise the first image type. `w
 
 Files travel as a `text/uri-list` of `file://` URIs on every desktop, which Windows and macOS
 exchange as their own file lists, so other apps paste them as files. On Linux, apps in a sandbox
-such as Flatpak can't open those paths, so the window also offers the files through the document
-portal's [file transfer](#files-for-apps-in-a-sandbox).
+such as Flatpak can't open those paths, so the window also offers the files the app's own pages
+copy through the document portal's [file transfer](#files-for-apps-in-a-sandbox).
 
-`clipboard` is only available to the app's own pages; calling it elsewhere throws. A request that
-gets no answer within 30 seconds rejects with a `TimeoutError`, and pending requests reject when
-the page goes away.
+`clipboard` is only available to the app's own pages; calling it elsewhere throws. A read or write
+carries up to 32 MiB, every type together. A request that gets no answer within 30 seconds rejects
+with a `TimeoutError`, and pending requests reject when the page goes away.
 
 ## The primary selection
 
@@ -151,11 +151,13 @@ Only the `file:` URIs in the list become files.
 
 ### Files for apps in a sandbox
 
-On Linux, a copy or drag that carries files also offers `application/vnd.portal.filetransfer`, the
-type GTK, Qt and Chromium look for when they run in a sandbox. When such an app asks for it, the
-window registers the files with the document portal's `FileTransfer` interface, on a thread of its
-own, and hands the app a key it trades for paths it can read. Each key works once. Files the
-person can change reach the app writable. Apps outside a sandbox read `text/uri-list` as before.
+On Linux, a drag or a copy from the app's own pages that carries files also offers
+`application/vnd.portal.filetransfer`, the type GTK, Qt and Chromium look for when they run in a
+sandbox. When such an app asks for it, the window registers the files with the document portal's
+`FileTransfer` interface, on a thread of its own, and hands the app a key it trades for paths it
+can read. Each key works once, and the files reach the app read-only. A file list any other page
+copies, such as a guest's, stays a list of names. Apps outside a sandbox read `text/uri-list` as
+before.
 
 ### Drag images
 

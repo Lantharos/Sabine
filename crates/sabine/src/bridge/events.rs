@@ -1,6 +1,7 @@
 use std::{
     io::BufReader,
     process::{Child, ChildStdout, Command, Stdio},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
@@ -8,10 +9,14 @@ use sabine_platform::{PlatformEvent, SingleInstancePolicy};
 
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
-use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher};
+use super::listeners::WindowReports;
+use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher, REQUEST_PREFIX};
 use super::writer::BridgeWriter;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
-use crate::window::{CLOSE_REQUESTED_LINE, WindowListeners};
+use crate::window::{PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowListeners};
+
+/// A window host writes this when people move focus to its window.
+pub(crate) const FOCUSED_LINE: &str = "SABINE_WINDOW_FOCUSED";
 
 pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, serde_json::Value) {
     match event {
@@ -96,11 +101,14 @@ pub(crate) fn spawn_bridge_dispatch(
     let emitter = emitter.clone();
     let dispatcher =
         BridgeRequestDispatcher::new(bridge_runtime, activity.clone(), emitter.clone(), writer);
+    let listeners = Arc::new(listeners);
+    let reports = WindowReports::new(window, Arc::clone(&listeners), emitter.clone());
     let thread = thread::spawn(move || {
         let host = WindowHost {
             window,
             dispatcher: &dispatcher,
             listeners: &listeners,
+            reports: &reports,
             emitter: &emitter,
         };
         host.read_requests(stdout, || {
@@ -108,16 +116,19 @@ pub(crate) fn spawn_bridge_dispatch(
         });
         activity.release_window(window);
         emitter.detach(window);
-        listeners.closed(window);
+        reports.closed();
     });
     BridgeDispatch { thread, ready }
 }
 
-/// What a window host's lines reach in the app.
+/// What a window host's lines reach in the app. The page's calls and the
+/// document changes they depend on are taken in order here; everything the
+/// app's listeners hear goes to them.
 struct WindowHost<'a> {
     window: u32,
     dispatcher: &'a BridgeRequestDispatcher,
     listeners: &'a WindowListeners,
+    reports: &'a WindowReports,
     emitter: &'a BridgeEventEmitter,
 }
 
@@ -125,21 +136,19 @@ impl WindowHost<'_> {
     fn read_requests(&self, stdout: ChildStdout, mut ready: impl FnMut()) {
         let mut reader = BufReader::new(stdout);
         while let Ok(Some(frame)) = Frame::read(&mut reader) {
-            if frame.line == "SABINE_OSR_READY" {
+            let line = frame.line.as_str();
+            if line == "SABINE_OSR_READY" {
                 ready();
-                continue;
-            }
-            if frame.line == CLOSE_REQUESTED_LINE {
-                if self.listeners.allows_close(self.window) {
-                    self.emitter.close_window(self.window);
+            } else if line == FOCUSED_LINE {
+                self.emitter.focused(self.window);
+            } else if line == PAGE_STARTED_LINE || line == PAGE_LOST_LINE {
+                self.listeners.deliver(self.window, line);
+            } else if line.starts_with(REQUEST_PREFIX) {
+                if let Some(request) = BridgeIpcRequest::parse(frame, self.window) {
+                    self.dispatcher.submit(request);
                 }
-                continue;
-            }
-            if self.listeners.deliver(self.window, &frame.line) {
-                continue;
-            }
-            if let Some(request) = BridgeIpcRequest::parse(frame, self.window) {
-                self.dispatcher.submit(request);
+            } else {
+                self.reports.report(frame.line);
             }
         }
     }
@@ -160,7 +169,8 @@ mod tests {
     use sabine_bridge::{ActivityRegistry, BridgeHandlers, BridgeRuntime};
 
     use super::*;
-    use crate::window::CloseRequestListener;
+    use crate::bridge::listeners::run_in_order;
+    use crate::window::{CLOSE_REQUESTED_LINE, CloseRequestListener};
 
     fn lines_after_close_request(allowed: bool) -> Vec<String> {
         let mut window = Command::new("cat")
@@ -182,17 +192,24 @@ mod tests {
             emitter.clone(),
             writer,
         );
-        let listeners = WindowListeners {
+        let listeners = Arc::new(WindowListeners {
             close_request: Some(CloseRequestListener::new(move |_| allowed)),
             ..WindowListeners::default()
-        };
+        });
+        let reports = WindowReports::new(window.id(), Arc::clone(&listeners), emitter.clone());
         WindowHost {
             window: window.id(),
             dispatcher: &dispatcher,
             listeners: &listeners,
+            reports: &reports,
             emitter: &emitter,
         }
         .read_requests(host.stdout.take().expect("stdout"), || {});
+        let (answered, answer) = crossbeam_channel::bounded(1);
+        run_in_order(move || {
+            let _ = answered.send(());
+        });
+        answer.recv().expect("the listener answered");
         assert!(emitter.emit_to(window.id(), "end", serde_json::Value::Null));
         let mut lines = Vec::new();
         for line in BufReader::new(window.stdout.take().expect("stdout")).lines() {

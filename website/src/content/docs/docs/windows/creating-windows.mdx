@@ -203,7 +203,9 @@ its page runs at the window's background frame rate, or stops rendering altogeth
 [Lifecycle](/docs/windows/lifecycle/) for what a hidden window costs.
 
 The page shows and hides its window with `appWindow.show()` and `appWindow.hide()`, and Rust with
-`show()`, `hide()` and `focus_window()` on the `SabineProcess` or its `BridgeEventEmitter`.
+`show()`, `hide()` and `focus_window()` on the `SabineProcess` or its `BridgeEventEmitter`, which
+act on the window people focused last. The emitter's `show_window`, `hide_window` and
+`activate_window` take the window to act on.
 
 `skip_taskbar` and `always_on_top` depend on the desktop:
 
@@ -264,8 +266,9 @@ listen("closeAsked", async () => {
 });
 ```
 
-The listener runs in the app process, on the thread that reads the window's messages, so answer
-quickly and leave the asking to the page. Only requests from the person and the desktop are
+The listener runs in the app process on a thread every window listener shares, so the window's
+bridge keeps answering its page meanwhile. Answer quickly, since the other listeners wait their
+turn, and leave the asking to the page. Only requests from the person and the desktop are
 asked about. `appWindow.close()`, `emitter.close_window(window)`, `app.quit()` and the app
 process ending close the window without asking, so a page that asked can always close it.
 

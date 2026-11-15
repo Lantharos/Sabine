@@ -75,6 +75,18 @@ fn shown() -> bool {
     true
 }
 
+fn rate(value: f64) -> Result<f64, String> {
+    if value > 0.0 && value <= 16.0 {
+        Ok(value)
+    } else {
+        Err("playback rate must be above 0 and at most 16".to_string())
+    }
+}
+
+fn volume(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
+}
+
 impl Request {
     pub(super) fn parse(command: &str, params: Value) -> Result<Self, String> {
         let invalid = |error: serde_json::Error| format!("invalid {command} request: {error}");
@@ -85,7 +97,12 @@ impl Request {
         };
         Ok(match command {
             commands::CREATE_COMMAND => {
-                Self::Create(serde_json::from_value(params).map_err(invalid)?)
+                let create: Create = serde_json::from_value(params).map_err(invalid)?;
+                Self::Create(Create {
+                    rate: rate(create.rate)?,
+                    volume: volume(create.volume),
+                    ..create
+                })
             }
             commands::DESTROY_COMMAND => Self::Destroy(id(params)?),
             commands::SET_RECT_COMMAND => {
@@ -113,15 +130,12 @@ impl Request {
                 )
             }
             commands::SET_RATE_COMMAND => {
-                let rate: Number = serde_json::from_value(params).map_err(invalid)?;
-                if !(rate.value > 0.0 && rate.value <= 16.0) {
-                    return Err("playback rate must be above 0 and at most 16".to_string());
-                }
-                Self::Command(rate.id, Command::Rate(rate.value))
+                let number: Number = serde_json::from_value(params).map_err(invalid)?;
+                Self::Command(number.id, Command::Rate(rate(number.value)?))
             }
             commands::SET_VOLUME_COMMAND => {
-                let volume: Number = serde_json::from_value(params).map_err(invalid)?;
-                Self::Command(volume.id, Command::Volume(volume.value))
+                let number: Number = serde_json::from_value(params).map_err(invalid)?;
+                Self::Command(number.id, Command::Volume(volume(number.value)))
             }
             commands::SET_MUTED_COMMAND => {
                 let muted: Flag = serde_json::from_value(params).map_err(invalid)?;

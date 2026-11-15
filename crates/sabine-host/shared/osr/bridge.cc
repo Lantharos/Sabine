@@ -40,6 +40,13 @@ bool SabineOsrHandler::OnProcessMessageReceived(
                            std::string_view(bytes.body, bytes.body_size));
     return true;
   }
+  if (message->GetName() == "sabine.clipboard.bytes") {
+    sabine_bytes::Message bytes;
+    if (sabine_bytes::Read(message, &bytes) && bytes.fields.size() == 1)
+      ForwardClipboardRequest(browser, frame, bytes.fields[0],
+                              std::string_view(bytes.body, bytes.body_size));
+    return true;
+  }
 #if defined(OS_LINUX)
   if (message->GetName() == sabine_bridge::kRendererMessage) {
     if (frame->IsMain() && !profile_.renderer_cgroup.empty())
@@ -58,7 +65,8 @@ bool SabineOsrHandler::OnProcessMessageReceived(
   }
   if (message->GetName() == "sabine.clipboard") {
     if (arguments->GetSize() == 1)
-      ForwardClipboardRequest(browser, frame, arguments->GetString(0));
+      ForwardClipboardRequest(browser, frame, arguments->GetString(0),
+                              std::nullopt);
     return true;
   }
   if (message->GetName() == "sabine.drop.ready") {
@@ -253,7 +261,7 @@ void SabineOsrHandler::ResolveBridgeResponse(
     const std::string& payload,
     const std::optional<std::string>& body) {
   CEF_REQUIRE_UI_THREAD();
-  if (ResolveClipboardResponse(request_id, ok, payload))
+  if (ResolveClipboardResponse(request_id, ok, payload, body))
     return;
   const int expected_id = std::atoi(browser_id.c_str());
   CefRefPtr<CefBrowser> target;

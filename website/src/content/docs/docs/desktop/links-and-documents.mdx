@@ -145,8 +145,11 @@ Sabine brings the window forward when they arrive.
     handler entry, `<app id>.sabine-url.desktop` in `~/.local/share/applications`, which starts
     the running executable, or the AppImage file when the app runs from one. It then sets the app
     as the default for each scheme in `~/.config/mimeapps.list`, unless another installed app is
-    already the default. Other associations in the file are kept, and Sabine apps take turns
-    updating it, so they never overwrite each other's changes.
+    already the default. Other associations in the file are kept, a `mimeapps.list` that links to
+    a file elsewhere is updated where it points, and Sabine apps take turns updating it, so they
+    never overwrite each other's changes. Files that already say what the app would write are left
+    alone, and the app opens while it registers; a registration the desktop refuses goes to the
+    app's diagnostics.
 
     Handler entries name the executable in `TryExec` as well as `Exec`, so once a package is
     removed, desktops stop offering a handler whose program is gone.

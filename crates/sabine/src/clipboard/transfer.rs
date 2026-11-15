@@ -5,9 +5,7 @@
 //! the files' own paths back for it, or keep reading `text/uri-list`.
 
 use std::collections::HashMap;
-use std::ffi::CString;
 use std::fs::{File, OpenOptions};
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
@@ -37,11 +35,6 @@ pub(crate) fn files_in(uri_list: &[u8]) -> Vec<PathBuf> {
         .filter(|line| !line.starts_with('#'))
         .filter_map(|line| url::Url::parse(line).ok()?.to_file_path().ok())
         .collect()
-}
-
-fn writable(path: &Path) -> bool {
-    CString::new(path.as_os_str().as_bytes())
-        .is_ok_and(|path| unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0)
 }
 
 fn handle(path: &Path) -> std::io::Result<File> {
@@ -75,10 +68,7 @@ async fn start(paths: &[PathBuf]) -> Option<String> {
         .collect::<std::io::Result<Vec<_>>>()
         .ok()?;
     let options = HashMap::from([
-        (
-            "writable",
-            Variant::from(paths.iter().all(|path| writable(path))),
-        ),
+        ("writable", Variant::from(false)),
         ("autostop", Variant::from(true)),
     ]);
     let key: String = portal.call("StartTransfer", &(options,)).await.ok()?;

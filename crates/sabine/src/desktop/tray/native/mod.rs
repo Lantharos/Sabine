@@ -12,7 +12,7 @@ use std::{
 use sabine_platform::{PlatformEvent, TrayActivation, TrayIcon, TrayMenuItem};
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent, menu::MenuEvent};
 
-use super::icon;
+use super::icon::{self, IconSource};
 use crate::desktop::{EventQueue, platform::UiQueue, sanitize_id};
 use menu::MenuEntries;
 
@@ -53,10 +53,14 @@ impl TrayHandle {
     /// Shows the image at `path`, or a plain dot without one. An image
     /// requested later replaces this one even when it decodes first.
     pub fn set_icon(&self, path: Option<PathBuf>, template: bool) {
+        self.show_icon(path.map(IconSource::File), template);
+    }
+
+    pub(in crate::desktop) fn show_icon(&self, source: Option<IconSource>, template: bool) {
         let request = self.icon_requests.fetch_add(1, Ordering::Relaxed) + 1;
         let handle = self.clone();
         sabine_platform::async_runtime().spawn_blocking(move || {
-            let image = icon::load(path.as_deref());
+            let image = icon::load(source.as_ref());
             #[cfg(target_os = "macos")]
             let template = template || image.is_black_and_white();
             let requests = Arc::clone(&handle.icon_requests);

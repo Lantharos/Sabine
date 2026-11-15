@@ -13,10 +13,25 @@ use crate::launch::browser::HOST_CONTROL_PREFIX;
 /// up with instead of losing events.
 #[derive(Clone, Default)]
 pub struct BridgeEventEmitter {
-    targets: Arc<Mutex<Vec<BridgeTarget>>>,
+    targets: Arc<Mutex<Targets>>,
     /// Held while the setting is sent and while windows attach, so every
     /// window ends up with the latest value.
     square_corners: Arc<Mutex<bool>>,
+}
+
+#[derive(Default)]
+struct Targets {
+    windows: Vec<BridgeTarget>,
+    focused: Option<WindowId>,
+}
+
+impl Targets {
+    /// The window calls for the app's window act on: the one focused last,
+    /// or else the first one open.
+    fn front(&self) -> Option<WindowId> {
+        self.focused
+            .or_else(|| self.windows.first().map(|target| target.window))
+    }
 }
 
 struct BridgeTarget {
@@ -85,7 +100,7 @@ impl BridgeEventEmitter {
             writer.send(Frame::shared(&square_corners_control(true), None));
         }
         let mut targets = lock(&self.targets);
-        targets.retain(|target| target.window != window);
+        targets.windows.retain(|target| target.window != window);
         for activity in activities
             .list()
             .into_iter()
@@ -94,42 +109,81 @@ impl BridgeEventEmitter {
             let begin = sabine_bridge::ActivityHostUpdate::Begin(activity);
             writer.send(Frame::shared(&activity_control(&begin), None));
         }
-        targets.push(BridgeTarget { window, writer });
+        targets.windows.push(BridgeTarget { window, writer });
     }
 
     pub(crate) fn detach(&self, window: WindowId) {
-        lock(&self.targets).retain(|target| target.window != window);
+        let mut targets = lock(&self.targets);
+        targets.windows.retain(|target| target.window != window);
+        if targets.focused == Some(window) {
+            targets.focused = None;
+        }
     }
 
+    /// Notes the window people moved focus to, which calls for the app's
+    /// window act on from then on.
+    pub(crate) fn focused(&self, window: WindowId) {
+        let mut targets = lock(&self.targets);
+        if targets.windows.iter().any(|target| target.window == window) {
+            targets.focused = Some(window);
+        }
+    }
+
+    /// Shows or hides the app's window: the one focused last, or the first
+    /// one open.
     pub fn set_visible(&self, visible: bool) -> bool {
-        self.emit_host_control("visible", if visible { "1" } else { "0" })
+        self.front_control("visible", if visible { "1" } else { "0" })
     }
 
+    /// Shows the app's window: the one focused last, or the first one open.
     pub fn show(&self) -> bool {
-        self.emit_host_control("show", "1")
+        self.front_control("show", "1")
     }
 
+    /// Hides the app's window: the one focused last, or the first one open.
     pub fn hide(&self) -> bool {
-        self.emit_host_control("hide", "1")
+        self.front_control("hide", "1")
     }
 
     pub(crate) fn quit(&self) -> bool {
-        self.emit_host_control("quit", "1")
+        self.host_control(None, "quit", "1")
     }
 
+    /// Shows and focuses the app's window: the one focused last, or the
+    /// first one open.
     pub fn focus_window(&self) -> bool {
-        self.emit_host_control("focus", "1")
+        self.focus_window_with_activation_token(None)
+    }
+
+    pub fn show_window(&self, window: WindowId) -> bool {
+        self.host_control(Some(window), "show", "1")
+    }
+
+    pub fn hide_window(&self, window: WindowId) -> bool {
+        self.host_control(Some(window), "hide", "1")
+    }
+
+    /// Shows and focuses one window. On Wayland, pass the activation token
+    /// from the click or launch that asked for it, so the window may take
+    /// focus.
+    pub fn activate_window(&self, window: WindowId, activation_token: Option<&str>) -> bool {
+        #[cfg(target_os = "windows")]
+        crate::desktop::allow_foreground(window);
+        self.host_control(
+            Some(window),
+            "focus",
+            activation_token
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .unwrap_or("1"),
+        )
     }
 
     /// Closes one window as its close button does, without asking
     /// [`SabineWindow::on_close_requested`](crate::SabineWindow::on_close_requested).
     /// A window built with `hide_on_close` hides instead.
     pub fn close_window(&self, window: WindowId) -> bool {
-        self.deliver(
-            Some(window),
-            format!("{HOST_CONTROL_PREFIX}\tclose\t1"),
-            None,
-        )
+        self.host_control(Some(window), "close", "1")
     }
 
     /// Replaces the blur, opaque and input regions of every window, for
@@ -185,14 +239,11 @@ impl BridgeEventEmitter {
         )
     }
 
+    /// Shows and focuses the app's window, the one focused last or the first
+    /// one open, with the activation token Wayland asks for.
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool {
-        self.emit_host_control(
-            "focus",
-            token
-                .map(str::trim)
-                .filter(|token| !token.is_empty())
-                .unwrap_or("1"),
-        )
+        let front = lock(&self.targets).front();
+        front.is_some_and(|window| self.activate_window(window, token))
     }
 
     /// Drives the guests of one window from Rust, for example to restore a
@@ -218,16 +269,22 @@ impl BridgeEventEmitter {
         self.deliver(update.record().window, activity_control(update), None)
     }
 
-    pub(crate) fn emit_host_control(&self, command: &str, value: &str) -> bool {
+    fn host_control(&self, window: Option<WindowId>, command: &str, value: &str) -> bool {
         self.deliver(
-            None,
+            window,
             format!("{HOST_CONTROL_PREFIX}\t{command}\t{value}"),
             None,
         )
     }
 
+    fn front_control(&self, command: &str, value: &str) -> bool {
+        let front = lock(&self.targets).front();
+        front.is_some_and(|window| self.host_control(Some(window), command, value))
+    }
+
     fn deliver(&self, window: Option<WindowId>, line: String, body: Option<&[u8]>) -> bool {
         let writers = lock(&self.targets)
+            .windows
             .iter()
             .filter(|target| window.is_none_or(|window| window == target.window))
             .map(|target| (target.window, target.writer.clone()))
@@ -363,6 +420,30 @@ mod tests {
         assert_eq!(next_line(&mut child), format!("{begin}\n"));
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    #[test]
+    fn calls_for_the_apps_window_reach_the_window_focused_last() {
+        let (mut first, first_writer) = window();
+        let (mut second, second_writer) = window();
+        let emitter = BridgeEventEmitter::default();
+        emitter.attach(first.id(), first_writer, &ActivityRegistry::default());
+        emitter.attach(second.id(), second_writer, &ActivityRegistry::default());
+        assert!(emitter.show());
+        emitter.focused(second.id());
+        assert!(emitter.hide());
+        assert_eq!(
+            next_line(&mut first),
+            format!("{HOST_CONTROL_PREFIX}\tshow\t1\n")
+        );
+        assert_eq!(
+            next_line(&mut second),
+            format!("{HOST_CONTROL_PREFIX}\thide\t1\n")
+        );
+        for mut child in [first, second] {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     #[test]
