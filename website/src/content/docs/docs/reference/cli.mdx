@@ -20,9 +20,11 @@ one. `sabine help <command>` and `sabine <command> --help` print the flags of a 
 | Command | Does |
 | --- | --- |
 | [`sabine new`](#sabine-new) | Creates a project |
+| [`sabine info`](#sabine-info) | Shows what the project builds and runs with |
 | [`sabine dev`](#sabine-dev) | Runs the app in development |
 | [`sabine bindings`](#sabine-bindings) | Writes or checks the TypeScript bindings |
-| [`sabine bundle`](#sabine-bundle) | Builds a package |
+| [`sabine bundle`](#sabine-bundle) | Builds packages |
+| [`sabine icon`](#sabine-icon) | Generates the app's icons |
 | [`sabine install`](#sabine-install) | Installs the app on this machine |
 | [`sabine uninstall`](#sabine-uninstall) | Removes an installed app, or Sabine |
 | [`sabine update`](#sabine-update) | Updates Sabine, the CEF runtime or an app |
@@ -46,18 +48,39 @@ running daemon, or say that the service isn't installed or the daemon isn't runn
 
 ```sh
 sabine new my-app
+sabine new my-app --template react --id com.example.my-app
 sabine new my-notes --template notes
 ```
 
 Creates a folder named after the app with a Rust executable, a TypeScript page, a
-`Sabine.toml`, a default icon in `assets/icon.svg` and a release workflow in
+`Sabine.toml`, a `.gitignore`, a default icon in `assets/icon.svg` and a release workflow in
 `.github/workflows/release.yml`. The Rust crate and the `@lantharos/sabine` package are pinned to
-the CLI's own Sabine release.
+the CLI's own Sabine release, and the workflow to the commit of its tag, which `sabine new` looks up
+on GitHub; offline, it leaves the workflow for `sabine release-init` to write.
+
+Without `--id`, it asks for the app id, suggesting `com.example.<name>`, and takes the suggestion
+when it isn't run in a terminal.
 
 | Argument or flag | Default | Meaning |
 | --- | --- | --- |
 | `<name>` | required | The folder and package name: letters, digits, `-` and `_`. The folder must not exist |
-| `--template <name>` | `app` | `app` for the default app, or `notes` for a small notes app with a glass window that draws its own titlebar and calls a typed command |
+| `--id <id>` | asked | The app id, a reverse domain such as `com.example.tern` |
+| `--template <name>` | `app` | `app` for a Vite and TypeScript page, `react`, `svelte`, `vue` or `solid` for the same page in that framework, or `notes` for a small notes app with a glass window that draws its own titlebar and calls a typed command |
+
+## sabine info
+
+```sh
+sabine info
+```
+
+Prints the versions of the CLI, the installed service and the running daemon, the CEF runtime apps
+would use and whether its host is ready, the Rust, Cargo, Bun and Node versions on `PATH`, the
+platform and, on Linux, the session, and the id, name, version, page and update source of the
+project in the folder.
+
+| Argument | Meaning |
+| --- | --- |
+| `[source]` | The project folder; `.` by default |
 
 ## sabine dev
 
@@ -71,12 +94,18 @@ Runs the app from its project:
 
 1. prepares the CEF runtime and host if this machine has none
 2. loads the development environment files
-3. rewrites the TypeScript bindings when `Sabine.toml` has `[bindings]`
+3. rewrites the TypeScript bindings when `Sabine.toml` has `[bindings]`, while the next two steps
+   run
 4. installs the web project's dependencies when it has a `package.json` and no `node_modules`
 5. starts the web development server, reuses one already listening on its port, or waits for the
    one at `dev_url` when nothing tells it how to start one
 6. runs `cargo run`, with the app id suffixed `.dev`, `SABINE_DEV_URL` pointing at the server and
    `SABINE_MANIFEST_PATH` at the project's `Sabine.toml`
+
+While the app runs, `sabine dev` watches the package's `src` folder, `Cargo.toml`, `Cargo.lock`,
+`build.rs` and `Sabine.toml`. A change closes the app, rewrites the bindings and runs it again. When
+the build fails or the app exits with an error, it waits for the next change instead of stopping;
+an app you close normally ends `sabine dev`.
 
 `Ctrl+C` stops the app and any server `sabine dev` started. If the server exits while the app runs,
 `sabine dev` stops the app too.
@@ -88,7 +117,7 @@ Runs the app from its project:
 | `--no-install` | Doesn't install missing web dependencies |
 | `--web-only` | Runs only the web development server, without the runtime or the app |
 | `--no-runtime-prepare` | Skips preparing the CEF runtime and host |
-| `--command <command>` | Runs this shell command instead of `cargo run`; trailing arguments are passed to it. Bindings aren't rewritten |
+| `--command <command>` | Runs this shell command instead of `cargo run`; trailing arguments are passed to it. Bindings aren't rewritten and Rust changes aren't watched |
 | `-- <args>` | Arguments passed on to the app |
 
 The development environment files are `.env`, `.env.local`, `.env.development` and
@@ -117,19 +146,24 @@ table.
 ```sh
 sabine bundle .
 sabine bundle . --target msi --offline
+sabine bundle . --target deb,rpm,appimage
 sabine bundle . --target deb --no-web-build --json
 ```
 
-Builds the app into a package. [Bundling](/docs/distribution/bundling/) explains each target and
-what goes into it.
+Builds the app into packages. [Bundling](/docs/distribution/bundling/) explains each target and
+what goes into it. The app and its page build once for all the targets, which have to run on the
+same operating system. Before the page builds, its dependencies install when it has no
+`node_modules`, and the built app writes its TypeScript bindings when `Sabine.toml` has
+`[bindings]`.
 
 | Argument or flag | Default | Meaning |
 | --- | --- | --- |
 | `[source]` | `.` | The project folder |
-| `--target <target>` | `portable` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos` |
+| `--target <target>` | `portable` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos`. Repeat it, or separate targets with commas, for several |
 | `--out <path>` | `dist` | Where staged bundles and packages go |
 | `--debug` | off | Packages a debug build instead of Cargo's release profile |
 | `--no-build` | off | Packages the executable already in Cargo's default output folder |
+| `--build-only` | off | Builds the page and the executable without packaging them, and prints where the executable is. A later run with `--binary` and `--no-web-build` packages them, so signing secrets need to reach only that run |
 | `--binary <path>` | | Packages this executable instead of building one |
 | `--no-web-build` | off | Skips the web build and packages the existing output |
 | `--web-build <command>` | `[web] build` | The web build command |
@@ -140,7 +174,25 @@ what goes into it.
 | `--version <version>` | `[app] version` | The app version for this build |
 | `--env-file <path>` | | Another environment file for the build; repeat it for several |
 | `--offline` | off | Ships this machine's Sabine service, host and CEF runtime in the bundle |
-| `--json` | off | Prints the result as one line of JSON |
+| `--json` | off | Prints one line of JSON for each package, or for the build with `--build-only` |
+
+## sabine icon
+
+```sh
+sabine icon
+sabine icon assets/icon.svg --out icons
+```
+
+Writes every icon Sabine makes for the app from one SVG or raster image: PNGs from 16 to 1024
+pixels in the freedesktop layout under `hicolor/`, a Windows `.ico` and a macOS `.icns`, named
+after the app id. `sabine bundle` makes the same icons from `[app] icon` on its own; this is for
+seeing them, or using them elsewhere.
+
+| Argument or flag | Default | Meaning |
+| --- | --- | --- |
+| `[image]` | `[app] icon` | The image to start from |
+| `--source <path>` | `.` | The project folder |
+| `--out <path>` | `dist/icons` | Where the icons go |
 
 ## sabine install
 
@@ -174,8 +226,9 @@ sabine uninstall com.example.tern --purge
 sabine uninstall --system
 ```
 
-Removes an app installed with `sabine install` or by a store, keeping its data. Apps installed from
-packages are removed with their package manager or uninstaller instead.
+Removes an app installed with `sabine install` or by a store, keeping its data. An app installed
+with `--system-wide` is removed for every user, which needs administrator rights. Apps installed
+from packages are removed with their package manager or uninstaller instead.
 
 | Argument or flag | Meaning |
 | --- | --- |
@@ -249,8 +302,8 @@ Manages the CEF runtime apps share.
 sabine release-init --repository example/tern
 ```
 
-Creates a new update signing key, stores it as the repository's `SABINE_UPDATE_SIGNING_KEY` Actions
-secret, turns on immutable releases, writes the `[updates]` table of the `Sabine.toml` in the
+Creates a new update signing key, saves a copy only you can read and prints where, stores it as
+the repository's `SABINE_UPDATE_SIGNING_KEY` Actions secret, turns on immutable releases, writes the `[updates]` table of the `Sabine.toml` in the
 current folder, and writes the release workflow. An app that updated from another source moves to
 GitHub releases. It stops when the app already has a signing key.
 Needs the GitHub CLI, signed in. See

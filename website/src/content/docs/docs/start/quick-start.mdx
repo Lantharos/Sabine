@@ -19,12 +19,13 @@ and builds a package you can hand to someone else. It assumes you have
    cd my-app
    ```
 
-   The name may contain letters, digits, hyphens and underscores. The app's id becomes
-   `dev.sabine.my-app`; change it in `Sabine.toml` to a reverse domain you own before you ship.
+   The name may contain letters, digits, hyphens and underscores. `sabine new` asks for the app's
+   id, a reverse domain you own such as `com.example.my-app`, or takes it from `--id`.
 
-   The default template is a Vite and TypeScript page with one command. For a fuller starting
-   point, `sabine new my-notes --template notes` creates a small notes app instead: a glass window
-   that draws its own titlebar, with a command its page calls through generated bindings.
+   The default template is a Vite and TypeScript page with one command. `--template react`,
+   `svelte`, `vue` or `solid` builds the same page with that framework, and
+   `sabine new my-notes --template notes` creates a small notes app instead: a glass window that
+   draws its own titlebar, with a command its page calls through generated bindings.
 
 2. **Run it.**
 
@@ -34,9 +35,9 @@ and builds a package you can hand to someone else. It assumes you have
 
    The first run prepares Sabine's runtime, which takes a minute. After that, `sabine dev`
    installs the page's packages if `node_modules` is missing, starts the Vite server on port 5173
-   (or reuses one already running there), writes the page's TypeScript bindings, and starts the
-   app with `cargo run`. The window opens on the development server, so page edits reload as you
-   save them.
+   (or reuses one already running there) while it writes the page's TypeScript bindings, and
+   starts the app with `cargo run`. The window opens on the development server, so page edits
+   reload as you save them, and saving a Rust file rebuilds and reopens the app.
 
    Development runs use the app id with `.dev` appended, so they keep their own browser storage
    and never collide with an installed copy of the app. Right-click the page and choose

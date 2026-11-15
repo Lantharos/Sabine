@@ -57,9 +57,10 @@ The CLI also loads `.env`, `.env.local`, `.env.<mode>` and `.env.<mode>.local` f
 | `SABINE_BUILD_TARGET` | Cargo build | Set by `sabine bundle` for the app's Cargo build: `linux`, `windows` or `macos`. Build scripts can read it. |
 | `SABINE_UPDATE_SIGNING_KEY` | CLI | The app's private Ed25519 update signing key, base64. `sabine bundle` writes its public key into the bundle, and fails if `[updates]` names a different public key. `sabine release-manifest` signs the update manifest with it. Inside GitHub Actions, bundles with updates enabled require it, unless they update from Schelf. |
 | `SABINE_MACOS_SIGNING_IDENTITY` | CLI | Developer ID Application identity in the keychain. Signs every framework, helper and executable inside an `.app` before the bundle itself, with the hardened runtime, and signs disk images. |
-| `SABINE_NOTARY_APPLE_ID` | CLI | Apple ID for notarization. Set together with the next two. |
-| `SABINE_NOTARY_TEAM_ID` | CLI | Team ID for notarization. |
-| `SABINE_NOTARY_PASSWORD` | CLI | App-specific password for notarization. |
+| `SABINE_NOTARY_API_KEY` | CLI | Path to the App Store Connect API key (`.p8`) for notarization. Set together with the next two. |
+| `SABINE_NOTARY_API_KEY_ID` | CLI | The API key's ID. |
+| `SABINE_NOTARY_API_ISSUER` | CLI | The API key's issuer ID. |
+| `SABINE_NOTARY_KEYCHAIN_PROFILE` | CLI | A notarytool keychain profile for notarization, instead of the API key. |
 | `SABINE_WINDOWS_CERTIFICATE` | CLI | Path to a `.pfx` Authenticode certificate. Signs every `.exe` and `.dll` the app ships, and the MSI or setup `.exe`. |
 | `SABINE_WINDOWS_CERTIFICATE_PASSWORD` | CLI | Password of that certificate. |
 | `SABINE_WINDOWS_CERTIFICATE_SHA1` | CLI | Thumbprint of a certificate in the Windows certificate store, instead of a `.pfx`, for certificates on a token or in a cloud signing service. Set this or `SABINE_WINDOWS_CERTIFICATE`, not both. |
