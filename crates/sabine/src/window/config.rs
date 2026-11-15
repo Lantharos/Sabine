@@ -151,6 +151,8 @@ impl SabineWindowConfig {
                 .validate()
                 .map_err(|message| SabineError::CreationFailed { message })?;
         }
+        sabine_service::manifest::AppAction::validate_all(&self.desktop_services.app_actions)
+            .map_err(|message| SabineError::CreationFailed { message })?;
         let app_id = self.app_id.as_deref().map(str::trim).unwrap_or_default();
         if !sabine_service::valid_app_id(app_id) {
             return Err(SabineError::CreationFailed {
@@ -343,6 +345,9 @@ pub struct DesktopServiceConfig {
     pub native_messaging_hosts: Vec<NativeMessagingHost>,
     pub single_instance_id: Option<String>,
     pub single_instance_policy: Option<SingleInstancePolicy>,
+    /// From `[[app.actions]]` in `Sabine.toml`, which also lists them in the
+    /// app's Linux desktop entry when it is bundled.
+    pub app_actions: Vec<sabine_service::manifest::AppAction>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

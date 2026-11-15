@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use winit::event_loop::ActiveEventLoop;
+use winit::window::UserAttentionType;
 
 use crate::osr::host::native::{OsrNativeHost, present_window};
 use crate::osr::host::types::{LifecycleState, WindowState};
@@ -56,6 +57,16 @@ impl OsrNativeHost {
         self.send_control("focus\t1\n");
         self.resume(reason);
         self.send_resize();
+    }
+
+    pub(in crate::osr::host) fn request_attention(&self, critical: bool) {
+        if let Some(window) = &self.window {
+            window.request_user_attention(Some(if critical {
+                UserAttentionType::Critical
+            } else {
+                UserAttentionType::Informational
+            }));
+        }
     }
 
     pub(in crate::osr::host) fn activate_window(

@@ -45,6 +45,14 @@ export interface SabineWindowApi {
   setAlwaysOnTop(enabled: boolean): Promise<void>;
   setResizable(enabled: boolean): Promise<void>;
   /**
+   * Asks people to look at the window: the Dock icon bounces once on macOS,
+   * the taskbar button flashes on Windows until the window is focused, and
+   * Wayland compositors mark the window. A critical request keeps the Dock
+   * icon bouncing until the app is active, and also flashes the window's
+   * frame on Windows.
+   */
+  requestAttention(critical?: boolean): Promise<void>;
+  /**
    * While enabled and the window is focused, the desktop's own keyboard
    * shortcuts reach the page instead. Rejects on desktops that do not allow
    * it, and on macOS until the app has the Accessibility permission.

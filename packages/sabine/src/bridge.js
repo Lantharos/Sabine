@@ -117,4 +117,31 @@ export const app = {
   setAutostart(enabled) {
     return invoke("app.setAutostart", { enabled });
   },
+  /**
+   * @param {number | string | null} badge
+   * @returns {Promise<void>}
+   */
+  setBadge(badge) {
+    return invoke("app.setBadge", { badge });
+  },
+  /**
+   * @param {import("../types/bridge.js").AppProgress} progress
+   * @returns {Promise<void>}
+   */
+  setProgress(progress) {
+    if (progress === null) return invoke("app.setProgress", { progress: { state: "hidden" } });
+    if (typeof progress === "number") return invoke("app.setProgress", { progress: { state: "normal", value: progress } });
+    return invoke("app.setProgress", { progress });
+  },
+  /**
+   * @param {string} path
+   * @returns {Promise<void>}
+   */
+  addRecentDocument(path) {
+    return invoke("app.addRecentDocument", { path: String(path) });
+  },
+  /** @returns {Promise<void>} */
+  clearRecentDocuments() {
+    return invoke("app.clearRecentDocuments");
+  },
 };

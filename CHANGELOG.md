@@ -1,3 +1,17 @@
+# Unreleased
+
+- The app's Dock or taskbar icon shows a badge and a progress bar: `app.setBadge` and
+  `app.setProgress` from pages, `set_badge` and `set_progress` on the process handle. Linux docks
+  that follow `com.canonical.Unity.LauncherEntry` show counts and progress, Windows draws them on
+  every window's taskbar button, and macOS on the Dock tile.
+- `appWindow.requestAttention()` and `WindowControl::RequestAttention` bounce the Dock icon, flash
+  the taskbar button or mark the window on Wayland.
+- `[[app.actions]]` in `Sabine.toml` lists things to start the app for in its Linux desktop entry,
+  Windows jump list and macOS Dock menu. Choosing one starts the app with the action's arguments,
+  or hands them to the running instance.
+- `app.addRecentDocument` and `app.clearRecentDocuments` add files to the desktop's recent files,
+  and take the app's own off again.
+
 # Sabine 0.90
 
 - On Kestrel, a window hears which material its glass has: Luca, a blur of what is behind it, or

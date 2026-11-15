@@ -1,16 +1,19 @@
 mod app_delegate;
 pub(crate) mod desktop_wait;
+mod dock;
 mod launch_agent;
 
 use std::collections::BTreeSet;
 
 use dispatch2::DispatchQueue;
+use objc2::MainThreadMarker;
 use objc2::runtime::AnyObject;
 use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, ns_string};
 use sabine_platform::{DeepLinkRegistration, NativeMessagingHost};
 
 pub(super) use super::hotkeys::GlobalShortcuts;
-pub(super) use app_delegate::AppEvents;
+pub(super) use app_delegate::{AppEventTargets, AppEvents};
+pub(super) use dock::{set_badge, set_progress};
 pub(super) use launch_agent::write_autostart_entry;
 
 /// AppKit's main thread. The tray icon, hotkeys and app delegate live there
@@ -34,6 +37,11 @@ impl UiQueue {
     pub(super) fn run(&self, task: impl FnOnce() + Send + 'static) {
         DispatchQueue::main().exec_async(task);
     }
+}
+
+fn main_queue_thread() -> MainThreadMarker {
+    // SAFETY: tasks on the main dispatch queue run on the main thread.
+    unsafe { MainThreadMarker::new_unchecked() }
 }
 
 pub(super) fn register_native_messaging_host(host: &NativeMessagingHost) -> Result<(), String> {

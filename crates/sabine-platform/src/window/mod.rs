@@ -6,6 +6,8 @@ mod options;
 #[cfg(target_os = "linux")]
 mod placement;
 mod regions;
+#[cfg(target_os = "windows")]
+mod taskbar;
 
 pub use backdrop::{BackdropMaterial, BackdropPreference, BackdropRole, WindowBackdrop};
 #[cfg(target_os = "macos")]
@@ -15,3 +17,5 @@ pub use options::{WindowBackgroundEffect, WindowChrome, WindowOptions};
 #[cfg(target_os = "linux")]
 pub use placement::{CompositorSupport, WindowPlacement, compositor_support};
 pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+#[cfg(target_os = "windows")]
+pub use taskbar::Taskbar;

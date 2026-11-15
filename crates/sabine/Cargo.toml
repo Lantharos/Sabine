@@ -84,6 +84,9 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_Controls",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_Storage_EnhancedStorage",
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Direct3D12",
@@ -100,7 +103,7 @@ windows = { version = "0.62.2", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSBezierPath", "NSColor", "NSDockTile", "NSImage", "NSMenu", "NSMenuItem", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true

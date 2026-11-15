@@ -28,7 +28,10 @@ impl OsrNativeHost {
             HostControl::SquareCorners(square) => self.set_square_corners(square),
             HostControl::Notify(notification) => self.show_notification(notification),
             HostControl::Print(files) => self.print_files(files),
-            HostControl::Window(control) => self.control_window(control),
+            #[cfg(target_os = "windows")]
+            HostControl::Badge(label) => self.taskbar.set_badge(label),
+            #[cfg(target_os = "windows")]
+            HostControl::Progress(progress) => self.taskbar.set_progress(progress),
             HostControl::Close => return self.close_window(event_loop),
             HostControl::Quit => {
                 self.remember_size();
@@ -58,7 +61,13 @@ pub(in crate::osr::host) fn host_control_from_parts(
         )))),
         "notify" => crate::osr::protocol::notification_from_json(value).map(HostControl::Notify),
         "print" => serde_json::from_str(value).ok().map(HostControl::Print),
-        "window" => serde_json::from_str(value).ok().map(HostControl::Window),
+        #[cfg(target_os = "windows")]
+        "badge" => serde_json::from_str(value).ok().map(HostControl::Badge),
+        #[cfg(target_os = "windows")]
+        "progress" => serde_json::from_str(value)
+            .ok()
+            .and_then(|progress| crate::desktop::progress_from_json(progress).ok())
+            .map(HostControl::Progress),
         "activity.begin" => activity_control_value(value).map(HostControl::ActivityBegin),
         "activity.end" => activity_control_value(value).map(HostControl::ActivityEnd),
         "regions" => serde_json::from_str(value).ok().map(|regions| {

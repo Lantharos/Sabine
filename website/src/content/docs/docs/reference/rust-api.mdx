@@ -445,10 +445,15 @@ impl SabineProcessHandle {
     pub fn present(&self, activation_token: Option<String>) -> bool;
     pub fn quit(&self) -> bool;
     pub fn set_autostart(&self, enabled: bool) -> Result<(), String>;
+
+    pub fn set_badge(&self, badge: Option<AppBadge>);
+    pub fn set_progress(&self, progress: AppProgress);
+    pub fn add_recent_document(&self, path: impl AsRef<Path>) -> Result<(), String>;
+    pub fn clear_recent_documents(&self) -> Result<(), String>;
 }
 ```
 
-A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop. `quit` closes every window and ends the app, also a background app or one whose window hides on close, and `wait` then returns a success status. `set_autostart` turns the app's autostart entry on or off; see [Starting at login](/docs/desktop/autostart/).
+A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop. `quit` closes every window and ends the app, also a background app or one whose window hides on close, and `wait` then returns a success status. `set_autostart` turns the app's autostart entry on or off; see [Starting at login](/docs/desktop/autostart/). `set_badge`, `set_progress` and the recent files change what the app's Dock or taskbar icon shows; see [Dock and taskbar](/docs/desktop/dock-and-taskbar/).
 
 ### BridgeEventEmitter
 
@@ -502,6 +507,7 @@ pub enum WindowControl {
     Maximize,
     Unmaximize,
     SetFullscreen { enabled: bool },
+    RequestAttention { critical: bool },
 }
 ```
 
@@ -509,7 +515,7 @@ pub enum WindowControl {
 emitter.control_window(window, &WindowControl::SetSize { width: 960, height: 720 });
 ```
 
-Sizes are in logical pixels, like `size` on the builder. `SetPosition` takes the physical pixels display bounds are in; Wayland places windows itself, so it isn't there on Linux. The window shows its page's `document.title`, and the builder's `title` while the page has none; `SetTitle` names the window over the page's title until it is set to `None`.
+Sizes are in logical pixels, like `size` on the builder. `SetPosition` takes the physical pixels display bounds are in; Wayland places windows itself, so it isn't there on Linux. The window shows its page's `document.title`, and the builder's `title` while the page has none; `SetTitle` names the window over the page's title until it is set to `None`. `RequestAttention` bounces the Dock icon or flashes the taskbar button; see [Dock and taskbar](/docs/desktop/dock-and-taskbar/#asking-for-attention).
 
 `displays` lists the displays the app's windows last saw, empty until the first window opens:
 
@@ -900,6 +906,27 @@ pub struct Appearance {
 ```
 
 Showing a notification with the id of one already shown replaces it. `Appearance::accent_hex()` returns the accent as a CSS hex color. See [Notifications](/docs/desktop/notifications/) and [Appearance and shell](/docs/desktop/appearance-and-shell/).
+
+### Dock and taskbar
+
+```rust
+pub enum AppBadge {
+    Count(u64),
+    #[cfg(not(target_os = "linux"))]
+    Text(String),
+}
+
+pub enum AppProgress {
+    Hidden,
+    #[cfg(not(target_os = "linux"))]
+    Indeterminate,
+    Normal(f64),
+    Paused(f64),
+    Error(f64),
+}
+```
+
+`AppBadge::Count(0)` shows no badge. Progress values run from 0 to 1. Linux docks show only counts and no indeterminate bar, so those variants exist on Windows and macOS only. See [Dock and taskbar](/docs/desktop/dock-and-taskbar/).
 
 ### Launch behavior
 

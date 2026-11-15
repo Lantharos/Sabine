@@ -104,6 +104,8 @@ impl OsrNativeHost {
         if let Err(error) = self.media.attach(window.as_ref(), self.media_viewport()) {
             sabine_runtime::report_error("media", error);
         }
+        #[cfg(target_os = "windows")]
+        self.taskbar.attach(&window);
         #[cfg(target_os = "linux")]
         {
             self.attach_clipboard(window.as_ref());

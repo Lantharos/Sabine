@@ -1,6 +1,7 @@
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod hotkeys;
 mod instance;
+mod launcher;
 mod native_messaging;
 pub(crate) mod open_urls;
 #[cfg(target_os = "linux")]
@@ -29,6 +30,9 @@ use sabine_platform::{
 use instance::SingleInstanceGuard;
 #[cfg(target_os = "linux")]
 pub(crate) use instance::startup_activation_token;
+pub(crate) use launcher::{Launcher, launcher_commands};
+#[cfg(target_os = "windows")]
+pub(crate) use launcher::{progress_from_json, progress_to_json};
 #[cfg(target_os = "linux")]
 use platform::ShortcutHost;
 #[cfg(not(target_os = "linux"))]
@@ -96,14 +100,23 @@ impl DesktopClaim {
             autostart.set_enabled(entry.enabled).map_err(failed)?;
         }
         if registers {
-            register_with_desktop(
-                services.deep_links.clone(),
-                services.native_messaging_hosts.clone(),
-            );
+            register_with_desktop(Registrations {
+                deep_links: services.deep_links.clone(),
+                hosts: services.native_messaging_hosts.clone(),
+                #[cfg(target_os = "windows")]
+                actions: services.app_actions.clone(),
+            });
         }
         let events = self.event_sender;
         #[cfg(target_os = "macos")]
-        let app_events = platform::AppEvents::install(events.clone());
+        let app_events = platform::AppEvents::install(platform::AppEventTargets {
+            events: events.clone(),
+            actions: services.app_actions.clone(),
+            policy: services
+                .single_instance_policy
+                .filter(|policy| *policy != SingleInstancePolicy::AllowMultiple)
+                .unwrap_or(SingleInstancePolicy::FocusExisting),
+        });
         #[cfg(target_os = "linux")]
         let shortcut_host = ShortcutHost::new(require_app_id(config)?, &config.title);
         #[cfg(target_os = "linux")]
@@ -240,15 +253,39 @@ pub fn start_desktop_event_forwarder(
     })
 }
 
-/// Registers the app's links and native messaging hosts with the desktop
-/// while the app starts. A registration the desktop refuses goes to the
-/// app's diagnostics and the app opens without it.
-fn register_with_desktop(deep_links: Vec<DeepLinkRegistration>, hosts: Vec<NativeMessagingHost>) {
-    if deep_links.is_empty() && hosts.is_empty() {
+/// What the app registers with the desktop each time it starts.
+struct Registrations {
+    deep_links: Vec<DeepLinkRegistration>,
+    hosts: Vec<NativeMessagingHost>,
+    /// The jump list's tasks, which an app without actions clears.
+    #[cfg(target_os = "windows")]
+    actions: Vec<sabine_service::manifest::AppAction>,
+}
+
+impl Registrations {
+    /// Windows always writes the jump list, which may hold an older version's
+    /// actions.
+    fn is_empty(&self) -> bool {
+        cfg!(not(target_os = "windows")) && self.deep_links.is_empty() && self.hosts.is_empty()
+    }
+}
+
+/// Registers the app's links, native messaging hosts and Windows jump list
+/// with the desktop while the app starts. A registration the desktop refuses
+/// goes to the app's diagnostics and the app opens without it.
+fn register_with_desktop(registrations: Registrations) {
+    if registrations.is_empty() {
         return;
     }
     thread::spawn(move || {
-        for registration in &deep_links {
+        #[cfg(target_os = "windows")]
+        if let Err(error) = platform::register_app_actions(&registrations.actions) {
+            sabine_runtime::report_error(
+                "desktop",
+                format!("could not list the app's actions in its jump list: {error}"),
+            );
+        }
+        for registration in &registrations.deep_links {
             if let Err(error) = register_deep_links(registration) {
                 sabine_runtime::report_error(
                     "desktop",
@@ -259,7 +296,7 @@ fn register_with_desktop(deep_links: Vec<DeepLinkRegistration>, hosts: Vec<Nativ
                 );
             }
         }
-        for host in &hosts {
+        for host in &registrations.hosts {
             if let Err(error) = register_native_messaging_host(host) {
                 sabine_runtime::report_error(
                     "desktop",

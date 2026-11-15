@@ -1,0 +1,147 @@
+---
+title: Dock and taskbar
+description: Badges, progress, attention requests, app actions and recent files on the app's Dock, taskbar or dock icon.
+sidebar:
+  order: 11
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+The app's icon in the Dock, taskbar or Linux dock can show more than the icon: a badge, a progress
+bar, a menu of things to start the app for, and the files it opened recently.
+
+## Badges
+
+A badge is a count, such as unread messages, or on Windows and macOS a few characters.
+
+```ts
+import { app } from "@lantharos/sabine";
+
+await app.setBadge(3);
+await app.setBadge(null);
+```
+
+A count of zero shows no badge. From Rust:
+
+```rust
+use sabine::AppBadge;
+
+handle.set_badge(Some(AppBadge::Count(3)));
+handle.set_badge(None);
+```
+
+`AppBadge::Text` exists on Windows and macOS only, and a text badge from a page rejects on Linux.
+
+## Progress
+
+```ts
+await app.setProgress(0.4);
+await app.setProgress({ state: "paused", value: 0.4 });
+await app.setProgress({ state: "indeterminate" });
+await app.setProgress(null);
+```
+
+Values run from 0 to 1. The states are `normal`, `paused`, `error` and `indeterminate`. From Rust,
+pass an `AppProgress` to `handle.set_progress(...)`, and `AppProgress::Hidden` to take the bar off.
+
+## Asking for attention
+
+When something needs the person while the app is in the background, the window can ask for
+attention:
+
+```ts
+import { appWindow } from "@lantharos/sabine";
+
+await appWindow.requestAttention();
+await appWindow.requestAttention(true);
+```
+
+The Dock icon bounces once on macOS, the taskbar button flashes on Windows until the window is
+focused, and Wayland compositors mark the window. A critical request keeps the Dock icon bouncing
+until the app is active and also flashes the window's frame on Windows. From Rust, send
+`WindowControl::RequestAttention { critical }` with `control_window` on the `BridgeEventEmitter`.
+
+## App actions
+
+Actions are things people start the app for straight from its icon, such as a new window. Declare
+them in `Sabine.toml`:
+
+```toml
+[[app.actions]]
+id = "new-window"
+name = "New Window"
+arguments = ["--new-window"]
+```
+
+Choosing one starts the app with the action's arguments. A running single-instance app gets them
+as a second launch would, through [`singleInstance`](/docs/desktop/single-instance/).
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    `sabine bundle` lists the actions in the app's desktop entry, which launchers and docks show
+    when the app's icon is right-clicked. Development runs show none.
+  </TabItem>
+  <TabItem label="Windows">
+    The actions are the tasks of the app's jump list, which the app writes each time it starts.
+    Development runs leave the jump list alone.
+  </TabItem>
+  <TabItem label="macOS">
+    The actions make up the Dock menu while the app runs, and reach it through `singleInstance`
+    whatever its single-instance policy.
+  </TabItem>
+</Tabs>
+
+## Recent files
+
+Add the files people open to the desktop's list of recent files:
+
+```ts
+await app.addRecentDocument("/home/ana/Notes/plans.md");
+await app.clearRecentDocuments();
+```
+
+From Rust, `handle.add_recent_document(path)` and `handle.clear_recent_documents()`. Adding fails
+when the path is not a file. Clearing takes off only the files the app added.
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Files go to `recently-used.xbel` in the data folder, which file managers and file choosers
+    read, named as opened by the app.
+  </TabItem>
+  <TabItem label="Windows">
+    Files go to the person's recent items. The app's jump list shows a file only when its type is
+    registered to open with the app, as [documents](/docs/desktop/links-and-documents/) are.
+  </TabItem>
+  <TabItem label="macOS">
+    Files show under the Dock menu's recent items and in File > Open Recent.
+  </TabItem>
+</Tabs>
+
+## Where it shows
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Badges and progress go out as the `com.canonical.Unity.LauncherEntry` signal for the app's
+    desktop entry, which KDE Plasma, Dash to Dock, Dash to Panel and other docks show. Docks that
+    don't follow it, such as GNOME's own dash, show neither. Only installed apps match their
+    desktop entry, so development runs show nothing. Docks draw paused and failed progress as they
+    draw any other.
+  </TabItem>
+  <TabItem label="Windows">
+    Every window's taskbar button shows the badge as a small overlay icon and the progress in the
+    button itself. Windows opened later show them too. Counts above 99 show as `99+`, and text
+    keeps its first three characters.
+  </TabItem>
+  <TabItem label="macOS">
+    The badge is the Dock tile's own. While there is progress, the Dock tile draws the app's icon
+    with a bar across its foot, in the accent colour, yellow when paused and red on error.
+  </TabItem>
+</Tabs>
+
+## Related pages
+
+- [Single instance](/docs/desktop/single-instance/) covers how a running app gets a second
+  launch's arguments.
+- [Links and documents](/docs/desktop/links-and-documents/) covers registering the file types
+  the app opens.
+- [Manifest](/docs/reference/manifest/#appactions) lists the `[[app.actions]]` keys.

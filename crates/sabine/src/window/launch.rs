@@ -4,8 +4,9 @@ use sabine_runtime::RuntimeInfo;
 use super::manifest::development_env;
 use super::origins::{allow_dev_origins, allow_url_origin};
 use super::{SabineWindow, SabineWindowConfig};
+use crate::bridge::BridgeEventEmitter;
 use crate::desktop::open_urls::{Openable, within_reach};
-use crate::desktop::{DesktopClaim, TRAY_UPDATE_COMMAND};
+use crate::desktop::{DesktopClaim, Launcher, TRAY_UPDATE_COMMAND, launcher_commands};
 use crate::error::{SabineError, SabineResult};
 use crate::host::{SabineProcess, SabineProcessHandle};
 use crate::launch::metrics::LaunchMetrics;
@@ -75,9 +76,16 @@ impl SabineWindow {
             std::env::current_dir().ok().as_deref(),
             &openable,
         );
-        let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart());
+        let emitter = BridgeEventEmitter::default();
+        #[cfg(target_os = "linux")]
+        let launcher = Launcher::new(&self.config)?;
+        #[cfg(target_os = "windows")]
+        let launcher = Launcher::new(emitter.clone());
+        #[cfg(target_os = "macos")]
+        let launcher = Launcher::new();
+        let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart(), launcher);
         desktop_services.attach(&handle);
-        self = self.app_commands(&handle);
+        self = launcher_commands(self.app_commands(&handle), &handle);
         let app_id = osr::launch::require_app_id(&self.config)?.to_string();
         let store = Store::open(&app_id);
         self = self.storage_commands(&store, &Secrets::new(&app_id));
@@ -97,6 +105,7 @@ impl SabineWindow {
             &self.bridge_handlers,
             &url,
             (handle, commands),
+            emitter,
             metrics.clone(),
         )?;
         crate::storage::forward_store_changes(&store, process.bridge_event_emitter());

@@ -1,4 +1,4 @@
-use sabine_service::manifest::AppSection;
+use sabine_service::manifest::{AppAction, AppSection};
 
 const MAIN_CATEGORIES: [&str; 13] = [
     "AudioVideo",
@@ -24,6 +24,7 @@ pub(crate) struct Listing {
     pub keywords: Vec<String>,
     pub listed: bool,
     pub autostart_arguments: Option<String>,
+    pub actions: Vec<AppAction>,
 }
 
 impl Default for Listing {
@@ -43,6 +44,7 @@ impl Listing {
             keywords: app.keywords.clone(),
             listed: app.listed.unwrap_or(true),
             autostart_arguments: app.autostart_arguments.clone(),
+            actions: app.actions.clone(),
         }
     }
 
@@ -95,7 +97,7 @@ impl Listing {
                 MAIN_CATEGORIES.join(", ")
             ));
         }
-        Ok(())
+        AppAction::validate_all(&self.actions)
     }
 }
 
@@ -142,6 +144,26 @@ impl Entry<'_> {
                 string(arguments.trim())
             ));
         }
+        let actions = &self.listing.actions;
+        if !actions.is_empty() {
+            let ids = actions
+                .iter()
+                .map(|action| action.id.clone())
+                .collect::<Vec<_>>();
+            entry.push_str(&format!("Actions={}\n", list(&ids)));
+        }
+        for action in actions {
+            let command = std::iter::once(self.exec)
+                .chain(action.arguments.iter().map(String::as_str))
+                .map(exec)
+                .collect::<Vec<_>>()
+                .join(" ");
+            entry.push_str(&format!(
+                "\n[Desktop Action {}]\nName={}\nExec={command}\n",
+                action.id,
+                string(&action.name)
+            ));
+        }
         entry
     }
 }
@@ -183,6 +205,7 @@ mod tests {
             keywords: vec!["console".to_string(), "a;b".to_string()],
             listed: true,
             autostart_arguments: Some("--background".to_string()),
+            actions: Vec::new(),
         };
         let entry = Entry {
             id: "com.example.tern",
@@ -216,6 +239,31 @@ mod tests {
         .render();
         assert!(entry.contains("NoDisplay=true\n"));
         assert!(entry.contains("MimeType=x-scheme-handler/example-signin;\n"));
+    }
+
+    #[test]
+    fn lists_actions_after_the_main_entry() {
+        let listing = Listing {
+            actions: vec![AppAction {
+                id: "new-window".to_string(),
+                name: "New Window".to_string(),
+                arguments: vec!["--new-window".to_string(), "50%".to_string()],
+            }],
+            ..Listing::default()
+        };
+        let entry = Entry {
+            id: "com.example.tern",
+            name: "Tern",
+            exec: "/opt/tern/tern",
+            icon: None,
+            mime_types: &[],
+            listing: &listing,
+        }
+        .render();
+        assert!(entry.contains("Actions=new-window;\n"));
+        assert!(entry.ends_with(
+            "\n[Desktop Action new-window]\nName=New Window\nExec=\"/opt/tern/tern\" \"--new-window\" \"50%%\"\n"
+        ));
     }
 
     #[test]

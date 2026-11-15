@@ -105,6 +105,26 @@ be a main category: `AudioVideo`, `Audio`, `Video`, `Development`, `Education`, 
 `Network`, `Office`, `Science`, `Settings`, `System` or `Utility`. The first main category also picks
 the macOS application category.
 
+### `[[app.actions]]`
+
+Things people start the app for from its icon's menu: the Linux desktop entry, the Windows jump
+list and the macOS Dock menu. See [Dock and taskbar](/docs/desktop/dock-and-taskbar/#app-actions).
+
+```toml
+[[app.actions]]
+id = "new-window"
+name = "New Window"
+arguments = ["--new-window"]
+```
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Letters, digits and hyphens, unique among the actions |
+| `name` | string | The menu item's label |
+| `arguments` | array of strings | What the app starts with; defaults to none |
+
+`name` and each argument contain no control characters.
+
 ### URL schemes and documents
 
 Each `mime_types` entry is a `type/subtype` made of letters, digits and `/-._+`. An entry of the

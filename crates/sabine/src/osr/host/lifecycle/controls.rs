@@ -105,6 +105,7 @@ impl OsrNativeHost {
                     window.set_fullscreen(enabled.then_some(Fullscreen::Borderless(None)));
                 }
             }
+            WindowControl::RequestAttention { critical } => self.request_attention(critical),
         }
         Ok(())
     }

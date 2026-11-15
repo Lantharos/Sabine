@@ -5,4 +5,6 @@ pub(in crate::osr::host) mod cursor;
 mod file_dialog;
 mod loading;
 mod loading_messages;
+#[cfg(target_os = "windows")]
+pub(in crate::osr::host) mod taskbar;
 mod tooltip;
