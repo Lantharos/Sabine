@@ -80,7 +80,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | [Secrets](/docs/web/store-and-secrets/#secrets) | Secret Service | Credential Manager | Login keychain |
 | Cookie and password encryption | Secret Service, or KWallet on KDE | DPAPI | A fixed key |
 | [Crash reports](/docs/distribution/crash-reports-and-logs/) | Yes | Yes | Yes |
-| Screen readers | No | No | No |
+| [Screen readers](/docs/web/accessibility/) | AT-SPI | UI Automation | NSAccessibility |
 | [Shared Chromium process](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux) | Apps installed for every user | No, one per app | No, one per app |
 | Browser sandbox | Namespaces and seccomp | Restricted processes | Seatbelt |
 | [App sandbox](/docs/distribution/app-sandbox/) | Enforced | Declared, not enforced | Declared, not enforced |
@@ -132,7 +132,6 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 
 ### Every platform
 
-- **Screen readers.** The off-screen browser's accessibility tree isn't exposed to UI Automation, NSAccessibility or AT-SPI. Semantic HTML still helps keyboard navigation, but Sabine windows aren't accessible to desktop screen readers.
 - **Codecs.** Chromium's runtime has no H.264, HEVC or AAC decoders. Play such media through [native video](/docs/web/native-video/), which needs a transparent window.
 - **Browser permissions.** Camera, microphone and geolocation requests are denied, and there is no API to grant them.
 - **Pen data.** Chromium's pen input carries no tilt, twist or barrel pressure, and no button state while the pen touches the screen. Tilt and barrel buttons come through [`events.pen`](/docs/reference/javascript-api/#payloads) instead.

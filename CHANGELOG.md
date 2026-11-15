@@ -23,6 +23,12 @@
 - `system.watchIdle(seconds, callback)` and `IdleWatch` report people going idle and coming back.
 - An activity begun with `keepAwake: "system"` or `"display"`, or `.keep_awake(KeepAwake::…)` in
   Rust, keeps the machine from sleeping until it ends, and `SleepBlocker` does the same from Rust.
+- Screen readers read and use the page: Orca through AT-SPI on Linux, Narrator, NVDA and JAWS
+  through UI Automation on Windows, and VoiceOver through NSAccessibility on macOS. They get its
+  roles, names, states, text with the caret, focus and live regions, and can focus, click, edit,
+  select and scroll. Chromium builds the tree only while assistive technology reads the window.
+- Confined apps on Linux reach the accessibility bus through a filter, as Flatpaks do, so screen
+  readers read them without them reading other apps.
 
 # Sabine 0.90
 

@@ -86,9 +86,12 @@ A confined app:
   `camera`, and the cameras with `camera`, but no other socket in your runtime folder, such as the
   session bus, the service manager or other apps'
 - talks over the session bus only to the names in `talk` and to what Sabine itself uses: the
-  desktop and document portals, notifications, the tray and GNOME's idle monitor. An app that keeps
-  [secrets](/docs/web/store-and-secrets/#secrets) adds `org.freedesktop.secrets`, which also lets
-  Chromium keep its cookie key in the keyring instead of using a fixed one
+  desktop and document portals, notifications, the tray, GNOME's idle monitor and whether a screen
+  reader runs. An app that keeps [secrets](/docs/web/store-and-secrets/#secrets) adds
+  `org.freedesktop.secrets`, which also lets Chromium keep its cookie key in the keyring instead of
+  using a fixed one
+- offers its own accessibility to screen readers, but can't read or drive other apps through the
+  accessibility bus
 - reads its own program, web assets, Sabine's host and the CEF runtime, and writes Sabine's logs
 - reaches the declared `filesystems` and `devices`, and nothing else in your home folder
 - can't reach abstract sockets or signal processes outside the app
@@ -124,8 +127,10 @@ let opened = within_reach(paths, Handed::Existing).await?;
 let save_as = within_reach(vec![chosen], Handed::New).await?;
 ```
 
-Sabine filters the session bus with `xdg-dbus-proxy`, which the app starts before it confines
-itself. Without it, a confined app gets no session bus at all, and records that in its diagnostics.
+Sabine filters the session bus and the accessibility bus with `xdg-dbus-proxy`, which the app
+starts before it confines itself, with the rules Flatpak uses for the accessibility bus. Without
+it, a confined app gets neither bus, so screen readers can't read it, and it records that in its
+diagnostics.
 A confined app never joins the [shared runtime](/docs/concepts/shared-runtime/), which runs outside
 its confinement.
 

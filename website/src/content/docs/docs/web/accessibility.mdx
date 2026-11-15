@@ -1,0 +1,58 @@
+---
+title: Accessibility
+description: How screen readers and other assistive technology read and use your app's page.
+sidebar:
+  order: 6
+---
+
+Screen readers read a Sabine window as they read a browser tab. Chromium renders the page off
+screen, so Sabine hands its accessibility tree to the desktop itself: AT-SPI on Linux, UI
+Automation on Windows and NSAccessibility on macOS. Orca, Narrator, NVDA, JAWS and VoiceOver all
+work with it.
+
+There is nothing to turn on. Chromium builds the tree only once assistive technology reads the
+window, and on Linux stops when it goes away, so a window nobody reads with a screen reader pays
+nothing for it. What a screen reader finds is what your HTML says, so the usual web practice
+applies: semantic elements, labelled controls and ARIA where HTML falls short.
+
+## What assistive technology sees
+
+- the window, with the page and its same-site frames inside it
+- roles, names, descriptions, values and states, such as checked, expanded, disabled, required
+  and selected
+- headings and their levels, lists, tables with their rows, columns and headers, and landmarks
+- which element labels, describes or controls another, and the active descendant of composite
+  widgets
+- the focused element, as focus moves
+- live regions, announced as `aria-live` asks
+- text by character and word, with the caret and selection in fields, so screen readers read and
+  edit text as in any other app
+- where each element is in the window, for magnifiers and touch exploration
+
+## What it can do
+
+| Action | What happens in the page |
+| --- | --- |
+| Focus | The element takes focus, as when tabbed to |
+| Click, expand or collapse | The element is clicked |
+| Set a value | The field's value changes, and `input` and `change` fire |
+| Move the caret or select text | The selection moves, in fields and editable content |
+| Increment or decrement | Sliders and number fields step, and `input` and `change` fire |
+| Scroll | The element scrolls into view, or a scrolling element scrolls by a line or a page |
+
+## Limits
+
+- Guests aren't exposed to assistive technology yet, only the window's page.
+- Frames from another site run in a process of their own; screen readers read them, but their
+  actions don't reach their elements.
+- After an element scrolls its content, the positions inside it catch up with the next change to
+  the page.
+- In editable content, screen readers follow the caret but not the extent of a selection.
+- On Windows and macOS, once assistive technology reads a window, Chromium keeps its tree until the
+  window closes.
+
+## Testing
+
+Try the app with the screen reader your users have: Orca on Linux, Narrator or NVDA on Windows and
+VoiceOver on macOS. Accerciser, Accessibility Insights and Xcode's Accessibility Inspector show the
+tree they read.
