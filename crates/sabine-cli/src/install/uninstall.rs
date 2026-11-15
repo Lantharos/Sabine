@@ -37,6 +37,14 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     let bundle_install = directory.join("bundle-install.json").is_file();
     let registered = service.app(&id);
     if !source_install && !bundle_install {
+        if let Some(system) = super::system::SystemInstall::read(&id)? {
+            system.remove(&id)?;
+            if purge {
+                remove_data(&id, &directory)?;
+            }
+            report_uninstalled(&system.name, purge);
+            return Ok(ExitCode::SUCCESS);
+        }
         let app = registered.map_err(|error| error.to_string())?;
         if sabine_service::installed_by_store(&app) {
             service.remove_app(&id).map_err(|error| error.to_string())?;
@@ -72,7 +80,6 @@ pub fn run(target: Option<String>, system: bool, purge: bool) -> Result<ExitCode
     }
     for entry in [
         "launch.sh",
-        "launch.cmd",
         "web",
         "icons",
         "source-install.toml",
@@ -153,7 +160,7 @@ fn remove_desktop(id: &str, name: &str, directory: &Path) -> Result<(), String> 
     #[cfg(windows)]
     {
         super::handlers::windows::remove(&install)?;
-        super::desktop::remove_windows_shortcut(name)?;
+        super::shortcut::remove(name, super::shortcut::StartMenu::User)?;
     }
     Ok(())
 }

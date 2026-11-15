@@ -28,6 +28,8 @@ pub struct DevOptions {
     pub no_runtime_prepare: bool,
     pub command: Option<String>,
     pub args: Vec<String>,
+    /// The id a development install runs the app as.
+    pub app_id: Option<String>,
 }
 
 pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
@@ -217,8 +219,10 @@ fn run_cargo(
     command.current_dir(&project.source);
     environment.apply(&mut command);
     command.env_remove("SABINE_DEV_URL");
-    if let Some(id) = std::env::var("SABINE_APP_ID")
-        .ok()
+    if let Some(id) = options
+        .app_id
+        .clone()
+        .or_else(|| std::env::var("SABINE_APP_ID").ok())
         .or_else(|| project.app_id.clone())
     {
         command.env(

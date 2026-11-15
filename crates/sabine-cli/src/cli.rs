@@ -32,6 +32,14 @@ pub(crate) enum Command {
         #[arg(last = true)]
         args: Vec<String>,
     },
+    /// Run a development install, as its shortcuts do.
+    #[cfg(windows)]
+    #[command(hide = true)]
+    Launch {
+        id: String,
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
     /// Write the app's TypeScript bindings, or check that they are current.
     Bindings {
         #[arg(default_value = ".")]

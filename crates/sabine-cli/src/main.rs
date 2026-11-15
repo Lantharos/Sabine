@@ -59,6 +59,7 @@ fn main() -> ExitCode {
             no_runtime_prepare,
             command,
             args,
+            app_id: None,
         }) {
             Ok(code) => code,
             Err(error) => {
@@ -66,6 +67,8 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        #[cfg(windows)]
+        Command::Launch { id, args } => report(install::source::launch(&id, args)),
         Command::Bindings { source, check } => match dev::run_bindings(&source, check) {
             Ok(code) => code,
             Err(error) => {
