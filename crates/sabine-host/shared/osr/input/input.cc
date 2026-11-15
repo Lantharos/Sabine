@@ -254,7 +254,7 @@ void SabineOsrHandler::HandleControlLine(
     event.modifiers = modifiers;
     event.windows_key_code = key_code;
     event.native_key_code = native_key_code;
-    const std::u16string characters = Utf8ToUtf16(text);
+    const std::u16string characters = CefString(text).ToString16();
     if (characters.size() == 1) {
       event.character = characters.front();
       event.unmodified_character = characters.front();

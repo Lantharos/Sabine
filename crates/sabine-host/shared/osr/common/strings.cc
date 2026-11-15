@@ -1,6 +1,5 @@
 #include "osr/common/strings.h"
 
-#include <cstdint>
 #include <sstream>
 
 namespace sabine_osr {
@@ -68,38 +67,6 @@ std::string HtmlEscape(const std::string& value) {
     }
   }
   return escaped;
-}
-
-std::u16string Utf8ToUtf16(const std::string& value) {
-  std::u16string output;
-  for (size_t i = 0; i < value.size();) {
-    uint32_t cp = static_cast<unsigned char>(value[i++]);
-    if ((cp & 0x80) == 0) {
-    } else if ((cp & 0xe0) == 0xc0 && i < value.size()) {
-      const uint32_t b1 = static_cast<unsigned char>(value[i++]);
-      cp = ((cp & 0x1f) << 6) | (b1 & 0x3f);
-    } else if ((cp & 0xf0) == 0xe0 && i + 1 < value.size()) {
-      const uint32_t b1 = static_cast<unsigned char>(value[i++]);
-      const uint32_t b2 = static_cast<unsigned char>(value[i++]);
-      cp = ((cp & 0x0f) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f);
-    } else if ((cp & 0xf8) == 0xf0 && i + 2 < value.size()) {
-      const uint32_t b1 = static_cast<unsigned char>(value[i++]);
-      const uint32_t b2 = static_cast<unsigned char>(value[i++]);
-      const uint32_t b3 = static_cast<unsigned char>(value[i++]);
-      cp = ((cp & 0x07) << 18) | ((b1 & 0x3f) << 12) | ((b2 & 0x3f) << 6) |
-           (b3 & 0x3f);
-    } else {
-      continue;
-    }
-    if (cp <= 0xffff) {
-      output.push_back(static_cast<char16_t>(cp));
-    } else {
-      cp -= 0x10000;
-      output.push_back(static_cast<char16_t>(0xd800 + (cp >> 10)));
-      output.push_back(static_cast<char16_t>(0xdc00 + (cp & 0x3ff)));
-    }
-  }
-  return output;
 }
 
 bool ParseBridgeResponse(const std::string& line,
