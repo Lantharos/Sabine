@@ -19,6 +19,7 @@ path = "src/main.rs"
 [dependencies]
 clap.workspace = true
 ctrlc = { workspace = true, features = ["termination"] }
+dirs.workspace = true
 dunce.workspace = true
 editpe.workspace = true
 sabine-host.workspace = true
@@ -31,6 +32,7 @@ sha2.workspace = true
 base64.workspace = true
 getrandom.workspace = true
 image.workspace = true
+notify.workspace = true
 resvg.workspace = true
 icns.workspace = true
 toml.workspace = true
@@ -52,7 +54,10 @@ libc.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_System_Com",
     "Win32_System_Registry",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
+    "Win32_UI_Shell",
 ] }

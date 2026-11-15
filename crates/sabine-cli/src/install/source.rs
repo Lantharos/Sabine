@@ -1,5 +1,5 @@
 mod launcher;
-use launcher::launcher_script;
+use launcher::Launcher;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -10,7 +10,8 @@ use std::{
 use crate::{
     desktop::{entry::Listing, icons, types::Associations},
     install::{assets::stage_icon, desktop as source_desktop},
-    project::{CargoPackage, absolute_path, detect_icon, read_sabine_file, sanitize_id},
+    project::{CargoPackage, detect_icon, read_sabine_file},
+    util::{existing_path, sanitize_id},
 };
 
 #[derive(Debug)]
@@ -84,7 +85,7 @@ pub(crate) fn detect_source_app(
     command: Option<String>,
     autostart: bool,
 ) -> Result<SourceApp, String> {
-    let source = absolute_path(source)?;
+    let source = existing_path(source)?;
     let sabine = read_sabine_file(&source)?;
     let listing = Listing::of(&sabine.app);
     listing.validate()?;
@@ -133,13 +134,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
     fs::create_dir_all(&app_dir).map_err(|error| error.to_string())?;
     let staged_icon = stage_icon(&app_dir, app.icon.as_deref())?;
     let desktop_icon = icons::install_user_icon(&app.id, staged_icon.as_deref())?;
-    let wrapper = app_dir.join(if cfg!(target_os = "windows") {
-        "launch.cmd"
-    } else {
-        "launch.sh"
-    });
-    fs::write(&wrapper, launcher_script(app)?).map_err(|error| error.to_string())?;
-    sabine_runtime::make_executable(&wrapper).map_err(|error| error.to_string())?;
+    let launcher = Launcher::install(app, &app_dir)?;
     let record = toml::to_string(&SourceRecord::of(app)).map_err(|error| error.to_string())?;
     fs::write(app_dir.join(SOURCE_RECORD), record).map_err(|error| error.to_string())?;
 
@@ -148,8 +143,8 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
             id: app.id.clone(),
             name: app.name.clone(),
             version: app.version.clone(),
-            executable: wrapper.clone(),
-            args: Vec::new(),
+            executable: launcher.program.clone(),
+            args: launcher.arguments.clone(),
             update: None,
             sabine: sabine_service::SabineVersion::current(),
         })
@@ -161,27 +156,33 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
         fs::create_dir_all(&desktop_dir).map_err(|error| error.to_string())?;
         fs::write(
             desktop_dir.join(format!("{}.desktop", app.id)),
-            source_desktop::entry(app, &wrapper, desktop_icon.as_deref()),
+            source_desktop::entry(app, &launcher.program, desktop_icon.as_deref()),
         )
         .map_err(|error| error.to_string())?;
         sabine_service::refresh_desktop_database(&desktop_dir);
     }
     #[cfg(target_os = "windows")]
     if desktop {
-        source_desktop::install_windows_shortcut(
-            &app.name,
-            app.listing.generic_name.as_deref(),
-            &wrapper,
-            desktop_icon.as_deref(),
-            false,
-        )?;
+        super::shortcut::Shortcut {
+            name: &app.name,
+            target: &launcher.program,
+            arguments: &launcher.arguments.join(" "),
+            description: app.listing.generic_name.as_deref(),
+            icon: desktop_icon.as_deref(),
+        }
+        .install(super::shortcut::StartMenu::User)?;
     }
     #[cfg(target_os = "macos")]
     if desktop {
-        source_desktop::install_macos_app(app, &wrapper)?;
+        source_desktop::install_macos_app(app, &launcher.program)?;
     }
+    #[cfg(target_os = "windows")]
     if app.autostart {
-        source_desktop::install_autostart(app, &wrapper, desktop_icon.as_deref())?;
+        source_desktop::install_windows_autostart(&app.id, &launcher.command_line())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    if app.autostart {
+        source_desktop::install_autostart(app, &launcher.program, desktop_icon.as_deref())?;
     }
     Ok(())
 }
@@ -212,6 +213,22 @@ impl SourceRecord {
             autostart: app.autostart,
         }
     }
+}
+
+/// Runs the development install `id` names, as its Windows shortcuts do.
+#[cfg(windows)]
+pub fn launch(id: &str, args: Vec<String>) -> Result<ExitCode, String> {
+    let app = read_registered_app(id)?;
+    crate::dev::run_dev(crate::dev::DevOptions {
+        source: app.source,
+        release: false,
+        no_install: false,
+        web_only: false,
+        no_runtime_prepare: false,
+        command: app.command,
+        args,
+        app_id: Some(app.id),
+    })
 }
 
 pub(crate) fn read_registered_app(id: &str) -> Result<SourceApp, String> {

@@ -126,7 +126,9 @@ sabine uninstall --system
 project it removes the development launcher when there is one, and the production install
 otherwise. It removes the app's launcher entry, shortcuts, file types, autostart entry and
 registration, and the files the install put there; files the app or you added to the install folder
-stay, and so does the folder until it's empty. App data and browser profiles are kept.
+stay, and so does the folder until it's empty. App data and browser profiles are kept. An app
+installed for every user goes with its files and shortcut, which needs administrator rights; Sabine
+keeps a list of them under `installed-apps` in the machine-wide Sabine folder.
 
 | Option | Effect |
 | --- | --- |
@@ -244,7 +246,7 @@ user.
     | --- | --- |
     | Sabine's data: service, host, runtimes, registry, downloads, logs | `%LOCALAPPDATA%\Sabine` |
     | `sabine install` apps | `%LOCALAPPDATA%\Sabine\apps\<app id>\install` |
-    | Development launchers | `%LOCALAPPDATA%\Sabine\apps\<app id>.dev\launch.cmd` |
+    | Development launchers | Start menu shortcuts that run `sabine launch <app id>.dev` |
     | Start menu shortcuts of `sabine install` apps | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\<app name>.lnk` |
     | Start at login | A value named after the app id under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
     | MSI and setup installs | `%LOCALAPPDATA%\Programs\<app id>` |

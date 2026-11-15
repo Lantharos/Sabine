@@ -2,6 +2,8 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use super::shortcut::{Shortcut, StartMenu};
 use crate::install::source::SourceApp;
 
 pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
@@ -30,15 +32,16 @@ pub fn install_entry(app: &SourceApp, executable: &Path) -> Result<(), String> {
         let icon = crate::desktop::icons::install_user_icon(&app.id, app.icon.as_deref())?;
         super::handlers::windows::register(app, executable)?;
         if app.listing.listed {
-            install_windows_shortcut(
-                &app.name,
-                app.listing.generic_name.as_deref(),
-                executable,
-                icon.as_deref(),
-                false,
-            )?;
+            Shortcut {
+                name: &app.name,
+                target: executable,
+                arguments: "",
+                description: app.listing.generic_name.as_deref(),
+                icon: icon.as_deref(),
+            }
+            .install(StartMenu::User)?;
         } else {
-            remove_windows_shortcut(&app.name)?;
+            super::shortcut::remove(&app.name, StartMenu::User)?;
         }
     }
     #[cfg(target_os = "macos")]
@@ -90,7 +93,7 @@ fn register_with_launch_services(bundle: &Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-use crate::desktop::macos::xml;
+use crate::util::xml;
 
 #[cfg(target_os = "linux")]
 pub fn entry(app: &SourceApp, wrapper: &Path, desktop_icon: Option<&str>) -> String {
@@ -121,12 +124,7 @@ pub fn install_autostart(
     #[cfg(target_os = "windows")]
     {
         let _ = desktop_icon;
-        sabine_service::windows_registry::set_current_user_value(
-            sabine_service::APP_AUTOSTART_KEY,
-            &app.id,
-            &format!("\"{}\"", wrapper.display()),
-        )
-        .map_err(|error| error.to_string())
+        install_windows_autostart(&app.id, &format!("\"{}\"", wrapper.display()))
     }
     #[cfg(target_os = "macos")]
     {
@@ -148,37 +146,13 @@ pub fn install_autostart(
 }
 
 #[cfg(target_os = "windows")]
-pub fn install_windows_shortcut(
-    app_name: &str,
-    description: Option<&str>,
-    wrapper: &Path,
-    icon: Option<&str>,
-    all_users: bool,
-) -> Result<(), String> {
-    let file = powershell_string(&shortcut_file(app_name));
-    let target = powershell_string(&wrapper.display().to_string());
-    let icon = icon
-        .map(|icon| format!("$shortcut.IconLocation='{}';", powershell_string(icon)))
-        .unwrap_or_default();
-    let description = description
-        .map(|name| format!("$shortcut.Description='{}';", powershell_string(name)))
-        .unwrap_or_default();
-    let folder = if all_users {
-        "CommonPrograms"
-    } else {
-        "Programs"
-    };
-    let script = format!(
-        "$dir=[Environment]::GetFolderPath('{folder}'); $shell=New-Object -ComObject WScript.Shell; $shortcut=$shell.CreateShortcut((Join-Path $dir '{file}')); $shortcut.TargetPath='{target}'; {icon}{description}$shortcut.Save()"
-    );
-    let status = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .status()
-        .map_err(|error| error.to_string())?;
-    status
-        .success()
-        .then_some(())
-        .ok_or_else(|| "failed to create Windows Start Menu shortcut".to_string())
+pub fn install_windows_autostart(id: &str, command: &str) -> Result<(), String> {
+    sabine_service::windows_registry::set_current_user_value(
+        sabine_service::APP_AUTOSTART_KEY,
+        id,
+        command,
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -224,34 +198,4 @@ pub fn install_macos_app(app: &SourceApp, wrapper: &Path) -> Result<(), String> 
         .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(launch, permissions).map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "windows")]
-pub fn remove_windows_shortcut(app_name: &str) -> Result<(), String> {
-    let programs =
-        std::path::PathBuf::from(std::env::var_os("APPDATA").ok_or("APPDATA is not set")?)
-            .join("Microsoft/Windows/Start Menu/Programs");
-    sabine_runtime::remove_file_if_present(&programs.join(shortcut_file(app_name)))
-        .map_err(|error| error.to_string())
-}
-
-/// The Start menu lists a shortcut by its file name, so it is the app's name.
-#[cfg(target_os = "windows")]
-fn shortcut_file(app_name: &str) -> String {
-    let name = app_name
-        .chars()
-        .map(|character| {
-            if character.is_control() || r#"\/:*?"<>|"#.contains(character) {
-                '-'
-            } else {
-                character
-            }
-        })
-        .collect::<String>();
-    format!("{}.lnk", name.trim_end_matches(['.', ' ']))
-}
-
-#[cfg(target_os = "windows")]
-fn powershell_string(value: &str) -> String {
-    value.replace('\'', "''").replace(['\r', '\n'], " ")
 }

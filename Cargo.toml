@@ -71,6 +71,7 @@ khronos-egl = { version = "6.0.0", features = ["dynamic"] }
 landlock = "0.4.7"
 libc = "0.2.190"
 mime = "0.3.17"
+notify = "8.2.2"
 lopdf = { version = "0.46.0", default-features = false }
 libloading = "0.9.0"
 resvg = "0.48.1"

@@ -61,7 +61,9 @@ repository's secrets and settings.
 - It takes the repository from `--repository`, then `GITHUB_REPOSITORY`, then `gh repo view` in the
   current folder.
 - It generates a new Ed25519 signing key and stores it as the repository's Actions secret
-  `SABINE_UPDATE_SIGNING_KEY`. The private key never touches the disk.
+  `SABINE_UPDATE_SIGNING_KEY`. It also saves a copy in a `sabine-keys` folder in your user's
+  configuration folder, readable only by you, and prints where; keep it somewhere safe, since
+  GitHub never shows a secret again.
 - It turns on immutable releases for the repository, so a published release can't be changed.
 - It sets `provider = "github"`, the repository and the new `public_key` in the `[updates]` table of
   the folder's `Sabine.toml`, creating the file or the table when there is none. An app that updated
@@ -102,25 +104,37 @@ permissions:
 
 jobs:
   release:
-    uses: Lantharos/Sabine/.github/workflows/release-app.yml@${tag}
+    uses: Lantharos/Sabine/.github/workflows/release-app.yml@<release commit> # ${tag}
     with:
       sabine_version: ${tag}
-      # Building the MSI package accepts the WiX 7 license: https://docs.firegiant.com/wix/osmf/
-      accept_wix_eula: true
-    secrets: inherit
+      # MSI packages need the WiX 7 license: review https://docs.firegiant.com/wix/osmf/ and set this to true
+      accept_wix_eula: false
+    secrets:
+      SABINE_UPDATE_SIGNING_KEY: \${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+      MACOS_CERTIFICATE: \${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: \${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: \${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_API_KEY: \${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: \${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: \${{ secrets.APPLE_API_ISSUER }}
+      WINDOWS_CERTIFICATE: \${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: \${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
 `} />
 
-Keep `sabine_version` and the workflow's tag on the Sabine release your app builds against;
-`sabine release-init` moves both onto the CLI's release. The written workflow accepts the WiX
-license that MSI builds need, so read its terms before you publish; without `accept_wix_eula`, the
-Windows builds stop.
+The workflow is pinned to the commit the Sabine tag points to, so the tag can't change under it;
+<code>git ls-remote https://github.com/Lantharos/Sabine refs/tags/{tag}</code> prints it.
+Keep `sabine_version` and the pinned commit on the Sabine release your app builds against;
+`sabine release-init` moves both onto the CLI's release. Windows builds leave out the MSI package
+until you set `accept_wix_eula: true`, after reading the WiX license.
 
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `sabine_version` | required | The Sabine tag to install the CLI from, such as <code>{tag}</code> |
 | `rust_toolchain` | `stable` | The Rust toolchain that builds the app; Sabine needs 1.98 or newer |
-| `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/) for MSI builds. MSI builds stop until you set it to `true` after reviewing the terms |
+| `accept_wix_eula` | `false` | Accepts the [WiX 7 EULA](https://docs.firegiant.com/wix/osmf/), so Windows builds include an MSI package and test it. Without it, they build the setup `.exe` and the tarball only |
 | `upgrade_from_sabine_version` | empty | An older Sabine tag to install before the Windows launch test, to check that your app works on a machine upgrading from it |
+| `version` | `[app] version` | The version to build instead of the one in `Sabine.toml`, such as a nightly's `0.2.0-nightly.202611030415.g1a2b3c4` |
+| `artifact` | `release` | What the builds' artifacts are named, followed by the platform, so several apps can build in one run |
 | `app` | `.` | The app's folder, for a repository that holds several apps, which [update from Schelf](#updating-from-schelf). The workflow reads its `Sabine.toml` and bundles it from there; web dependencies still install at the repository root |
 | `platforms` | every platform | The platforms to build, separated by spaces, such as `linux-x86_64 linux-aarch64`, for an app that doesn't run everywhere. The platforms are `linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-aarch64` and `macos-aarch64`; any other name stops the run before it builds |
 | `linux_packages` | empty | More Ubuntu packages the Linux builds install, for apps that link system libraries |
@@ -128,13 +142,15 @@ Windows builds stop.
 The workflow needs the `SABINE_UPDATE_SIGNING_KEY` secret, unless the app
 [updates from Schelf](#updating-from-schelf), and takes the optional
 [signing secrets](/docs/distribution/code-signing/#the-release-workflows-secrets) for macOS and
-Windows. `secrets: inherit` passes them all on.
+Windows, each passed by name. Only the step that signs and packages sees them.
 
 ### What it builds
 
-Each platform builds on a runner of its own, installs the matching Sabine CLI with
-`cargo install`, installs your web dependencies with `bun install --frozen-lockfile` at the
-repository root, and runs `sabine bundle` for each package:
+Each platform builds on a runner of its own. It downloads the matching Sabine CLI from Sabine's
+release and checks its build provenance with `gh attestation verify`, installs your web
+dependencies with `bun install --frozen-lockfile` at the repository root, builds the app and its
+page once with `sabine bundle --build-only`, and then signs and packages every package from that
+build:
 
 | Platform | Packages |
 | --- | --- |
@@ -147,7 +163,7 @@ unpacked portable bundles.
 
 With `platforms`, only the platforms you name build, and the release carries only their packages.
 
-On Windows x86_64 the workflow then installs the MSI silently on a clean machine, launches the app,
+When it builds an MSI, the Windows x86_64 run then installs it silently on a clean machine, launches the app,
 waits for Sabine's first-run setup to finish with a running service, and checks that the page
 renders, before uninstalling it again. It also checks that the executable needs no C runtime
 redistributable, runs as a GUI program, and carries its icon.
@@ -244,8 +260,7 @@ Publish the release on Schelf first, and wait for its approval, since copies tha
 feed from then on. Then tag the commit it was built from and offer the same packages on GitHub with
 Sabine's handover workflow:
 
-```yaml
-name: Hand over to Schelf
+<Code lang="yaml" title=".github/workflows/handover.yml" code={`name: Hand over to Schelf
 
 on:
   workflow_dispatch:
@@ -260,13 +275,13 @@ permissions:
 
 jobs:
   handover:
-    uses: Lantharos/Sabine/.github/workflows/handover-to-schelf.yml@v0.79
+    uses: Lantharos/Sabine/.github/workflows/handover-to-schelf.yml@<release commit> # ${tag}
     with:
-      run_id: ${{ inputs.run_id }}
-      sabine_version: v0.79
+      run_id: \${{ inputs.run_id }}
+      sabine_version: ${tag}
     secrets:
-      SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
-```
+      SABINE_UPDATE_SIGNING_KEY: \${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+`} />
 
 Run it on the release's tag:
 

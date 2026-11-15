@@ -5,11 +5,14 @@ use std::{
 
 use sabine_service::{Sandbox, SandboxSection, manifest::WindowSection};
 
+use super::CargoPackage;
 use super::file::read_sabine_file;
 use super::updates::resolve_updates;
 use super::web::{WebBundle, resolve_web};
-use super::{CargoPackage, absolute_path, sanitize_id};
-use crate::desktop::{entry::Listing, types::Associations};
+use crate::{
+    desktop::{entry::Listing, types::Associations},
+    util::{existing_path, sanitize_id},
+};
 
 #[derive(Debug)]
 pub(crate) struct BundleApp {
@@ -48,7 +51,7 @@ pub(crate) struct ConfigOverrides {
 }
 
 pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<BundleApp, String> {
-    let source_dir = absolute_path(source)?;
+    let source_dir = existing_path(source)?;
     let sabine = read_sabine_file(&source_dir)?;
     let listing = Listing::of(&sabine.app);
     let cargo_manifest = sabine.cargo_manifest(&source_dir);

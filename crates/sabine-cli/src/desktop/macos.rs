@@ -1,5 +1,7 @@
 use std::{fs::File, io::Read, path::Path};
 
+use crate::util::xml;
+
 pub fn validate_executable(path: &Path) -> Result<(), String> {
     let mut header = [0u8; 32];
     File::open(path)
@@ -77,13 +79,4 @@ pub fn info_plist(
         xml(name),
         xml(executable)
     ))
-}
-
-pub fn xml(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }

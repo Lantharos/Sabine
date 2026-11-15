@@ -15,8 +15,9 @@ packages it with that platform's own tool.
 sabine bundle . --target deb
 ```
 
-Without `--target`, `sabine bundle` builds a `portable` archive for the machine it runs on. Bundles
-use Cargo's release profile; `--debug` packages a debug build instead, which is quicker to build
+Without `--target`, `sabine bundle` builds a `portable` archive for the machine it runs on.
+`--target deb,rpm,appimage` builds several packages for one operating system from a single build.
+Bundles use Cargo's release profile; `--debug` packages a debug build instead, which is quicker to build
 for checking a package but is not what you ship.
 
 ## What a bundle build does
@@ -26,13 +27,15 @@ for checking a package but is not what you ship.
 1. Reads `Sabine.toml` and the Cargo manifest, and resolves the app's id, name, version and
    metadata. See [App metadata](#app-metadata) for the fallbacks.
 
-2. Loads the production environment files and runs your web build command in the web root, such as
-   `bun run build`. Pass `--no-web-build` to package assets you already built.
+2. Loads the production environment files and builds the executable with
+   `cargo build --bin <package>`, for the target's Rust triple when it differs from the machine you
+   build on.
 
-3. Builds the executable with `cargo build --bin <package>`, for the target's Rust triple when it
-   differs from the machine you build on.
+3. Has the built app write its TypeScript bindings when `Sabine.toml` has `[bindings]`, installs
+   the web project's dependencies when it has no `node_modules`, and runs your web build command in
+   the web root, such as `bun run build`. Pass `--no-web-build` to package assets you already built.
 
-4. Stages the app: the executable, your built web assets, `[resources]`, icons, desktop metadata and
+4. Stages the app for each target: the executable, your built web assets, `[resources]`, icons, desktop metadata and
    a production `Sabine.toml` that the app reads at runtime. Development settings such as `dev_url`,
    `dev_port` and `dev_command` are left out.
 
@@ -183,6 +186,7 @@ on they update like any other installation.
 | `--debug` | Builds and packages a debug build instead of Cargo's release profile |
 | `--no-build` | Skips `cargo build` and packages the executable already in Cargo's default output folder |
 | `--binary <path>` | Packages this executable instead of building one |
+| `--build-only` | Builds the page and the executable and stops, printing the executable's path for a later `--binary` run |
 | `--no-web-build` | Skips the web build command and packages the existing output |
 | `--web-build <command>` | Runs this web build command instead of `[web] build` |
 | `--web-root <path>` | Uses this folder as the web root instead of `[web] root` |
@@ -190,7 +194,7 @@ on they update like any other installation.
 | `--id`, `--name`, `--version` | Overrides the app id, name or version for this build |
 | `--env-file <path>` | Loads another environment file for the build; repeat it for several |
 | `--out <path>` | Writes the bundle under this folder instead of `dist` |
-| `--json` | Prints one line of JSON describing the result |
+| `--json` | Prints one line of JSON describing each package |
 
 The web entry has to exist in the built output before staging, and the output folder may not
 overlap your web assets or contain the project itself.

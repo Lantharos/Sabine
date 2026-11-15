@@ -4,7 +4,7 @@
 // ordering are part of the install transaction. Keep setup after InstallFiles
 // and unregister before RemoveFiles; XML that builds can still fail at install.
 
-use crate::{desktop::types::prog_id, project::BundleApp};
+use crate::{desktop::types::prog_id, project::BundleApp, util::xml};
 use std::{fs, path::Path};
 
 pub(in crate::bundle) fn wix_source(
@@ -218,12 +218,4 @@ fn actions() -> String {
 "#
     ))
     .collect()
-}
-
-fn xml(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }

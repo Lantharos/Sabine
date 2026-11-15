@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use serde_json::{Value, json};
 
-use super::{cargo_toml, sanitize_id};
+use super::cargo_toml;
 
 macro_rules! example {
     ($path:literal) => {
@@ -35,11 +35,11 @@ const FONTS: [(&str, &[u8]); 2] = [
     ),
 ];
 
-pub(super) fn write_notes_template(root: &Path, name: &str) -> std::io::Result<()> {
+pub(super) fn write_notes_template(root: &Path, name: &str, id: &str) -> std::io::Result<()> {
     fs::create_dir_all(root.join("src"))?;
     fs::create_dir_all(root.join("ui/fonts"))?;
     fs::write(root.join("Cargo.toml"), cargo_toml(name))?;
-    fs::write(root.join("Sabine.toml"), notes_sabine_toml(name))?;
+    fs::write(root.join("Sabine.toml"), notes_sabine_toml(name, id))?;
     fs::write(root.join("package.json"), notes_package_json(name))?;
     fs::write(root.join("tsconfig.json"), notes_tsconfig())?;
     for (path, contents) in FILES {
@@ -52,13 +52,12 @@ pub(super) fn write_notes_template(root: &Path, name: &str) -> std::io::Result<(
 }
 
 /// The example's manifest with the new app's identity.
-fn notes_sabine_toml(name: &str) -> String {
+fn notes_sabine_toml(name: &str, id: &str) -> String {
     let (_, web) = include_str!(example!("Sabine.toml"))
         .split_once("[web]")
         .expect("the example's manifest has a [web] section");
     format!(
-        "[app]\nid = \"dev.sabine.{}\"\nname = \"{name}\"\nversion = \"0.1.0\"\nicon = \"assets/icon.svg\"\n\n[web]{web}",
-        sanitize_id(name)
+        "[app]\nid = \"{id}\"\nname = \"{name}\"\nversion = \"0.1.0\"\nicon = \"assets/icon.svg\"\n\n[web]{web}"
     )
 }
 

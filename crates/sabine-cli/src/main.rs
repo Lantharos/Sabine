@@ -2,16 +2,18 @@ mod bundle;
 mod desktop;
 mod dev;
 mod handover;
+mod info;
 mod install;
 mod project;
 mod release;
 mod runtime;
 mod template;
 mod update;
+mod util;
 
 use std::process::ExitCode;
 
-use bundle::BundleOptions;
+use bundle::{BuildOptions, BundleOptions};
 use clap::Parser;
 mod cli;
 use cli::{Cli, Command, RuntimeSubcommand};
@@ -41,7 +43,14 @@ fn main() -> ExitCode {
         Err(error) => error.exit(),
     };
     match cli.command {
-        Command::New { name, template } => template::new_app(&name, &template),
+        Command::New { name, template, id } => report(template::new_app(&name, &template, id)),
+        Command::Info { source } => {
+            info::run(&source);
+            ExitCode::SUCCESS
+        }
+        Command::Icon { image, source, out } => {
+            report(desktop::icons::export(image, &source, &out))
+        }
         Command::Dev {
             source,
             release,
@@ -50,7 +59,7 @@ fn main() -> ExitCode {
             no_runtime_prepare,
             command,
             args,
-        } => match dev::run_dev(dev::DevOptions {
+        } => report(dev::run_dev(dev::DevOptions {
             source,
             release,
             no_install,
@@ -58,20 +67,11 @@ fn main() -> ExitCode {
             no_runtime_prepare,
             command,
             args,
-        }) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
-        Command::Bindings { source, check } => match dev::run_bindings(&source, check) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+            app_id: None,
+        })),
+        #[cfg(windows)]
+        Command::Launch { id, args } => report(install::source::launch(&id, args)),
+        Command::Bindings { source, check } => report(dev::run_bindings(&source, check)),
         Command::Runtime { command } => runtime::run_runtime(match command {
             RuntimeSubcommand::Prepare => RuntimeCommand::Prepare,
             #[cfg(target_os = "linux")]
@@ -99,7 +99,7 @@ fn main() -> ExitCode {
             no_desktop,
             system_wide,
             root,
-        } => match install::run(
+        } => report(install::run(
             InstallOptions {
                 source,
                 id,
@@ -114,38 +114,21 @@ fn main() -> ExitCode {
                 (false, false) => install::InstallKind::Source,
             },
             env_file,
-        ) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        )),
         Command::Uninstall {
             target,
             system,
             purge,
-        } => match install::uninstall::run(target, system, purge) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::FAILURE
-            }
-        },
-        Command::Update { target, all, force } => match update::run(target, all, force) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        } => report(install::uninstall::run(target, system, purge)),
+        Command::Update { target, all, force } => report(update::run(target, all, force)),
         Command::Bundle {
             env_file,
             source,
-            target,
+            targets,
             out,
             debug,
             no_build,
+            build_only,
             binary,
             no_web_build,
             web_build,
@@ -156,31 +139,28 @@ fn main() -> ExitCode {
             version,
             json,
             offline,
-        } => match bundle::bundle(BundleOptions {
-            source,
-            target,
+        } => report(bundle::bundle(BundleOptions {
+            build: BuildOptions {
+                source,
+                release: !debug,
+                no_build,
+                binary,
+                no_web_build,
+                web_build,
+                web_root,
+                web_dist,
+                id,
+                name,
+                version,
+                system_wide: false,
+                env_files: env_file,
+            },
+            targets,
             out,
-            release: !debug,
-            no_build,
-            binary,
-            no_web_build,
-            web_build,
-            web_root,
-            web_dist,
-            id,
-            name,
-            version,
+            build_only,
             json,
             offline,
-            system_wide: false,
-            env_files: env_file,
-        }) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        })),
         Command::ReleaseManifest {
             source,
             output,
@@ -189,83 +169,61 @@ fn main() -> ExitCode {
             executable,
             base_url,
             handover_from,
-        } => match release::write_manifest(release::ManifestRequest {
-            source: &source,
-            output: &output,
-            channel: &channel,
-            artifact_specs: &artifact,
-            executable_specs: &executable,
-            base_url: base_url.as_deref(),
-            handover_from,
-        }) {
-            Ok(()) => {
-                println!("wrote {}", output.display());
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        } => report(
+            release::write_manifest(release::ManifestRequest {
+                source: &source,
+                output: &output,
+                channel: &channel,
+                artifact_specs: &artifact,
+                executable_specs: &executable,
+                base_url: base_url.as_deref(),
+                handover_from,
+            })
+            .map(|()| wrote(&output)),
+        ),
         Command::SystemReleaseStage {
             service,
             host,
             output,
-        } => match release::stage_system_release(&service, &host, &output) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        } => report(
+            release::stage_system_release(&service, &host, &output).map(|()| ExitCode::SUCCESS),
+        ),
         Command::SystemReleaseManifest {
             version,
             directory,
             output,
-        } => match release::write_system_manifest(&version, &directory, &output) {
-            Ok(()) => {
-                println!("wrote {}", output.display());
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        } => report(
+            release::write_system_manifest(&version, &directory, &output).map(|()| wrote(&output)),
+        ),
         Command::ReleaseKeygen { public_output } => {
-            match release::generate_signing_key(&public_output) {
-                Ok(private_key) => {
-                    println!("{private_key}");
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("{error}");
-                    ExitCode::from(1)
-                }
-            }
+            report(release::generate_signing_key(&public_output).map(|key| printed(&key)))
         }
-        Command::ReleasePublicKey => match release::signing_public_key() {
-            Ok(public_key) => {
-                println!("{public_key}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        Command::ReleasePublicKey => report(release::signing_public_key().map(|key| printed(&key))),
         Command::ReleaseInit {
             repository,
             rotate_key,
-        } => match release::initialize_github_release(repository.as_deref(), rotate_key) {
-            Ok(public_key) => {
-                println!("configured signed immutable releases (public key {public_key})");
+        } => report(
+            release::initialize_github_release(repository.as_deref(), rotate_key).map(|key| {
+                println!("configured signed immutable releases (public key {key})");
                 ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+            }),
+        ),
     }
+}
+
+fn wrote(output: &std::path::Path) -> ExitCode {
+    println!("wrote {}", output.display());
+    ExitCode::SUCCESS
+}
+
+fn printed(value: &str) -> ExitCode {
+    println!("{value}");
+    ExitCode::SUCCESS
+}
+
+fn report(result: Result<ExitCode, String>) -> ExitCode {
+    result.unwrap_or_else(|error| {
+        eprintln!("{error}");
+        ExitCode::FAILURE
+    })
 }

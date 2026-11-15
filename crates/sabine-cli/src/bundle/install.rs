@@ -1,4 +1,4 @@
-use super::{BuildTarget, BundleOptions, prepare_bundle};
+use super::stage_portable;
 use crate::install::{
     desktop,
     source::{InstallOptions, SourceApp},
@@ -10,28 +10,10 @@ pub fn install_bundle(
     env_files: Vec<PathBuf>,
 ) -> Result<ExitCode, String> {
     let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let (app, format, staged) = prepare_bundle(BundleOptions {
-        source: options.source,
-        target: "portable".into(),
-        out: temporary.path().to_path_buf(),
-        release: true,
-        no_build: false,
-        binary: None,
-        no_web_build: false,
-        web_build: None,
-        web_root: None,
-        web_dist: None,
-        id: options.id,
-        name: options.name,
-        version: None,
-        json: false,
-        offline: false,
-        system_wide: false,
-        env_files: env_files.clone(),
-    })?;
+    let (app, staged) = stage_portable(&options, env_files.clone(), temporary.path(), false)?;
     let service = sabine_service::SabineService::default();
     let directory = service.root().join("apps").join(&app.id);
-    let macos = format.target() == BuildTarget::Macos;
+    let macos = cfg!(target_os = "macos");
     let release = if macos {
         directory.join("install").join(format!("{}.app", app.id))
     } else {

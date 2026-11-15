@@ -15,7 +15,10 @@ use std::{
 
 pub(crate) use init::initialize_github_release;
 
-use crate::project::{ConfigOverrides, absolute_path, resolve_app};
+use crate::{
+    project::{ConfigOverrides, resolve_app},
+    util::existing_path,
+};
 
 pub(crate) struct ManifestRequest<'a> {
     pub source: &'a Path,
@@ -147,8 +150,8 @@ pub(crate) fn stage_system_release(
     let cli = std::env::current_exe().map_err(|error| error.to_string())?;
     sabine_service::stage_system_files(
         output,
-        &absolute_path(service)?,
-        &absolute_path(host)?,
+        &existing_path(service)?,
+        &existing_path(host)?,
         Some(&cli),
     )
     .map_err(|error| error.to_string())
@@ -171,7 +174,7 @@ pub(crate) fn write_system_manifest(
             sabine_service::SABINE_VERSION
         ));
     }
-    let directory = absolute_path(directory)?;
+    let directory = existing_path(directory)?;
     let mut artifacts = BTreeMap::new();
     for entry in std::fs::read_dir(&directory).map_err(|error| error.to_string())? {
         let path = entry.map_err(|error| error.to_string())?.path();

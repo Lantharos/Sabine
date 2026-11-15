@@ -10,10 +10,29 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Create a project.
     New {
         name: String,
+        /// `app`, `react`, `svelte`, `vue`, `solid` or `notes`.
         #[arg(long, default_value = "app")]
         template: String,
+        /// The reverse-DNS identifier of the app, such as com.example.tern.
+        #[arg(long)]
+        id: Option<String>,
+    },
+    /// Show the Sabine, runtime, toolchain and project this machine builds with.
+    Info {
+        #[arg(default_value = ".")]
+        source: PathBuf,
+    },
+    /// Generate the app's icons for every platform from one image.
+    Icon {
+        /// The source image; the project's `[app] icon` when absent.
+        image: Option<PathBuf>,
+        #[arg(long, default_value = ".")]
+        source: PathBuf,
+        #[arg(long, default_value = "dist/icons")]
+        out: PathBuf,
     },
     Dev {
         #[arg(default_value = ".")]
@@ -29,6 +48,14 @@ pub(crate) enum Command {
         /// Run a custom native command alongside the development server.
         #[arg(long)]
         command: Option<String>,
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+    /// Run a development install, as its shortcuts do.
+    #[cfg(windows)]
+    #[command(hide = true)]
+    Launch {
+        id: String,
         #[arg(last = true)]
         args: Vec<String>,
     },
@@ -93,8 +120,9 @@ pub(crate) enum Command {
         env_file: Vec<PathBuf>,
         #[arg(default_value = ".")]
         source: PathBuf,
-        #[arg(long, default_value = "portable")]
-        target: String,
+        /// The packages to build, all for one operating system; repeat it or separate them with commas.
+        #[arg(long = "target", default_value = "portable", value_delimiter = ',')]
+        targets: Vec<String>,
         #[arg(long, default_value = "dist")]
         out: PathBuf,
         /// Package a debug build instead of Cargo's release profile.
@@ -102,6 +130,9 @@ pub(crate) enum Command {
         debug: bool,
         #[arg(long)]
         no_build: bool,
+        /// Build the web assets and the executable without packaging them.
+        #[arg(long, conflicts_with_all = ["no_build", "binary", "no_web_build", "offline"])]
+        build_only: bool,
         #[arg(long)]
         binary: Option<PathBuf>,
         #[arg(long)]

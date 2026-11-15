@@ -13,7 +13,7 @@ on:
         type: string
         default: stable
       accept_wix_eula:
-        description: Accept the WiX 7 EULA for MSI builds (https://docs.firegiant.com/wix/osmf/)
+        description: Accept the WiX 7 EULA (https://docs.firegiant.com/wix/osmf/), so Windows builds include MSI packages
         required: false
         type: boolean
         default: false
@@ -60,14 +60,14 @@ on:
       MACOS_SIGNING_IDENTITY:
         description: 'Signing identity, such as "Developer ID Application: Example (TEAMID)"'
         required: false
-      APPLE_ID:
-        description: Apple ID that notarizes disk images
+      APPLE_API_KEY:
+        description: Contents of the App Store Connect API key (.p8) that notarizes macOS apps
         required: false
-      APPLE_TEAM_ID:
-        description: Apple developer team ID that notarizes disk images
+      APPLE_API_KEY_ID:
+        description: Key ID of the App Store Connect API key
         required: false
-      APPLE_APP_PASSWORD:
-        description: App-specific password for notarization
+      APPLE_API_ISSUER:
+        description: Issuer ID of the App Store Connect API key
         required: false
       WINDOWS_CERTIFICATE:
         description: Base64 Authenticode certificate (.pfx) that signs Windows apps and installers
@@ -77,35 +77,46 @@ on:
         required: false
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
+
+concurrency:
+  group: sabine-release-app-${{ github.ref }}-${{ inputs.artifact }}
+  cancel-in-progress: false
 
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       schelf: ${{ steps.plan.outputs.schelf }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
           sparse-checkout: ${{ inputs.app == '.' && 'Sabine.toml' || format('{0}/Sabine.toml', inputs.app) }}
           sparse-checkout-cone-mode: false
       - id: plan
         shell: pwsh
+        env:
+          APP: ${{ inputs.app }}
+          PLATFORMS: ${{ inputs.platforms }}
+          ACCEPT_WIX_EULA: ${{ inputs.accept_wix_eula }}
         run: |
-          $schelf = (Get-Content (Join-Path '${{ inputs.app }}' Sabine.toml) -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
+          $schelf = (Get-Content (Join-Path $env:APP Sabine.toml) -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
           "schelf=$($schelf.ToString().ToLower())" >> $env:GITHUB_OUTPUT
-          $linux = @{ targets = 'appimage deb rpm portable' }
+          $windows = if ($env:ACCEPT_WIX_EULA -eq 'true') { 'msi,exe,windows' } else { 'exe,windows' }
+          $linux = @{ targets = 'appimage,deb,rpm,portable' }
           $platforms = @(
-            @{ os = 'windows-latest'; platform = 'windows-x86_64'; targets = 'msi exe windows' }
-            @{ os = 'windows-11-arm'; platform = 'windows-aarch64'; targets = 'msi exe windows' }
-            @{ os = 'macos-15'; platform = 'macos-aarch64'; targets = 'dmg macos' }
+            @{ os = 'windows-latest'; platform = 'windows-x86_64'; targets = $windows }
+            @{ os = 'windows-11-arm'; platform = 'windows-aarch64'; targets = $windows }
+            @{ os = 'macos-15'; platform = 'macos-aarch64'; targets = 'dmg,macos' }
             $linux + @{ os = 'ubuntu-24.04'; platform = 'linux-x86_64'; appimagetool = 'x86_64'; appimagetool_sha256 = 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0' }
             $linux + @{ os = 'ubuntu-24.04-arm'; platform = 'linux-aarch64'; appimagetool = 'aarch64'; appimagetool_sha256 = 'f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158' }
           )
-          $wanted = @(-split '${{ inputs.platforms }}' | Where-Object { $_ })
+          $wanted = @(-split $env:PLATFORMS | Where-Object { $_ })
           $unknown = $wanted | Where-Object { $_ -notin $platforms.platform }
           if ($unknown) { throw "Sabine can't build for $($unknown -join ', ')" }
           $chosen = @($platforms | Where-Object { -not $wanted -or $_.platform -in $wanted })
@@ -113,43 +124,61 @@ jobs:
 
   build:
     name: Build for ${{ matrix.platform }}
-    env:
-      SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
     needs: plan
+    timeout-minutes: 120
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    env:
+      APP: ${{ inputs.app }}
+      PLATFORM: ${{ matrix.platform }}
+      TARGETS: ${{ matrix.targets }}
+      SABINE_VERSION: ${{ inputs.sabine_version }}
+      SIGN_MACOS: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      SIGN_WINDOWS: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Use the version being released
         if: inputs.version != ''
         shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          $path = Join-Path '${{ inputs.app }}' Sabine.toml
+          $path = Join-Path $env:APP Sabine.toml
           $text = Get-Content $path -Raw
           $version = [regex]::new('(?ms)^(\[app\][^\n]*\n(?:(?!^\[).)*?^version\s*=\s*)"[^"]*"')
           if (-not $version.IsMatch($text)) { throw "Sabine.toml has no [app] version to replace" }
-          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""${{ inputs.version }}""", 1))
-      - uses: oven-sh/setup-bun@v2
+          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""$env:VERSION""", 1))
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
       - name: Install web dependencies
         run: bun install --frozen-lockfile
-      - run: rustup toolchain install "${{ inputs.rust_toolchain }}" --profile minimal
-      - run: rustup override set "${{ inputs.rust_toolchain }}"
+      - name: Install Rust
+        shell: bash
+        env:
+          RUST_TOOLCHAIN: ${{ inputs.rust_toolchain }}
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup override set "$RUST_TOOLCHAIN"
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'
+        env:
+          LINUX_PACKAGES: ${{ inputs.linux_packages }}
+          APPIMAGETOOL: ${{ matrix.appimagetool }}
+          APPIMAGETOOL_SHA256: ${{ matrix.appimagetool_sha256 }}
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm ${{ inputs.linux_packages }}
-          if [ -n "${{ matrix.appimagetool }}" ]; then
-            curl --fail --location --output "$RUNNER_TEMP/appimagetool" "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${{ matrix.appimagetool }}.AppImage"
-            echo "${{ matrix.appimagetool_sha256 }}  $RUNNER_TEMP/appimagetool" | sha256sum --check
-            sudo install -m 755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
-          fi
+          # shellcheck disable=SC2086
+          sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm $LINUX_PACKAGES
+          curl --fail --location --output "$RUNNER_TEMP/appimagetool" "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$APPIMAGETOOL.AppImage"
+          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum --check
+          sudo install -m 755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
       - name: Install NSIS
         if: contains(matrix.targets, 'exe')
         shell: pwsh
@@ -161,9 +190,6 @@ jobs:
         if: contains(matrix.targets, 'msi')
         shell: pwsh
         run: |
-          if ('${{ inputs.accept_wix_eula }}' -ne 'true') {
-            throw 'MSI builds require WiX 7 license acceptance. Review https://docs.firegiant.com/wix/osmf/ and set accept_wix_eula: true.'
-          }
           dotnet tool install --global wix --version 7.0.0
           if ($LASTEXITCODE -ne 0) { throw "WiX installation failed" }
           wix eula accept wix7
@@ -171,15 +197,32 @@ jobs:
           wix extension add --global WixToolset.UI.wixext/7.0.0
           if ($LASTEXITCODE -ne 0) { throw "WiX extension installation failed; check WiX EULA acceptance" }
       - name: Install matching Sabine CLI
-        run: cargo install --git https://github.com/Lantharos/Sabine --tag "${{ inputs.sabine_version }}" --locked sabine-cli
-      - name: Prepare macOS signing
-        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
+        shell: pwsh
         env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archive = if ($IsWindows) { "sabine-cli-$env:PLATFORM.zip" } else { "sabine-cli-$env:PLATFORM.tar.gz" }
+          $directory = (New-Item (Join-Path $env:RUNNER_TEMP 'sabine-cli') -ItemType Directory -Force).FullName
+          gh release download $env:SABINE_VERSION --repo Lantharos/Sabine --pattern $archive --dir $directory
+          if ($LASTEXITCODE -ne 0) { throw "Sabine $env:SABINE_VERSION has no CLI for $env:PLATFORM" }
+          $path = Join-Path $directory $archive
+          gh attestation verify $path --repo Lantharos/Sabine --signer-workflow Lantharos/Sabine/.github/workflows/release.yml --source-ref "refs/tags/$env:SABINE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "The Sabine CLI download isn't attested by Sabine's release workflow" }
+          if ($IsWindows) { Expand-Archive $path -DestinationPath $directory -Force } else { tar -xzf $path -C $directory }
+          if ($LASTEXITCODE -ne 0) { throw "The Sabine CLI archive could not be unpacked" }
+          $directory >> $env:GITHUB_PATH
+      - name: Build application
+        id: build
+        shell: pwsh
+        run: |
+          $built = sabine bundle $env:APP --target $env:TARGETS --build-only --json | Select-Object -Last 1
+          if ($LASTEXITCODE -ne 0) { throw "Building the application failed" }
+          "binary=$(($built | ConvertFrom-Json).binary)" >> $env:GITHUB_OUTPUT
+      - name: Prepare macOS signing
+        if: runner.os == 'macOS' && env.SIGN_MACOS == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           keychain="$RUNNER_TEMP/signing.keychain-db"
           keychain_password="$(openssl rand -hex 24)"
@@ -188,26 +231,14 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
           security import "$RUNNER_TEMP/certificate.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          rm "$RUNNER_TEMP/certificate.p12"
           security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain"
           read -ra keychains <<<"$(security list-keychains -d user | tr -d '"')"
           security list-keychains -d user -s "$keychain" "${keychains[@]}"
-          rm "$RUNNER_TEMP/certificate.p12"
-          echo "SABINE_MACOS_SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
-          if [ -n "$APPLE_ID" ]; then
-            {
-              echo "SABINE_NOTARY_APPLE_ID=$APPLE_ID"
-              echo "SABINE_NOTARY_TEAM_ID=$APPLE_TEAM_ID"
-              echo "SABINE_NOTARY_PASSWORD=$APPLE_APP_PASSWORD"
-            } >> "$GITHUB_ENV"
-          fi
-      - name: Prepare Windows signing
-        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      - name: Find signtool
+        if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
         shell: pwsh
         run: |
-          $certificate = Join-Path $env:RUNNER_TEMP 'certificate.pfx'
-          [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
           $architecture = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
           $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
             Where-Object { $_.Directory.Name -eq $architecture } |
@@ -215,20 +246,43 @@ jobs:
             Select-Object -First 1
           if ($null -eq $signtool) { throw 'signtool.exe was not found in the Windows SDK' }
           $signtool.DirectoryName >> $env:GITHUB_PATH
-          "SABINE_WINDOWS_CERTIFICATE=$certificate" >> $env:GITHUB_ENV
-          "SABINE_WINDOWS_CERTIFICATE_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
-      - name: Bundle application
+      - name: Sign and package application
         shell: pwsh
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          BINARY: ${{ steps.build.outputs.binary }}
+          SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+          SABINE_MACOS_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.MACOS_CERTIFICATE != '' && secrets.MACOS_SIGNING_IDENTITY || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+          SABINE_NOTARY_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          SABINE_NOTARY_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          WINDOWS_CERTIFICATE: ${{ runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE || '' }}
+          SABINE_WINDOWS_CERTIFICATE_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
         run: |
-          $platform = '${{ matrix.platform }}'
-          foreach ($target in -split '${{ matrix.targets }}') {
-            $bundle = sabine bundle '${{ inputs.app }}' --target $target --json | Select-Object -Last 1
-            if ($LASTEXITCODE -ne 0) { throw "Bundling $target failed" }
-            $result = $bundle | ConvertFrom-Json
+          $notaryKey = Join-Path $env:RUNNER_TEMP 'notary.p8'
+          $certificate = Join-Path $env:RUNNER_TEMP 'certificate.pfx'
+          try {
+            if ($env:APPLE_API_KEY) {
+              [IO.File]::WriteAllText($notaryKey, $env:APPLE_API_KEY)
+              $env:SABINE_NOTARY_API_KEY = $notaryKey
+            }
+            if ($env:WINDOWS_CERTIFICATE) {
+              [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+              $env:SABINE_WINDOWS_CERTIFICATE = $certificate
+            }
+            $env:APPLE_API_KEY = $null
+            $env:WINDOWS_CERTIFICATE = $null
+            $bundles = @(sabine bundle $env:APP --target $env:TARGETS --binary $env:BINARY --no-web-build --json |
+              Where-Object { $_.StartsWith('{') } |
+              ConvertFrom-Json)
+            if ($LASTEXITCODE -ne 0) { throw "Packaging the application failed" }
+          } finally {
+            Remove-Item $notaryKey, $certificate -Force -ErrorAction Ignore
+          }
+          foreach ($result in $bundles) {
+            $target = $result.target
             if ($result.artifacts.Count -ne 1) { throw "Bundling $target produced no artifact" }
-            $updateTarget = if ($target -in @('portable', 'windows', 'macos')) { $platform } else { "$platform-$target" }
+            $updateTarget = if ($target -in @('portable', 'windows', 'macos')) { $env:PLATFORM } else { "$env:PLATFORM-$target" }
             $destination = New-Item "dist/release/$updateTarget" -ItemType Directory -Force
             $artifact = [IO.FileInfo]::new($result.artifacts[0])
             if (-not $artifact.Exists) { throw "Bundling $target reported a missing artifact: $($artifact.FullName)" }
@@ -240,16 +294,24 @@ jobs:
               [IO.File]::WriteAllText((Join-Path $destination.FullName "$updateTarget.executable"), $executable)
             }
           }
+          $expected = @($env:TARGETS -split ',').Count
+          if ($bundles.Count -ne $expected) { throw "Bundling produced $($bundles.Count) of $expected packages" }
+      - name: Remove macOS signing keychain
+        if: always() && runner.os == 'macOS' && env.SIGN_MACOS == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
       - name: Check out Windows validation tools
-        if: matrix.platform == 'windows-x86_64'
+        if: matrix.platform == 'windows-x86_64' && inputs.accept_wix_eula
         uses: actions/checkout@v7
         with:
           repository: Lantharos/Sabine
           ref: 7dd92a4987fb12b4b8f89a4162e7e1809321777b
           path: .sabine-release
+          persist-credentials: false
       - name: Verify installed Windows application
-        if: matrix.platform == 'windows-x86_64'
+        if: matrix.platform == 'windows-x86_64' && inputs.accept_wix_eula
         shell: pwsh
+        env:
+          UPGRADE_FROM_SABINE_VERSION: ${{ inputs.upgrade_from_sabine_version }}
         run: |
           $msi = @(Get-ChildItem dist/release/windows-x86_64-msi -Filter *.msi -File)
           $stagedExe = @(Get-ChildItem dist/msi -Filter *.exe -File -Recurse)
@@ -267,7 +329,7 @@ jobs:
             throw "Windows executable is not marked as a GUI application"
           }
           $wixSource = Get-Content (Get-ChildItem dist/msi -Filter installer.wxs -File -Recurse | Select-Object -First 1) -Raw
-          $config = Get-Content (Join-Path '${{ inputs.app }}' Sabine.toml) -Raw
+          $config = Get-Content (Join-Path $env:APP Sabine.toml) -Raw
           if ($config -match '(?m)^icon\s*=\s*"' -and ($wixSource -notmatch '<Icon Id="AppIcon.ico"' -or $wixSource -notmatch 'Icon="AppIcon.ico"')) {
             throw "MSI shortcut icon metadata is missing"
           }
@@ -275,12 +337,12 @@ jobs:
             throw "Sabine.toml app name is missing"
           }
           $appName = $Matches[1]
-          $expectedSabineVersion = "${{ inputs.sabine_version }}".TrimStart('v')
+          $expectedSabineVersion = $env:SABINE_VERSION.TrimStart('v')
           $sabineData = Join-Path $env:LOCALAPPDATA 'Sabine'
           if (Test-Path $sabineData) {
             Remove-Item $sabineData -Recurse -Force
           }
-          $upgradeFrom = "${{ inputs.upgrade_from_sabine_version }}".TrimStart('v')
+          $upgradeFrom = $env:UPGRADE_FROM_SABINE_VERSION.TrimStart('v')
           if ($upgradeFrom) {
             $oldVersionDir = Join-Path $sabineData "bin/versions/$upgradeFrom"
             New-Item $oldVersionDir -ItemType Directory -Force | Out-Null
@@ -363,27 +425,41 @@ jobs:
     needs: [plan, build]
     if: needs.plan.outputs.schelf != 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
-      SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+      APP: ${{ inputs.app }}
+      SABINE_VERSION: ${{ inputs.sabine_version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Use the version being released
         if: inputs.version != ''
         shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          $path = Join-Path '${{ inputs.app }}' Sabine.toml
+          $path = Join-Path $env:APP Sabine.toml
           $text = Get-Content $path -Raw
           $version = [regex]::new('(?ms)^(\[app\][^\n]*\n(?:(?!^\[).)*?^version\s*=\s*)"[^"]*"')
           if (-not $version.IsMatch($text)) { throw "Sabine.toml has no [app] version to replace" }
-          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""${{ inputs.version }}""", 1))
-      - run: rustup toolchain install "${{ inputs.rust_toolchain }}" --profile minimal
-      - run: rustup override set "${{ inputs.rust_toolchain }}"
-      - name: Install CLI build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libfontconfig1-dev libwayland-dev libxkbcommon-dev
+          [IO.File]::WriteAllText($path, $version.Replace($text, "`${1}""$env:VERSION""", 1))
+      - name: Install CLI runtime dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libfontconfig1
       - name: Install matching Sabine CLI
-        run: cargo install --git https://github.com/Lantharos/Sabine --tag "${{ inputs.sabine_version }}" --locked sabine-cli
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          directory="$RUNNER_TEMP/sabine-cli"
+          mkdir -p "$directory"
+          gh release download "$SABINE_VERSION" --repo Lantharos/Sabine --pattern sabine-cli-linux-x86_64.tar.gz --dir "$directory"
+          gh attestation verify "$directory/sabine-cli-linux-x86_64.tar.gz" --repo Lantharos/Sabine --signer-workflow Lantharos/Sabine/.github/workflows/release.yml --source-ref "refs/tags/$SABINE_VERSION"
+          tar -xzf "$directory/sabine-cli-linux-x86_64.tar.gz" -C "$directory"
+          echo "$directory" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.artifact }}-*
@@ -391,6 +467,8 @@ jobs:
           merge-multiple: true
       - name: Generate updater manifest
         shell: pwsh
+        env:
+          SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
         run: |
           $arguments = @()
           Get-ChildItem release -Directory | ForEach-Object {
@@ -403,7 +481,8 @@ jobs:
               $arguments += "$($_.Name)=$((Get-Content $executable -Raw).Trim())"
             }
           }
-          sabine release-manifest '${{ inputs.app }}' --output release/sabine-update.json @arguments
+          sabine release-manifest $env:APP --output release/sabine-update.json @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Writing the update manifest failed" }
       - name: Flatten release assets
         shell: pwsh
         run: |

@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::project::read_sabine_file;
+use crate::{
+    project::read_sabine_file,
+    util::{existing_path, shell_command},
+};
 use sabine_service::manifest::WebSection;
 
 #[derive(Debug, Clone)]
@@ -29,7 +32,7 @@ pub struct DevFrontend {
 }
 
 pub fn resolve_dev_project(source: &Path) -> Result<DevProject, String> {
-    let source_dir = absolute_path(source)?;
+    let source_dir = existing_path(source)?;
     let sabine_path = source_dir.join("Sabine.toml");
     let mut sabine = read_sabine_file(&source_dir)?;
     if let Some(sandbox) = sabine.sandbox.take() {
@@ -109,6 +112,37 @@ fn nonempty(value: Option<&str>) -> Option<String> {
     value
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
+}
+
+/// Installs the dependencies of the JavaScript project at `root` when it has
+/// none yet.
+pub(crate) fn ensure_dependencies(root: &Path) -> Result<(), String> {
+    let manifest = root.join("package.json");
+    if !manifest.is_file() {
+        return Ok(());
+    }
+    let package = read_package_json(&manifest)?;
+    install_dependencies(root, package_manager(root, &package))
+}
+
+pub(crate) fn install_dependencies(root: &Path, package_manager: &str) -> Result<(), String> {
+    if root.join("node_modules").is_dir() {
+        return Ok(());
+    }
+    eprintln!(
+        "sabine: installing JS deps with {package_manager} in {}",
+        root.display()
+    );
+    let status = shell_command(&format!("{package_manager} install"))
+        .current_dir(root)
+        .status()
+        .map_err(|error| format!("failed to run {package_manager} install: {error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "{package_manager} install failed with status {status}"
+        ));
+    }
+    Ok(())
 }
 
 pub fn detect_package_root(source_dir: &Path) -> Option<PathBuf> {
@@ -212,35 +246,6 @@ fn read_package_json(path: &Path) -> Result<serde_json::Value, String> {
     let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
     serde_json::from_str(&text)
         .map_err(|error| format!("failed to parse {}: {error}", path.display()))
-}
-
-fn absolute_path(path: &Path) -> Result<PathBuf, String> {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .map_err(|error| error.to_string())?
-    };
-    Ok(dunce_simplify(absolute))
-}
-
-fn dunce_simplify(path: PathBuf) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other.as_os_str()),
-        }
-    }
-    if out.as_os_str().is_empty() {
-        PathBuf::from(".")
-    } else {
-        out
-    }
 }
 
 fn vite_dev_url(port: u16) -> String {

@@ -1,4 +1,5 @@
-use super::{macos::xml, types::Document};
+use super::types::Document;
+use crate::util::xml;
 
 /// Uniform Type Identifiers macOS itself declares for common MIME types. Apps
 /// list these directly; declaring them again would hide the system type.

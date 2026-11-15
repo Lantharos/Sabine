@@ -17,19 +17,25 @@ signed [release manifest](/docs/distribution/releases-and-updates/#release-manif
 | Variable | Meaning |
 | --- | --- |
 | `SABINE_MACOS_SIGNING_IDENTITY` | The Developer ID Application identity in your keychain, such as `Developer ID Application: Example (TEAMID)`. Signs every piece of code in a `.app` and the bundle itself, and signs disk images |
-| `SABINE_NOTARY_APPLE_ID` | The Apple ID that submits builds for notarization |
-| `SABINE_NOTARY_TEAM_ID` | The developer team id the build is notarized under |
-| `SABINE_NOTARY_PASSWORD` | An app-specific password for that Apple ID |
+| `SABINE_NOTARY_API_KEY` | Path to the App Store Connect API key (`.p8`) that submits builds for notarization |
+| `SABINE_NOTARY_API_KEY_ID` | The key's ID |
+| `SABINE_NOTARY_API_ISSUER` | The key's issuer ID |
+| `SABINE_NOTARY_KEYCHAIN_PROFILE` | A notarytool keychain profile, used instead of the API key |
 | `SABINE_WINDOWS_CERTIFICATE` | Path to a `.pfx` Authenticode certificate |
 | `SABINE_WINDOWS_CERTIFICATE_PASSWORD` | Password of that `.pfx`, when it has one |
 | `SABINE_WINDOWS_CERTIFICATE_SHA1` | Thumbprint of a certificate in the Windows certificate store, used instead of a `.pfx` |
 | `SABINE_WINDOWS_TIMESTAMP_URL` | RFC 3161 timestamp server; `http://timestamp.digicert.com` when unset |
 
-Empty values count as unset. `sabine bundle` checks the combination before it builds anything:
+Empty values count as unset. `sabine bundle` reads the variables of the operating system it
+bundles for, and checks their combination before it builds anything:
 
-- The three notarization variables go together; setting only some of them is an error.
+- The three API key variables go together; setting only some of them is an error.
+- Notarize with the API key or a keychain profile, not both.
 - Notarization needs `SABINE_MACOS_SIGNING_IDENTITY` as well.
 - Set either `SABINE_WINDOWS_CERTIFICATE` or `SABINE_WINDOWS_CERTIFICATE_SHA1`, not both.
+
+No password or key reaches a command line, and the programs `sabine bundle` builds the app with
+don't see `SABINE_WINDOWS_CERTIFICATE_PASSWORD` or `SABINE_UPDATE_SIGNING_KEY`.
 
 ## macOS
 
@@ -38,10 +44,17 @@ Mac with your Developer ID certificate in the keychain.
 
 ```sh
 export SABINE_MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAMID)"
-export SABINE_NOTARY_APPLE_ID="ada@example.com"
-export SABINE_NOTARY_TEAM_ID="TEAMID"
-export SABINE_NOTARY_PASSWORD="abcd-efgh-ijkl-mnop"
+export SABINE_NOTARY_API_KEY="$HOME/keys/AuthKey_ABCD123456.p8"
+export SABINE_NOTARY_API_KEY_ID="ABCD123456"
+export SABINE_NOTARY_API_ISSUER="69a6de70-0000-47e3-e053-5b8c7c11a4d1"
 sabine bundle . --target dmg
+```
+
+On your own Mac, a profile you stored once with `xcrun notarytool store-credentials` keeps the
+credentials in the keychain instead:
+
+```sh
+export SABINE_NOTARY_KEYCHAIN_PROFILE="notary"
 ```
 
 ### Inside-out signing
@@ -58,9 +71,12 @@ inside out. It walks the staged `.app` in a stable order and signs:
 
 </Steps>
 
-Each signature is timestamped and uses the hardened runtime (`--options runtime`), keeping any
-entitlements a nested piece already has. Offline bundles sign the CEF runtime and host they carry
-the same way.
+Each signature is timestamped and uses the hardened runtime (`--options runtime`). Libraries and
+frameworks keep any entitlements they already have. Chromium's helper apps get the exceptions they
+need: the Renderer and GPU helpers may run code compiled as they go
+(`com.apple.security.cs.allow-jit`), and the Plugin helper may run unsigned memory and load
+unsigned libraries. Every other app, yours included, gets none. Offline bundles sign the CEF runtime
+and host they carry the same way.
 
 ### Notarization and stapling
 
@@ -79,19 +95,21 @@ asks people before opening a downloaded app.
 ## Windows
 
 Signing uses `signtool` from the Windows SDK, which has to be on `PATH`. Sabine signs every `.exe`
-and `.dll` in the staged app folder before packaging it, then signs the MSI or setup program it
-builds. The CEF runtime inside an offline bundle keeps the signatures its builders gave it.
+and `.dll` in the staged app folder before packaging it, the uninstaller a setup program writes,
+and the MSI or setup program it builds. The CEF runtime inside an offline bundle keeps the
+signatures its builders gave it.
 
-Each file is signed with SHA-256 file and timestamp digests:
+Each file is signed by the certificate's thumbprint, with SHA-256 file and timestamp digests:
 
 ```sh
-signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f certificate.pfx /p <password> <files>
+signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /sha1 <thumbprint> <files>
 ```
 
 <Tabs>
   <TabItem label=".pfx file">
     Point `SABINE_WINDOWS_CERTIFICATE` at the certificate file, and give its password in
-    `SABINE_WINDOWS_CERTIFICATE_PASSWORD` if it has one:
+    `SABINE_WINDOWS_CERTIFICATE_PASSWORD` if it has one. Sabine imports it into a certificate store
+    of its own for your user while it signs, and removes the store and the key again afterwards:
 
     ```powershell
     $env:SABINE_WINDOWS_CERTIFICATE = "C:\certs\example.pfx"
@@ -125,24 +143,25 @@ signs from optional repository secrets. Platforms whose secrets are missing buil
 | `MACOS_CERTIFICATE` | Your Developer ID Application certificate as a base64 `.p12` |
 | `MACOS_CERTIFICATE_PASSWORD` | Password of that `.p12` |
 | `MACOS_SIGNING_IDENTITY` | The identity to sign with, such as `Developer ID Application: Example (TEAMID)` |
-| `APPLE_ID` | The Apple ID that notarizes builds |
-| `APPLE_TEAM_ID` | The developer team id |
-| `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID |
+| `APPLE_API_KEY` | The contents of an App Store Connect API key (`.p8`) that notarizes builds |
+| `APPLE_API_KEY_ID` | The key's ID |
+| `APPLE_API_ISSUER` | The key's issuer ID |
 | `WINDOWS_CERTIFICATE` | Your Authenticode certificate as a base64 `.pfx` |
 | `WINDOWS_CERTIFICATE_PASSWORD` | Password of that `.pfx` |
 
-On macOS runners the workflow imports the certificate into a temporary keychain and sets
-`SABINE_MACOS_SIGNING_IDENTITY`, plus the three notarization variables when `APPLE_ID` is set. On
-Windows runners it writes the `.pfx` to a temporary file, puts the SDK's `signtool` on `PATH`, and
-sets `SABINE_WINDOWS_CERTIFICATE` and its password. The workflow signs with a `.pfx` only; a
-certificate that lives in a store or on a token needs a build machine where its software runs.
+The workflow builds the app first, with no secrets around. Only then does it import the macOS
+certificate into a temporary keychain, and the one step that signs and packages sees the rest:
+on macOS it writes the API key to a temporary file for the notarization variables, and on Windows
+it writes the `.pfx` to a temporary file and finds the SDK's `signtool`. Both files go when the step
+ends. The workflow signs with a `.pfx` only; a certificate that lives in a store or on a token
+needs a build machine where its software runs.
 
 Encode the files for the secrets with `base64`:
 
 ```sh
 base64 < DeveloperID.p12 | gh secret set MACOS_CERTIFICATE
+gh secret set APPLE_API_KEY < AuthKey_ABCD123456.p8
 base64 < example.pfx | gh secret set WINDOWS_CERTIFICATE
 ```
 
-Projects created with `sabine new` call the workflow with `secrets: inherit`, so every secret you
-add to the repository reaches it.
+Projects created with `sabine new` pass each of these secrets to the workflow by name.

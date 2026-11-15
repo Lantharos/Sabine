@@ -1,50 +1,102 @@
 //! `sabine new` project templates.
 
 mod app;
+mod frontends;
 mod notes;
 
-use std::{fs, path::PathBuf, process::ExitCode};
+use std::{
+    fs,
+    io::{BufRead, IsTerminal, Write},
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
-use crate::release::workflow::write_release_workflow;
+use crate::{
+    release::workflow::{Release, write_release_workflow},
+    util::sanitize_id,
+};
 use app::write_app_template;
+use frontends::FRONTENDS;
 use notes::write_notes_template;
 
-pub fn new_app(name: &str, template: &str) -> ExitCode {
-    if !matches!(template, "app" | "notes") {
-        eprintln!("unknown template `{template}`; available templates: app, notes");
-        return ExitCode::from(1);
+const GITIGNORE: &str = "/target\n/node_modules\n/dist\n/ui/dist\n";
+
+pub fn new_app(name: &str, template: &str, id: Option<String>) -> Result<ExitCode, String> {
+    let frontend = FRONTENDS
+        .iter()
+        .find(|frontend| frontend.template == template);
+    if frontend.is_none() && template != "notes" {
+        let templates = FRONTENDS
+            .iter()
+            .map(|frontend| frontend.template)
+            .chain(["notes"])
+            .collect::<Vec<_>>();
+        return Err(format!(
+            "unknown template `{template}`; available templates: {}",
+            templates.join(", ")
+        ));
     }
     if !is_valid_name(name) {
-        eprintln!("app name must contain only letters, numbers, hyphens, and underscores");
-        return ExitCode::from(1);
+        return Err("app name must contain only letters, numbers, hyphens, and underscores".into());
     }
-
     let root = PathBuf::from(name);
     if root.exists() {
-        eprintln!("{} already exists", root.display());
-        return ExitCode::from(1);
+        return Err(format!("{} already exists", root.display()));
     }
-
-    let result = match template {
-        "notes" => write_notes_template(&root, name),
-        _ => write_app_template(&root, name),
+    let id = match id {
+        Some(id) => id,
+        None => ask_id(name)?,
+    };
+    if !sabine_service::valid_app_id(&id) {
+        return Err(format!(
+            "app id {id:?} may contain only letters, digits, dots, hyphens and underscores"
+        ));
     }
-    .and_then(|_| write_default_icon(&root))
-    .and_then(|_| write_release_workflow(&root).map(|_| ()));
-    match result {
-        Ok(()) => {
-            println!("Created Sabine app at {}", root.display());
-            println!("Run it with: cd {name} && sabine dev");
-            ExitCode::SUCCESS
+    match frontend {
+        Some(frontend) => write_app_template(&root, name, &id, frontend),
+        None => write_notes_template(&root, name, &id),
+    }
+    .and_then(|()| fs::write(root.join(".gitignore"), GITIGNORE))
+    .and_then(|()| write_default_icon(&root))
+    .map_err(|error| format!("failed to create app: {error}"))?;
+    match Release::current() {
+        Ok(release) => {
+            write_release_workflow(&root, &release).map_err(|error| error.to_string())?;
         }
-        Err(error) => {
-            eprintln!("failed to create app: {error}");
-            ExitCode::from(1)
-        }
+        Err(error) => eprintln!(
+            "left out the release workflow, which `sabine release-init` writes later: {error}"
+        ),
     }
+    println!("Created Sabine app {id} at {}", root.display());
+    println!("Run it with: cd {name} && sabine dev");
+    Ok(ExitCode::SUCCESS)
 }
 
-fn write_default_icon(root: &std::path::Path) -> std::io::Result<()> {
+/// The reverse-DNS identifier installed copies of the app are known by.
+fn ask_id(name: &str) -> Result<String, String> {
+    let suggestion = format!("com.example.{}", sanitize_id(name));
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        return Ok(suggestion);
+    }
+    print!("App identifier ({suggestion}): ");
+    std::io::stdout()
+        .flush()
+        .map_err(|error| error.to_string())?;
+    let mut answer = String::new();
+    stdin
+        .lock()
+        .read_line(&mut answer)
+        .map_err(|error| error.to_string())?;
+    let answer = answer.trim();
+    Ok(if answer.is_empty() {
+        suggestion
+    } else {
+        answer.to_string()
+    })
+}
+
+fn write_default_icon(root: &Path) -> std::io::Result<()> {
     let assets = root.join("assets");
     fs::create_dir_all(&assets)?;
     fs::write(
@@ -55,18 +107,6 @@ fn write_default_icon(root: &std::path::Path) -> std::io::Result<()> {
 </svg>
 "##,
     )
-}
-
-pub(crate) fn sanitize_id(name: &str) -> String {
-    name.chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' {
-                character.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
 }
 
 fn is_valid_name(name: &str) -> bool {

@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, process::Command};
 
-use super::{WindowsArchitecture, artwork, msi, msi_actions, nsis_script};
+use super::{WindowsArchitecture, artwork, msi, msi_actions, nsis_script, signing::WindowsSigning};
 use crate::bundle::{
     BundleFormat,
     package::{artifact_path, ensure_parent, run},
@@ -53,6 +53,7 @@ pub(in crate::bundle) fn package_msi(
 pub(in crate::bundle) fn package_exe(
     app: &BundleApp,
     staged: &StagedBundle,
+    signing: Option<&WindowsSigning>,
 ) -> Result<PathBuf, String> {
     WindowsArchitecture::of(&staged.binary)?;
     let script = staged.root.join("installer.nsi");
@@ -73,6 +74,7 @@ pub(in crate::bundle) fn package_exe(
             &artifact.display().to_string(),
             icon.as_deref(),
             welcome_bitmap.as_deref(),
+            signing,
         )?,
     )
     .map_err(|error| error.to_string())?;

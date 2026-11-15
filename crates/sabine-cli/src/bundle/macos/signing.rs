@@ -10,23 +10,41 @@ use crate::bundle::signing::run;
 /// Code bundles that carry a signature of their own.
 const CODE_BUNDLES: &[&str] = &["app", "framework", "appex", "xpc", "bundle", "plugin"];
 
+/// The hardened runtime exceptions Chromium's helpers need: V8 and
+/// SwiftShader compile code as they run, and plugins load unsigned code.
+const HELPER_ENTITLEMENTS: &[(&str, &str)] = &[
+    (
+        " Helper (Renderer).app",
+        include_str!("entitlements/jit.plist"),
+    ),
+    (" Helper (GPU).app", include_str!("entitlements/jit.plist")),
+    (
+        " Helper (Plugin).app",
+        include_str!("entitlements/plugin.plist"),
+    ),
+];
+
 pub(in crate::bundle) struct MacosSigning {
     pub identity: String,
     pub notary: Option<Notary>,
 }
 
-pub(in crate::bundle) struct Notary {
-    pub apple_id: String,
-    pub team_id: String,
-    pub password: String,
+pub(in crate::bundle) enum Notary {
+    ApiKey {
+        key: PathBuf,
+        key_id: String,
+        issuer: String,
+    },
+    KeychainProfile(String),
 }
 
 impl MacosSigning {
     /// Signs every piece of code in `bundle` before the bundle that holds
     /// it, ending with `bundle` itself, all with the hardened runtime.
     pub(in crate::bundle) fn sign_app(&self, bundle: &Path) -> Result<(), String> {
-        self.sign_contents(bundle)?;
-        self.sign(bundle, true)
+        let entitlements = Entitlements::write()?;
+        self.sign_contents(bundle, &entitlements)?;
+        self.sign(bundle, Hardening::App(&entitlements))
     }
 
     /// Notarizes the signed `bundle` and staples the ticket to it, so it
@@ -50,7 +68,7 @@ impl MacosSigning {
     }
 
     pub(in crate::bundle) fn sign_disk_image(&self, image: &Path) -> Result<(), String> {
-        self.sign(image, false)?;
+        self.sign(image, Hardening::None)?;
         if let Some(notary) = &self.notary {
             notary.submit(image)?;
             notary.staple(image)?;
@@ -58,26 +76,37 @@ impl MacosSigning {
         Ok(())
     }
 
-    fn sign_contents(&self, directory: &Path) -> Result<(), String> {
+    fn sign_contents(&self, directory: &Path, entitlements: &Entitlements) -> Result<(), String> {
         for path in sorted_entries(directory)? {
             let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
             if metadata.is_dir() {
-                self.sign_contents(&path)?;
-                if is_code_bundle(&path) {
-                    self.sign(&path, true)?;
+                self.sign_contents(&path, entitlements)?;
+                if has_extension(&path, &["app"]) {
+                    self.sign(&path, Hardening::App(entitlements))?;
+                } else if has_extension(&path, CODE_BUNDLES) {
+                    self.sign(&path, Hardening::Preserved)?;
                 }
             } else if metadata.is_file() && is_mach_o(&path)? {
-                self.sign(&path, true)?;
+                self.sign(&path, Hardening::Preserved)?;
             }
         }
         Ok(())
     }
 
-    fn sign(&self, path: &Path, hardened: bool) -> Result<(), String> {
+    fn sign(&self, path: &Path, hardening: Hardening) -> Result<(), String> {
         let mut command = Command::new("codesign");
         command.args(["--force", "--timestamp", "--sign", &self.identity]);
-        if hardened {
-            command.args(["--options", "runtime", "--preserve-metadata=entitlements"]);
+        match hardening {
+            Hardening::None => {}
+            Hardening::Preserved => {
+                command.args(["--options", "runtime", "--preserve-metadata=entitlements"]);
+            }
+            Hardening::App(entitlements) => {
+                command.args(["--options", "runtime"]);
+                if let Some(plist) = entitlements.of(path) {
+                    command.arg("--entitlements").arg(plist);
+                }
+            }
         }
         run(command.arg(path), "codesign")
     }
@@ -85,21 +114,23 @@ impl MacosSigning {
 
 impl Notary {
     fn submit(&self, path: &Path) -> Result<(), String> {
-        run(
-            Command::new("xcrun")
-                .args(["notarytool", "submit"])
-                .arg(path)
-                .args([
-                    "--apple-id",
-                    &self.apple_id,
-                    "--team-id",
-                    &self.team_id,
-                    "--password",
-                    &self.password,
-                    "--wait",
-                ]),
-            "notarytool",
-        )
+        let mut command = Command::new("xcrun");
+        command
+            .args(["notarytool", "submit"])
+            .arg(path)
+            .arg("--wait");
+        match self {
+            Self::ApiKey {
+                key,
+                key_id,
+                issuer,
+            } => command
+                .arg("--key")
+                .arg(key)
+                .args(["--key-id", key_id, "--issuer", issuer]),
+            Self::KeychainProfile(profile) => command.args(["--keychain-profile", profile]),
+        };
+        run(&mut command, "notarytool")
     }
 
     fn staple(&self, path: &Path) -> Result<(), String> {
@@ -107,6 +138,36 @@ impl Notary {
             Command::new("xcrun").args(["stapler", "staple"]).arg(path),
             "stapler",
         )
+    }
+}
+
+enum Hardening<'a> {
+    None,
+    Preserved,
+    App(&'a Entitlements),
+}
+
+/// The helpers' entitlements, written out for `codesign` to read.
+struct Entitlements {
+    directory: tempfile::TempDir,
+}
+
+impl Entitlements {
+    fn write() -> Result<Self, String> {
+        let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
+        for (index, (_, plist)) in HELPER_ENTITLEMENTS.iter().enumerate() {
+            fs::write(directory.path().join(format!("{index}.plist")), plist)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(Self { directory })
+    }
+
+    fn of(&self, app: &Path) -> Option<PathBuf> {
+        let name = app.file_name()?.to_str()?;
+        HELPER_ENTITLEMENTS
+            .iter()
+            .position(|(suffix, _)| name.ends_with(suffix))
+            .map(|index| self.directory.path().join(format!("{index}.plist")))
     }
 }
 
@@ -120,10 +181,10 @@ fn sorted_entries(directory: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(entries)
 }
 
-fn is_code_bundle(path: &Path) -> bool {
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| CODE_BUNDLES.contains(&extension))
+        .is_some_and(|extension| extensions.contains(&extension))
 }
 
 fn is_mach_o(path: &Path) -> Result<bool, String> {

@@ -1,7 +1,10 @@
 pub(crate) mod assets;
 pub(crate) mod desktop;
 mod handlers;
+#[cfg(windows)]
+pub(crate) mod shortcut;
 pub(crate) mod source;
+pub(crate) mod system;
 pub mod uninstall;
 
 #[derive(serde::Serialize, serde::Deserialize)]
