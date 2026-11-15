@@ -200,6 +200,18 @@ fn chain(index: usize, signal: libc::c_int) {
     }
 }
 
+/// The `errno` of the thread the handler interrupted, which it leaves as it
+/// found it.
+#[cfg(target_os = "linux")]
+unsafe fn errno() -> *mut libc::c_int {
+    unsafe { libc::__errno_location() }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn errno() -> *mut libc::c_int {
+    unsafe { libc::__error() }
+}
+
 fn slot(signal: libc::c_int) -> Option<usize> {
     SIGNALS.iter().position(|known| *known == signal)
 }
@@ -209,11 +221,13 @@ extern "C" fn handle_signal(
     info: *mut libc::siginfo_t,
     context: *mut libc::c_void,
 ) {
+    let interrupted = unsafe { *errno() };
     signal_groups(libc::SIGTERM);
     let wake = WAKE.load(Ordering::SeqCst);
     let byte = signal as u8;
     unsafe {
         libc::write(wake, (&raw const byte).cast(), 1);
+        *errno() = interrupted;
     }
     let Some(previous) = slot(signal).map(|index| &PREVIOUS[index]) else {
         return;
