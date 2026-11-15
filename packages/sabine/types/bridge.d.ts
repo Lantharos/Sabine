@@ -2,7 +2,7 @@ import type { SabineActivityApi } from "./activity.js";
 import type { SabineClipboardApi } from "./desktop/clipboard.js";
 import type { SabineGuestApi } from "./guest.js";
 import type { SabinePrintApi } from "./desktop/print.js";
-import type { SystemAppearance } from "./desktop/system.js";
+import type { SabineSystemApi } from "./desktop/system.js";
 import type { SabinePopupApi, SabineWindowApi } from "./window/app-window.js";
 
 export type JsonValue =
@@ -13,7 +13,7 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-/** How long to wait for a command's answer. Typed bindings take these. */
+/** How long to wait for a command's answer. */
 export interface CallOptions {
   signal?: AbortSignal;
   /** Deadline in milliseconds; defaults to 60000. */
@@ -44,7 +44,7 @@ export interface SabineApi {
   guest: SabineGuestApi;
   activity: SabineActivityApi;
   popup: SabinePopupApi;
-  system: { appearance(): Promise<SystemAppearance> };
+  system: SabineSystemApi;
   print: SabinePrintApi;
   /** Present in the app's own pages. */
   clipboard?: SabineClipboardApi;

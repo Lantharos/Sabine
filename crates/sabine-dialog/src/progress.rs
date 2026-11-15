@@ -1,13 +1,12 @@
 use softbuffer::{Context, Surface};
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     window::{Window, WindowAttributes, WindowId},
 };
@@ -59,6 +58,7 @@ pub fn run_progress_window(
         title: title.to_string(),
         icon,
         theme: Theme::follow(proxy.clone()),
+        last_paint: None,
     };
     event_loop.run_app(app).map_err(|error| error.to_string())?;
 
@@ -76,31 +76,24 @@ pub fn run_progress_window(
     })
 }
 
-static LAST_PROGRESS_MS: AtomicU64 = AtomicU64::new(0);
-
+/// Wakes the window only when it has painted every earlier update; the window
+/// paints the latest one no sooner than `MIN_PROGRESS_INTERVAL` after the last.
 pub fn set_progress(
     state: &Mutex<ProgressState>,
     proxy: &EventLoopProxy,
     message: impl Into<String>,
     fraction: Option<f32>,
 ) {
-    let message = message.into();
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
-    let last = LAST_PROGRESS_MS.load(Ordering::Relaxed);
-    let force = fraction.is_some_and(|value| value >= 0.999);
-    if let Ok(mut guard) = state.lock() {
-        guard.message = message;
-        guard.fraction = fraction;
-        guard.dirty = true;
-    }
-    if !force && now_ms.saturating_sub(last) < MIN_PROGRESS_INTERVAL.as_millis() as u64 {
+    let Ok(mut guard) = state.lock() else {
         return;
+    };
+    guard.message = message.into();
+    guard.fraction = fraction;
+    let painted = !std::mem::replace(&mut guard.dirty, true);
+    drop(guard);
+    if painted {
+        proxy.wake_up();
     }
-    LAST_PROGRESS_MS.store(now_ms, Ordering::Relaxed);
-    proxy.wake_up();
 }
 
 pub fn finish(state: &Mutex<ProgressState>, proxy: &EventLoopProxy, result: Result<(), String>) {
@@ -119,6 +112,7 @@ struct ProgressApp {
     title: String,
     icon: IconHook,
     theme: Theme,
+    last_paint: Option<Instant>,
 }
 
 impl ApplicationHandler for ProgressApp {
@@ -201,20 +195,33 @@ impl ApplicationHandler for ProgressApp {
         }
     }
 
-    fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
-        let outcome = self.state.lock().ok().and_then(|state| state.done.clone());
-        match outcome {
-            Some(Ok(())) => {
-                event_loop.exit();
-                return;
-            }
-            Some(Err(_)) => {
-                event_loop.exit();
-                return;
-            }
-            None => {}
+    fn new_events(&mut self, event_loop: &dyn ActiveEventLoop, cause: StartCause) {
+        if let StartCause::ResumeTimeReached { .. } = cause {
+            event_loop.set_control_flow(ControlFlow::Wait);
+            self.paint(event_loop, false);
         }
-        self.paint(event_loop, true);
+    }
+
+    fn proxy_wake_up(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let Ok((done, dirty)) = self
+            .state
+            .lock()
+            .map(|state| (state.done.is_some(), state.dirty))
+        else {
+            return;
+        };
+        if done {
+            event_loop.exit();
+            return;
+        }
+        let due = self
+            .last_paint
+            .map(|painted| painted + MIN_PROGRESS_INTERVAL)
+            .filter(|due| dirty && *due > Instant::now());
+        match due {
+            Some(due) => event_loop.set_control_flow(ControlFlow::WaitUntil(due)),
+            None => self.paint(event_loop, true),
+        }
     }
 }
 
@@ -250,6 +257,7 @@ impl ProgressApp {
         if !force && !dirty {
             return Ok(());
         }
+        self.last_paint = Some(Instant::now());
 
         let status = if message.is_empty() {
             self.title.as_str()

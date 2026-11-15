@@ -3,17 +3,11 @@ export interface PrintFilesOptions {
   title?: string;
 }
 
-export interface SabinePrintApi {
-  page(): Promise<void>;
-  element(element: Element): Promise<void>;
-  files(paths: Iterable<string>, options?: PrintFilesOptions): Promise<boolean>;
-}
-
 /**
  * Printing through the desktop's print dialog: the print portal on Linux and
  * the system's own dialog on macOS and Windows.
  */
-export declare const print: {
+export interface SabinePrintApi {
   /** Prints the page, like `window.print()`. */
   page(): Promise<void>;
   /**
@@ -26,4 +20,6 @@ export declare const print: {
    * the person cancels the print dialog on Linux.
    */
   files(paths: Iterable<string>, options?: PrintFilesOptions): Promise<boolean>;
-};
+}
+
+export declare const print: SabinePrintApi;

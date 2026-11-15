@@ -20,7 +20,7 @@ pub use sabine_bridge::{
     ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
     BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,
     GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
-    SabineActivityLease,
+    SabineActivityLease, TypedRequest, WithBody,
 };
 pub use sabine_platform::{
     Appearance, AutostartEntry, BackdropMaterial, BackdropPreference, BackdropRole,

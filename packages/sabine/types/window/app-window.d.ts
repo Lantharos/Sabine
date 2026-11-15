@@ -85,6 +85,15 @@ export interface SabineWindowApi {
    * snapping it to one half of the screen. Wayland only.
    */
   readonly tiled: boolean;
+  /** Calls `callback` whenever `visible` or `suspended` changes. */
+  onVisibilityChanged(callback: (state: WindowVisibility) => void): () => void;
+  /** Calls `callback` whenever `maximized`, `fullscreen` or `tiled` changes. */
+  onStateChanged(callback: (state: WindowState) => void): () => void;
+  /**
+   * Calls `callback` whenever the corner the system's window controls cover
+   * changes, such as when the window enters or leaves fullscreen.
+   */
+  onControlsOverlayChanged(callback: (overlay: ControlsOverlay) => void): () => void;
 }
 
 export interface ControlsOverlay {
@@ -102,18 +111,6 @@ export interface WindowState {
   maximized: boolean;
   fullscreen: boolean;
   tiled: boolean;
-}
-
-export interface AppWindow extends SabineWindowApi {
-  /** Calls `callback` whenever `visible` or `suspended` changes. */
-  onVisibilityChanged(callback: (state: WindowVisibility) => void): () => void;
-  /** Calls `callback` whenever `maximized`, `fullscreen` or `tiled` changes. */
-  onStateChanged(callback: (state: WindowState) => void): () => void;
-  /**
-   * Calls `callback` whenever the corner the system's window controls cover
-   * changes, such as when the window enters or leaves fullscreen.
-   */
-  onControlsOverlayChanged(callback: (overlay: ControlsOverlay) => void): () => void;
 }
 
 /** A window region built with the `region` helpers. */
@@ -146,7 +143,7 @@ export interface SabinePopupApi {
   close(): Promise<void>;
 }
 
-export declare const appWindow: AppWindow;
+export declare const appWindow: SabineWindowApi;
 export declare const popup: SabinePopupApi;
 
 /** Regions for `appWindow.setRegions`, sized with the window as it resizes. */

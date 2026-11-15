@@ -11,11 +11,13 @@ export interface SystemAppearance {
   backdrop: "luca" | "maris";
 }
 
-export declare const system: {
+export interface SabineSystemApi {
   /**
-   * The desktop's light or dark preference and accent color. Pages also get
-   * the accent color as the `--sabine-accent-color` CSS property, and hear
-   * about changes through `events.appearanceChanged`.
+   * The desktop's light or dark preference, accent color and glass. Pages
+   * also get the accent color as the `--sabine-accent-color` CSS property,
+   * and hear about changes through `events.appearanceChanged`.
    */
   appearance(): Promise<SystemAppearance>;
-};
+}
+
+export declare const system: SabineSystemApi;

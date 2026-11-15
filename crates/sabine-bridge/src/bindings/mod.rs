@@ -2,6 +2,7 @@ mod event;
 mod numbers;
 mod phases;
 mod render;
+mod request;
 mod walk;
 
 use std::collections::BTreeMap;
@@ -10,6 +11,7 @@ use specta::datatype::DataType;
 use specta::{Type, Types};
 
 pub use event::{BridgeEvent, Bytes};
+pub use request::{TypedRequest, WithBody};
 
 type Definition = fn(&mut Types) -> DataType;
 
@@ -17,6 +19,7 @@ type Definition = fn(&mut Types) -> DataType;
 struct CommandSignature {
     params: Definition,
     result: Definition,
+    body: bool,
 }
 
 /// The typed commands and events an app's pages can use, from which Sabine
@@ -29,12 +32,13 @@ pub struct BridgeBindings {
 }
 
 impl BridgeBindings {
-    pub fn command<Req: Type, Res: Type>(&mut self, name: impl Into<String>) {
+    pub fn command<Req: TypedRequest, Res: Type>(&mut self, name: impl Into<String>) {
         self.commands.insert(
             name.into(),
             CommandSignature {
-                params: Req::definition,
+                params: Req::params_definition,
                 result: Res::definition,
+                body: Req::BODY,
             },
         );
     }

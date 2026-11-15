@@ -67,6 +67,15 @@ export interface PenEvent {
   tiltY: number | null;
 }
 
+/** A desktop notification the window showed, by its `id`. */
+export interface NotificationEvent {
+  id: string;
+}
+
+export interface NotificationErrorEvent extends NotificationEvent {
+  message: string;
+}
+
 type Listen<T> = (callback: (payload: T) => void) => () => void;
 
 export declare const events: {
@@ -78,6 +87,9 @@ export declare const events: {
   rendererCrashed: Listen<RendererCrashedEvent>;
   appearanceChanged: Listen<SystemAppearance>;
   pen: Listen<PenEvent>;
+  notificationClick: Listen<NotificationEvent>;
+  notificationClose: Listen<NotificationEvent>;
+  notificationError: Listen<NotificationErrorEvent>;
   guestCreated: Listen<GuestInfo>;
   guestDestroyed: Listen<GuestIdEvent>;
   guestLoading: Listen<GuestLoadingEvent>;

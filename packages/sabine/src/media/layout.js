@@ -1,39 +1,27 @@
-/** @typedef {{ x: number, y: number, width: number, height: number }} Box */
+/** @typedef {import("./box.js").Box} Box */
+/** @typedef {Box & { radius: number, clip: Box | null, visible: boolean }} Placement */
+
+import { intersect, sameBox } from "./box.js";
+import { observeMove } from "./move-observer.js";
 
 const LAYOUT_EVENTS = ["scroll", "resize", "fullscreenchange", "transitionend", "animationend"];
+const STYLE_ATTRIBUTES = ["style", "class"];
+
+/** @type {Placement} */
+export const HIDDEN = { x: 0, y: 0, width: 0, height: 0, radius: 0, clip: null, visible: false };
 
 /**
- * @param {Box} a
- * @param {Box} b
- * @returns {Box | null}
+ * @param {Placement} a
+ * @param {Placement} b
  */
-function intersect(a, b) {
-  const x = Math.max(a.x, b.x);
-  const y = Math.max(a.y, b.y);
-  const width = Math.min(a.x + a.width, b.x + b.width) - x;
-  const height = Math.min(a.y + a.height, b.y + b.height) - y;
-  return width > 0 && height > 0 ? { x, y, width, height } : null;
+export function samePlacement(a, b) {
+  return sameBox(a, b) && a.radius === b.radius && a.visible === b.visible && sameBox(a.clip, b.clip);
 }
 
-/**
- * @param {Element} element
- * @returns {Box}
- */
-function clipOf(element) {
-  /** @type {Box | null} */
-  let clip = { x: 0, y: 0, width: innerWidth, height: innerHeight };
-  for (let parent = element.parentElement; parent && clip; parent = parent.parentElement) {
-    const style = getComputedStyle(parent);
-    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
-    const bounds = parent.getBoundingClientRect();
-    clip = intersect(clip, {
-      x: bounds.left + parent.clientLeft,
-      y: bounds.top + parent.clientTop,
-      width: parent.clientWidth,
-      height: parent.clientHeight,
-    });
-  }
-  return clip ?? { x: 0, y: 0, width: 0, height: 0 };
+/** @param {Element} element */
+function clipsOverflow(element) {
+  const style = getComputedStyle(element);
+  return style.overflowX !== "visible" || style.overflowY !== "visible";
 }
 
 /**
@@ -66,27 +54,40 @@ function holePath(container, hole, radius) {
  */
 export class LayoutTracker {
   #element;
+  #style;
   #cutout;
   #cutoutClip;
+  #cutoutPath;
   #place;
-  #observer;
+  #resizes;
+  #restyles;
+  #stopMoves;
+  /** @type {Element[]} */
+  #ancestors = [];
+  /** @type {Element[]} */
+  #clippers = [];
+  #stale = true;
   #frame = 0;
 
   /**
    * @param {Element} element
    * @param {HTMLElement | null} cutout
-   * @param {(placement: Record<string, unknown>) => void} place
+   * @param {(placement: Placement) => void} place
    */
   constructor(element, cutout, place) {
     this.#element = element;
+    this.#style = getComputedStyle(element);
     this.#cutout = cutout;
     this.#cutoutClip = cutout?.style.clipPath ?? "";
+    this.#cutoutPath = this.#cutoutClip;
     this.#place = place;
-    this.#observer = new ResizeObserver(this.update);
-    this.#observer.observe(element);
+    this.#resizes = new ResizeObserver(this.update);
+    this.#restyles = new MutationObserver(this.#restyled);
+    this.#stopMoves = observeMove(element, this.update);
     for (const name of LAYOUT_EVENTS) {
       addEventListener(name, this.update, { capture: true, passive: true });
     }
+    addEventListener("resize", this.#invalidate, { passive: true });
     this.update();
   }
 
@@ -99,21 +100,76 @@ export class LayoutTracker {
   };
 
   stop() {
-    this.#observer.disconnect();
+    this.#resizes.disconnect();
+    this.#restyles.disconnect();
+    this.#stopMoves();
     for (const name of LAYOUT_EVENTS) {
       removeEventListener(name, this.update, { capture: true });
     }
+    removeEventListener("resize", this.#invalidate);
     cancelAnimationFrame(this.#frame);
     if (this.#cutout) this.#cutout.style.clipPath = this.#cutoutClip;
   }
 
+  #invalidate = () => {
+    this.#stale = true;
+    this.update();
+  };
+
+  /** @param {MutationRecord[]} records */
+  #restyled = (records) => {
+    if (records.some((record) => record.target !== this.#element)) this.#stale = true;
+    this.update();
+  };
+
+  #moved() {
+    let index = 0;
+    for (let parent = this.#element.parentElement; parent; parent = parent.parentElement) {
+      if (this.#ancestors[index++] !== parent) return true;
+    }
+    return index !== this.#ancestors.length;
+  }
+
+  #watchAncestors() {
+    this.#stale = false;
+    this.#ancestors = [];
+    for (let parent = this.#element.parentElement; parent; parent = parent.parentElement) {
+      this.#ancestors.push(parent);
+    }
+    this.#clippers = this.#ancestors.filter(clipsOverflow);
+    this.#restyles.disconnect();
+    for (const element of [this.#element, ...this.#ancestors]) {
+      this.#restyles.observe(element, { attributes: true, attributeFilter: STYLE_ATTRIBUTES });
+    }
+    this.#resizes.disconnect();
+    for (const element of [this.#element, ...this.#clippers]) {
+      this.#resizes.observe(element);
+    }
+  }
+
+  #clip() {
+    /** @type {Box | null} */
+    let clip = { x: 0, y: 0, width: innerWidth, height: innerHeight };
+    for (const parent of this.#clippers) {
+      const bounds = parent.getBoundingClientRect();
+      clip = intersect(clip, {
+        x: bounds.left + parent.clientLeft,
+        y: bounds.top + parent.clientTop,
+        width: parent.clientWidth,
+        height: parent.clientHeight,
+      });
+      if (!clip) return { x: 0, y: 0, width: 0, height: 0 };
+    }
+    return clip;
+  }
+
   #measure() {
+    if (this.#stale || this.#moved()) this.#watchAncestors();
     const element = this.#element;
     const bounds = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    const radius = parseFloat(style.borderTopLeftRadius) || 0;
-    const clip = clipOf(element);
-    const visible = element.isConnected && style.visibility !== "hidden";
+    const radius = parseFloat(this.#style.borderTopLeftRadius) || 0;
+    const clip = this.#clip();
+    const visible = element.isConnected && this.#style.visibility !== "hidden";
     this.#place({
       x: bounds.x,
       y: bounds.y,
@@ -126,8 +182,10 @@ export class LayoutTracker {
     if (!this.#cutout) return;
     const hole = visible && intersect(bounds, clip);
     const unclipped = hole && hole.width === bounds.width && hole.height === bounds.height;
-    this.#cutout.style.clipPath = hole
-      ? holePath(this.#cutout, hole, unclipped ? radius : 0)
-      : this.#cutoutClip;
+    const path = hole ? holePath(this.#cutout, hole, unclipped ? radius : 0) : this.#cutoutClip;
+    if (path === this.#cutoutPath) return;
+    this.#cutoutPath = path;
+    this.#cutout.style.clipPath = path;
+    this.#restyles.takeRecords();
   }
 }

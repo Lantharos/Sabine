@@ -1,11 +1,4 @@
-import { requireApi } from "./bridge.js";
+import { forward } from "./bridge.js";
 
 /** @type {import("../types/activity.js").SabineActivityApi} */
-export const activity = {
-  begin(options = {}) {
-    return requireApi().activity.begin(options);
-  },
-  list() {
-    return requireApi().activity.list();
-  },
-};
+export const activity = /* @__PURE__ */ forward((api) => api.activity);

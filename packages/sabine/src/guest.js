@@ -2,7 +2,7 @@
 /** @typedef {import("../types/guest.js").GuestCreateOptions} GuestCreateOptions */
 /** @typedef {import("../types/guest.js").GuestNavigateTarget} GuestNavigateTarget */
 
-import { requireApi } from "./bridge.js";
+import { forward, requireApi } from "./bridge.js";
 
 const guests = () => requireApi().guest;
 
@@ -78,53 +78,7 @@ export class Guest {
 }
 
 /** @type {import("../types/guest.js").GuestHelpers} */
-export const guest = {
-  create(options) {
-    return Guest.create(options);
-  },
-  list() {
-    return guests().list();
-  },
-  get(id) {
-    return guests().get(id);
-  },
-  destroy(id) {
-    return guests().destroy(id);
-  },
-  navigate(id, target) {
-    return guests().navigate(id, target);
-  },
-  setBounds(id, bounds) {
-    return guests().setBounds(id, bounds);
-  },
-  setVisible(id, visible) {
-    return guests().setVisible(id, visible);
-  },
-  setCovered(covered) {
-    return guests().setCovered(covered);
-  },
-  focus(id) {
-    return guests().focus(id);
-  },
-  reload(id, options = {}) {
-    return guests().reload(id, options);
-  },
-  goBack(id) {
-    return guests().goBack(id);
-  },
-  goForward(id) {
-    return guests().goForward(id);
-  },
-  setZoom(id, factor) {
-    return guests().setZoom(id, factor);
-  },
-  executeJavaScript(id, code) {
-    return guests().executeJavaScript(id, code);
-  },
-  capturePreview(id) {
-    return guests().capturePreview(id);
-  },
-  downloadAction(downloadId, action, options = {}) {
-    return guests().downloadAction(downloadId, action, options);
-  },
-};
+export const guest = /* @__PURE__ */ forward((api) => api.guest, {
+  /** @param {GuestCreateOptions} options */
+  create: (options) => Guest.create(options),
+});
