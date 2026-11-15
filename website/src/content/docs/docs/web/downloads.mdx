@@ -1,0 +1,65 @@
+---
+title: Downloads
+description: Decide where the downloads a window's page starts go, follow their progress, and pause, resume or cancel them.
+sidebar:
+  order: 6
+---
+
+A download the window's page starts asks people where to save it, in the desktop's save dialog.
+The app can decide instead, in Rust, and the page hears how each download goes. Guests' downloads
+work differently: they wait for the page, see [Guests](/docs/web/guests/#downloads).
+
+## Choosing where downloads go
+
+`.on_download` sees each download as it starts and answers where it goes:
+
+```rust
+use sabine::{Download, DownloadDecision};
+
+window.on_download(|download: &Download| {
+    match dirs::download_dir() {
+        Some(folder) => DownloadDecision::SaveTo(folder.join(&download.filename)),
+        None => DownloadDecision::Ask,
+    }
+})
+```
+
+`SaveTo` saves the file at that path, `Ask` opens the save dialog, and `Cancel` drops the
+download. `.on_download_updated` hears every download as it moves along, from its request to
+`Completed`, `Cancelled` or `Interrupted`.
+
+Rust pauses, resumes and cancels downloads through the process's
+[event emitter](/docs/reference/rust-api/#bridgeeventemitter):
+
+```rust
+use sabine::DownloadControl;
+
+process
+    .bridge_event_emitter()
+    .download_control(download.window, &download.id, DownloadControl::Pause);
+```
+
+## In the page
+
+The page receives a `download` event for each change, and controls downloads with `downloads`:
+
+```ts
+import { downloads, events } from "@lantharos/sabine";
+
+events.download((download) => {
+  if (download.state === "progress" && download.totalBytes > 0) {
+    progress.value = download.receivedBytes / download.totalBytes;
+  }
+});
+
+cancel.onclick = () => downloads.cancel(current.downloadId);
+```
+
+Each event carries the `downloadId`, the `url`, the `filename` the site suggested, the
+`mimeType`, `receivedBytes`, `totalBytes`, the `savePath` once it's known, and the `state`:
+`requested`, `progress`, `completed`, `cancelled` or `interrupted`. An interrupted download carries
+an `error` saying why, as guests' downloads do. `downloads.pause`, `downloads.resume` and
+`downloads.cancel` take the `downloadId`.
+
+A window keeps up to 256 pending or running downloads, its page's and its guests' together, and
+cancels further ones.

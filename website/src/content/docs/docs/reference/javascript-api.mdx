@@ -39,6 +39,8 @@ in code that also runs in a browser.
 | `activity` | object | [Activity](#activity) |
 | `NativeVideo` | class | [Native video](#nativevideo) |
 | `clipboard` | object | [Clipboard](#clipboard) |
+| `downloads` | object | [Downloads](#downloads) |
+| `spellcheck` | object | [Spellcheck](#spellcheck) |
 | `print` | object | [Printing](#print) |
 | `shell` | object | [Shell](#shell) |
 | `system` | object | [System](#system) |
@@ -252,13 +254,14 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | `screenLocked` | `null` | The screen locked. |
 | `screenUnlocked` | `null` | The screen unlocked. |
 | `powerSourceChanged` | `PowerSource` | The machine switched between battery and mains power, or its battery's charge changed. |
+| `download` | `DownloadEvent` | A download of the app's page was requested, progressed or ended. |
 | `guestCreated` | `GuestInfo` | A guest finished opening. |
 | `guestDestroyed` | `GuestIdEvent` | A guest closed. |
 | `guestLoading` | `GuestLoadingEvent` | A guest started or finished loading. |
 | `guestTitle` | `GuestTitleEvent` | A guest's title changed. |
 | `guestNavigated` | `GuestNavigatedEvent` | A guest navigated. |
 | `guestNewWindow` | `GuestNewWindowEvent` | A guest with the `deny` popup policy tried to open a window. |
-| `guestDownload` | `GuestDownloadEvent` | A download was requested, progressed or ended. |
+| `guestDownload` | `GuestDownloadEvent` | A guest's download was requested, progressed or ended. |
 | `guestShortcut` | `GuestShortcutEvent` | A focused guest received an intercepted shortcut. |
 | `guestWheel` | `GuestWheelEvent` | Horizontal scrolling over a guest was intercepted. |
 | `guestFavicon` | `GuestFaviconEvent` | A guest's favicon URLs changed. |
@@ -669,6 +672,12 @@ interface GuestBounds {
 
 type GuestPopupPolicy = "deny" | "navigateSame" | "openGuest";
 
+type SabinePermission =
+  | "camera" | "microphone" | "screen" | "geolocation" | "notifications" | "midi"
+  | "clipboard" | "pointer-lock" | "keyboard-lock" | "local-fonts" | "window-management"
+  | "idle-detection" | "storage-access" | "protected-media" | "file-system" | "sensors"
+  | "local-network" | "downloads";
+
 interface GuestCreateOptions {
   id?: string;
   url?: string;
@@ -681,6 +690,7 @@ interface GuestCreateOptions {
   visible?: boolean; // default true
   popupPolicy?: GuestPopupPolicy; // default "deny"
   allowDownloads?: boolean; // default true
+  permissions?: SabinePermission[]; // what the guest may ask people for, default none
   backgroundColor?: string; // "#RRGGBB" or "#AARRGGBB"
 }
 
@@ -734,7 +744,7 @@ interface GuestNewWindowEvent {
 }
 
 interface GuestDownloadEvent {
-  guestId: string; // empty for downloads of the app's own page
+  guestId: string;
   downloadId: string;
   url: string;
   filename: string;
@@ -942,6 +952,49 @@ await clipboard.write({ "text/uri-list": "file:///home/ana/notes.txt\r\n" });
 const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
 ```
 
+## `downloads`
+
+```ts
+const downloads: {
+  pause(downloadId: string): Promise<void>;
+  resume(downloadId: string): Promise<void>;
+  cancel(downloadId: string): Promise<void>;
+};
+
+interface DownloadEvent {
+  downloadId: string;
+  url: string;
+  filename: string;
+  mimeType: string;
+  totalBytes: number; // 0 or less while the size is unknown
+  receivedBytes: number;
+  state: "requested" | "progress" | "completed" | "cancelled" | "interrupted";
+  savePath: string;
+  error?: string; // why an interrupted download stopped
+}
+```
+
+Controls the downloads the app's page started, which `events.download` reports. Where they go is
+up to the app's Rust code or the person, see [Downloads](/docs/web/downloads/).
+
+## `spellcheck`
+
+```ts
+const spellcheck: {
+  get(): Promise<SpellcheckSettings>;
+  set(settings: Partial<SpellcheckSettings>): Promise<SpellcheckSettings>;
+  addWord(word: string): Promise<void>;
+};
+
+interface SpellcheckSettings {
+  enabled: boolean;
+  languages: string[]; // such as "en-US", at most 16
+}
+```
+
+Reads and changes spellchecking in the app's profile, and adds words to its custom dictionary. See
+[Spellcheck](/docs/web/spellcheck/).
+
 ## `print`
 
 ```ts
@@ -1113,7 +1166,7 @@ await tray.update({
 
 The package's types also declare the global, so `window.sabine` is typed as
 `SabineApi | undefined` in pages that import the package. It has `bridge`, `window`, `guest`,
-`activity`, `popup`, `system`, `print` and, in the app's own pages, `clipboard`: the objects the
-exports above stand for. `appWindow`, `popup`, `guest`, `activity`, `system`, `print` and
-`clipboard` look up their part of `window.sabine` on each use, so they have the same members;
+`activity`, `popup`, `system`, `print`, `downloads`, `spellcheck` and, in the app's own pages,
+`clipboard`: the objects the exports above stand for. `appWindow`, `popup`, `guest`, `activity`,
+`system`, `print`, `downloads`, `spellcheck` and `clipboard` look up their part of `window.sabine` on each use, so they have the same members;
 `guest.create` alone differs, resolving a [`Guest`](#guest) instead of its `GuestInfo`.

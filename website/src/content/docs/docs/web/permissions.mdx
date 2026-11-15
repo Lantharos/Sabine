@@ -1,0 +1,105 @@
+---
+title: Permissions
+description: Let pages use the camera, microphone, screen, location and other browser permissions the app declares, and decide requests in Rust or let people choose.
+sidebar:
+  order: 5
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Pages ask for browser permissions as they would anywhere: `getUserMedia` for the camera and
+microphone, `getDisplayMedia` for the screen, `navigator.geolocation` for the location. Sabine
+grants a permission only when the app declares it, and only to the app's own pages and the guests
+the app lets ask. Every other request is denied without a prompt.
+
+## Declaring permissions
+
+List what the app's pages may ask for in `[permissions]`, each set to `true` or to the reason the
+app needs it:
+
+```toml
+[permissions]
+camera = "Notes records video memos"
+microphone = true
+screen = true
+```
+
+The same goes in Rust with `.permission(Permission::Camera)`. The reason shows in the macOS
+permission dialog; with `true`, macOS says the app uses the device.
+
+| Permission | What the page can do |
+| --- | --- |
+| `camera` | Use cameras, and pan, tilt and zoom them |
+| `microphone` | Record sound |
+| `screen` | Record a screen or window, and the sound it plays |
+| `geolocation` | Read the location |
+| `notifications` | Pass Chromium's notification permission, which shows nothing itself. The app's own pages show desktop notifications without it, see [Notifications](/docs/desktop/notifications/) |
+| `midi` | Send system exclusive MIDI messages |
+| `clipboard` | Read the clipboard. The app's own pages can without it |
+| `pointer-lock` | Lock and hide the pointer |
+| `keyboard-lock` | Capture keys such as Escape and system shortcuts |
+| `local-fonts` | List the fonts installed on the computer |
+| `window-management` | Place windows on other displays |
+| `idle-detection` | Know when people are away |
+| `storage-access` | Use its cookies and storage while embedded in another site |
+| `protected-media` | Play DRM content that identifies the device |
+| `file-system` | Edit files people pick, with the File System Access API |
+| `sensors` | Read motion and orientation sensors |
+| `local-network` | Reach servers on the local network and the loopback interface from a public site |
+| `downloads` | Start several downloads at once |
+
+An app Sabine confines to its [sandbox](/docs/distribution/app-sandbox/) also needs
+`camera = true` or `microphone = true` in `[sandbox]` before its pages can use those devices.
+
+## Who may ask
+
+The app's own documents may ask for any permission the app declares. A guest asks for nothing
+unless the page creates it with the permissions it may ask for, of those the app declares:
+
+```ts
+await guest.create({
+  url: "https://meet.example.com",
+  bounds,
+  permissions: ["camera", "microphone"],
+});
+```
+
+Frames embedded in the app's pages ask in their own origin's name, so a frame from another site is
+denied like any other site.
+
+## Asking people
+
+Sabine asks in the window, at its top, naming the site and what it wants. The app's own pages ask
+in the app's name. People's choices are kept per origin in the app's profile, and asked again only
+for permissions they haven't decided. Recording the screen is asked each time, since what people
+share changes.
+
+On Linux, Sabine leaves screen recording to the desktop: the screen sharing portal asks people
+which screen or window to share, so Sabine doesn't ask first.
+
+## Deciding in Rust
+
+`.on_permission_request` sees each request for a declared permission before people do, and
+answers it:
+
+```rust
+use sabine::{PermissionDecision, PermissionRequest, Permission};
+
+window.on_permission_request(|request: &PermissionRequest| {
+    if request.guest.is_none() && request.permissions == [Permission::Microphone] {
+        PermissionDecision::Allow
+    } else {
+        PermissionDecision::Ask
+    }
+})
+```
+
+`Allow` and `Deny` answer right away and aren't remembered. `Ask` hands the request to people, or
+to the choice they made before. The listener runs on the thread every window's listeners share, so
+it should answer quickly.
+
+<Aside>
+  Pages on Linux can't find the location: Chromium reads it from Google's location service, which
+  needs an API key Sabine doesn't have, and has no way to ask the desktop. Windows and macOS give
+  pages the system's location once people allow it there too.
+</Aside>

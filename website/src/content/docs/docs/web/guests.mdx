@@ -45,6 +45,7 @@ handles: `guest.create` also resolves with a `Guest`, and `guest.navigate(id, ur
 | `visible` | `true` | Whether the guest is shown. |
 | `popupPolicy` | `"deny"` | What happens when the guest opens a window. See [Popups](#popups). |
 | `allowDownloads` | `true` | Whether the guest may start downloads. See [Downloads](#downloads). |
+| `permissions` | `[]` | The browser permissions the guest may ask people for, of those the app declares. See [Permissions](/docs/web/permissions/#who-may-ask). |
 | `allowBridge` | `false` | Whether the guest's pages get the bridge. See [Bridge access](#bridge-access). |
 | `interceptedShortcuts` | `[]` | Keyboard shortcuts the page handles while the guest has focus. See [Keyboard and wheel](#keyboard-and-wheel). |
 | `interceptHorizontalWheel` | `false` | Whether horizontal scrolling over the guest goes to the page instead. |
@@ -217,8 +218,7 @@ Later events report `progress`, then `completed`, `cancelled` or `interrupted`, 
 created with `allowDownloads: false` can't download at all. A window keeps up to 256 pending or
 running downloads and cancels further ones.
 
-Downloads the app's own page starts open the Save dialog without waiting, and are reported as
-`guestDownload` events with an empty `guestId`.
+The app's own page has downloads of its own, see [Downloads](/docs/web/downloads/).
 
 ## Keyboard and wheel
 

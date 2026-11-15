@@ -1,0 +1,44 @@
+---
+title: Spellcheck
+description: Choose the languages pages check spelling in, turn spellchecking on or off, and add words to the app's dictionary.
+sidebar:
+  order: 7
+---
+
+Text fields in the app's pages check spelling as people type, and the context menu offers
+corrections. Spellchecking belongs to the app's profile, so its settings and custom words are
+shared by every window of the app.
+
+## Languages
+
+Pick the languages in `Sabine.toml`, or in Rust with `.spellcheck_languages(["en-US", "de-DE"])`
+and `.spellcheck(false)`:
+
+```toml
+[spellcheck]
+languages = ["en-US", "de-DE"]
+```
+
+Without them, Chromium checks the system's language. Settings from `Sabine.toml` or Rust apply
+each time the app starts, over what a page changed, so an app that lets people pick languages
+leaves them out and sets them from the page.
+
+## From the page
+
+```ts
+import { spellcheck } from "@lantharos/sabine";
+
+await spellcheck.set({ languages: ["en-GB", "fr"] });
+await spellcheck.addWord("Sabine");
+const { enabled, languages } = await spellcheck.get();
+```
+
+`set` changes what it's given and keeps the rest, `addWord` adds a word to the app's custom
+dictionary, and `get` reads the settings. Only the app's own pages have `spellcheck`. Rust changes
+the same settings with the event emitter's `set_spellcheck` and `add_spellcheck_word`.
+
+## Dictionaries
+
+On Linux, Chromium downloads the dictionary of each language from Google the first time a page
+checks spelling in it, and keeps it in the app's profile. On Windows and macOS it checks with the
+system's spellchecker, and downloads dictionaries only for languages the system lacks.

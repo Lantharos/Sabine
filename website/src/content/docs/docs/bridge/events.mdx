@@ -198,6 +198,7 @@ Pages receive these events without the app sending anything. The `events` object
 | `events.screenLocked` | `system.lock` | `null` | The screen locked. |
 | `events.screenUnlocked` | `system.unlock` | `null` | The screen unlocked. |
 | `events.powerSourceChanged` | `system.powerSource` | `{ onBattery, batteryLevel }` | The machine switched between battery and mains power, or its battery's charge changed. See [Power and idle](/docs/desktop/power-and-idle/). |
+| `events.download` | `download` | `DownloadEvent` | A download of the app's page was requested, progressed or ended. |
 | `events.rendererCrashed` | `runtime.renderer-crashed` | `{ guestId, code, recovering }` | A renderer stopped. `guestId` is empty for the app's own page. Sabine reloads it unless it stopped three times within a minute. |
 | `events.guestCreated` | `guest.created` | `GuestInfo` | A guest finished opening. |
 | `events.guestDestroyed` | `guest.destroyed` | `{ id }` | A guest closed. |
@@ -205,7 +206,7 @@ Pages receive these events without the app sending anything. The `events` object
 | `events.guestTitle` | `guest.title` | `{ id, title }` | A guest's document title changed. |
 | `events.guestNavigated` | `guest.navigated` | `{ id, url, title, canGoBack, canGoForward }` | A guest navigated or its address changed. |
 | `events.guestNewWindow` | `guest.newWindow` | `{ id, url, disposition }` | A guest with the `deny` popup policy tried to open a window. |
-| `events.guestDownload` | `guest.download` | `GuestDownloadEvent` | A download was requested, progressed or ended. |
+| `events.guestDownload` | `guest.download` | `GuestDownloadEvent` | A guest's download was requested, progressed or ended. |
 | `events.guestShortcut` | `guest.shortcut` | `GuestShortcutEvent` | A focused guest received one of its intercepted shortcuts. |
 | `events.guestWheel` | `guest.wheel` | `GuestWheelEvent` | A guest that intercepts horizontal scrolling received a horizontal wheel or trackpad scroll. |
 | `events.guestFavicon` | `guest.favicon` | `{ id, favicons }` | A guest's favicon URLs changed. |

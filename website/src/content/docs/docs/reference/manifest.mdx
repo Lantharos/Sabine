@@ -43,13 +43,20 @@ public_key = "4Zc2Y0v2pZ8m0nq3w6m2b1V8x0o0Yk1o8f6lV0Gq1yE="
 
 [sandbox]
 filesystems = ["xdg-documents"]
+microphone = true
+
+[permissions]
+microphone = "Tern records voice notes"
+
+[spellcheck]
+languages = ["en-US", "de-DE"]
 ```
 
 Every table is optional, and a project without a `Sabine.toml` uses the defaults. Paths are relative
 to the folder that holds `Sabine.toml`. A key Sabine doesn't know is an error for the `sabine`
 command, which names it, so a misspelled key never silently does nothing. The app itself only warns
 about one, in its output and the `manifest` log, so a bundle made by a newer `sabine` still starts;
-in `[sandbox]` an unknown key is an error there too.
+in `[sandbox]`, `[permissions]` and `[spellcheck]` an unknown key is an error there too.
 
 ## How the app reads it
 
@@ -284,6 +291,26 @@ platform applies it.
 | `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox; takes only `reason` beside it |
 | `reason` | string | | Why the app can't run in a sandbox, in one line. Required with `unsandboxed = true` |
 
+## `[permissions]`
+
+What the app's pages may ask people for. Each key is a permission, set to `true` or to the reason
+the app needs it, in one line, which macOS shows when it asks for the camera, microphone or
+location. [Permissions](/docs/web/permissions/) lists them and explains who may ask.
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `camera`, `microphone`, `screen`, `geolocation`, `notifications`, `midi`, `clipboard`, `pointer-lock`, `keyboard-lock`, `local-fonts`, `window-management`, `idle-detection`, `storage-access`, `protected-media`, `file-system`, `sensors`, `local-network`, `downloads` | boolean or string | Lets pages ask for the permission. A confined app also needs `camera` or `microphone` in `[sandbox]` for those two |
+
+## `[spellcheck]`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | Chromium's | Whether pages check spelling |
+| `languages` | array of strings | The system's language | Up to 16 language tags, such as `en-US`, the first suggesting corrections first |
+
+Each launch applies these to the app's profile, over what its pages set. See
+[Spellcheck](/docs/web/spellcheck/).
+
 ## The production manifest
 
 `sabine bundle` writes its own `Sabine.toml` into the bundle, next to the executable in
@@ -294,7 +321,8 @@ platform applies it.
 - `[web]` with `entry` pointing at the packaged assets in `web/`, or `url` for a remote app, plus
   `allowed_origins` and `local_files`
 - `[resources]` pointing at the copies in `files/`
-- `[sandbox]`, normalized, and `[window]` when `splash` is on
+- `[sandbox]`, normalized, `[permissions]` and `[spellcheck]` as they're declared, and `[window]`
+  when `splash` is on
 - `[updates]` with the source, channel, policy and public key (none for Schelf sources), plus two
   keys the bundle sets for its package kind: `install_mode` (`"managed"` for archives, `"package"`
   for installers and packages) and `package_kind` (`"deb"`, `"rpm"`, `"app-image"`, `"msi"`,
