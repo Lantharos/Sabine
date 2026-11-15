@@ -1,6 +1,6 @@
 use std::{
     path::Path,
-    sync::mpsc::{Receiver, TryRecvError, channel},
+    sync::mpsc::{Receiver, channel},
     time::{Duration, Instant},
 };
 
@@ -46,11 +46,8 @@ impl RustChanges {
 
     /// Whether the sources changed and have been quiet for a moment since.
     pub(super) fn settled(&mut self) -> bool {
-        loop {
-            match self.events.try_recv() {
-                Ok(()) => self.pending = Some(Instant::now()),
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
-            }
+        while let Ok(()) = self.events.try_recv() {
+            self.pending = Some(Instant::now());
         }
         if self
             .pending
