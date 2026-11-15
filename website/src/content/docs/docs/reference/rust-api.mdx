@@ -412,6 +412,7 @@ impl SabineProcess {
 }
 ```
 
+- `show`, `hide`, `set_visible` and `focus_window` act on the window people focused last, or the first one open.
 - `id` is the first window's id while it is open. `WindowId` is a `u32`, the id of the window host's process.
 - `open_window` opens another window with the app's id and bridge handlers; handlers registered on the window you pass are ignored. It waits up to 20 seconds for the first window to be ready, since the others join its browser. `close_window` returns `false` for an unknown id.
 - `wait` blocks until every window has closed, then returns the first window's exit status. A background app keeps waiting for its next activation, until `SabineProcessHandle::quit` ends it.
@@ -462,11 +463,15 @@ impl BridgeEventEmitter {
     pub fn set_visible(&self, visible: bool) -> bool;
     pub fn focus_window(&self) -> bool;
     pub fn focus_window_with_activation_token(&self, token: Option<&str>) -> bool;
+
+    pub fn show_window(&self, window: WindowId) -> bool;
+    pub fn hide_window(&self, window: WindowId) -> bool;
+    pub fn activate_window(&self, window: WindowId, activation_token: Option<&str>) -> bool;
     pub fn close_window(&self, window: WindowId) -> bool;
 }
 ```
 
-`close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead.
+`show`, `hide`, `set_visible` and `focus_window` act on the app's window: the one people focused last, or the first one open. `show_window`, `hide_window` and `activate_window` act on the window you name; `activate_window` shows and focuses it. `close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead.
 
 The emitter is `Clone`, `Send` and `Sync`. Events go to every window unless sent with a `_to` variant. Sending waits while a window's pages haven't taken earlier events, so producers run at the pace pages keep up with. Pages receive bytes as a `Uint8Array`.
 

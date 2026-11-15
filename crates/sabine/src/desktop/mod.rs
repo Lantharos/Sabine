@@ -31,11 +31,11 @@ use platform::ShortcutHost;
 use platform::UiThread;
 #[cfg(target_os = "macos")]
 pub(crate) use platform::desktop_wait;
-#[cfg(target_os = "windows")]
-pub(crate) use platform::with_app_icon;
 use platform::{
     GlobalShortcuts, register_deep_links, register_native_messaging_host, write_autostart_entry,
 };
+#[cfg(target_os = "windows")]
+pub(crate) use platform::{allow_foreground, with_app_icon};
 pub use tray::TrayHandle;
 pub(crate) use tray::UPDATE_COMMAND as TRAY_UPDATE_COMMAND;
 

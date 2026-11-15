@@ -1,5 +1,8 @@
+use std::io::Write;
+
 use winit::dpi::PhysicalSize;
 
+use crate::bridge::FOCUSED_LINE;
 use crate::osr::host::native::OsrNativeHost;
 
 impl OsrNativeHost {
@@ -60,6 +63,7 @@ impl OsrNativeHost {
         self.focused = focused;
         if focused {
             self.refresh_appearance();
+            report_focus();
         } else {
             self.cancel_context_menu();
             self.lose_pointer_capture();
@@ -116,4 +120,11 @@ impl OsrNativeHost {
         self.config.width = logical.width.round() as u32;
         self.config.height = logical.height.round() as u32;
     }
+}
+
+/// Tells the app that calls for its window act on this one from now on.
+fn report_focus() {
+    let mut output = std::io::stdout().lock();
+    let _ = writeln!(output, "{FOCUSED_LINE}");
+    let _ = output.flush();
 }
