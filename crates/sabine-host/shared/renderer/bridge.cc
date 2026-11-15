@@ -5,6 +5,7 @@
 #include <vector>
 #include "common/bridge_policy.h"
 #include "common/bytes_message.h"
+#include "include/cef_command_line.h"
 
 namespace sabine_bridge {
 namespace {
@@ -19,7 +20,6 @@ struct ContextOrigin {
   std::string origin;
 };
 std::vector<ContextOrigin> contexts;
-const std::string process_token = UniqueToken();
 uint64_t next_request = 0;
 constexpr size_t kMaxPendingRequests = 128;
 constexpr size_t kMaxMessageBytes = 1024 * 1024;
@@ -117,8 +117,12 @@ class NativePostMessageHandler : public CefV8Handler {
       exception = "Sabine bridge request capacity is exhausted";
       return false;
     }
+    static const std::string renderer =
+        CefCommandLine::GetGlobalCommandLine()
+            ->GetSwitchValue("renderer-client-id")
+            .ToString();
     const std::string native_id =
-        process_token + "-" + std::to_string(++next_request);
+        renderer + "-" + std::to_string(++next_request);
     pending.emplace(native_id, PendingRequest{context, (*values)[1], browser});
     (*values)[1] = native_id;
     return true;
