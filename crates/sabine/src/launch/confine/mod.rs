@@ -54,9 +54,17 @@ fn dev_port(config: &SabineWindowConfig) -> Option<u16> {
     crate::launch::dev_server::port(config.dev_url.as_deref()?)
 }
 
-/// Confines the app to what its `[sandbox]` declares, unless it declares
-/// nothing, says it can't run in a sandbox, already runs in one or the
-/// system gave it full access.
+/// Whether Sabine confines the app to its `[sandbox]`: it declares one it
+/// runs in, doesn't run in an app sandbox already, and the system didn't
+/// give it full access.
+pub(crate) fn applies(config: &SabineWindowConfig) -> bool {
+    matches!(config.sandbox, Some(Sandbox::Confined { .. }))
+        && !super::sandbox::in_app_sandbox()
+        && std::env::var_os(FULL_ACCESS).is_none()
+}
+
+/// Confines the app to what its `[sandbox]` declares, when [`applies`] says
+/// Sabine does.
 pub(crate) fn apply(config: &SabineWindowConfig, runtime: &Path, host: &Path) -> SabineResult<()> {
     let Some(Sandbox::Confined {
         network,
@@ -67,7 +75,7 @@ pub(crate) fn apply(config: &SabineWindowConfig, runtime: &Path, host: &Path) ->
     else {
         return Ok(());
     };
-    if super::sandbox::in_app_sandbox() || std::env::var_os(FULL_ACCESS).is_some() {
+    if !applies(config) {
         return Ok(());
     }
     let app_id = crate::osr::launch::require_app_id(config)?;

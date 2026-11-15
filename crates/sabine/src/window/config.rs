@@ -212,6 +212,19 @@ impl SabineWindowConfig {
         self.browser.effective_remote_devtools_port(self.dev_mode())
     }
 
+    /// Whether the app's pages can join a shared runtime: its Chromium flags
+    /// are the same as every other app's, and neither an app sandbox, which
+    /// the runtime's service can't reach into, nor Sabine's own confinement,
+    /// which a runtime started outside the app never inherits, holds it.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn shares_runtime(&self) -> bool {
+        !self.browser.separate_runtime
+            && !self.dev_mode()
+            && !crate::launch::sandbox::in_app_sandbox()
+            && !crate::launch::confine::applies(self)
+            && self.effective_remote_devtools_port().is_none()
+    }
+
     /// Whether pages in this window can play video on native surfaces.
     pub(crate) fn native_media(&self) -> bool {
         crate::media::supported(self)
