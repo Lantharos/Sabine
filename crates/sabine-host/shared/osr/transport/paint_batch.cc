@@ -9,7 +9,8 @@
 
 using namespace sabine_osr;
 
-bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
+bool SabineOsrHandler::SendPaintBatch(const AcceleratedSurfaceKey& source,
+                                      PaintSurface surface,
                                       const std::string& guest_id,
                                       int32_t origin_x,
                                       int32_t origin_y,
@@ -48,11 +49,14 @@ bool SabineOsrHandler::SendPaintBatch(PaintSurface surface,
   if (rects.empty()) {
     return true;
   }
-  if (total_bytes >= kSharedPaintThreshold &&
-      SendSharedPaint(surface, guest_id, origin_x, origin_y, buffer,
-                      buffer_width, buffer_height,
-                      static_cast<size_t>(total_bytes))) {
-    return true;
+  if (total_bytes >= kSharedPaintThreshold) {
+    if (SendSharedPaint(surface, guest_id, origin_x, origin_y, buffer,
+                        buffer_width, buffer_height,
+                        static_cast<size_t>(total_bytes))) {
+      return true;
+    }
+    dropped_paints_.insert(source);
+    return false;
   }
 
   std::vector<char>& payload = paint_scratch_.bytes;
@@ -131,6 +135,18 @@ bool SabineOsrHandler::SendSharedPaint(PaintSurface surface,
 void SabineOsrHandler::ReleaseSharedPaint(uint32_t slot, uint32_t generation) {
   CEF_REQUIRE_UI_THREAD();
   shared_paint_.Release(slot, generation);
+  RepaintDroppedPaints();
+}
+
+void SabineOsrHandler::RepaintDroppedPaints() {
+  for (const AcceleratedSurfaceKey& surface : dropped_paints_) {
+    for (const CefRefPtr<CefBrowser>& browser : browsers_) {
+      if (browser->GetIdentifier() == surface.browser_id) {
+        browser->GetHost()->Invalidate(surface.popup ? PET_POPUP : PET_VIEW);
+      }
+    }
+  }
+  dropped_paints_.clear();
 }
 
 void SabineOsrHandler::SendGuestOrder() {

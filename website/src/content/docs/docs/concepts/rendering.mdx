@@ -56,7 +56,7 @@ Sabine runs only in Wayland sessions, and Chromium uses its Wayland platform. Ch
   </TabItem>
   <TabItem label="Windows">
 
-Chromium renders with ANGLE on D3D11, on the adapter the window composites on: the window passes its DXGI adapter LUID to Chromium. The host opens each of Chromium's pooled textures once on D3D11, keeps it while it stays in the pool, and copies the changed area into one of four Sabine-owned D3D12 shared textures per surface. A handle value Chromium reuses for a new texture is told apart by the kernel object it names. Chromium's frames may be BGRA or RGBA.
+Chromium renders with ANGLE on D3D11, on the adapter the window composites on: the window passes its DXGI adapter LUID to Chromium. The host opens each of Chromium's pooled textures once on D3D11, keeps up to eight for each surface until the pool moves to another size, and copies the changed area into one of four Sabine-owned D3D12 shared textures per surface. A handle value Chromium reuses for a new texture is told apart by the kernel object it names. Chromium's frames may be BGRA or RGBA.
 
 Chromium creates its texture without a keyed mutex and fences only between its own devices, so nothing would make its next draw wait for Sabine's copy. The host therefore waits on a D3D11 fence until the copy has finished before it returns, checking the fence's value rather than trusting its event. A copy that doesn't finish within a second counts as a lost device.
 
@@ -67,7 +67,7 @@ If the window's device lands on a different adapter than the browser's, Sabine r
   </TabItem>
   <TabItem label="macOS">
 
-Chromium renders into IOSurfaces. The host wraps each of Chromium's pooled surfaces as a Metal texture once, blits the changed area into one of four Sabine-owned IOSurfaces per surface, and waits for the blit to finish before it returns: Chromium reuses its surface without checking whether it is still in use, so a copy that was only scheduled could read the next frame.
+Chromium renders into IOSurfaces. The host wraps each of Chromium's pooled surfaces as a Metal texture once, keeps up to eight for each surface until the pool moves to another size, blits the changed area into one of four Sabine-owned IOSurfaces per surface, and waits for the blit to finish before it returns: Chromium reuses its surface without checking whether it is still in use, so a copy that was only scheduled could read the next frame.
 
 Each owned IOSurface reaches the window once, as a Mach port sent to a bootstrap service set up for that window's connection. Messages carry the window's socket token and anything else is discarded. Frames then refer to the surface by its id. A frame that names a surface whose announcement is still on its way waits for it briefly; every other frame goes straight through. The window wraps each surface as a Metal texture once and acknowledges it after GPU work stops sampling it.
 
@@ -87,6 +87,7 @@ Chromium reports which rectangle of a page changed, and that is all Sabine copie
 - Every slot remembers the area that changed since it last received a frame, and a frame copies only that area into it.
 - On Linux, Chromium reports damage against the frame before, so a frame that follows one the host never copied is copied whole.
 - Chromium changes some pixels without reporting them, such as the edges of icons and rounded corners when an animated layer comes or goes. Once a page has painted nothing for 100 milliseconds, the Linux host copies its last frame again whole from the buffer Chromium drew it into, so the window settles on the page exactly as drawn.
+- Every frame names the area that changed since the surface's frame before it. A page in a [subsurface on Linux](#the-page-in-a-subsurface-on-linux) tells the compositor only about that area, unless the frame before never reached the compositor.
 - Software paints upload only their dirty rectangles.
 
 Composing the window is cheap by comparison: a redraw draws a handful of textured quads for the page, its popups, its guests and Sabine's own chrome, and changed pixels only travel as far as the page textures. The window redraws only when a paint, the titlebar, a tooltip or a menu changes. Its display list, vertex data and surface ids are reused between redraws, and GPU vertex buffers grow geometrically, so a redraw allocates nothing.
@@ -116,8 +117,9 @@ The browser logs why its frames were dropped, against the size and scale the win
 In software, Chromium hands over BGRA dirty rectangles. Sabine moves them without per-frame allocation, mapping or file writes:
 
 - A paint of 256 KiB or more is copied into one of at most four reusable shared-memory slots per window. The window maps each slot once and hands it back with a release message once its pixels are consumed.
-- On Linux and macOS a slot reaches the window as a file descriptor with its first paint. On Windows it is a file mapping whose handle the browser duplicates, read-only, into the window's process.
-- Smaller paints travel inline on the socket, and so does a paint that finds every slot still in use.
+- On Linux and macOS a slot reaches the window as a file descriptor with its first paint. On Linux the slot is sealed so it can never shrink under the window's mapping, and the window refuses one that isn't. On Windows it is a file mapping whose handle the browser duplicates, read-only, into the window's process.
+- Smaller paints travel inline on the socket.
+- A paint that finds every slot still in use is dropped, and Chromium paints that surface again as soon as a slot comes back.
 - Every rectangle in a batch refers to the batch's single byte buffer. Rectangles outside the surface are left out; a paint is dropped only when its pixels are cut short.
 
 The window uploads each changed rectangle from those bytes into the surface's GPU texture. wgpu stages the upload once on its way to the GPU, with no other copy on the CPU.
@@ -175,7 +177,7 @@ A graphics device can disappear, such as when the driver resets or is updated wh
 
 While the driver is still restarting and no adapter is available, the window looks for one every 250 milliseconds for up to 20 seconds, each attempt on a thread of its own, so the window keeps handling input and the browser's messages in the meantime. Sabine then asks Chromium to repaint its main page, popups and guests. The page keeps its state and its bridge connection.
 
-On Linux, when a copy fails on a lost device, the browser's Vulkan copy device opens a new device through a new Vulkan instance, imports Chromium's dma-bufs again into new Sabine-owned slots, and repaints every page whole. While no device is available it retries every 250 milliseconds for up to 20 seconds, and only then does the page fall back to software painting. A window whose frames fail to import because its own device was lost waits for its renderer to come back instead.
+On Linux, when a copy fails on a lost device, the browser's Vulkan copy device opens a new device through a new Vulkan instance, imports Chromium's dma-bufs again into new Sabine-owned slots, and repaints every page whole. While no device is available it tries again at most every 250 milliseconds for up to 20 seconds, and then gives up for good: every page falls back to software painting. A window whose frames fail to import because its own device was lost waits for its renderer to come back instead.
 
 On Windows, when the browser's copy device finds itself removed, or finds Chromium's frames on another adapter, it opens a new device and replaces every shared texture. If the window comes back on a different adapter, Sabine restarts the browser on that adapter, which reloads the page.
 

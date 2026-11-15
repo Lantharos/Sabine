@@ -2,28 +2,13 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "osr/accelerated/linux/dmabuf_copy.h"
 #include "osr/accelerated/protocol.h"
-#include "osr/common/registry.h"
-#include "osr/handler.h"
+#include "osr/accelerated/share.h"
 
 using namespace sabine_osr;
 
 namespace {
 
 constexpr int64_t kReopenRetryMs = 250;
-
-// Resources go with the copy device for every window when it is lost, so
-// every window drops the ones it was handed and paints again.
-void RetireEverywhere(const AccelDmabufCopiedFrame& copied) {
-  if (copied.retired_resource_ids.empty() && !copied.device_reopened) {
-    return;
-  }
-  for (SabineOsrHandler* handler : RegisteredHandlers()) {
-    handler->RetireAcceleratedResources(copied.retired_resource_ids);
-    if (copied.device_reopened) {
-      handler->RepaintAll();
-    }
-  }
-}
 
 }  // namespace
 
@@ -48,25 +33,20 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
 bool SabineOsrHandler::ShareDmabufCopy(DmabufCopy result,
                                        const AccelDmabufCopiedFrame& copied,
                                        CopiedAccelFrame* out) {
-  RetireEverywhere(copied);
+  RetireEverywhere(copied.retired_resource_ids, copied.device_reopened);
   if (result != DmabufCopy::kCopied) {
     return false;
   }
-  if (!announced_accelerated_resources_.count(copied.resource_id)) {
-    const std::vector<char> payload = BuildDmabufAnnouncePayload(
-        copied.resource_id, copied.modifier, copied.stride, copied.offset);
-    if (!SendMessageWithFd(kAccelDmabuf, copied.width, copied.height, 0, 0,
-                           payload.data(),
-                           static_cast<uint32_t>(payload.size()), copied.fd)) {
-      ReleaseAcceleratedDmabufFrame(copied.slot_token);
-      return false;
-    }
-    announced_accelerated_resources_.insert(copied.resource_id);
-  }
-  *out = {
-      copied.width,     copied.height, copied.resource_id, copied.slot_index, 0,
-      copied.slot_token};
-  return true;
+  return ShareCopiedSlot(
+      copied,
+      [&](uint64_t*) {
+        const std::vector<char> payload = BuildDmabufAnnouncePayload(
+            copied.resource_id, copied.modifier, copied.stride, copied.offset);
+        return SendMessageWithFd(
+            kAccelDmabuf, copied.width, copied.height, 0, 0, payload.data(),
+            static_cast<uint32_t>(payload.size()), copied.fd);
+      },
+      out);
 }
 
 void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {

@@ -83,6 +83,7 @@ impl OsrNativeHost {
         let slot = ExternalSlot {
             index: frame.resource_slot,
             resource_id: frame.resource_id,
+            size: (frame.coded_width, frame.coded_height),
         };
         let installed = renderer.set_external_bgra_texture(
             image,

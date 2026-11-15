@@ -244,7 +244,6 @@ pub(crate) fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
         .join(sanitized))
 }
 
-#[cfg(unix)]
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

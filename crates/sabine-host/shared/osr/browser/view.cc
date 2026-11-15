@@ -174,8 +174,9 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
   if (GuestView* guest = GuestForBrowser(browser)) {
     if (type == PET_POPUP) {
       const CefRect popup = guest->ToView(guest_popup_rect_);
-      SendPaintBatch(PaintSurface::kGuest, guest->id + "/popup", popup.x,
-                     popup.y, buffer, width, height, dirtyRects);
+      SendPaintBatch({browser->GetIdentifier(), true}, PaintSurface::kGuest,
+                     guest->id + "/popup", popup.x, popup.y, buffer, width,
+                     height, dirtyRects);
       return;
     }
     if (!guest->painted) {
@@ -214,8 +215,9 @@ void SabineOsrHandler::OnPaint(CefRefPtr<CefBrowser> browser,
     last_main_paint_width_ = width;
     last_main_paint_height_ = height;
   }
-  const bool sent = SendPaintBatch(surface, std::string(), x, y, buffer, width,
-                                   height, resized ? kWholeFrame : dirtyRects);
+  const bool sent = SendPaintBatch(
+      {browser->GetIdentifier(), type == PET_POPUP}, surface, std::string(), x,
+      y, buffer, width, height, resized ? kWholeFrame : dirtyRects);
   if (type == PET_VIEW) {
     CompleteResizeFrame(width, height);
   }

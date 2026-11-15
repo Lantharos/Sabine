@@ -419,8 +419,4 @@ VulkanContext* ReopenSharedVulkanContext() {
   return context.get();
 }
 
-bool VulkanDeviceLost(VulkanContext* context) {
-  return context->vkDeviceWaitIdle(context->device) == VK_ERROR_DEVICE_LOST;
-}
-
 }  // namespace sabine_osr

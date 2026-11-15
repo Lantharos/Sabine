@@ -22,10 +22,10 @@
 
 #include <chrono>
 #include <cstdio>
-#include <map>
 #include <memory>
 
 #include "osr/accelerated/slot_ring.h"
+#include "osr/accelerated/windows/source_cache.h"
 
 namespace sabine_osr {
 namespace {
@@ -33,7 +33,6 @@ namespace {
 using Microsoft::WRL::ComPtr;
 
 constexpr std::chrono::milliseconds kGpuFenceTimeout{1000};
-constexpr size_t kMaxCachedSources = 8;
 
 struct D3d11Context {
   ~D3d11Context() {
@@ -81,28 +80,10 @@ struct OwnedSharedSlot : RingSlot {
   }
 };
 
-// CEF hands out the same few pooled textures frame after frame, so each is
-// opened once. A handle value can name a new texture once CEF closed the old
-// one, so the cache keeps its own handle to tell them apart.
-struct CachedSource {
-  CachedSource() = default;
-  CachedSource(const CachedSource&) = delete;
-  CachedSource& operator=(const CachedSource&) = delete;
-  ~CachedSource() {
-    if (handle) {
-      CloseHandle(handle);
-    }
-  }
-
-  HANDLE handle = nullptr;
-  ComPtr<ID3D11Texture2D> texture;
-};
-
-using SurfaceSlots = SurfaceRing<OwnedSharedSlot, NoExtra>;
+using SurfaceSlots = SurfaceRing<OwnedSharedSlot, SourceCache>;
 
 std::unique_ptr<D3d11Context> g_d3d11;
-SlotRings<OwnedSharedSlot> g_surfaces;
-std::map<HANDLE, std::unique_ptr<CachedSource>> g_sources;
+SlotRings<OwnedSharedSlot, SourceCache> g_surfaces;
 
 void LogFailure(const char* what, HRESULT hr) {
   std::fprintf(stderr, "Sabine CEF: %s (hr=0x%08lx)\n", what,
@@ -342,61 +323,24 @@ void ResetContext(std::vector<uint64_t>* retired) {
   const std::vector<uint64_t> slots =
       g_surfaces.RetireAll([](SurfaceSlots&) {});
   retired->insert(retired->end(), slots.begin(), slots.end());
-  g_sources.clear();
   g_d3d11.reset();
-}
-
-// CompareObjectHandles lives in kernelbase.dll, whose import library the
-// Windows SDK doesn't put on the default linker path.
-bool SameObject(HANDLE first, HANDLE second) {
-  using Compare = BOOL(WINAPI*)(HANDLE, HANDLE);
-  static const auto compare = reinterpret_cast<Compare>(GetProcAddress(
-      GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
-  return compare(first, second);
-}
-
-ID3D11Texture2D* CachedTexture(HANDLE cef_shared_handle) {
-  const auto cached = g_sources.find(cef_shared_handle);
-  if (cached == g_sources.end()) {
-    return nullptr;
-  }
-  if (SameObject(cached->second->handle, cef_shared_handle)) {
-    return cached->second->texture.Get();
-  }
-  g_sources.erase(cached);
-  return nullptr;
-}
-
-ID3D11Texture2D* Cache(HANDLE cef_shared_handle,
-                       ComPtr<ID3D11Texture2D> texture) {
-  auto source = std::make_unique<CachedSource>();
-  if (!DuplicateHandle(GetCurrentProcess(), cef_shared_handle,
-                       GetCurrentProcess(), &source->handle, 0, FALSE,
-                       DUPLICATE_SAME_ACCESS)) {
-    return nullptr;
-  }
-  if (g_sources.size() >= kMaxCachedSources) {
-    g_sources.clear();
-  }
-  source->texture = std::move(texture);
-  ID3D11Texture2D* opened = source->texture.Get();
-  g_sources[cef_shared_handle] = std::move(source);
-  return opened;
 }
 
 // The returned texture stays cached while CEF keeps it in its pool, but its
 // pixels are only Chromium's frame until this paint callback returns.
-ID3D11Texture2D* OpenCefTexture(HANDLE cef_shared_handle,
+ID3D11Texture2D* OpenCefTexture(const AcceleratedSurfaceKey& surface,
+                                HANDLE cef_shared_handle,
                                 std::vector<uint64_t>* retired) {
   if (g_d3d11) {
-    if (ID3D11Texture2D* cached = CachedTexture(cef_shared_handle)) {
+    SourceCache& sources = g_surfaces[surface].extra;
+    if (ID3D11Texture2D* cached = sources.Find(cef_shared_handle)) {
       return cached;
     }
     ComPtr<ID3D11Texture2D> texture;
     const HRESULT hr = g_d3d11->device->OpenSharedResource1(
         cef_shared_handle, IID_PPV_ARGS(&texture));
     if (SUCCEEDED(hr)) {
-      return Cache(cef_shared_handle, std::move(texture));
+      return sources.Insert(cef_shared_handle, std::move(texture));
     }
     if (!ContextIsStale(cef_shared_handle)) {
       LogFailure("OpenSharedResource1 failed", hr);
@@ -418,7 +362,8 @@ ID3D11Texture2D* OpenCefTexture(HANDLE cef_shared_handle,
     LogFailure("OpenSharedResource1 failed", hr);
     return nullptr;
   }
-  return Cache(cef_shared_handle, std::move(texture));
+  return g_surfaces[surface].extra.Insert(cef_shared_handle,
+                                          std::move(texture));
 }
 
 bool SupportedFormat(DXGI_FORMAT format) {
@@ -436,7 +381,9 @@ bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
     return false;
   }
   ID3D11Texture2D* source =
-      OpenCefTexture(cef_shared_handle, &out->retired_resource_ids);
+      OpenCefTexture(surface, cef_shared_handle, &out->retired_resource_ids);
+  SurfaceSlots& slots = g_surfaces[surface];
+  slots.Damage(damage);
   if (!source) {
     return false;
   }
@@ -446,8 +393,7 @@ bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
       !SupportedFormat(source_desc.Format)) {
     return false;
   }
-  SurfaceSlots& slots = g_surfaces[surface];
-  slots.Damage(damage);
+  slots.extra.ForgetOtherSizes(source_desc.Width, source_desc.Height);
   const std::optional<uint32_t> slot_index = slots.FreeSlot();
   if (!slot_index) {
     return false;
@@ -463,17 +409,12 @@ bool CopyAcceleratedD3d11Frame(const AcceleratedSurfaceKey& surface,
     }
     return false;
   }
-  out->slot_index = *slot_index;
+  slots.Hand(*slot_index, {}, out);
   return true;
 }
 
 std::vector<uint64_t> RetireAcceleratedD3d11Browser(int browser_id) {
-  std::vector<uint64_t> retired =
-      g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
-  if (g_surfaces.empty()) {
-    g_sources.clear();
-  }
-  return retired;
+  return g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
 }
 
 void ReleaseAcceleratedD3d11Frame(uint64_t slot_token) {

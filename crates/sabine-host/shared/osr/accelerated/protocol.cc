@@ -6,7 +6,8 @@ namespace sabine_osr {
 
 namespace {
 
-constexpr size_t kMetaLen = 4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8;
+constexpr size_t kMetaLen =
+    4 + 4 + 4 + 4 + 4 + 8 + 4 + 8 + 8 + 4 + 4 + 4 + 4 + 8;
 
 }  // namespace
 
@@ -25,6 +26,11 @@ void BuildAccelPayload(const std::string& guest_id,
   PutU32(payload, at + 28, meta.resource_slot);
   PutU64(payload, at + 32, meta.shared_handle);
   PutU64(payload, at + 40, meta.slot_token);
+  PutI32(payload, at + 48, meta.damage.x);
+  PutI32(payload, at + 52, meta.damage.y);
+  PutU32(payload, at + 56, static_cast<uint32_t>(meta.damage.width));
+  PutU32(payload, at + 60, static_cast<uint32_t>(meta.damage.height));
+  PutU64(payload, at + 64, meta.sequence);
 }
 
 std::vector<char> BuildAccelRetirePayload(

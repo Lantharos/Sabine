@@ -21,6 +21,14 @@ pub(crate) fn import_io_surface(
     } else {
         MTLPixelFormat::RGBA8Unorm_sRGB
     };
+    let (surface_width, surface_height) = (surface.width(), surface.height());
+    if surface_width != frame.coded_width as usize || surface_height != frame.coded_height as usize
+    {
+        return Err(format!(
+            "the shared surface is {surface_width}x{surface_height}, not the {}x{} its frame names",
+            frame.coded_width, frame.coded_height
+        ));
+    }
     let desc = wgpu::TextureDescriptor {
         label: Some("sabine-osr-iosurface"),
         size: wgpu::Extent3d {

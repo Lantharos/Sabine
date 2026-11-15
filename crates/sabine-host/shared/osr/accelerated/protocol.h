@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "osr/accelerated/damage.h"
+
 constexpr uint32_t kMainAccel = 24;
 constexpr uint32_t kPopupAccel = 25;
 constexpr uint32_t kGuestAccel = 26;
@@ -30,6 +32,9 @@ struct AccelPaintMeta {
   /// Identifies the producer slot released after the compositor is done
   /// sampling.
   uint64_t slot_token = 0;
+  /// The pixels that differ from the surface's frame numbered one less.
+  PixelRegion damage;
+  uint64_t sequence = 0;
 };
 
 void BuildAccelPayload(const std::string& guest_id,

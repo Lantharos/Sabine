@@ -15,7 +15,7 @@ impl SharedResources {
             .resolve(frame.resource_id, super::accel::announced_texture(meta));
     }
 
-    pub(super) fn retire(&mut self, resource_ids: Vec<u64>) {
+    pub(super) fn retire(&mut self, resource_ids: &[u64]) {
         self.0.retire(resource_ids);
     }
 }
@@ -30,7 +30,7 @@ impl SharedResources {
         frame.resource = self.0.resolve(frame.resource_id);
     }
 
-    pub(super) fn retire(&mut self, resource_ids: Vec<u64>) {
+    pub(super) fn retire(&mut self, resource_ids: &[u64]) {
         self.0.retire(resource_ids);
     }
 
@@ -50,5 +50,9 @@ impl SharedResources {
 
     pub(super) fn attach(&mut self, frame: &mut OsrAccelFrame, _meta: &[u8]) {
         frame.resource = self.0.surface(frame.resource_id);
+    }
+
+    pub(super) fn take_retired(&mut self) -> Option<Vec<u64>> {
+        Some(self.0.take_retired()).filter(|retired| !retired.is_empty())
     }
 }

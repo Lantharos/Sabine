@@ -29,9 +29,9 @@ impl Dmabufs {
         self.0.get(&resource_id).cloned()
     }
 
-    pub(crate) fn retire(&mut self, resource_ids: impl IntoIterator<Item = u64>) {
+    pub(crate) fn retire(&mut self, resource_ids: &[u64]) {
         for resource_id in resource_ids {
-            self.0.remove(&resource_id);
+            self.0.remove(resource_id);
         }
     }
 }

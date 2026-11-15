@@ -5,23 +5,16 @@
 #include <vector>
 
 #include "include/internal/cef_types_wrappers.h"
-#include "osr/accelerated/damage.h"
+#include "osr/accelerated/slot_ring.h"
 
 namespace sabine_osr {
 
-struct AccelDmabufCopiedFrame {
+struct AccelDmabufCopiedFrame : CopiedSlot {
   // Owned by the slot; valid until the resource is retired.
   int fd = -1;
-  uint64_t resource_id = 0;
-  uint32_t slot_index = 0;
-  uint64_t slot_token = 0;
-  uint32_t width = 0;
-  uint32_t height = 0;
   uint64_t modifier = 0;
   uint32_t stride = 0;
   uint32_t offset = 0;
-  // Resources this call replaced, whose compositor imports can be dropped.
-  std::vector<uint64_t> retired_resource_ids;
   // The copy device was lost and replaced, and with it every slot of every
   // surface, so every surface needs a new frame.
   bool device_reopened = false;

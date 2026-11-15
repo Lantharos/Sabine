@@ -16,7 +16,7 @@ use crate::osr::control::ControlWriter;
 /// file descriptor on Linux and macOS, a file mapping handle it opened in
 /// this process on Windows.
 #[cfg(unix)]
-pub(super) type AnnouncedMapping = i32;
+pub(super) type AnnouncedMapping = std::os::fd::OwnedFd;
 #[cfg(windows)]
 pub(super) type AnnouncedMapping = u64;
 
