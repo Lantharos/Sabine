@@ -236,13 +236,12 @@ int Listen(const std::string& path) {
 }
 
 std::string SocketPath() {
-  const char* runtime = std::getenv("XDG_RUNTIME_DIR");
-  if (!runtime || !*runtime) {
+  const char* folder = std::getenv("SABINE_DISPLAY_DIR");
+  if (!folder || !*folder) {
     return {};
   }
-  const std::string folder = std::string(runtime) + "/sabine";
-  mkdir(folder.c_str(), 0700);
-  return folder + "/display-" + std::to_string(getpid());
+  mkdir(folder, 0700);
+  return std::string(folder) + "/display-" + std::to_string(getpid());
 }
 
 void Serve(void* display) {

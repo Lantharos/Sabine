@@ -54,6 +54,6 @@ pub mod prelude {
 /// when it yields `true`. The dispatcher recognizes both OSR-host and runtime
 /// bootstrap children. Ordinary application arguments return `false` without
 /// initializing Sabine.
-pub fn dispatch_host_mode_from_args(args: &[String]) -> bool {
+pub fn dispatch_host_mode_from_args(args: &[std::ffi::OsString]) -> bool {
     launch::dispatch_host_mode_from_args(args)
 }

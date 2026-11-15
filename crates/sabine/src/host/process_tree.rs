@@ -72,8 +72,13 @@ impl Drop for ManagedChild {
     }
 }
 
-pub(crate) fn prepare_child_command(command: &mut Command) {
-    platform::prepare_child_command(command, true);
+/// Starts a child that ends with this process, such as a window host.
+pub(crate) fn spawn_child(mut command: Command) -> std::io::Result<Child> {
+    platform::prepare_child_command(&mut command, true);
+    #[cfg(target_os = "linux")]
+    return spawner::spawn(command);
+    #[cfg(not(target_os = "linux"))]
+    command.spawn()
 }
 
 /// Prepare a child that may outlive this process when siblings still need it
@@ -82,178 +87,14 @@ pub(crate) fn prepare_detachable_child_command(command: &mut Command) {
     platform::prepare_child_command(command, false);
 }
 
-#[cfg(unix)]
-use std::sync::atomic::{AtomicBool, Ordering};
-
 #[cfg(target_os = "windows")]
 #[path = "process_tree/windows.rs"]
 mod platform;
-#[cfg(target_os = "windows")]
+#[cfg(unix)]
+#[path = "process_tree/unix.rs"]
+mod platform;
+#[cfg(target_os = "linux")]
+#[path = "process_tree/spawner.rs"]
+mod spawner;
+
 use platform::ProcessGroup;
-
-#[cfg(unix)]
-struct ProcessGroup {
-    id: u32,
-    active: AtomicBool,
-}
-
-#[cfg(unix)]
-impl ProcessGroup {
-    fn register(id: u32) -> std::io::Result<Self> {
-        platform::register_process_group(id);
-        Ok(Self {
-            id,
-            active: AtomicBool::new(true),
-        })
-    }
-
-    fn terminate(&self) {
-        if !self.active.load(Ordering::SeqCst) {
-            return;
-        }
-        platform::terminate_process_group(self.id);
-    }
-
-    fn kill(&self) {
-        if !self.active.load(Ordering::SeqCst) {
-            return;
-        }
-        platform::kill_process_group(self.id);
-    }
-
-    fn unregister(&self) {
-        if !self.active.swap(false, Ordering::SeqCst) {
-            return;
-        }
-        platform::unregister_process_group(self.id);
-    }
-}
-
-#[cfg(unix)]
-mod platform {
-    use std::{
-        process::Command,
-        sync::atomic::{AtomicBool, AtomicI32, Ordering},
-    };
-
-    const GROUP_CAPACITY: usize = 128;
-
-    static INSTALLED: AtomicBool = AtomicBool::new(false);
-    static PROCESS_GROUPS: [AtomicI32; GROUP_CAPACITY] =
-        [const { AtomicI32::new(0) }; GROUP_CAPACITY];
-
-    pub(super) fn prepare_child_command(command: &mut Command, die_with_parent: bool) {
-        use std::os::unix::process::CommandExt;
-
-        install_signal_cleanup();
-        command.process_group(0);
-        #[cfg(target_os = "linux")]
-        if die_with_parent {
-            terminate_with_parent(command);
-        }
-        #[cfg(target_os = "macos")]
-        let _ = die_with_parent;
-    }
-
-    /// Window hosts must not outlive a crashed app, which they also notice
-    /// when the app's end of their input closes. The shared browser process is
-    /// started without this, so closing one window leaves it to the others.
-    #[cfg(target_os = "linux")]
-    fn terminate_with_parent(command: &mut Command) {
-        use std::{io, os::unix::process::CommandExt};
-
-        unsafe {
-            command.pre_exec(|| {
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                if libc::getppid() == 1 {
-                    libc::raise(libc::SIGTERM);
-                }
-                Ok(())
-            });
-        }
-    }
-
-    pub(super) fn install_signal_cleanup() {
-        if INSTALLED.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let handler = handle_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
-        unsafe {
-            libc::signal(libc::SIGINT, handler);
-            libc::signal(libc::SIGTERM, handler);
-        }
-    }
-
-    pub(super) fn register_process_group(id: u32) {
-        let Ok(id) = i32::try_from(id) else {
-            return;
-        };
-        if id <= 0 {
-            return;
-        }
-        install_signal_cleanup();
-        for slot in &PROCESS_GROUPS {
-            if slot
-                .compare_exchange(0, id, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-            {
-                return;
-            }
-        }
-    }
-
-    pub(super) fn unregister_process_group(id: u32) {
-        let Ok(id) = i32::try_from(id) else {
-            return;
-        };
-        for slot in &PROCESS_GROUPS {
-            let _ = slot.compare_exchange(id, 0, Ordering::SeqCst, Ordering::SeqCst);
-        }
-    }
-
-    pub(super) fn terminate_process_group(id: u32) {
-        send_process_group(id, libc::SIGTERM);
-    }
-
-    pub(super) fn kill_process_group(id: u32) {
-        send_process_group(id, libc::SIGKILL);
-    }
-
-    extern "C" fn handle_signal(signal: libc::c_int) {
-        end_process_groups();
-        end_by(signal);
-    }
-
-    fn end_process_groups() {
-        for slot in &PROCESS_GROUPS {
-            let id = slot.load(Ordering::SeqCst);
-            if id > 0 {
-                unsafe {
-                    libc::kill(-id, libc::SIGTERM);
-                    libc::kill(-id, libc::SIGKILL);
-                }
-            }
-        }
-    }
-
-    fn end_by(signal: libc::c_int) {
-        unsafe {
-            libc::signal(signal, libc::SIG_DFL);
-            libc::raise(signal);
-        }
-    }
-
-    fn send_process_group(id: u32, signal: libc::c_int) {
-        let Ok(id) = i32::try_from(id) else {
-            return;
-        };
-        if id <= 0 {
-            return;
-        }
-        unsafe {
-            libc::kill(-id, signal);
-        }
-    }
-}

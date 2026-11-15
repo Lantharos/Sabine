@@ -49,8 +49,6 @@ inline bool MatchesOrigin(const std::string& origin,
     return false;
   for (size_t index = 0; index < allowed->GetSize(); ++index) {
     const std::string candidate = allowed->GetString(index);
-    if (candidate == "*")
-      return true;
     CefURLParts parts;
     if (!CefParseURL(candidate, parts))
       continue;

@@ -44,8 +44,8 @@ file with `.entry(path)` or another URL with `.url(url)`.
 
 A window opened this way takes over from the app's first window:
 
-- **Its app id and bridge commands** are the first window's. Commands registered on the new
-  builder are ignored; register every command on the first one.
+- **Its app id** is the first window's, and so are its **bridge commands**, plus those registered
+  on the new builder. A command both register runs the new builder's handler in that window.
 - **Desktop services** such as the tray icon, global shortcuts and single-instance handling belong
   to the app and start with the first window. The new builder's are ignored.
 - **Everything else** is its own: size, chrome, glass, regions, lifecycle and visibility.
@@ -61,7 +61,7 @@ process to open the window:
 
 | Method | Effect |
 | --- | --- |
-| `handle.open_window(window)` | Opens a window and returns its id, waiting up to 20 seconds for the answer |
+| `handle.open_window(window)` | Opens a window and returns its id, waiting up to 20 seconds for the answer; a window not open by then never opens |
 | `handle.present(activation_token)` | Shows and focuses the app's window, opening it first in a background app without one |
 
 `process.handle()` returns one, and `.on_launched(...)` hands one to code that only builds the

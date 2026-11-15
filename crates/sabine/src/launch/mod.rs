@@ -10,26 +10,25 @@ pub(crate) mod sandbox;
 #[cfg(target_os = "linux")]
 pub(crate) mod shared;
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::error::{SabineError, SabineResult};
 use crate::osr;
 use crate::window::config::SabineWindowConfig;
 
-pub(crate) fn dispatch_host_mode_from_args(args: &[String]) -> bool {
+pub(crate) fn dispatch_host_mode_from_args(args: &[OsString]) -> bool {
     if osr::launch::starts_window_host(args) {
         osr::launch::run_window_host();
         return true;
     }
-    if args.iter().any(|arg| {
-        matches!(
-            arg.as_str(),
-            bootstrap::BOOTSTRAP_ARG
-                | bootstrap::NOTICE_ARG
-                | bootstrap::CONFIRM_UPDATE_ARG
-                | bootstrap::BLOCKED_ARG
-        )
-    }) {
+    let modes = [
+        bootstrap::BOOTSTRAP_ARG,
+        bootstrap::NOTICE_ARG,
+        bootstrap::CONFIRM_UPDATE_ARG,
+        bootstrap::BLOCKED_ARG,
+    ];
+    if args.iter().any(|arg| modes.iter().any(|mode| arg == mode)) {
         return bootstrap::run_from_args(args);
     }
     false

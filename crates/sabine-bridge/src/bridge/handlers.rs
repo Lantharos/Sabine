@@ -52,6 +52,12 @@ impl BridgeHandlers {
         );
     }
 
+    /// Adds the handlers of `other`, which replace any registered here under
+    /// the same name.
+    pub fn extend(&mut self, other: BridgeHandlers) {
+        self.handlers.extend(other.handlers);
+    }
+
     pub fn dispatch(&self, command: BridgeCommand) -> BridgeOutcome {
         match self.handlers.get(&command.name) {
             Some(BridgeHandler::Sync(handler)) => BridgeOutcome::Ready(handler(command)),

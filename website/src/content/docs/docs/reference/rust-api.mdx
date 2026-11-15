@@ -55,7 +55,7 @@ impl SabineWindow {
     pub fn launch(self) -> SabineResult<SabineProcess>;
 }
 
-pub fn dispatch_host_mode_from_args(args: &[String]) -> bool;
+pub fn dispatch_host_mode_from_args(args: &[OsString]) -> bool;
 ```
 
 `SabineWindow::main` is the recommended entry point. It runs Sabine's internal modes when the executable was started as a window host, setup window or notice, loads `Sabine.toml`, hands a window configured from it to `build`, launches it, waits, and exits with the window's exit status. When `build` returns an error, or the launch fails, it shows a native notice and exits with status 1. A launch handed to an already running instance exits with status 0.
@@ -126,7 +126,7 @@ A custom `main` must let Sabine run its internal modes before parsing arguments,
 
 ```rust
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = std::env::args_os().collect::<Vec<_>>();
     if sabine::dispatch_host_mode_from_args(&args) {
         return;
     }
@@ -413,7 +413,7 @@ impl SabineProcess {
 ```
 
 - `id` is the first window's id while it is open. `WindowId` is a `u32`, the id of the window host's process.
-- `open_window` opens another window with the app's id and bridge handlers; handlers registered on the window you pass are ignored. It waits up to 20 seconds for the first window to be ready, since the others join its browser. `close_window` returns `false` for an unknown id.
+- `open_window` opens another window with the app's id and bridge handlers, plus the handlers registered on the window you pass, which answer in that window for a command both register. It waits up to 20 seconds for the first window to be ready, since the others join its browser. `close_window` returns `false` for an unknown id.
 - `wait` blocks until every window has closed, then returns the first window's exit status. A background app keeps waiting for its next activation, until `SabineProcessHandle::quit` ends it.
 - `take_open_urls` drains the queue of URLs and documents the app was asked to open, by its arguments, a second launch, or the system.
 - `notify` shows a desktop notification from the first window; its pages hear clicks as `notification.click` events.
@@ -810,7 +810,7 @@ pub struct GlobalShortcutActivation {
 
 pub struct SingleInstanceActivation {
     pub policy: SingleInstancePolicy,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<OsString>,
     pub working_directory: Option<PathBuf>,
     pub activation_token: Option<String>,
 }

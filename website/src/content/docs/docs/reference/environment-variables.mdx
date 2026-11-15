@@ -99,7 +99,8 @@ Sabine follows the platform's own variables for folders, sessions and launches.
 | `XDG_CONFIG_HOME` | App, Service, Linux | Autostart entries, `mimeapps.list` and the daemon's systemd unit. Default `~/.config`. |
 | `XDG_STATE_HOME` | App, Linux | Where `.remember_size()` keeps the window's size and windows keep what they show. |
 | `XDG_DATA_DIRS` | App, Linux | Searched for installed desktop entries. |
-| `XDG_RUNTIME_DIR` | App, host | Window sockets, the shared runtime's socket, and Chromium's private Wayland display. Without it, window sockets go in `~/.cache/sabine/run/`. |
+| `XDG_RUNTIME_DIR` | App, host | Window sockets, the shared runtime's socket, Chromium's private Wayland display, and the filtered session bus of an app Sabine confines to its `[sandbox]`. Without it, window sockets go in `~/.cache/sabine/run/`. |
+| `DBUS_SESSION_BUS_ADDRESS` | App, Linux | The session bus. An app Sabine confines to its `[sandbox]` points it at its filtered bus for itself and everything it starts. |
 | `WAYLAND_DISPLAY` | App, host, Linux | The compositor to connect to, passed on to the shared runtime. |
 | `XDG_ACTIVATION_TOKEN`, `DESKTOP_STARTUP_ID` | App, Linux | The activation token a launcher handed the app. The first window uses it to take focus, and Sabine removes it from the environment of window hosts so later windows don't reuse it. |
 | `APPIMAGE`, `APPDIR` | App, Linux | Set by the AppImage runtime. Sabine registers URL handlers, native messaging hosts and updates against the AppImage file instead of its temporary mount. |

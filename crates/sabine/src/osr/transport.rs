@@ -223,7 +223,7 @@ fn runtime_ipc_dir(_app_id: &str) -> io::Result<PathBuf> {
 }
 
 #[cfg(unix)]
-fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
+pub(crate) fn runtime_ipc_dir(app_id: &str) -> io::Result<PathBuf> {
     let sanitized = crate::desktop::sanitize_id(app_id);
     if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         let path = PathBuf::from(runtime_dir);

@@ -4,9 +4,10 @@ use landlock::{ABI, Access, AccessFs, BitFlags};
 
 pub(super) const LANDLOCK: ABI = ABI::V9;
 
-const SYSTEM: [&str; 14] = [
+const SYSTEM: [&str; 15] = [
     "/usr",
     "/etc",
+    "/run/host/etc",
     "/opt",
     "/lib",
     "/lib64",
@@ -20,7 +21,24 @@ const SYSTEM: [&str; 14] = [
     "/nix/store",
     "/gnu/store",
 ];
-const SOCKETS: &str = "/run";
+const RUN: &str = "/run";
+/// What of `/run` stays out of reach: the runtime folders of the person and
+/// everyone else, the removable drives mounted for them, and the host's
+/// files a container shows, apart from the host's settings.
+const PRIVATE_RUN: [&str; 3] = ["user", "media", "host"];
+/// The system's sockets that answer the lookups every program makes, of host
+/// names and user accounts.
+const LOOKUP_SOCKETS: [&str; 3] = [
+    "/run/systemd/resolve/io.systemd.Resolve",
+    "/run/systemd/userdb",
+    "/run/nscd/socket",
+];
+const WAYLAND_DISPLAY: &str = "WAYLAND_DISPLAY";
+const DEFAULT_WAYLAND_DISPLAY: &str = "wayland-0";
+const SOUND_SOCKET: &str = "pulse/native";
+const MEDIA_SOCKET: &str = "pipewire-0";
+const DOCUMENTS: &str = "doc";
+const CAMERA_PREFIX: &str = "video";
 const SCRATCH: [&str; 3] = ["/tmp", "/var/tmp", "/proc"];
 const DEVICES: &str = "/dev";
 const COMMON_DEVICES: [&str; 10] = [
@@ -61,6 +79,18 @@ pub(super) struct Own<'a> {
     pub(super) runtime: &'a Path,
     pub(super) host: &'a Path,
     pub(super) profile: PathBuf,
+}
+
+/// What an app reaches of the person's runtime folder besides the display,
+/// sound and the documents handed to it.
+pub(super) struct Runtime {
+    /// The app's own folder, where its windows, browser and session bus
+    /// keep their sockets.
+    pub(super) own: PathBuf,
+    /// The socket later launches of a single-instance app reach it through.
+    pub(super) instance: Option<PathBuf>,
+    /// Whether the app records sound or uses cameras through PipeWire.
+    pub(super) media: bool,
 }
 
 fn read() -> BitFlags<AccessFs> {
@@ -122,18 +152,22 @@ impl Paths {
         }
     }
 
-    /// The system's programs, libraries and settings, its sockets, and
-    /// scratch space.
+    /// The system's programs, libraries and settings, the sockets of its
+    /// lookups, and scratch space.
     pub(super) fn system(&mut self) -> &mut Self {
         for path in SYSTEM {
             self.allow(path, read());
         }
-        self.allow(SOCKETS, read() | AccessFs::ResolveUnix);
+        for entry in std::fs::read_dir(RUN).into_iter().flatten().flatten() {
+            if !PRIVATE_RUN.iter().any(|name| entry.file_name() == *name) {
+                self.allow(entry.path(), read());
+            }
+        }
+        for socket in LOOKUP_SOCKETS {
+            self.allow(socket, AccessFs::ResolveUnix.into());
+        }
         for path in SCRATCH {
             self.allow(path, write());
-        }
-        if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
-            self.allow(runtime, write());
         }
         self.allow(DEVICES, AccessFs::ReadDir.into());
         for device in COMMON_DEVICES {
@@ -182,6 +216,36 @@ impl Paths {
             if std::fs::create_dir_all(&folder).is_ok() {
                 self.allow(folder, write());
             }
+        }
+        self
+    }
+
+    /// The desktop's display, sound, and PipeWire when the app records sound
+    /// or uses cameras, the documents the portal hands the app and its own
+    /// folder: none of the other sockets in the person's runtime folder, such
+    /// as the session bus, the service manager's or other apps'.
+    pub(super) fn runtime(&mut self, runtime: &Runtime) -> &mut Self {
+        if let Some(folder) = dirs::runtime_dir() {
+            let display = std::env::var_os(WAYLAND_DISPLAY)
+                .filter(|display| !display.is_empty())
+                .unwrap_or_else(|| DEFAULT_WAYLAND_DISPLAY.into());
+            self.allow(folder.join(display), AccessFs::ResolveUnix.into())
+                .allow(folder.join(SOUND_SOCKET), AccessFs::ResolveUnix.into())
+                .allow(folder.join(DOCUMENTS), write());
+            if runtime.media {
+                self.allow(folder.join(MEDIA_SOCKET), AccessFs::ResolveUnix.into());
+            }
+        }
+        self.allow(&runtime.own, write());
+        if let Some(instance) = &runtime.instance {
+            self.allow(instance, AccessFs::ResolveUnix.into());
+        }
+        self
+    }
+
+    pub(super) fn cameras(&mut self) -> &mut Self {
+        for device in named(&[CAMERA_PREFIX]) {
+            self.allow(device, write());
         }
         self
     }

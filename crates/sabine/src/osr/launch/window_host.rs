@@ -8,9 +8,7 @@ use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
 use super::{OSR_HOST_ARG, require_app_id};
 use crate::bridge::{BridgeEventEmitter, prepare_bridge_command, spawn_bridge_dispatch};
-use crate::host::{
-    ManagedChild, PrimaryWindow, ProcessCommand, SabineProcessHandle, prepare_child_command,
-};
+use crate::host::{ManagedChild, PrimaryWindow, ProcessCommand, SabineProcessHandle, spawn_child};
 use crate::launch::metrics::LaunchMetrics;
 use crate::window::config::SabineWindowConfig;
 use crate::{SabineError, SabineProcess, SabineResult};
@@ -37,7 +35,7 @@ pub(crate) fn launch_process(
     #[cfg(target_os = "linux")]
     let installation = crate::host::Installation::hold(config);
     #[cfg(target_os = "linux")]
-    crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
+    let session_bus = crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let mut process = SabineProcess {
@@ -70,6 +68,8 @@ pub(crate) fn launch_process(
         },
         #[cfg(target_os = "linux")]
         installation,
+        #[cfg(target_os = "linux")]
+        _session_bus: session_bus,
     };
     if !config.background {
         open_primary_window(&mut process, launch_activation_token())?;
@@ -120,7 +120,15 @@ pub(crate) fn open_primary_window(
     let config = process.windows.primary.clone();
     let url = process.windows.url.clone();
     let restoring = process.windows.restoring.take();
-    let (child, ready) = spawn_window(process, &config, &url, activation_token, restoring)?;
+    let handlers = process.windows.bridge_handlers.clone();
+    let (child, ready) = spawn_window(
+        process,
+        &config,
+        handlers,
+        &url,
+        activation_token,
+        restoring,
+    )?;
     process.primary = Some(PrimaryWindow {
         child,
         ready,
@@ -129,16 +137,24 @@ pub(crate) fn open_primary_window(
     Ok(())
 }
 
+/// Opens another window with the first window's app id and commands, and the
+/// commands of its own, which answer in place of the first window's for a
+/// command both register.
 pub(crate) fn attach_open_window(
     process: &mut SabineProcess,
     config: &SabineWindowConfig,
+    own_handlers: BridgeHandlers,
     url: &str,
 ) -> SabineResult<u32> {
     let mut window_config = config.clone();
     window_config.app_id = process.windows.primary.app_id.clone();
-    window_config.bridge = process.windows.primary.bridge.clone();
+    for descriptor in process.windows.primary.bridge.descriptors() {
+        window_config.bridge.register_descriptor(descriptor.clone());
+    }
     window_config.listeners.open_urls = process.open_urls.clone();
-    let (child, _) = spawn_window(process, &window_config, url, None, None)?;
+    let mut handlers = process.windows.bridge_handlers.clone();
+    handlers.extend(own_handlers);
+    let (child, _) = spawn_window(process, &window_config, handlers, url, None, None)?;
     let window_id = child.id();
     process.extra_windows.push(child);
     Ok(window_id)
@@ -147,6 +163,7 @@ pub(crate) fn attach_open_window(
 fn spawn_window(
     process: &mut SabineProcess,
     config: &SabineWindowConfig,
+    handlers: BridgeHandlers,
     url: &str,
     activation_token: Option<String>,
     restoring: Option<String>,
@@ -162,7 +179,7 @@ fn spawn_window(
     )?;
     let dispatch = spawn_bridge_dispatch(
         &mut child,
-        BridgeRuntime::new(context.bridge_handlers.clone()),
+        BridgeRuntime::new(handlers),
         process.activity.clone(),
         &process.bridge_emitter,
         config.listeners.clone(),
@@ -245,7 +262,7 @@ fn spawn_osr_host_child(
     {
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
         body["activation_token"] = activation_token.into();
-        body["shared_runtime"] = config.browser.shares_runtime(config.dev_mode()).into();
+        body["shared_runtime"] = config.shares_runtime().into();
         body["parent_window"] = config.parent_window.clone().into();
         body["modal"] = config.modal.into();
         body["restoring"] = restoring.into();
@@ -262,12 +279,9 @@ fn spawn_osr_host_child(
     #[cfg(target_os = "linux")]
     command.env_remove(crate::window::restore::RESTORE_WINDOWS);
     prepare_bridge_command(&mut command);
-    prepare_child_command(&mut command);
-    let mut child = command
-        .spawn()
-        .map_err(|error| SabineError::CreationFailed {
-            message: format!("failed to launch Sabine OSR host: {error}"),
-        })?;
+    let mut child = spawn_child(command).map_err(|error| SabineError::CreationFailed {
+        message: format!("failed to launch Sabine OSR host: {error}"),
+    })?;
     sabine_runtime::capture_diagnostics(&mut child, "osr");
     let mut message = body.to_string();
     message.push('\n');

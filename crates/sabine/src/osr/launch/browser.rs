@@ -165,6 +165,9 @@ fn own_browser_command(
     {
         command.env("LD_LIBRARY_PATH", ld_library_path(binary_dir));
         command.env("AMD_DEBUG", crate::launch::browser::chromium_amd_debug());
+        let display = crate::osr::transport::runtime_ipc_dir(&browser_profile_key(config))
+            .map_err(|error| format!("could not find the app's runtime folder: {error}"))?;
+        command.env(crate::launch::browser::DISPLAY_DIR_ENV, display);
     }
     #[cfg(target_os = "windows")]
     {

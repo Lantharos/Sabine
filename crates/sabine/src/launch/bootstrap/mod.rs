@@ -12,9 +12,9 @@ use sabine_runtime::{
 use sabine_service::{AppManifest, SabineService, prepare_machine_with_progress};
 use serde::{Deserialize, Serialize};
 use std::{
-    path::{Path, PathBuf},
+    ffi::OsString,
+    io::Write,
     process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub(crate) const CONFIRM_UPDATE_ARG: &str = "--sabine-confirm-update";
@@ -39,7 +39,13 @@ pub(crate) fn show_failure(title: &str, error: &dyn std::fmt::Display) {
 
 pub(crate) const BOOTSTRAP_ARG: &str = "--sabine-bootstrap";
 
-pub(crate) fn run_from_args(args: &[String]) -> bool {
+/// Runs the mode Sabine started this process in, whose arguments Sabine
+/// wrote itself.
+pub(crate) fn run_from_args(args: &[OsString]) -> bool {
+    let args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
     if let Some(index) = args.iter().position(|arg| arg == CONFIRM_UPDATE_ARG) {
         let accepted =
             args.get(index + 1)
@@ -75,14 +81,10 @@ pub(crate) fn run_from_args(args: &[String]) -> bool {
         }
         return true;
     }
-    let Some(index) = args.iter().position(|arg| arg == BOOTSTRAP_ARG) else {
+    if !args.iter().any(|arg| arg == BOOTSTRAP_ARG) {
         return false;
-    };
-    let Some(path) = args.get(index + 1).map(PathBuf::from) else {
-        eprintln!("missing Sabine bootstrap config");
-        std::process::exit(1);
-    };
-    let BootstrapRequest { runtime, register } = match read_bootstrap(path) {
+    }
+    let BootstrapRequest { runtime, register } = match read_bootstrap() {
         Ok(request) => request,
         Err(error) => {
             show_failure("Sabine setup could not start", &error);
@@ -261,12 +263,11 @@ fn run_bootstrap_install(
     config: &SabineWindowConfig,
     register: Option<AppManifest>,
 ) -> SabineResult<()> {
-    let config_path = bootstrap_config_path();
-    let request = BootstrapRequest {
+    let request = serde_json::to_vec(&BootstrapRequest {
         runtime: config.runtime.clone(),
         register,
-    };
-    write_bootstrap(&config_path, &request).map_err(|error| SabineError::CreationFailed {
+    })
+    .map_err(|error| SabineError::CreationFailed {
         message: format!("failed to prepare Sabine bootstrap: {error}"),
     })?;
     let executable = std::env::current_exe().map_err(|error| SabineError::CreationFailed {
@@ -274,15 +275,24 @@ fn run_bootstrap_install(
     })?;
     let mut command = Command::new(executable);
     configure_background_command(&mut command);
-    let status = command
+    let mut setup = command
         .arg(BOOTSTRAP_ARG)
-        .arg(&config_path)
-        .stdin(Stdio::null())
-        .status()
+        .stdin(Stdio::piped())
+        .spawn()
         .map_err(|error| SabineError::CreationFailed {
             message: format!("failed to launch Sabine bootstrap: {error}"),
         })?;
-    let _ = std::fs::remove_file(config_path);
+    let handed = setup
+        .stdin
+        .take()
+        .expect("the setup's input is piped")
+        .write_all(&request);
+    let status = setup.wait().map_err(|error| SabineError::CreationFailed {
+        message: format!("Sabine setup did not finish: {error}"),
+    })?;
+    handed.map_err(|error| SabineError::CreationFailed {
+        message: format!("failed to hand Sabine setup its request: {error}"),
+    })?;
     match status.code() {
         Some(0) => Ok(()),
         Some(2) => Err(SabineError::SetupCancelled),
@@ -313,30 +323,14 @@ pub(crate) fn app_manifest(config: &SabineWindowConfig) -> Option<AppManifest> {
     })
 }
 
-/// What the setup process prepares, handed to it in a file.
+/// What the setup process prepares, handed to it on its input.
 #[derive(Deserialize, Serialize)]
 struct BootstrapRequest {
     runtime: RuntimeConfig,
     register: Option<AppManifest>,
 }
 
-fn write_bootstrap(path: &Path, request: &BootstrapRequest) -> std::io::Result<()> {
-    std::fs::write(path, serde_json::to_vec(request)?)
-}
-
-fn read_bootstrap(path: PathBuf) -> Result<BootstrapRequest, String> {
-    let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
-    let _ = std::fs::remove_file(path);
-    serde_json::from_slice(&bytes).map_err(|error| format!("invalid Sabine setup request: {error}"))
-}
-
-fn bootstrap_config_path() -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    std::env::temp_dir().join(format!(
-        "sabine-bootstrap-{}-{nonce}.json",
-        std::process::id()
-    ))
+fn read_bootstrap() -> Result<BootstrapRequest, String> {
+    serde_json::from_reader(std::io::stdin().lock())
+        .map_err(|error| format!("invalid Sabine setup request: {error}"))
 }
