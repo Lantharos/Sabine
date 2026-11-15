@@ -39,8 +39,7 @@ pub enum WindowControl {
     },
     /// Moves the window's outer top left corner to a point of the desktop, in
     /// the physical pixels display bounds are in. Wayland places windows
-    /// itself.
-    #[cfg(not(target_os = "linux"))]
+    /// itself, so there it fails.
     SetPosition {
         x: i32,
         y: i32,

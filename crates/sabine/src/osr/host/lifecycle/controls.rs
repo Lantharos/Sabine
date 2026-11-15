@@ -81,6 +81,10 @@ impl OsrNativeHost {
                     window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y).into());
                 }
             }
+            #[cfg(target_os = "linux")]
+            WindowControl::SetPosition { .. } => {
+                return Err("Wayland places windows itself, so an app can't move them".into());
+            }
             WindowControl::SetAlwaysOnTop { enabled } => self.keep_above(enabled)?,
             WindowControl::SetResizable { enabled } => {
                 self.config.resizable = enabled;
