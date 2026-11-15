@@ -56,9 +56,10 @@ fn forget_associations(desktop_ids: &[String]) -> io::Result<()> {
     if updated == content {
         return Ok(());
     }
-    let temporary = path.with_extension("list.sabine-tmp");
+    let target = fs::canonicalize(&path)?;
+    let temporary = target.with_extension("list.sabine-tmp");
     fs::write(&temporary, updated)?;
-    fs::rename(temporary, path)
+    sabine_runtime::replace_file(&temporary, &target)
 }
 
 fn exec_program(entry: &str) -> Option<String> {

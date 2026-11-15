@@ -136,15 +136,18 @@ mod tests {
 
     #[test]
     fn update_paths_stay_inside_release_directory() {
-        assert!(updates::installers::safe_relative_path(Path::new(
-            "bin/notes"
-        )));
-        assert!(!updates::installers::safe_relative_path(Path::new(
-            "../notes"
-        )));
-        assert!(!updates::installers::safe_relative_path(Path::new(
-            "/usr/bin/notes"
-        )));
+        assert!(types::safe_relative_path(Path::new("bin/notes")));
+        assert!(!types::safe_relative_path(Path::new("../notes")));
+        assert!(!types::safe_relative_path(Path::new("/usr/bin/notes")));
+    }
+
+    #[test]
+    fn app_versions_are_semantic_versions() {
+        assert!(types::valid_version("1.2.3"));
+        assert!(types::valid_version("1.2.3-beta.1"));
+        for version in ["", "..", "../../x", "/home/u/x", "1.2.3/..", "latest"] {
+            assert!(!types::valid_version(version), "{version}");
+        }
     }
 
     #[test]

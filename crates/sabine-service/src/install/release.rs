@@ -145,7 +145,6 @@ pub(super) fn install_system_release(
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<Option<StagedSystemUpdate>> {
     let _lock = lock_system_installation()?;
-    validate_system_release(&manifest)?;
     let compatibility = normalized_release_compatibility(&manifest)?;
     let required = match &mode {
         SystemUpdateMode::Required(required) => Some(required.sabine),

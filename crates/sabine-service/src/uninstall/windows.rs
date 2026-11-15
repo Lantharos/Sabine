@@ -5,13 +5,18 @@
 // only over once its uninstall entry is gone. Sabine's MSI packages share an
 // upgrade code derived from the app's ID, which finds every installed product.
 
-use std::time::{Duration, Instant};
+use std::{
+    ffi::OsString,
+    os::windows::ffi::OsStringExt,
+    time::{Duration, Instant},
+};
 
 use sabine_runtime::background_command;
 use windows::{
     Win32::{
-        Foundation::ERROR_SUCCESS,
+        Foundation::{ERROR_SUCCESS, HLOCAL, LocalFree},
         System::ApplicationInstallationAndServicing::MsiEnumRelatedProductsW,
+        UI::Shell::CommandLineToArgvW,
     },
     core::{HSTRING, PWSTR},
 };
@@ -48,7 +53,10 @@ fn run_nsis_uninstaller(id: &str) -> ServiceResult<()> {
     let Some(command) = windows_registry::current_user_value(&key, "QuietUninstallString") else {
         return Ok(());
     };
-    let (program, arguments) = split_command(&command);
+    let command = split_command(&command)?;
+    let Some((program, arguments)) = command.split_first() else {
+        return Ok(());
+    };
     background_command(program).args(arguments).status()?;
     let started = Instant::now();
     while windows_registry::current_user_value(&key, "UninstallString").is_some() {
@@ -62,13 +70,23 @@ fn run_nsis_uninstaller(id: &str) -> ServiceResult<()> {
     Ok(())
 }
 
-fn split_command(command: &str) -> (&str, Vec<&str>) {
+/// The program and arguments of `command`, split the way Windows splits a
+/// command line it starts.
+fn split_command(command: &str) -> ServiceResult<Vec<OsString>> {
     let command = command.trim();
-    let (program, rest) = match command.strip_prefix('"') {
-        Some(quoted) => quoted.split_once('"').unwrap_or((quoted, "")),
-        None => command.split_once(' ').unwrap_or((command, "")),
-    };
-    (program, rest.split_whitespace().collect())
+    if command.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut count = 0;
+    let arguments = unsafe { CommandLineToArgvW(&HSTRING::from(command), &mut count) };
+    if arguments.is_null() {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let parsed = (0..count as usize)
+        .map(|index| OsString::from_wide(unsafe { (*arguments.add(index)).as_wide() }))
+        .collect();
+    unsafe { LocalFree(Some(HLOCAL(arguments.cast()))) };
+    Ok(parsed)
 }
 
 fn msi_products(id: &str) -> Vec<String> {

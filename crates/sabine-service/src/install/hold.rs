@@ -28,7 +28,6 @@ pub(super) fn installable_release(
     mode: &SystemUpdateMode,
     latest: SystemReleaseManifest,
 ) -> ServiceResult<Option<SystemReleaseManifest>> {
-    validate_system_release(&latest)?;
     let candidate = normalized_release_compatibility(&latest)?;
     let current = installed_system_compatibility();
     let apps = installed_apps(&SabineService::default())?;
@@ -55,11 +54,8 @@ pub(super) fn installable_release(
         current,
         candidate,
         &apps,
-        |version| {
-            fetch_system_manifest(Some(&version.label()))
-                .ok()
-                .filter(|manifest| validate_system_release(manifest).is_ok())
-        },
+        published_versions()?,
+        |version| fetch_system_manifest(Some(&version.label())).ok(),
     ))
 }
 
@@ -80,20 +76,27 @@ fn blocking_apps(
         .collect()
 }
 
+/// The newest of the `published` releases between `current` and `held` that
+/// runs every app, fetching only the manifests of those releases.
 fn newest_compatible_release(
     current: SystemCompatibility,
     held: SystemCompatibility,
     apps: &[InstalledApp],
+    published: Vec<SabineVersion>,
     fetch: impl Fn(SabineVersion) -> Option<SystemReleaseManifest>,
 ) -> Option<SystemReleaseManifest> {
     if held.major != current.major {
         return None;
     }
-    (current.build + 1..held.build).rev().find_map(|build| {
-        let manifest = fetch(SabineVersion {
-            major: held.major,
-            build,
-        })?;
+    let mut candidates = published
+        .into_iter()
+        .filter(|version| {
+            version.major == held.major && (current.build + 1..held.build).contains(&version.build)
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_unstable_by(|left, right| right.cmp(left));
+    candidates.into_iter().find_map(|version| {
+        let manifest = fetch(version)?;
         let compatibility = normalized_release_compatibility(&manifest).ok()?;
         blocking_apps(current, compatibility, apps, &[])
             .is_empty()
@@ -167,8 +170,17 @@ mod tests {
                 .find(|release| release.compatibility.build == version.build)
                 .cloned()
         };
-        let chosen = newest_compatible_release(system(58, 53), system(62, 57), &apps, fetch);
+        let published = || {
+            [59, 60, 61]
+                .map(|build| SabineVersion { major: 0, build })
+                .to_vec()
+        };
+        let chosen =
+            newest_compatible_release(system(58, 53), system(62, 57), &apps, published(), fetch);
         assert_eq!(chosen.map(|release| release.version), Some("0.60".into()));
-        assert!(newest_compatible_release(system(60, 56), system(62, 57), &apps, fetch).is_none());
+        assert!(
+            newest_compatible_release(system(60, 56), system(62, 57), &apps, published(), fetch)
+                .is_none()
+        );
     }
 }

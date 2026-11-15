@@ -4,7 +4,7 @@ mod system;
 mod updates_section;
 
 use std::{
-    path::PathBuf,
+    path::{Component, Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
@@ -69,6 +69,16 @@ pub(crate) fn is_https_url(value: &str) -> bool {
     value.starts_with("https://") && value.len() > "https://".len()
 }
 
+/// Whether `path` names something inside the folder it is joined to: relative,
+/// with only plain names, and none a Windows stream or drive.
+pub(crate) fn safe_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+        && !path.as_os_str().to_string_lossy().contains(':')
+}
+
 pub(crate) fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -97,6 +107,12 @@ pub(crate) fn update_artifact_target(
         return format!("{PLATFORM_TARGET}-{}", kind.target_suffix());
     }
     PLATFORM_TARGET.to_string()
+}
+
+/// Whether `value` is a version Sabine can order, which also makes it a
+/// single plain path component.
+pub(crate) fn valid_version(value: &str) -> bool {
+    parse_semver(value).is_ok()
 }
 
 pub(crate) fn version_is_newer(candidate: &str, current: &str) -> bool {

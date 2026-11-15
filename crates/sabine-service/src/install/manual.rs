@@ -1,6 +1,5 @@
 use super::*;
 use sabine_runtime::sabine_data_dir;
-use serde::Deserialize;
 
 pub struct ComponentUpdate {
     _lock: sabine_runtime::FileLock,
@@ -20,7 +19,6 @@ pub fn update_components(
         |_| {},
     )?;
     let manifest = newest_release()?;
-    validate_system_release(&manifest)?;
     let mut result = ComponentUpdate {
         _lock,
         version: manifest.version.clone(),
@@ -59,22 +57,11 @@ pub fn update_components(
 }
 
 fn newest_release() -> ServiceResult<SystemReleaseManifest> {
-    if std::env::var_os("SABINE_RELEASE_MANIFEST_URL").is_some() {
+    if manifest_override().is_some() {
         return fetch_system_manifest(None);
     }
-    #[derive(Deserialize)]
-    struct Release {
-        tag_name: String,
-        draft: bool,
-        prerelease: bool,
-    }
-    let releases: Vec<Release> = crate::download::fetch_manifest(&format!(
-        "https://api.github.com/repos/{SERVICE_REPO}/releases?per_page=100"
-    ))?;
-    let version = releases
+    let version = published_versions()?
         .into_iter()
-        .filter(|release| !release.draft && !release.prerelease)
-        .filter_map(|release| SabineVersion::parse(release.tag_name.trim_start_matches('v')))
         .max()
         .ok_or_else(|| ServiceError::Update("no published stable Sabine release found".into()))?;
     fetch_system_manifest(Some(&version.label()))

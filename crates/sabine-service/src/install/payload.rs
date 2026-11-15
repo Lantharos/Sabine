@@ -49,7 +49,7 @@ pub(super) fn install_system_archive(
         .artifacts
         .get(&name)
         .ok_or_else(|| ServiceError::Update(format!("Sabine release has no {name} artifact")))?;
-    if !artifact.url.starts_with("https://") {
+    if !crate::types::is_https_url(&artifact.url) {
         return Err(ServiceError::Update(
             "Sabine system artifact URL must use HTTPS".to_string(),
         ));

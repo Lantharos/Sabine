@@ -9,12 +9,13 @@ use crate::{
     SabineService, ServiceError, ServiceResult, ensure_service_executable,
     install::{
         StagedSystemUpdate, daemon_paths_for_version, repair_system_installation,
-        rollback_system_update, service_path_for_version, stage_required_system_update,
-        stage_system_update,
+        rollback_system_update, stage_required_system_update, stage_system_update,
     },
     service_daemon_path,
 };
-use sabine_runtime::{configure_background_command, process_alive, sabine_data_dir};
+use sabine_runtime::{
+    ProcessIdentity, configure_background_command, process_alive, sabine_data_dir,
+};
 
 use super::{autostart::install_login_autostart_with, load_policy};
 
@@ -26,7 +27,7 @@ mod ownership;
 mod process;
 
 pub use handoff::complete_system_update;
-use ownership::{DAEMON_STATE_FILE, claim_daemon, daemon_state};
+use ownership::{DAEMON_STATE_FILE, DaemonState, claim_daemon, daemon_state};
 use process::{process_executable, same_executable, terminate_process};
 
 pub fn ensure_daemon_running() -> ServiceResult<bool> {
@@ -39,8 +40,8 @@ pub fn ensure_daemon_running() -> ServiceResult<bool> {
     })?;
     let daemon = service_daemon_path(&service);
     let login_autostart = load_policy().login_autostart;
-    let matching_daemon = daemon_state()
-        .is_some_and(|state| state.version == expected_version && process_alive(state.pid));
+    let matching_daemon =
+        daemon_state().is_some_and(|state| state.version == expected_version && state.is_running());
     if matching_daemon {
         #[cfg(target_os = "linux")]
         if login_autostart && !supervised_daemon_matches(&daemon) {
@@ -110,10 +111,19 @@ pub fn ensure_daemon_running() -> ServiceResult<bool> {
 }
 
 pub fn running_daemon_version() -> Option<String> {
-    let state = daemon_state().filter(|state| process_alive(state.pid))?;
+    let state = daemon_state().filter(DaemonState::is_running)?;
+    runs_installed_daemon(&state)?.then_some(state.version)
+}
+
+/// Whether the daemon `state` names runs the program Sabine installed for
+/// its version, or `None` when its program can't be read.
+fn runs_installed_daemon(state: &DaemonState) -> Option<bool> {
     let actual = process_executable(state.pid)?;
-    let expected = service_daemon_path(&service_path_for_version(&state.version));
-    (actual.file_name() == expected.file_name()).then_some(state.version)
+    Some(
+        daemon_paths_for_version(&state.version)
+            .iter()
+            .any(|expected| same_executable(&actual, expected)),
+    )
 }
 
 pub fn run_daemon() -> ServiceResult<()> {
@@ -129,7 +139,7 @@ pub fn run_daemon() -> ServiceResult<()> {
     };
     #[cfg(target_os = "linux")]
     show_sabine_in_desktop();
-    schedule_installation_finalization(owner.pid);
+    schedule_installation_finalization(owner.identity);
     let service = SabineService::default();
     let mut next_maintenance = Instant::now();
     loop {
@@ -225,12 +235,11 @@ fn show_sabine_in_desktop() {
     }
 }
 
-fn schedule_installation_finalization(pid: u32) {
+fn schedule_installation_finalization(identity: ProcessIdentity) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(10));
-        let healthy = daemon_state().is_some_and(|state| {
-            state.pid == pid && state.version == crate::SABINE_VERSION && process_alive(state.pid)
-        });
+        let healthy = daemon_state()
+            .is_some_and(|state| state.is(identity) && state.version == crate::SABINE_VERSION);
         if healthy {
             crate::install::mark_system_update_healthy(crate::SABINE_VERSION);
         }
@@ -263,26 +272,23 @@ pub(crate) fn service_version(service: &Path) -> Option<String> {
 
 /// Stops the daemon recorded as running, when it is a Sabine daemon.
 pub(crate) fn stop_daemon() -> ServiceResult<()> {
-    let Some(state) = daemon_state().filter(|state| process_alive(state.pid)) else {
+    let Some(state) = daemon_state().filter(DaemonState::is_running) else {
         return Ok(());
     };
-    let Some(actual) = process_executable(state.pid) else {
+    let Some(installed) = runs_installed_daemon(&state) else {
         return Err(ServiceError::Update(format!(
             "could not verify stale Sabine service {} before stopping it",
             state.pid
         )));
     };
     let state_file = sabine_data_dir().join(DAEMON_STATE_FILE);
-    if !daemon_paths_for_version(&state.version)
-        .iter()
-        .any(|expected| same_executable(&actual, expected))
-    {
+    if !installed {
         let _ = fs::remove_file(state_file);
         return Ok(());
     }
     terminate_process(state.pid)?;
     for _ in 0..40 {
-        if !process_alive(state.pid) {
+        if !state.is_running() {
             let _ = fs::remove_file(state_file);
             return Ok(());
         }
@@ -298,8 +304,7 @@ fn wait_for_daemon_version(version: &str, timeout: Duration) -> bool {
     let started = std::time::Instant::now();
     let mut matching_since = None;
     while started.elapsed() < timeout {
-        if daemon_state().is_some_and(|state| state.version == version && process_alive(state.pid))
-        {
+        if daemon_state().is_some_and(|state| state.version == version && state.is_running()) {
             matching_since.get_or_insert_with(std::time::Instant::now);
             if matching_since.is_some_and(|seen| seen.elapsed() >= Duration::from_secs(1)) {
                 return true;

@@ -12,7 +12,7 @@ pub fn cached_service_path() -> PathBuf {
         .unwrap_or_else(|| service_path_for_version(crate::SABINE_VERSION))
 }
 
-pub(crate) fn service_path_for_version(version: &str) -> PathBuf {
+fn service_path_for_version(version: &str) -> PathBuf {
     versions_dir().join(version).join(service_binary_name())
 }
 
