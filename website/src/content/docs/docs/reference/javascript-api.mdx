@@ -706,7 +706,8 @@ interface ActivityList {
 An activity keeps the page running while its window is out of sight, instead of letting Sabine
 freeze it, unless it is begun with `keepRunning: false`. It belongs to the page that began it and
 ends when that page reloads, navigates away, loses its renderer or its window closes. `end()`
-resolves with `ended: false` when the activity had already ended. `list()` returns the activities
+resolves with `ended: false` when the activity had already ended. A window's pages keep up to 32
+activities at once, and `begin` rejects beyond that. `list()` returns the activities
 that apply to this window, the page's own and those the app began from Rust, and how many of them
 keep it running. See [Lifecycle](/docs/windows/lifecycle/).
 

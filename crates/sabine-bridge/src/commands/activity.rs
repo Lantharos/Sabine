@@ -15,6 +15,7 @@ const LIST_COMMAND: &str = "sabine.activity.list";
 const DOCUMENT_OPENED_COMMAND: &str = "sabine.activity.documentOpened";
 /// Sent by a page as it goes away, ending what it began.
 const DOCUMENT_CLOSED_COMMAND: &str = "sabine.activity.documentClosed";
+const MAX_PAGE_ACTIVITIES_PER_WINDOW: usize = 32;
 
 pub(super) const COMMANDS: [&str; 5] = [
     BEGIN_COMMAND,
@@ -103,7 +104,8 @@ impl ActivityHostUpdate {
 
 impl ActivityRegistry {
     pub fn begin(&self, options: ActivityOptions) -> ActivityRecord {
-        self.insert(options, None)
+        let mut state = self.state();
+        state.insert(options, None)
     }
 
     pub fn end(&self, id: &str) -> Option<ActivityRecord> {
@@ -140,22 +142,25 @@ impl ActivityRegistry {
                 .ok_or_else(|| BridgeError::new("activity commands require a `document` string"))
         };
         match command.name.as_str() {
-            BEGIN_COMMAND => Some(match document() {
-                Ok(document) => {
-                    let page = Page {
-                        window,
-                        browser: browser.to_string(),
-                        document: document.to_string(),
-                    };
-                    let record = self.insert(options_of(&command.params), Some(page));
-                    (
+            BEGIN_COMMAND => Some(
+                match document().and_then(|document| {
+                    self.begin_page(
+                        options_of(&command.params),
+                        Page {
+                            window,
+                            browser: browser.to_string(),
+                            document: document.to_string(),
+                        },
+                    )
+                }) {
+                    Ok(record) => (
                         Ok(BridgeResponse::json(record_json(&record))),
                         vec![ActivityHostUpdate::Begin(record)],
-                    )
-                }
-                Err(error) => (Err(error), Vec::new()),
-            }),
-            END_COMMAND => Some(self.dispatch_end(command, window)),
+                    ),
+                    Err(error) => (Err(error), Vec::new()),
+                },
+            ),
+            END_COMMAND => Some(self.dispatch_end(command, window, browser)),
             LIST_COMMAND => Some((
                 Ok(BridgeResponse::json(self.snapshot_json(window))),
                 Vec::new(),
@@ -199,23 +204,23 @@ impl ActivityRegistry {
         self.inner.lock().expect("activity registry poisoned")
     }
 
-    fn insert(&self, options: ActivityOptions, page: Option<Page>) -> ActivityRecord {
+    fn begin_page(
+        &self,
+        options: ActivityOptions,
+        page: Page,
+    ) -> Result<ActivityRecord, BridgeError> {
         let mut state = self.state();
-        state.next_id += 1;
-        let record = ActivityRecord {
-            id: format!("activity-{}", state.next_id),
-            name: normalize_name(&options.name),
-            keep_running: options.keep_running,
-            window: page.as_ref().map(|page| page.window),
-        };
-        state.entries.insert(
-            record.id.clone(),
-            Entry {
-                record: record.clone(),
-                page,
-            },
-        );
-        record
+        let window_activities = state
+            .entries
+            .values()
+            .filter(|entry| entry.record.window == Some(page.window))
+            .count();
+        if window_activities >= MAX_PAGE_ACTIVITIES_PER_WINDOW {
+            return Err(BridgeError::new(format!(
+                "a window's pages can keep at most {MAX_PAGE_ACTIVITIES_PER_WINDOW} activities at once"
+            )));
+        }
+        Ok(state.insert(options, Some(page)))
     }
 
     fn release(&self, ends: impl Fn(&Page) -> bool) -> Vec<ActivityRecord> {
@@ -233,11 +238,12 @@ impl ActivityRegistry {
             .collect()
     }
 
-    /// Pages end only the activities their own window's pages began.
+    /// Pages end only the activities that pages of their own browser began.
     fn dispatch_end(
         &self,
         command: &BridgeCommand,
         window: u32,
+        browser: &str,
     ) -> (BridgeResult, Vec<ActivityHostUpdate>) {
         let Some(id) = command.params.get("id").and_then(Value::as_str) else {
             return (
@@ -251,7 +257,7 @@ impl ActivityRegistry {
                 entry
                     .page
                     .as_ref()
-                    .is_some_and(|page| page.window == window)
+                    .is_some_and(|page| page.window == window && page.browser == browser)
             });
             owned
                 .then(|| state.entries.remove(id))
@@ -285,6 +291,26 @@ impl ActivityRegistry {
                 .filter(|activity| activity.keep_running)
                 .count(),
         })
+    }
+}
+
+impl ActivityState {
+    fn insert(&mut self, options: ActivityOptions, page: Option<Page>) -> ActivityRecord {
+        self.next_id += 1;
+        let record = ActivityRecord {
+            id: format!("activity-{}", self.next_id),
+            name: normalize_name(&options.name),
+            keep_running: options.keep_running,
+            window: page.as_ref().map(|page| page.window),
+        };
+        self.entries.insert(
+            record.id.clone(),
+            Entry {
+                record: record.clone(),
+                page,
+            },
+        );
+        record
     }
 }
 
@@ -410,20 +436,35 @@ mod tests {
     }
 
     #[test]
-    fn pages_end_only_their_own_windows_activities() {
+    fn pages_end_only_their_own_browsers_activities() {
         let registry = ActivityRegistry::default();
         let record = begin(&registry, 7, "a");
-        let end = |window| {
+        let end = |window, browser| {
             registry
                 .dispatch_bridge_command(
                     &command(END_COMMAND, window, json!({ "id": record.id })),
-                    "1",
+                    browser,
                 )
                 .expect("activity command")
         };
-        assert!(end(8).1.is_empty());
-        assert!(matches!(end(7).1[..], [ActivityHostUpdate::End(_)]));
+        assert!(end(8, "1").1.is_empty());
+        assert!(end(7, "2").1.is_empty());
+        assert!(matches!(end(7, "1").1[..], [ActivityHostUpdate::End(_)]));
         assert!(registry.list().is_empty());
+    }
+
+    #[test]
+    fn a_window_keeps_a_bounded_number_of_page_activities() {
+        let registry = ActivityRegistry::default();
+        for _ in 0..MAX_PAGE_ACTIVITIES_PER_WINDOW {
+            begin(&registry, 7, "a");
+        }
+        let (result, updates) = registry
+            .dispatch_bridge_command(&command(BEGIN_COMMAND, 7, json!({ "document": "a" })), "1")
+            .expect("activity command");
+        assert!(result.is_err());
+        assert!(updates.is_empty());
+        begin(&registry, 8, "b");
     }
 
     #[test]

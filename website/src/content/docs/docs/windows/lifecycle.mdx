@@ -140,7 +140,9 @@ app's, with how many keep it running:
 const { activities, keepingRunning } = await activity.list();
 ```
 
-A page lists and ends only its own window's activities.
+A page lists only its own window's activities and ends only the ones it began, so a guest
+with the bridge can't end the page's. A window's pages keep up to 32 activities at once, and
+`activity.begin()` rejects beyond that.
 
 Rust starts activities on the process. They keep every window's page running, windows opened
 after the activity began included, until the lease is dropped or ended:
