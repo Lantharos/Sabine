@@ -111,18 +111,22 @@ impl SabineService {
             sabine_runtime::RuntimeMode::SharedPreferred
                 | sabine_runtime::RuntimeMode::SystemPreferred
         );
-        let runtime = if shared && let Some(runtime) = self.system_runtime() {
-            runtime
+        let (runtime, installed) = if shared && let Some(runtime) = self.system_runtime() {
+            (runtime, false)
         } else if shared && self.runtime.allow_user_install {
-            update_user_runtime_with_progress(&self.runtime, progress)?
+            let update = update_user_runtime_with_progress(&self.runtime, progress)?;
+            (update.runtime, update.installed)
         } else {
-            resolve_runtime(&self.runtime)?
+            (resolve_runtime(&self.runtime)?, false)
         };
         let host = sabine_host::ensure_host(runtime.location.path()).map_err(|error| {
             ServiceError::Update(format!(
                 "the Sabine host to validate the runtime with is unavailable: {error}"
             ))
         })?;
+        if !installed {
+            return Ok(runtime);
+        }
         if let Err(error) = sabine_host::smoke_test_runtime(&host, runtime.location.path()) {
             quarantine_user_runtime(
                 &runtime,

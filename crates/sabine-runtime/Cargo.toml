@@ -14,14 +14,15 @@ readme = "README.md"
 
 [dependencies]
 bzip2.workspace = true
+flate2.workspace = true
 getrandom.workspace = true
 tar.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha1.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
+zip.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = [
@@ -34,3 +35,6 @@ windows = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

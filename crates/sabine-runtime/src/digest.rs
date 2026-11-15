@@ -46,7 +46,7 @@ pub fn random_hex(bytes: usize) -> io::Result<String> {
     Ok(hex(&random))
 }
 
-/// Lowercase hexadecimal, as release manifests and CEF indexes write digests.
+/// Lowercase hexadecimal, as release manifests and the pinned CEF build write digests.
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

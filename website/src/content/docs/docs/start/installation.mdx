@@ -63,9 +63,9 @@ package, so an app always builds against the Sabine it was created with.
 Nothing else needs installing by hand. The first time you run `sabine dev`, Sabine prepares the
 machine:
 
-1. **The CEF runtime.** If no Chromium runtime is installed, the CLI downloads the newest
-   compatible CEF build, verifies its checksum, and installs it into Sabine's data folder. It
-   prints its progress in the terminal.
+1. **The CEF runtime.** If no Chromium runtime is installed, the CLI downloads the CEF build its
+   Sabine release pins, verifies its size and SHA-256, and installs it into Sabine's data folder.
+   It prints its progress in the terminal.
 2. **The CEF host.** Sabine's host is the small program that embeds Chromium. Release builds use
    the prebuilt host that ships with Sabine. Debug builds of your app compile it from the runtime's
    CEF SDK, which needs CMake and a C++ compiler; without them, they use the prebuilt host.

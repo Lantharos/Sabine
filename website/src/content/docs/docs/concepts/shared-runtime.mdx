@@ -26,7 +26,7 @@ The service, daemon, host and CLI are released together as one Sabine release, v
 The first time a Sabine app starts on a machine without Sabine, it shows a native setup window while it prepares the system:
 
 1. It downloads the Sabine release for the platform, checks its Ed25519 signature against the key built into the app and the SHA-256 of every file, and installs it into a versioned folder.
-2. It downloads the newest compatible Chromium runtime and validates it.
+2. It downloads the Chromium runtime its Sabine release pins and validates it.
 3. It registers the app and starts the daemon.
 
 Closing the setup window cancels it and keeps what was downloaded, so the next attempt resumes. A failure stays on screen with the error and the location of the logs until it is dismissed.
@@ -35,22 +35,22 @@ Every later app on the machine finds the system ready and starts without a setup
 
 ## Chromium runtimes
 
-Runtimes come from the CEF build index at `cef-builds.spotifycdn.com`, which lists every archive with its size and SHA-1. Sabine downloads the Minimal distribution, which keeps the build SDK but leaves out debug libraries and sample applications. The Sabine host is compiled against CEF's stable API version 15400, so any runtime from CEF 154 on works with it, and the daemon can move to newer Chromium releases without a new Sabine release. Apps negotiate Sabine capabilities and never ask for a particular Chromium version.
+Each Sabine release pins one CEF build, with the size and SHA-256 of its archive for every platform built into Sabine, and downloads exactly that build from `cef-builds.spotifycdn.com`. Sabine uses the Minimal distribution, which keeps the build SDK but leaves out debug libraries and sample applications. Newer Chromium arrives with Sabine updates. The Sabine host is compiled against CEF's stable API version 15400, so any runtime from CEF 154 on works with it, and apps negotiate Sabine capabilities and never ask for a particular Chromium version.
 
 ### Installing a runtime
 
 ```text
-plan → lock → download → SHA-1 verify → extract → install the version folder → ready
+lock → download → size and SHA-256 verify → extract → install the version folder → ready
 ```
 
-- Downloads resume with HTTP byte ranges after an interruption, and restart when the server doesn't support ranges. Sizes are checked against the index before the checksum. Transient failures get up to four attempts within a 30-minute deadline.
-- Extraction runs inside the process and rejects unsafe paths, links that leave the version folder, and device entries.
+- Downloads resume with HTTP byte ranges after an interruption, and restart when the server doesn't support ranges. The archive must match the pinned size and SHA-256 before anything is extracted. Transient failures get up to four attempts within a 30-minute deadline.
+- Extraction runs inside the process and rejects unsafe paths and device entries. Links are created after every other entry and must resolve inside the extracted folder.
 - A runtime needs the CEF library, `icudtl.dat`, `resources.pak` and at least one locale pack to count as installed. Headers and CMake files matter only for building the host.
 - Each version installs into its own immutable folder, so apps keep running on an older version while a newer one installs.
 
 ### Validation and quarantine
 
-The daemon downloads a new runtime into a folder beside the current one and starts it once with the installed host in a headless health probe: Chromium has to start, render a page off screen with the expected pixels within 25 seconds, and shut down normally. The probe uses a throwaway profile, with Chromium's mock keychain on macOS and its basic password store on Linux, so validating a runtime never asks for your keychain or keyring.
+The daemon installs a new runtime into a folder beside the current one and starts it once with the installed host in a headless health probe: Chromium has to start, render a page off screen with the expected pixels within 25 seconds, and shut down normally. The probe uses a throwaway profile, with Chromium's mock keychain on macOS and its basic password store on Linux, so validating a runtime never asks for your keychain or keyring.
 
 A runtime that fails gets an unusable marker with the reason and is quarantined. Apps keep resolving to the previous runtime, and maintenance stays on it. Markers are tied to the probe's version, so a later Sabine with a fixed probe tries that runtime again automatically. `sabine runtime doctor` shows a quarantined runtime with its reason.
 
@@ -74,7 +74,7 @@ Apps resolve a runtime at launch from the validated runtimes on the machine, new
 
 The daemon holds an operating-system file lock for as long as it runs, so two daemons can never both own the system, and a daemon that is killed releases the lock at once. It runs a maintenance pass at start and then every six hours:
 
-- Updates Chromium to the newest compatible runtime, validates it and prunes old ones.
+- Installs the Chromium runtime the active Sabine pins, validates it when it is new, and prunes old ones.
 - Installs Sabine updates, holding back any that would stop an installed app.
 - Downloads and stages app updates.
 - Removes apps that are gone: an app whose program has been missing for a week, and a development registration from `sabine dev` that hasn't been launched for 30 days, lose their registration and everything Sabine keeps for them: login item, browser extension hosts, staged updates and downloads, Sabine's folder for the app, the desktop entries and URL handler Sabine wrote on Linux, and the app's browser profile. Installed apps whose program is still there are never removed for being unused, and an app that comes back registers again.

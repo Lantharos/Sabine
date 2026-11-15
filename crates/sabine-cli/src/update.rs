@@ -69,7 +69,7 @@ fn update_sabine(force: bool) -> Result<(), String> {
 }
 
 fn update_cef() -> Result<(), String> {
-    println!("Checking CEF and validating Chromium startup…");
+    println!("Checking CEF…");
     let mut log = ProgressLog::default();
     sabine_service::ensure_service_executable(|progress| {
         if let Some(line) = log.line(&progress.message, progress.fraction) {

@@ -14,15 +14,6 @@ pub(crate) fn version_sort_key(version: &str) -> Vec<u32> {
         .collect()
 }
 
-pub(crate) fn channel_preference(channel: Option<&str>) -> u8 {
-    match channel {
-        Some("stable") | None => 0,
-        Some("beta") => 1,
-        Some("dev") | Some("canary") => 2,
-        _ => 3,
-    }
-}
-
 pub(crate) fn major_version(version: &str) -> u32 {
     version
         .split(['.', '+'])
