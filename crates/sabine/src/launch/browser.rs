@@ -169,12 +169,8 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--no-first-run");
     #[cfg(target_os = "linux")]
     command.args(options.password_store.switch());
-    // Builds other than `sabine bundle`'s are signed anew whenever they change, and the login
-    // keychain would ask for the person's password each time.
     #[cfg(target_os = "macos")]
-    if !crate::AppEnvironment::production_build() {
-        command.arg("--use-mock-keychain");
-    }
+    command.arg("--use-mock-keychain");
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
         command
             .arg(format!("--remote-debugging-port={port}"))

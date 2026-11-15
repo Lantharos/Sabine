@@ -65,7 +65,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | [Native video](/docs/web/native-video/) | GStreamer, transparent windows | Media Foundation, transparent windows | AVFoundation, transparent windows |
 | [Native messaging](/docs/desktop/native-messaging/) | Yes, including Flatpak and Snap browsers | Yes | Yes |
 | [Secrets](/docs/web/store-and-secrets/#secrets) | Secret Service | Credential Manager | Login keychain |
-| Cookie and password encryption | Secret Service, or KWallet on KDE | DPAPI | Login keychain for bundled apps, a fixed key in development |
+| Cookie and password encryption | Secret Service, or KWallet on KDE | DPAPI | A fixed key |
 | [Crash reports](/docs/distribution/crash-reports-and-logs/) | Yes | Yes | Yes |
 | Screen readers | No | No | No |
 | [Shared Chromium process](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux) | Apps installed for every user | No, one per app | No, one per app |
@@ -108,7 +108,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 
 - **Apple Silicon only.** Bundles require a native arm64 executable.
 - **Notifications** need a bundled app; macOS asks for permission the first time.
-- **Keychain.** Bundled apps keep Chromium's cookie key in the login keychain. Chromium runs from a bundle Sabine signs on each Mac, which changes with each runtime or Sabine update, so the keychain may ask for the person's password once after an update. Development runs use a fixed key instead.
+- **Keychain.** Chromium runs from a bundle Sabine signs on each Mac, whose identity changes with every runtime or Sabine update, so it keeps its cookie key out of the login keychain, which would ask for the password after each one. Keep secrets in the [secrets store](/docs/web/store-and-secrets/#secrets) instead.
 - **URL schemes and document types** must be declared in the bundle before it is signed, so test them with the bundled app rather than a development run.
 - **The tray** shows only the image in the menu bar, not the title. Black-and-white icons, and icons marked as templates, follow the menu bar's appearance.
 - **Tray icons and shortcuts** need the main thread's event loop. `SabineWindow::main` and `SabineProcess::wait()` run it; call `wait()` on the main thread when you manage the process yourself.
