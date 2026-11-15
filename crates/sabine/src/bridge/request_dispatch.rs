@@ -1,8 +1,8 @@
 use std::{
     panic::AssertUnwindSafe,
     sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
+        Arc, LazyLock,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
 };
@@ -10,14 +10,17 @@ use std::{
 use futures_util::FutureExt;
 use sabine_bridge::{BridgeCommand, BridgeError, BridgeFuture, BridgeOutcome, BridgeResult};
 
+use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
+use super::writer::BridgeWriter;
 
+/// Starts the line of a page's bridge call.
+pub(super) const REQUEST_PREFIX: &str = "SABINE_BRIDGE_REQUEST\t";
 /// Sent to a window's pages when updates from `bridge.send` were dropped
 /// because the window's queue was full.
 const DROPPED_EVENT: &str = "sabine.bridge.dropped";
+/// Calls one window may have waiting for a worker.
 const MAX_PENDING_REQUESTS: usize = 128;
-const MAX_PENDING_RESPONSES: usize = MAX_PENDING_REQUESTS + REQUEST_WORKERS;
-const REQUEST_WORKERS: usize = 4;
 
 pub(super) struct BridgeIpcRequest {
     reply: ReplyTo,
@@ -31,19 +34,23 @@ struct ReplyTo {
 
 impl BridgeIpcRequest {
     pub(super) fn parse(frame: Frame, window: u32) -> Option<Self> {
-        let parts = frame.line.splitn(6, '\t').collect::<Vec<_>>();
-        if parts.first().copied()? != "SABINE_BRIDGE_REQUEST" || parts.len() != 6 {
+        let parts = frame
+            .line
+            .strip_prefix(REQUEST_PREFIX)?
+            .splitn(5, '\t')
+            .collect::<Vec<_>>();
+        let [browser_id, id, origin, name, params] = parts[..] else {
             return None;
-        }
-        let params = serde_json::from_str(parts[5]).ok()?;
+        };
+        let params = serde_json::from_str(params).ok()?;
         Some(Self {
             reply: ReplyTo {
-                browser_id: parts[1].to_string(),
-                id: parts[2].to_string(),
+                browser_id: browser_id.to_string(),
+                id: id.to_string(),
             },
             command: BridgeCommand {
-                origin: Some(parts[3].to_string()).filter(|origin| !origin.is_empty()),
-                name: parts[4].to_string(),
+                origin: Some(origin.to_string()).filter(|origin| !origin.is_empty()),
+                name: name.to_string(),
                 params,
                 body: frame.body,
                 window: Some(window),
@@ -83,12 +90,79 @@ fn dropped_notice(command: &str) -> Arc<[u8]> {
     Frame::shared(&line, None)
 }
 
-/// Runs bridge handlers off the window's reader thread. Synchronous handlers
-/// run on a small pool of workers; async handlers are awaited on Sabine's
-/// async runtime, so a handler that waits does not hold a worker.
+/// What a window's calls run against and where their answers go.
+struct WindowCalls {
+    runtime: sabine_bridge::BridgeRuntime,
+    activity: sabine_bridge::ActivityRegistry,
+    emitter: BridgeEventEmitter,
+    writer: BridgeWriter,
+    waiting: AtomicUsize,
+}
+
+impl WindowCalls {
+    fn run(&self, BridgeIpcRequest { reply, command }: BridgeIpcRequest) {
+        let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            match self
+                .activity
+                .dispatch_bridge_command(&command, &reply.browser_id)
+            {
+                Some((result, updates)) => {
+                    for update in &updates {
+                        self.emitter.emit_activity_update(update);
+                    }
+                    BridgeOutcome::Ready(result)
+                }
+                None => self.runtime.dispatch_from_authorized_document(command),
+            }
+        }))
+        .unwrap_or_else(|_| BridgeOutcome::Ready(Err(handler_panicked())));
+        match outcome {
+            BridgeOutcome::Ready(result) => {
+                if let Some(answer) = reply.answer(result) {
+                    self.writer.answer(answer);
+                }
+            }
+            BridgeOutcome::Pending(future) => {
+                sabine_platform::async_runtime().spawn(answer(reply, future, self.writer.clone()));
+            }
+        }
+    }
+}
+
+struct Job {
+    window: Arc<WindowCalls>,
+    request: BridgeIpcRequest,
+}
+
+/// The workers every window's synchronous handlers run on, one per core and
+/// at least four.
+fn workers() -> &'static crossbeam_channel::Sender<Job> {
+    static WORKERS: LazyLock<crossbeam_channel::Sender<Job>> = LazyLock::new(|| {
+        let (jobs, queue) = crossbeam_channel::unbounded::<Job>();
+        for _ in 0..worker_count() {
+            let queue = queue.clone();
+            thread::spawn(move || {
+                for Job { window, request } in queue {
+                    window.waiting.fetch_sub(1, Ordering::Relaxed);
+                    window.run(request);
+                }
+            });
+        }
+        jobs
+    });
+    &WORKERS
+}
+
+fn worker_count() -> usize {
+    thread::available_parallelism().map_or(4, |cores| cores.get().max(4))
+}
+
+/// Runs a window's bridge handlers off its reader thread. Synchronous
+/// handlers run on the workers every window shares; async handlers are
+/// awaited on Sabine's async runtime, so a handler that waits does not hold
+/// a worker.
 pub(super) struct BridgeRequestDispatcher {
-    requests: crossbeam_channel::Sender<BridgeIpcRequest>,
-    responses: crossbeam_channel::Sender<Arc<[u8]>>,
+    window: Arc<WindowCalls>,
     /// Set while updates are being dropped, so pages hear once per burst.
     dropping: AtomicBool,
 }
@@ -97,106 +171,54 @@ impl BridgeRequestDispatcher {
     pub(super) fn new(
         runtime: sabine_bridge::BridgeRuntime,
         activity: sabine_bridge::ActivityRegistry,
-        activity_emitter: super::emitter::BridgeEventEmitter,
-        writer: super::writer::BridgeWriter,
+        emitter: BridgeEventEmitter,
+        writer: BridgeWriter,
     ) -> Self {
-        let (request_sender, request_receiver) =
-            crossbeam_channel::bounded::<BridgeIpcRequest>(MAX_PENDING_REQUESTS);
-        let (response_sender, response_receiver) =
-            crossbeam_channel::bounded::<Arc<[u8]>>(MAX_PENDING_RESPONSES);
-
-        for _ in 0..REQUEST_WORKERS {
-            let requests = request_receiver.clone();
-            let responses = response_sender.clone();
-            let runtime = runtime.clone();
-            let activity = activity.clone();
-            let emitter = activity_emitter.clone();
-            thread::spawn(move || {
-                while let Ok(BridgeIpcRequest { reply, command }) = requests.recv() {
-                    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        match activity.dispatch_bridge_command(&command, &reply.browser_id) {
-                            Some((result, updates)) => {
-                                for update in &updates {
-                                    emitter.emit_activity_update(update);
-                                }
-                                BridgeOutcome::Ready(result)
-                            }
-                            None => runtime.dispatch_from_authorized_document(command),
-                        }
-                    }))
-                    .unwrap_or_else(|_| BridgeOutcome::Ready(Err(handler_panicked())));
-                    match outcome {
-                        BridgeOutcome::Ready(result) => {
-                            if let Some(answer) = reply.answer(result)
-                                && responses.send(answer).is_err()
-                            {
-                                break;
-                            }
-                        }
-                        BridgeOutcome::Pending(future) => {
-                            sabine_platform::async_runtime().spawn(answer(
-                                reply,
-                                future,
-                                responses.clone(),
-                            ));
-                        }
-                    }
-                }
-            });
-        }
-
-        thread::spawn(move || {
-            while let Ok(frame) = response_receiver.recv() {
-                if !writer.send(frame) {
-                    break;
-                }
-            }
-        });
-
         Self {
-            requests: request_sender,
-            responses: response_sender,
+            window: Arc::new(WindowCalls {
+                runtime,
+                activity,
+                emitter,
+                writer,
+                waiting: AtomicUsize::new(0),
+            }),
             dropping: AtomicBool::new(false),
         }
     }
 
     pub(super) fn submit(&self, request: BridgeIpcRequest) {
-        let (request, message) = match self.requests.try_send(request) {
-            Ok(()) => {
-                self.dropping.store(false, Ordering::Relaxed);
-                return;
-            }
-            Err(crossbeam_channel::TrySendError::Full(request)) => {
-                (request, "Bridge request capacity is exhausted; retry later")
-            }
-            Err(crossbeam_channel::TrySendError::Disconnected(request)) => {
-                (request, "Bridge request executor is unavailable")
-            }
-        };
+        let waiting = &self.window.waiting;
+        if waiting.fetch_add(1, Ordering::Relaxed) < MAX_PENDING_REQUESTS {
+            self.dropping.store(false, Ordering::Relaxed);
+            let _ = workers().send(Job {
+                window: Arc::clone(&self.window),
+                request,
+            });
+            return;
+        }
+        waiting.fetch_sub(1, Ordering::Relaxed);
         let notice = if request.reply.wants_answer() {
-            request.reply.answer(Err(BridgeError::new(message)))
+            request.reply.answer(Err(BridgeError::new(
+                "Bridge request capacity is exhausted; retry later",
+            )))
         } else if !self.dropping.swap(true, Ordering::Relaxed) {
             Some(dropped_notice(&request.command.name))
         } else {
             None
         };
         if let Some(notice) = notice {
-            let _ = self.responses.try_send(notice);
+            self.window.writer.answer(notice);
         }
     }
 }
 
-async fn answer(
-    reply: ReplyTo,
-    future: BridgeFuture,
-    responses: crossbeam_channel::Sender<Arc<[u8]>>,
-) {
+async fn answer(reply: ReplyTo, future: BridgeFuture, writer: BridgeWriter) {
     let result = AssertUnwindSafe(future)
         .catch_unwind()
         .await
         .unwrap_or_else(|_| Err(handler_panicked()));
     if let Some(answer) = reply.answer(result) {
-        let _ = responses.send(answer);
+        writer.answer(answer);
     }
 }
 
@@ -214,12 +236,10 @@ mod tests {
     use sabine_bridge::{BridgeHandlers, BridgeResponse, BridgeRuntime};
 
     use super::*;
-    use crate::bridge::emitter::BridgeEventEmitter;
-    use crate::bridge::writer::BridgeWriter;
 
     #[test]
     fn waiting_async_handlers_do_not_hold_workers() {
-        let waiting = REQUEST_WORKERS + 2;
+        let waiting = worker_count() + 2;
         let barrier = Arc::new(tokio::sync::Barrier::new(waiting));
         let mut handlers = BridgeHandlers::default();
         handlers.register_async("wait", move |_| {
