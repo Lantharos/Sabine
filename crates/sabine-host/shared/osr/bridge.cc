@@ -15,6 +15,14 @@
 
 using namespace sabine_osr;
 
+namespace {
+
+bool FitsRequestLine(std::string_view field, const char* separators) {
+  return field.find_first_of(separators) == std::string_view::npos;
+}
+
+}  // namespace
+
 bool SabineOsrHandler::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -158,7 +166,9 @@ void SabineOsrHandler::HandleBridgeCommand(
     origin = frame->GetURL();
   else if (origin.back() == '/')
     origin.pop_back();
-  if (command.empty()) {
+  if (command.empty() || !FitsRequestLine(request_id, "\t\r\n") ||
+      !FitsRequestLine(command, "\t\r\n") ||
+      !FitsRequestLine(payload, "\r\n")) {
     ResolveBridgeResponse(browser_id, request_id, false,
                           "{\"message\":\"Malformed Sabine bridge request\"}");
     return;
