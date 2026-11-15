@@ -43,8 +43,9 @@ bool SabineOsrHandler::OnProcessMessageReceived(
   if (message->GetName() == "sabine.clipboard.bytes") {
     sabine_bytes::Message bytes;
     if (sabine_bytes::Read(message, &bytes) && bytes.fields.size() == 1)
-      ForwardClipboardRequest(browser, frame, bytes.fields[0],
-                              std::string_view(bytes.body, bytes.body_size));
+      clipboard_.Forward(browser, frame, bytes.fields[0],
+                         std::string_view(bytes.body, bytes.body_size),
+                         BridgePolicyFor(browser));
     return true;
   }
 #if defined(OS_LINUX)
@@ -65,8 +66,8 @@ bool SabineOsrHandler::OnProcessMessageReceived(
   }
   if (message->GetName() == "sabine.clipboard") {
     if (arguments->GetSize() == 1)
-      ForwardClipboardRequest(browser, frame, arguments->GetString(0),
-                              std::nullopt);
+      clipboard_.Forward(browser, frame, arguments->GetString(0), std::nullopt,
+                         BridgePolicyFor(browser));
     return true;
   }
   if (message->GetName() == "sabine.drop.ready") {
@@ -75,7 +76,9 @@ bool SabineOsrHandler::OnProcessMessageReceived(
     return true;
   }
   if (message->GetName() == "sabine.media_state") {
-    UpdateFrameMediaState(browser, frame, arguments->GetString(0) == "1");
+    media_.SetFramePlaying(browser->GetIdentifier(),
+                           frame->GetIdentifier().ToString(),
+                           arguments->GetString(0) == "1");
     return true;
   }
   if (message->GetName() == "sabine.page_zoom") {
@@ -138,26 +141,26 @@ void SabineOsrHandler::HandleWindowCommand(const std::string& command,
   if (command == "close") {
     RequestNativeClose();
   } else if (command == "start-drag" || command == "drag") {
-    SendMessage(kStartDragRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kStartDragRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "minimize") {
-    SendMessage(kMinimizeRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kMinimizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "maximize") {
-    SendMessage(kMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "restore") {
-    SendMessage(kRestoreRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kRestoreRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "toggle-maximize") {
-    SendMessage(kToggleMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kToggleMaximizeRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "fullscreen") {
-    SendMessage(kFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "exit-fullscreen") {
-    SendMessage(kExitFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kExitFullscreenRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "show") {
-    SendMessage(kShowRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kShowRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "hide") {
-    SendMessage(kHideRequested, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kHideRequested, 0, 0, 0, 0, nullptr, 0);
   } else if (command == "focus") {
-    SendMessage(kFocusRequested, 0, 0, 0, 0, value.data(),
-                static_cast<uint32_t>(value.size()));
+    transport_.Send(kFocusRequested, 0, 0, 0, 0, value.data(),
+                    static_cast<uint32_t>(value.size()));
   }
 }
 
@@ -181,7 +184,7 @@ void SabineOsrHandler::HandleBridgeCommand(
                           "{\"message\":\"Malformed Sabine bridge request\"}");
     return;
   }
-  const GuestView* guest = GuestForBrowser(browser);
+  const GuestView* guest = guests_.ForBrowser(browser);
   if (guest && !guest->allow_bridge) {
     ResolveBridgeResponse(
         browser_id, request_id, false,
@@ -196,8 +199,8 @@ void SabineOsrHandler::HandleBridgeCommand(
                             "guest views\"}");
       return;
     }
-  } else if (HandleGuestBridgeCommand(command, payload, browser_id,
-                                      request_id)) {
+  } else if (guests_.HandleBridgeCommand(command, payload, browser_id,
+                                         request_id)) {
     return;
   }
   if (bridge_commands_.find(command) == bridge_commands_.end() ||
@@ -211,7 +214,7 @@ void SabineOsrHandler::HandleBridgeCommand(
                               request_id + "\t" + origin + "\t" + command +
                               "\t" + (payload.empty() ? "{}" : payload);
   if (!body) {
-    SendMessage(kBridgeRequest, {request});
+    transport_.Send(kBridgeRequest, {request});
     return;
   }
   if (!bridge_policy_->GetBool("bytes")) {
@@ -223,11 +226,11 @@ void SabineOsrHandler::HandleBridgeCommand(
   }
   const std::string header =
       sabine_bytes::kPrefix + std::to_string(body->size()) + "\t";
-  SendMessage(kBridgeRequest, {header, request, "\n", *body});
+  transport_.Send(kBridgeRequest, {header, request, "\n", *body});
 }
 
 void SabineOsrHandler::RequestNativeClose() {
-  SendMessage(kCloseRequested, 0, 0, 0, 0, nullptr, 0);
+  transport_.Send(kCloseRequested, 0, 0, 0, 0, nullptr, 0);
 }
 
 void SabineOsrHandler::CloseFromNativeDisconnect() {
@@ -242,7 +245,7 @@ CefRefPtr<CefDictionaryValue> SabineOsrHandler::BridgePolicyFor(
     CefRefPtr<CefBrowser> browser) {
   if (browser_ && browser_->IsSame(browser))
     return bridge_policy_;
-  const GuestView* guest = GuestForBrowser(browser);
+  const GuestView* guest = guests_.ForBrowser(browser);
   return guest ? guest->bridge_policy : nullptr;
 }
 
@@ -261,7 +264,7 @@ void SabineOsrHandler::ResolveBridgeResponse(
     const std::string& payload,
     const std::optional<std::string>& body) {
   CEF_REQUIRE_UI_THREAD();
-  if (ResolveClipboardResponse(request_id, ok, payload, body))
+  if (clipboard_.Resolve(request_id, ok, payload, body))
     return;
   const int expected_id = std::atoi(browser_id.c_str());
   CefRefPtr<CefBrowser> target;

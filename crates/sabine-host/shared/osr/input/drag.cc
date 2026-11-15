@@ -126,10 +126,10 @@ bool SabineOsrHandler::StartDragging(CefRefPtr<CefBrowser> browser,
   PutU32(&payload, 0, static_cast<uint32_t>(content.size()));
   payload.insert(payload.end(), content.begin(), content.end());
   payload.insert(payload.end(), image.pixels.begin(), image.pixels.end());
-  if (!SendMessage(kDragStarted, static_cast<uint32_t>(image.width),
-                   static_cast<uint32_t>(image.height), image.hotspot.x,
-                   image.hotspot.y, payload.data(),
-                   static_cast<uint32_t>(payload.size()))) {
+  if (!transport_.Send(kDragStarted, static_cast<uint32_t>(image.width),
+                       static_cast<uint32_t>(image.height), image.hotspot.x,
+                       image.hotspot.y, payload.data(),
+                       static_cast<uint32_t>(payload.size()))) {
     return false;
   }
   drag_.source_browser = browser;
@@ -145,8 +145,8 @@ void SabineOsrHandler::UpdateDragCursor(CefRefPtr<CefBrowser> browser,
     return;
   }
   drag_.operation = operation;
-  SendMessage(kDragOperation, static_cast<uint32_t>(operation), 0, 0, 0,
-              nullptr, 0);
+  transport_.Send(kDragOperation, static_cast<uint32_t>(operation), 0, 0, 0,
+                  nullptr, 0);
 }
 
 bool SabineOsrHandler::TryHandleDragControl(

@@ -23,7 +23,7 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   const bool primary_browser = !browser_;
   if (primary_browser) {
     browser_ = browser;
-  } else if (GuestView* pending = GuestAwaitingBrowser()) {
+  } else if (GuestView* pending = guests_.AwaitingBrowser()) {
     pending->browser = browser;
     pending->pending = false;
   }
@@ -37,19 +37,38 @@ void SabineOsrHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
                  host->IsWindowRenderingDisabled() ? 1 : 0);
     std::fflush(stderr);
   }
-  if (!socket_.Connect(endpoint_, authentication_token_) ||
-      !SendMessage(kHostHello, 0, 0, 0, 0, SABINE_HOST_PROTOCOL_VERSION,
-                   sizeof(SABINE_HOST_PROTOCOL_VERSION) - 1)) {
+  if (!transport_.Connect() ||
+      !transport_.Send(kHostHello, 0, 0, 0, 0, SABINE_HOST_PROTOCOL_VERSION,
+                       sizeof(SABINE_HOST_PROTOCOL_VERSION) - 1)) {
     std::fprintf(stderr, "Sabine OSR: failed to connect native host\n");
     std::fflush(stderr);
     host->CloseBrowser(true);
     return;
   }
-  StartCommandReader();
+  transport_.StartReading();
   SendFocusedImeState();
-  ReportMediaPlaying();
+  media_.Report();
   host->WasResized();
   host->Invalidate(PET_VIEW);
+}
+
+bool SabineOsrHandler::OnBeforePopup(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame,
+    int popup_id,
+    const CefString& target_url,
+    const CefString& target_frame_name,
+    cef_window_open_disposition_t target_disposition,
+    bool user_gesture,
+    const CefPopupFeatures& popup_features,
+    CefWindowInfo& window_info,
+    CefRefPtr<CefClient>& client,
+    CefBrowserSettings& settings,
+    CefRefPtr<CefDictionaryValue>& extra_info,
+    bool* no_javascript_access) {
+  guests_.OpenPopup(browser, target_url.ToString(),
+                    static_cast<int>(target_disposition), user_gesture);
+  return true;
 }
 
 bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
@@ -62,12 +81,11 @@ bool SabineOsrHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   const int browser_id = browser->GetIdentifier();
-  RetireAcceleratedBrowser(browser_id);
-  ForgetAcceleratedCaptures(browser_id);
+  accelerated_.RetireBrowser(browser_id);
   renderer_crashes_.erase(browser_id);
   ime_.Forget(browser_id);
   media_.Forget(browser_id);
-  ReportMediaPlaying();
+  media_.Report();
   clipboard_.Forget(browser);
   if (devtools_inspected_ && devtools_inspected_->IsSame(browser)) {
     CloseDevTools();
@@ -75,15 +93,9 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   if (GuestView* guest = guests_.FindByBrowser(browser)) {
     const std::string id = guest->id;
     guest->browser = nullptr;
-    DestroyGuest(id);
+    guests_.Destroy(id);
   } else if (browser_ && browser_->IsSame(browser)) {
-    std::vector<std::string> ids;
-    for (const GuestView* view : guests_.InZOrder()) {
-      ids.push_back(view->id);
-    }
-    for (const auto& id : ids) {
-      DestroyGuest(id);
-    }
+    guests_.DestroyAll();
     ClosePrintDocuments();
     browser_ = nullptr;
   }
@@ -97,7 +109,7 @@ void SabineOsrHandler::QuitWhenClosed() {
   if (!browsers_.empty() || !print_documents_.empty()) {
     return;
   }
-  CloseTransport();
+  transport_.Close();
   UnregisterHandler(this);
   if (HasRegisteredHandlers()) {
     return;

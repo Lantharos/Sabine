@@ -2,10 +2,27 @@
 
 #include <string>
 
+#include "include/cef_values.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/handler.h"
 
-using namespace sabine_osr;
+namespace {
+
+void SetLifecycleState(CefRefPtr<CefBrowser> browser, const char* state) {
+  CefRefPtr<CefDictionaryValue> params = CefDictionaryValue::Create();
+  params->SetString("state", state);
+  browser->GetHost()->ExecuteDevToolsMethod(0, "Page.setWebLifecycleState",
+                                            params);
+}
+
+void PurgeMemory(CefRefPtr<CefBrowser> browser) {
+  CefRefPtr<CefDictionaryValue> params = CefDictionaryValue::Create();
+  params->SetString("level", "critical");
+  browser->GetHost()->ExecuteDevToolsMethod(
+      0, "Memory.simulatePressureNotification", params);
+}
+
+}  // namespace
 
 void SabineOsrHandler::ApplyLifecycle(const std::string& state,
                                       int frame_rate,
@@ -24,13 +41,13 @@ void SabineOsrHandler::ApplyLifecycle(const std::string& state,
     if (!UpdateViewHidden() && needs_paint) {
       host->Invalidate(PET_VIEW);
     }
-    ApplyGuestLifecycle();
+    guests_.ApplyLifecycle();
     return;
   }
   suspended_ = true;
   resume_needs_paint_ = resume_needs_paint_ || reason == "hidden";
   host->SetWindowlessFrameRate(frame_rate);
-  ApplyGuestLifecycle();
+  guests_.ApplyLifecycle();
 }
 
 void SabineOsrHandler::RepaintAll() {
@@ -39,10 +56,22 @@ void SabineOsrHandler::RepaintAll() {
   }
   browser_->GetHost()->Invalidate(PET_VIEW);
   browser_->GetHost()->Invalidate(PET_POPUP);
-  for (auto* guest : guests_.InZOrder()) {
-    if (guest->browser && guest->visible) {
-      guest->browser->GetHost()->Invalidate(PET_VIEW);
-      guest->browser->GetHost()->Invalidate(PET_POPUP);
+  guests_.Repaint();
+}
+
+// A frozen page runs no JavaScript at all, and its caches, decoded images and
+// GPU resources are released, while everything it holds stays in place for an
+// instant thaw.
+void SabineOsrHandler::SetPagesFrozen(bool frozen) {
+  CEF_REQUIRE_UI_THREAD();
+  if (frozen == frozen_) {
+    return;
+  }
+  frozen_ = frozen;
+  for (auto& browser : browsers_) {
+    SetLifecycleState(browser, frozen ? "frozen" : "active");
+    if (frozen) {
+      PurgeMemory(browser);
     }
   }
 }
@@ -56,7 +85,7 @@ void SabineOsrHandler::ApplyWindowState(bool shown,
   window_.occluded = shown && occluded;
   window_.suspended = suspended;
   if (browser_ && UpdateViewHidden()) {
-    ApplyGuestLifecycle();
+    guests_.ApplyLifecycle();
   }
   DispatchWindowState();
 }
@@ -85,7 +114,7 @@ void SabineOsrHandler::DispatchWindowState() {
       (window_.visible ? "true" : "false") + "," +
       (window_.suspended ? "true" : "false") + ");";
   for (auto& browser : browsers_) {
-    if (!GuestForBrowser(browser)) {
+    if (!guests_.ForBrowser(browser)) {
       browser->GetMainFrame()->ExecuteJavaScript(
           script, browser->GetMainFrame()->GetURL(), 0);
     }
@@ -110,7 +139,7 @@ void SabineOsrHandler::DispatchToplevelState() {
       flag(window_.maximized) + "," + flag(window_.fullscreen) + "," +
       flag(window_.tiled) + ");";
   for (auto& browser : browsers_) {
-    if (!GuestForBrowser(browser)) {
+    if (!guests_.ForBrowser(browser)) {
       browser->GetMainFrame()->ExecuteJavaScript(
           script, browser->GetMainFrame()->GetURL(), 0);
     }

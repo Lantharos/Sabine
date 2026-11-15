@@ -15,7 +15,7 @@ void SabineOsrHandler::OnRenderProcessTerminated(
     return;
   ime_.Forget(browser->GetIdentifier());
   media_.Forget(browser->GetIdentifier());
-  ReportMediaPlaying();
+  media_.Report();
   SendFocusedImeState();
   const auto now = std::chrono::steady_clock::now();
   auto& crashes = renderer_crashes_[browser->GetIdentifier()];
@@ -25,7 +25,7 @@ void SabineOsrHandler::OnRenderProcessTerminated(
   }
   const bool recovering = crashes.size() < 3;
   crashes.push_back(now);
-  const GuestView* guest = GuestForBrowser(browser);
+  const GuestView* guest = guests_.ForBrowser(browser);
   const std::string guest_id = guest ? guest->id : "";
   std::fprintf(stderr,
                "Sabine renderer terminated: browser=%d status=%d code=%d "
@@ -40,7 +40,7 @@ void SabineOsrHandler::OnRenderProcessTerminated(
   if (recovering) {
     if (!guest) {
       constexpr uint32_t kPageLost = 1;
-      SendMessage(kMainLoadStarted, kPageLost, 0, 0, 0, nullptr, 0);
+      transport_.Send(kMainLoadStarted, kPageLost, 0, 0, 0, nullptr, 0);
     }
     browser->Reload();
     return;
@@ -49,8 +49,8 @@ void SabineOsrHandler::OnRenderProcessTerminated(
     const std::string message =
         "The page renderer stopped repeatedly. Close the application and try "
         "again.";
-    SendMessage(kFatalError, 0, 0, 0, 0, message.data(),
-                static_cast<uint32_t>(message.size()));
+    transport_.Send(kFatalError, 0, 0, 0, 0, message.data(),
+                    static_cast<uint32_t>(message.size()));
   }
   browser->GetHost()->CloseBrowser(true);
 }
@@ -59,8 +59,8 @@ void SabineOsrHandler::OnFrameDetached(CefRefPtr<CefBrowser> browser,
                                        CefRefPtr<CefFrame> frame) {
   CEF_REQUIRE_UI_THREAD();
   const int browser_id = browser->GetIdentifier();
-  media_.playing_frames.erase({browser_id, frame->GetIdentifier().ToString()});
-  ReportMediaPlaying();
+  media_.ForgetFrame(browser_id, frame->GetIdentifier().ToString());
+  media_.Report();
   if (ime_.ForgetFrame(browser_id, frame)) {
     SendFocusedImeState();
   }

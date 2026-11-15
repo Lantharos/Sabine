@@ -106,19 +106,19 @@ void SabineOsrHandler::OpenDevToolsFrontend(const std::string& port,
       "/devtools/page/" + target;
   request.bounds = DevToolsBounds();
   request.allow_downloads = false;
-  ContinueCreateGuest(
+  guests_.ContinueCreate(
       request, nullptr, [](bool success, const std::string& result) {
         if (!success) {
           std::fprintf(stderr, "Sabine: DevTools did not open: %s\n",
                        result.c_str());
         }
       });
-  FocusGuest(kSabineDevToolsGuestId);
+  guests_.Focus(kSabineDevToolsGuestId);
 }
 
 void SabineOsrHandler::CloseDevTools() {
   CEF_REQUIRE_UI_THREAD();
   devtools_registration_ = nullptr;
   devtools_inspected_ = nullptr;
-  DestroyGuest(kSabineDevToolsGuestId);
+  guests_.Destroy(kSabineDevToolsGuestId);
 }

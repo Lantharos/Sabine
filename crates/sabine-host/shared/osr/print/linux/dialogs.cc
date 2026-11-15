@@ -60,7 +60,7 @@ bool PrintDialogs::OnPrintDialog(CefRefPtr<CefBrowser> browser,
       "{\"id\":" + std::to_string(id) +
       ",\"browser\":" + std::to_string(browser->GetIdentifier()) +
       ",\"hasSelection\":" + (has_selection ? "true" : "false") + "}";
-  if (!owner_->SendMessage(kPrintDialog, {payload})) {
+  if (!owner_->transport_.Send(kPrintDialog, {payload})) {
     return false;
   }
   dialogs_[id] = callback;
@@ -100,7 +100,7 @@ bool PrintDialogs::OnPrintJob(CefRefPtr<CefBrowser> browser,
       ",\"browser\":" + std::to_string(browser->GetIdentifier()) +
       ",\"title\":" + JsString(document_name.ToString()) +
       ",\"path\":" + JsString(pdf_file_path.ToString()) + "}";
-  if (!owner_->SendMessage(kPrintJob, {payload})) {
+  if (!owner_->transport_.Send(kPrintJob, {payload})) {
     return false;
   }
   jobs_[id] = callback;

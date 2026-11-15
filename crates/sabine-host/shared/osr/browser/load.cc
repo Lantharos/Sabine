@@ -21,12 +21,12 @@ void SabineOsrHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
   if (errorCode == ERR_ABORTED || !frame->IsMain()) {
     return;
   }
-  if (GuestView* guest = GuestForBrowser(browser)) {
+  if (GuestView* guest = guests_.ForBrowser(browser)) {
     std::cerr << "guest " << guest->id
               << " load failed: " << errorText.ToString()
               << " url=" << failedUrl.ToString() << std::endl;
     if (guest->id == kSabinePopupGuestId) {
-      DestroyGuest(guest->id);
+      guests_.Destroy(guest->id);
     }
     return;
   }
@@ -45,9 +45,9 @@ void SabineOsrHandler::OnLoadStart(CefRefPtr<CefBrowser> browser,
   if (!frame->IsMain()) {
     return;
   }
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
-    SendMessage(kMainLoadStarted, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kMainLoadStarted, 0, 0, 0, 0, nullptr, 0);
     InstallTransparentBackground(frame);
     if (!window_.Floating()) {
       DispatchToplevelState();
@@ -62,21 +62,21 @@ void SabineOsrHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   if (!frame->IsMain()) {
     return;
   }
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
     InstallTransparentBackground(frame);
-    SendMessage(kMainLoadReady, 0, 0, 0, 0, nullptr, 0);
+    transport_.Send(kMainLoadReady, 0, 0, 0, 0, nullptr, 0);
     if (!window_.visible || window_.suspended) {
       DispatchWindowState();
     }
     if (!window_.Floating()) {
       DispatchToplevelState();
     }
-    WatchAcceleratedPaint();
+    accelerated_.Watch();
     return;
   }
   guest->url = frame->GetURL();
-  EmitGuestEvent(*guest, "guest.navigated", GuestNavigatedJson(*guest));
+  guests_.Emit(*guest, "guest.navigated", GuestNavigatedJson(*guest));
 }
 
 void SabineOsrHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
@@ -84,27 +84,27 @@ void SabineOsrHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                             bool canGoBack,
                                             bool canGoForward) {
   CEF_REQUIRE_UI_THREAD();
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest || guest->loading == isLoading) {
     return;
   }
   guest->loading = isLoading;
-  EmitGuestEvent(*guest, "guest.loading",
-                 "{\"id\":" + JsString(guest->id) +
-                     ",\"loading\":" + (isLoading ? "true" : "false") + "}");
+  guests_.Emit(*guest, "guest.loading",
+               "{\"id\":" + JsString(guest->id) +
+                   ",\"loading\":" + (isLoading ? "true" : "false") + "}");
 }
 
 void SabineOsrHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
                                      const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
     return;
   }
   guest->title = title.ToString();
-  EmitGuestEvent(*guest, "guest.title",
-                 "{\"id\":" + JsString(guest->id) +
-                     ",\"title\":" + JsString(guest->title) + "}");
+  guests_.Emit(*guest, "guest.title",
+               "{\"id\":" + JsString(guest->id) +
+                   ",\"title\":" + JsString(guest->title) + "}");
 }
 
 void SabineOsrHandler::OnAddressChange(CefRefPtr<CefBrowser> browser,
@@ -114,19 +114,19 @@ void SabineOsrHandler::OnAddressChange(CefRefPtr<CefBrowser> browser,
   if (!frame->IsMain()) {
     return;
   }
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
     return;
   }
   guest->url = url.ToString();
-  EmitGuestEvent(*guest, "guest.navigated", GuestNavigatedJson(*guest));
+  guests_.Emit(*guest, "guest.navigated", GuestNavigatedJson(*guest));
 }
 
 void SabineOsrHandler::OnFaviconURLChange(
     CefRefPtr<CefBrowser> browser,
     const std::vector<CefString>& icon_urls) {
   CEF_REQUIRE_UI_THREAD();
-  GuestView* guest = GuestForBrowser(browser);
+  GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
     return;
   }
@@ -135,6 +135,5 @@ void SabineOsrHandler::OnFaviconURLChange(
   for (const CefString& icon : icon_urls) {
     favicons.push_back(icon.ToString());
   }
-  EmitGuestEvent(*guest, "guest.favicon",
-                 GuestFaviconJson(guest->id, favicons));
+  guests_.Emit(*guest, "guest.favicon", GuestFaviconJson(guest->id, favicons));
 }

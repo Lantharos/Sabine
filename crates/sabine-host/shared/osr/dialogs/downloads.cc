@@ -79,7 +79,7 @@ bool Downloads::OnBeforeDownload(
     const CefString& suggested_name,
     CefRefPtr<CefBeforeDownloadCallback> callback) {
   CEF_REQUIRE_UI_THREAD();
-  GuestView* guest = owner_->GuestForBrowser(browser);
+  GuestView* guest = owner_->guests_.ForBrowser(browser);
   if (guest && !guest->allow_downloads) {
     return true;
   }

@@ -40,5 +40,5 @@ void SabineOsrHandler::SetScreenOrigin(int x, int y) {
   if (browser_) {
     browser_->GetHost()->NotifyScreenInfoChanged();
   }
-  NotifyGuestScreenInfo();
+  guests_.NotifyScreenInfo();
 }

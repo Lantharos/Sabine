@@ -25,24 +25,24 @@ inline void RetireEverywhere(const std::vector<uint64_t>& resource_ids,
   }
 }
 
-}  // namespace sabine_osr
-
 template <typename Announce>
-bool SabineOsrHandler::ShareCopiedSlot(const sabine_osr::CopiedSlot& copied,
+bool AcceleratedPaint::ShareCopiedSlot(const CopiedSlot& copied,
                                        Announce announce,
-                                       CopiedAccelFrame* out) {
+                                       CopiedFrame* out) {
   uint64_t shared_handle = 0;
-  if (!announced_accelerated_resources_.count(copied.resource_id)) {
+  if (!announced_resources_.count(copied.resource_id)) {
     if (!announce(&shared_handle)) {
-      ReleaseAcceleratedSlot(copied.slot_token);
+      ReleaseSlot(copied.slot_token);
       return false;
     }
-    announced_accelerated_resources_.insert(copied.resource_id);
+    announced_resources_.insert(copied.resource_id);
   }
   *out = {copied.width,      copied.height,  copied.resource_id,
           copied.slot_index, shared_handle,  copied.slot_token,
           copied.damage,     copied.sequence};
   return true;
 }
+
+}  // namespace sabine_osr
 
 #endif

@@ -1,20 +1,19 @@
 #include "osr/accelerated/macos/iosurface_copy.h"
 #include "osr/accelerated/share.h"
 
-using namespace sabine_osr;
+namespace sabine_osr {
 
-void SabineOsrHandler::UseSurfaceService(const std::string& service_name) {
+void AcceleratedPaint::UseSurfaceService(const std::string& service_name) {
   if (!service_name.empty()) {
-    surface_broker_ =
-        std::make_unique<SurfaceBroker>(service_name, authentication_token_);
+    surface_broker_ = std::make_unique<SurfaceBroker>(
+        service_name, transport_.authentication_token());
   }
 }
 
-bool SabineOsrHandler::CopyAcceleratedFrame(
-    const AcceleratedSurfaceKey& surface,
-    const PixelRegion& damage,
-    const CefAcceleratedPaintInfo& info,
-    CopiedAccelFrame* out) {
+bool AcceleratedPaint::Copy(const AcceleratedSurfaceKey& surface,
+                            const PixelRegion& damage,
+                            const CefAcceleratedPaintInfo& info,
+                            CopiedFrame* out) {
   if (!surface_broker_) {
     return false;
   }
@@ -33,21 +32,22 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
       out);
 }
 
-void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {
+void AcceleratedPaint::Discard(const CopiedFrame& frame) {
   ReleaseAcceleratedIOSurfaceFrame(frame.slot_token);
 }
 
-void SabineOsrHandler::ReleaseAcceleratedSlot(uint64_t slot_token) {
+void AcceleratedPaint::ReleaseSlot(uint64_t slot_token) {
   ReleaseAcceleratedIOSurfaceFrame(slot_token);
 }
 
-void SabineOsrHandler::RetireAcceleratedSurfaces(int browser_id) {
-  RetireAcceleratedResources(RetireAcceleratedIOSurfaceBrowser(browser_id));
+void AcceleratedPaint::RetireSurfaces(int browser_id) {
+  RetireResources(RetireAcceleratedIOSurfaceBrowser(browser_id));
 }
 
-void SabineOsrHandler::SendAcceleratedRetire(
-    const std::vector<uint64_t>& resource_ids) {
+void AcceleratedPaint::SendRetire(const std::vector<uint64_t>& resource_ids) {
   for (const uint64_t resource_id : resource_ids) {
     surface_broker_->Retire(resource_id);
   }
 }
+
+}  // namespace sabine_osr

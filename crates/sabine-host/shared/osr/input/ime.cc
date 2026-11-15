@@ -113,38 +113,38 @@ void SabineOsrHandler::SendFocusedImeState() {
   CEF_REQUIRE_UI_THREAD();
   CefRefPtr<CefBrowser> target = browser_;
   const GuestView* guest = nullptr;
-  if (!focused_guest_id_.empty()) {
-    guest = guests_.Find(focused_guest_id_);
+  if (!guests_.focused_id().empty()) {
+    guest = guests_.Focused();
     if (!guest || !guest->browser) {
-      SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0, nullptr,
-                  0);
+      transport_.Send(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0,
+                      nullptr, 0);
       return;
     }
     target = guest->browser;
   }
   if (!target) {
-    SendMessage(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0, nullptr,
-                0);
+    transport_.Send(kImeStateChanged, CEF_TEXT_INPUT_MODE_NONE, 0, 0, 0,
+                    nullptr, 0);
     return;
   }
   const int browser_id = target->GetIdentifier();
   const auto mode = ime_.modes.find(browser_id);
   const cef_text_input_mode_t input_mode =
       mode == ime_.modes.end() ? CEF_TEXT_INPUT_MODE_NONE : mode->second;
-  SendMessage(kImeStateChanged, static_cast<uint32_t>(input_mode), 0, 0, 0,
-              nullptr, 0);
+  transport_.Send(kImeStateChanged, static_cast<uint32_t>(input_mode), 0, 0, 0,
+                  nullptr, 0);
   if (input_mode == CEF_TEXT_INPUT_MODE_NONE) {
     return;
   }
   const auto surrounding = ime_.surrounding.find(browser_id);
   if (surrounding != ime_.surrounding.end()) {
-    SendMessage(kImeSurroundingChanged, {surrounding->second});
+    transport_.Send(kImeSurroundingChanged, {surrounding->second});
   }
   const auto cursor = ime_.cursor_rects.find(browser_id);
   if (cursor == ime_.cursor_rects.end()) {
     return;
   }
   const CefRect rect = guest ? guest->ToView(cursor->second) : cursor->second;
-  SendMessage(kImeCursorAreaChanged, std::max(1, rect.width),
-              std::max(1, rect.height), rect.x, rect.y, nullptr, 0);
+  transport_.Send(kImeCursorAreaChanged, std::max(1, rect.width),
+                  std::max(1, rect.height), rect.x, rect.y, nullptr, 0);
 }

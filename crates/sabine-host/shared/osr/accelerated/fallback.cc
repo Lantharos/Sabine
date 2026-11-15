@@ -6,7 +6,7 @@
 #include "common/trace.h"
 #include "osr/handler.h"
 
-using namespace sabine_osr;
+namespace sabine_osr {
 
 namespace {
 
@@ -14,13 +14,9 @@ constexpr int64_t kAcceleratedPaintGraceMs = 2000;
 
 }  // namespace
 
-void SabineOsrHandler::UseAcceleratedPaint(bool enabled) {
-  accelerated_paint_ = enabled;
-}
-
-void SabineOsrHandler::DropAcceleratedFrame(AcceleratedDrop drop) {
-  const bool changed = drop.kind != accelerated_drop_.kind;
-  accelerated_drop_ = drop;
+void AcceleratedPaint::Drop(AcceleratedDrop drop) {
+  const bool changed = drop.kind != drop_.kind;
+  drop_ = drop;
   if (changed && TraceEnabled()) {
     std::fprintf(stderr, "Sabine CEF: dropped an accelerated frame: %s\n",
                  drop.Describe().c_str());
@@ -28,48 +24,51 @@ void SabineOsrHandler::DropAcceleratedFrame(AcceleratedDrop drop) {
   }
 }
 
-void SabineOsrHandler::WatchAcceleratedPaint() {
-  if (!accelerated_paint_ || accelerated_paint_seen_) {
+void AcceleratedPaint::Watch() {
+  if (!enabled_ || shown_) {
     return;
   }
-  CefRefPtr<SabineOsrHandler> self(this);
   CefPostDelayedTask(TID_UI,
                      CefCreateClosureTask(base::BindOnce(
-                         [](CefRefPtr<SabineOsrHandler> handler) {
-                           if (!handler->accelerated_paint_seen_ &&
-                               !handler->view_hidden_ && handler->browser_) {
-                             handler->ReportMissingAcceleratedPaint();
+                         [](CefRefPtr<SabineOsrHandler> owner) {
+                           if (!owner->accelerated_.shown_ &&
+                               !owner->view_hidden_ && owner->browser_) {
+                             owner->accelerated_.ReportMissing();
                            }
                          },
-                         self)),
+                         CefRefPtr<SabineOsrHandler>(owner_))),
                      kAcceleratedPaintGraceMs);
 }
 
-void SabineOsrHandler::ReportMissingAcceleratedPaint() {
+void AcceleratedPaint::ReportMissing() {
   std::fprintf(
       stderr,
       "Sabine CEF: no accelerated frame reached the window %lld ms "
       "after loading: %s; the window needs a %dx%d page at scale %.2f\n",
       static_cast<long long>(kAcceleratedPaintGraceMs),
-      accelerated_drop_.Describe().c_str(), width_, height_, scale_);
+      drop_.Describe().c_str(), owner_->width_, owner_->height_,
+      owner_->scale_);
   std::fflush(stderr);
   // A loaded page that still has no shared frame won't get one, such as when
   // Chromium can't allocate the buffers it shares frames in, so the window
   // takes software frames instead of waiting.
-  if (!accelerated_paint_failed_) {
-    accelerated_paint_failed_ = true;
-    SendMessage(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
+  if (!failed_) {
+    failed_ = true;
+    transport_.Send(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
   }
 }
 
-void SabineOsrHandler::ReportAcceleratedPaintUnavailable() {
-  if (accelerated_paint_failed_) {
+void AcceleratedPaint::ReportUnavailable(AcceleratedDrop reason) {
+  drop_ = reason;
+  if (failed_) {
     return;
   }
-  accelerated_paint_failed_ = true;
+  failed_ = true;
   std::fprintf(stderr,
                "Sabine CEF: no accelerated frame reached the window: %s\n",
-               accelerated_drop_.Describe().c_str());
+               drop_.Describe().c_str());
   std::fflush(stderr);
-  SendMessage(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
+  transport_.Send(kAccelUnavailable, 0, 0, 0, 0, nullptr, 0);
 }
+
+}  // namespace sabine_osr

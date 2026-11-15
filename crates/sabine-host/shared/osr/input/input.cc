@@ -17,6 +17,35 @@
 
 using namespace sabine_osr;
 
+void SabineOsrHandler::CompleteQueuedControl(size_t bytes) {
+  transport_.CompleteQueued(bytes);
+}
+
+void SabineOsrHandler::HandleQueuedControl(
+    const std::string& line,
+    const std::optional<std::string>& body) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!transport_.closed()) {
+    HandleControlLine(line, body);
+  }
+}
+
+void SabineOsrHandler::HandleLatestControl(CefRefPtr<LatestControl> control) {
+  CEF_REQUIRE_UI_THREAD();
+  const std::string line = control->Take();
+  if (!transport_.closed()) {
+    HandleControlLine(line);
+  }
+}
+
+void SabineOsrHandler::HandlePendingResize() {
+  CEF_REQUIRE_UI_THREAD();
+  const std::string line = transport_.TakeResize();
+  if (!line.empty()) {
+    HandleControlLine(line);
+  }
+}
+
 void SabineOsrHandler::HandleControlLine(
     const std::string& line,
     const std::optional<std::string>& body) {
@@ -37,7 +66,7 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
   if (ParseHostControl(line, &command, &value)) {
-    ApplyHostControl(command, value);
+    guests_.ApplyHostControl(command, value);
     return;
   }
   const auto parts = Split(line, '\t');
@@ -103,15 +132,15 @@ void SabineOsrHandler::HandleControlLine(
       pointer_y = point.y;
       pointer_zoom = pointer_guest->page_zoom;
       if (parts[0] == "mouse_click") {
-        FocusGuest(pointer_guest->id);
+        guests_.Focus(pointer_guest->id);
       }
     } else if (parts[0] == "mouse_click") {
-      DismissPopupGuest();
-      FocusGuest(std::string());
+      guests_.DismissPopup();
+      guests_.Focus(std::string());
     }
   } else if ((parts[0] == "key" || parts[0].rfind("ime_", 0) == 0) &&
-             !focused_guest_id_.empty()) {
-    GuestView* guest = guests_.Find(focused_guest_id_);
+             !guests_.focused_id().empty()) {
+    GuestView* guest = guests_.Focused();
     if (guest && guest->browser) {
       target_browser = guest->browser;
     }
@@ -164,7 +193,7 @@ void SabineOsrHandler::HandleControlLine(
     host->NotifyScreenInfoChanged();
     host->WasResized();
     host->Invalidate(PET_VIEW);
-    NotifyGuestScreenInfo();
+    guests_.NotifyScreenInfo();
   } else if (parts[0] == "mouse_move" && parts.size() >= 5) {
     CefMouseEvent event;
     event.x = mouse_x;
@@ -235,8 +264,7 @@ void SabineOsrHandler::HandleControlLine(
         std::atoi(parts[5].c_str()) != 0 || (modifiers & kGuestModRepeat) != 0;
     const int native_key_code =
         parts.size() >= 7 ? std::atoi(parts[6].c_str()) : 0;
-    GuestView* focused_guest =
-        focused_guest_id_.empty() ? nullptr : guests_.Find(focused_guest_id_);
+    GuestView* focused_guest = guests_.Focused();
     if (focused_guest && !focused_guest->intercepted_shortcuts.empty()) {
       if (const std::string* accelerator = MatchInterceptedShortcut(
               focused_guest->intercepted_shortcuts, key, modifiers)) {
@@ -274,7 +302,7 @@ void SabineOsrHandler::HandleControlLine(
     }
   } else if (parts[0] == "focus" && parts.size() >= 2) {
     const bool focused = std::atoi(parts[1].c_str()) != 0;
-    GuestView* guest = guests_.Find(focused_guest_id_);
+    GuestView* guest = guests_.Focused();
     if (guest && guest->browser) {
       guest->browser->GetHost()->SetFocus(focused);
     } else {

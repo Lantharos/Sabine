@@ -77,8 +77,8 @@ bool PageDialogs::OnFileDialog(
       "\",\"title\":" + JsString(title.ToString()) + ",\"defaultPath\":" +
       (default_path.empty() ? "null" : JsString(default_path)) +
       ",\"filters\":[" + filters + "]}";
-  if (!owner_->SendMessage(kFileDialog, 0, 0, 0, 0, payload.data(),
-                           static_cast<uint32_t>(payload.size()))) {
+  if (!owner_->transport_.Send(kFileDialog, 0, 0, 0, 0, payload.data(),
+                               static_cast<uint32_t>(payload.size()))) {
     return false;
   }
   files_[id] = callback;

@@ -1,6 +1,5 @@
-#include "osr/handler.h"
+#include "osr/transport/transport.h"
 
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -11,8 +10,9 @@
 #include "include/base/cef_callback.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "osr/handler.h"
 
-using namespace sabine_osr;
+namespace sabine_osr {
 
 namespace {
 
@@ -25,31 +25,35 @@ bool StartsWith(const std::string& line, const char* prefix) {
   return line.rfind(prefix, 0) == 0;
 }
 
-// Chromium sizes the view's pixels with gfx::ScaleToCeiledSize, rounding up
-// in single precision.
-int ViewPixels(int dips, float scale) {
-  const float pixels = static_cast<float>(dips) * scale;
-  return static_cast<int>(std::ceil(pixels));
-}
-
 }  // namespace
 
-void SabineOsrHandler::StartCommandReader() {
-  command_reader_ = this;
+Transport::Transport(SabineOsrHandler* owner,
+                     std::string endpoint,
+                     std::string authentication_token)
+    : owner_(owner),
+      endpoint_(std::move(endpoint)),
+      authentication_token_(std::move(authentication_token)) {}
+
+bool Transport::Connect() {
+  return socket_.Connect(endpoint_, authentication_token_);
+}
+
+void Transport::StartReading() {
+  reader_ = owner_;
   std::thread([this] {
     ReadControls();
-    CefPostTask(TID_UI, base::BindOnce(&SabineOsrHandler::CommandReaderStopped,
+    CefPostTask(TID_UI, base::BindOnce(&Transport::ReaderStopped,
                                        base::Unretained(this)));
   }).detach();
 }
 
-void SabineOsrHandler::CommandReaderStopped() {
+void Transport::ReaderStopped() {
   CEF_REQUIRE_UI_THREAD();
-  const CefRefPtr<SabineOsrHandler> self = std::move(command_reader_);
-  CloseFromNativeDisconnect();
+  const CefRefPtr<SabineOsrHandler> owner = std::move(reader_);
+  owner->CloseFromNativeDisconnect();
 }
 
-void SabineOsrHandler::ReadControls() {
+void Transport::ReadControls() {
   std::string pending;
   size_t start = 0;
   size_t searched = 0;
@@ -57,7 +61,7 @@ void SabineOsrHandler::ReadControls() {
   std::vector<char> buffer(kReadSize);
   const auto fail = [this](const char* reason) {
     std::fprintf(stderr, "Sabine OSR control: %s\n", reason);
-    CloseTransport();
+    Close();
   };
   while (true) {
     const int received =
@@ -109,11 +113,11 @@ void SabineOsrHandler::ReadControls() {
   }
 }
 
-bool SabineOsrHandler::DispatchControl(std::string line,
-                                       std::optional<std::string> body,
-                                       CefRefPtr<LatestControl>* move) {
+bool Transport::DispatchControl(std::string line,
+                                std::optional<std::string> body,
+                                CefRefPtr<LatestControl>* move) {
   if (StartsWith(line, kResizePrefix)) {
-    QueueResizeControlLine(std::move(line));
+    QueueResize(std::move(line));
     return true;
   }
   if (StartsWith(line, kMouseMovePrefix)) {
@@ -121,77 +125,55 @@ bool SabineOsrHandler::DispatchControl(std::string line,
       *move = new LatestControl(std::move(line));
       CefPostTask(TID_UI,
                   base::BindOnce(&SabineOsrHandler::HandleLatestControl,
-                                 CefRefPtr<SabineOsrHandler>(this), *move));
+                                 CefRefPtr<SabineOsrHandler>(owner_), *move));
     }
     return true;
   }
   *move = nullptr;
   const size_t bytes = line.size() + (body ? body->size() : 0);
   return controls_.Reserve(bytes) &&
-         CefPostTask(TID_UI, new QueuedControlTask(this, std::move(line),
+         CefPostTask(TID_UI, new QueuedControlTask(owner_, std::move(line),
                                                    std::move(body)));
 }
 
-void SabineOsrHandler::CompleteQueuedControl(size_t bytes) {
-  controls_.Release(bytes);
-}
-
-void SabineOsrHandler::HandleQueuedControl(
-    const std::string& line,
-    const std::optional<std::string>& body) {
-  CEF_REQUIRE_UI_THREAD();
-  if (!controls_.closed()) {
-    HandleControlLine(line, body);
-  }
-}
-
-void SabineOsrHandler::HandleLatestControl(CefRefPtr<LatestControl> control) {
-  CEF_REQUIRE_UI_THREAD();
-  const std::string line = control->Take();
-  if (!controls_.closed()) {
-    HandleControlLine(line);
-  }
-}
-
-bool SabineOsrHandler::SendMessage(uint32_t kind,
-                                   uint32_t width,
-                                   uint32_t height,
-                                   int32_t x,
-                                   int32_t y,
-                                   const void* payload,
-                                   uint32_t payload_len) {
+bool Transport::Send(uint32_t kind,
+                     uint32_t width,
+                     uint32_t height,
+                     int32_t x,
+                     int32_t y,
+                     const void* payload,
+                     uint32_t payload_len) {
   return socket_.Send(
       kind, width, height, x, y,
       {std::string_view(static_cast<const char*>(payload), payload_len)});
 }
 
-bool SabineOsrHandler::SendMessage(
-    uint32_t kind,
-    std::initializer_list<std::string_view> parts) {
+bool Transport::Send(uint32_t kind,
+                     std::initializer_list<std::string_view> parts) {
   return socket_.Send(kind, 0, 0, 0, 0, parts);
 }
 
 #if !defined(OS_WIN)
-bool SabineOsrHandler::SendMessageWithFd(uint32_t kind,
-                                         uint32_t width,
-                                         uint32_t height,
-                                         int32_t x,
-                                         int32_t y,
-                                         const void* payload,
-                                         uint32_t payload_len,
-                                         int fd) {
+bool Transport::SendWithFd(uint32_t kind,
+                           uint32_t width,
+                           uint32_t height,
+                           int32_t x,
+                           int32_t y,
+                           const void* payload,
+                           uint32_t payload_len,
+                           int fd) {
   return socket_.SendWithFd(
       kind, width, height, x, y,
       std::string_view(static_cast<const char*>(payload), payload_len), fd);
 }
 #endif
 
-void SabineOsrHandler::CloseTransport() {
+void Transport::Close() {
   controls_.Close();
   socket_.Shutdown();
 }
 
-void SabineOsrHandler::QueueResizeControlLine(std::string line) {
+void Transport::QueueResize(std::string line) {
   {
     std::lock_guard<std::mutex> lock(resize_.mutex);
     resize_.line = std::move(line);
@@ -200,49 +182,33 @@ void SabineOsrHandler::QueueResizeControlLine(std::string line) {
     }
     resize_.task_pending = true;
   }
-  PostPendingResize();
+  PostResize();
 }
 
-void SabineOsrHandler::PostPendingResize() {
+void Transport::PostResize() {
   if (!CefPostTask(TID_UI,
                    base::BindOnce(&SabineOsrHandler::HandlePendingResize,
-                                  CefRefPtr<SabineOsrHandler>(this)))) {
+                                  CefRefPtr<SabineOsrHandler>(owner_)))) {
     std::lock_guard<std::mutex> lock(resize_.mutex);
     resize_.task_pending = false;
   }
 }
 
-void SabineOsrHandler::HandlePendingResize() {
-  CEF_REQUIRE_UI_THREAD();
-  std::string line;
-  {
-    std::lock_guard<std::mutex> lock(resize_.mutex);
-    line = std::move(resize_.line);
-    resize_.line.clear();
-    resize_.task_pending = false;
-    resize_.in_flight = !line.empty();
-  }
-  if (!line.empty()) {
-    HandleControlLine(line);
-  }
-}
-
-bool SabineOsrHandler::FitsView(int pixel_width, int pixel_height) const {
-  return pixel_width == ViewPixels(width_, scale_) &&
-         pixel_height == ViewPixels(height_, scale_);
-}
-
-bool SabineOsrHandler::QualifyResizeFrame(int pixel_width, int pixel_height) {
-  CEF_REQUIRE_UI_THREAD();
+std::string Transport::TakeResize() {
   std::lock_guard<std::mutex> lock(resize_.mutex);
-  return !resize_.in_flight || FitsView(pixel_width, pixel_height);
+  std::string line = std::move(resize_.line);
+  resize_.line.clear();
+  resize_.task_pending = false;
+  resize_.in_flight = !line.empty();
+  return line;
 }
 
-void SabineOsrHandler::CompleteResizeFrame(int pixel_width, int pixel_height) {
-  CEF_REQUIRE_UI_THREAD();
-  if (!FitsView(pixel_width, pixel_height)) {
-    return;
-  }
+bool Transport::ResizeInFlight() {
+  std::lock_guard<std::mutex> lock(resize_.mutex);
+  return resize_.in_flight;
+}
+
+void Transport::ResizeFramePainted() {
   {
     std::lock_guard<std::mutex> lock(resize_.mutex);
     if (!resize_.in_flight) {
@@ -254,5 +220,7 @@ void SabineOsrHandler::CompleteResizeFrame(int pixel_width, int pixel_height) {
     }
     resize_.task_pending = true;
   }
-  PostPendingResize();
+  PostResize();
 }
+
+}  // namespace sabine_osr

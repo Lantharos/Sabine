@@ -123,13 +123,14 @@ bool PageDialogs::RunContextMenu(
     CefRefPtr<CefRunContextMenuCallback> callback) {
   CEF_REQUIRE_UI_THREAD();
   CefRect point(params->GetXCoord(), params->GetYCoord(), 0, 0);
-  if (const GuestView* guest = owner_->GuestForBrowser(browser)) {
+  if (const GuestView* guest = owner_->guests_.ForBrowser(browser)) {
     point = guest->ToView(point);
   }
   const std::string items = MenuItemsJson(model);
   if (model->GetCount() == 0 ||
-      !owner_->SendMessage(kContextMenu, 0, 0, point.x, point.y, items.data(),
-                           static_cast<uint32_t>(items.size()))) {
+      !owner_->transport_.Send(kContextMenu, 0, 0, point.x, point.y,
+                               items.data(),
+                               static_cast<uint32_t>(items.size()))) {
     callback->Cancel();
     return true;
   }
@@ -145,7 +146,7 @@ void PageDialogs::OnContextMenuDismissed(CefRefPtr<CefBrowser> browser,
   CEF_REQUIRE_UI_THREAD();
   if (context_menu_) {
     context_menu_ = nullptr;
-    owner_->SendMessage(kContextMenuDismissed, 0, 0, 0, 0, nullptr, 0);
+    owner_->transport_.Send(kContextMenuDismissed, 0, 0, 0, 0, nullptr, 0);
   }
 }
 

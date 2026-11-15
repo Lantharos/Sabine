@@ -12,7 +12,7 @@
 // stops painting, its last frame is copied again whole from the dma-buf it was
 // drawn into, so the window settles on the page as drawn.
 
-using namespace sabine_osr;
+namespace sabine_osr {
 
 namespace {
 
@@ -20,9 +20,9 @@ constexpr std::chrono::milliseconds kSettleDelay{100};
 
 }  // namespace
 
-void SabineOsrHandler::SettleWhenPaused(const AcceleratedSurfaceKey& surface,
+void AcceleratedPaint::SettleWhenPaused(const AcceleratedSurfaceKey& surface,
                                         CefRefPtr<CefBrowser> browser,
-                                        const AcceleratedContent& content) {
+                                        const Content& content) {
   unsettled_frames_[surface] = {browser, content,
                                 std::chrono::steady_clock::now()};
   if (!settle_pending_) {
@@ -30,19 +30,18 @@ void SabineOsrHandler::SettleWhenPaused(const AcceleratedSurfaceKey& surface,
   }
 }
 
-void SabineOsrHandler::ScheduleSettle(std::chrono::milliseconds delay) {
+void AcceleratedPaint::ScheduleSettle(std::chrono::milliseconds delay) {
   settle_pending_ = true;
-  CefRefPtr<SabineOsrHandler> self(this);
   CefPostDelayedTask(TID_UI,
                      CefCreateClosureTask(base::BindOnce(
-                         [](CefRefPtr<SabineOsrHandler> handler) {
-                           handler->SettlePausedFrames();
+                         [](CefRefPtr<SabineOsrHandler> owner) {
+                           owner->accelerated_.SettlePausedFrames();
                          },
-                         self)),
+                         CefRefPtr<SabineOsrHandler>(owner_))),
                      delay.count());
 }
 
-void SabineOsrHandler::SettlePausedFrames() {
+void AcceleratedPaint::SettlePausedFrames() {
   settle_pending_ = false;
   const auto now = std::chrono::steady_clock::now();
   auto next = kSettleDelay;
@@ -62,28 +61,30 @@ void SabineOsrHandler::SettlePausedFrames() {
   }
 }
 
-void SabineOsrHandler::SettleFrame(const AcceleratedSurfaceKey& surface,
+void AcceleratedPaint::SettleFrame(const AcceleratedSurfaceKey& surface,
                                    const UnsettledFrame& frame) {
-  if (accelerated_paint_failed_) {
+  if (failed_) {
     return;
   }
-  if (GuestView* guest = GuestForBrowser(frame.browser)) {
+  if (GuestView* guest = owner_->guests_.ForBrowser(frame.browser)) {
     if (!guest->visible) {
       return;
     }
-  } else if (!FitsView(frame.content.visible.width,
-                       frame.content.visible.height)) {
+  } else if (!owner_->FitsView(frame.content.visible.width,
+                               frame.content.visible.height)) {
     return;
   }
   const std::optional<AcceleratedTarget> target =
-      AcceleratedTargetFor(frame.browser, PET_VIEW);
+      owner_->AcceleratedTargetFor(frame.browser, PET_VIEW);
   if (!target) {
     return;
   }
   AccelDmabufCopiedFrame copied_dmabuf{};
   const DmabufCopy result = CopyFinishedDmabufFrame(surface, &copied_dmabuf);
-  CopiedAccelFrame copied{};
+  CopiedFrame copied{};
   if (ShareDmabufCopy(result, copied_dmabuf, &copied)) {
-    SendAcceleratedFrame(*target, copied, frame.content);
+    Send(*target, copied, frame.content);
   }
 }
+
+}  // namespace sabine_osr

@@ -25,33 +25,24 @@
 #include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
 #include "include/cef_values.h"
-#include "osr/accelerated/slot_ring.h"
-#include "osr/browser/clipboard.h"
-#include "osr/browser/media_state.h"
+#include "osr/accelerated/paint.h"
 #include "osr/dialogs/dialogs.h"
 #include "osr/dialogs/downloads.h"
-#include "osr/guest/registry.h"
+#include "osr/guest/guests.h"
 #include "osr/input/drag.h"
 #include "osr/input/ime.h"
+#include "osr/page/clipboard.h"
+#include "osr/page/media_state.h"
+#include "osr/paint/dropped.h"
+#include "osr/paint/software.h"
 #include "osr/print/document.h"
 #include "osr/transport/control_queue.h"
 #include "osr/transport/message_kinds.h"
-#include "osr/transport/socket.h"
+#include "osr/transport/transport.h"
 #include "osr/transport/wire.h"
 #include "osr/window_state.h"
-#include "osr/paint/shared_pool.h"
-#include "osr/accelerated/drop.h"
 #if defined(OS_LINUX)
-#include "osr/accelerated/linux/dmabuf_copy.h"
 #include "osr/print/linux/dialogs.h"
-#endif
-#if defined(OS_WIN)
-#include "osr/accelerated/windows/parent_process.h"
-#endif
-#if defined(OS_MAC)
-#include <memory>
-
-#include "osr/accelerated/macos/surface_broker.h"
 #endif
 
 // The page sizes and frame rates a window's browser starts with.
@@ -218,11 +209,7 @@ class SabineOsrHandler : public CefClient,
   void CompleteQueuedControl(size_t bytes);
   void HandleLatestControl(CefRefPtr<sabine_osr::LatestControl> control);
   void HandlePendingResize();
-  bool FitsView(int pixel_width, int pixel_height) const;
-  bool QualifyResizeFrame(int pixel_width, int pixel_height);
-  void CompleteResizeFrame(int pixel_width, int pixel_height);
   void CloseFromNativeDisconnect();
-  void ApplyHostControl(const std::string& command, const std::string& value);
   void ResolveBridgeResponse(
       const std::string& browser_id,
       const std::string& request_id,
@@ -232,186 +219,41 @@ class SabineOsrHandler : public CefClient,
   void EmitBridgeEvent(const std::string& name_json,
                        const std::string& payload,
                        const std::optional<std::string>& body = std::nullopt);
-  void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
   void UseProfile(BrowserProfile profile, bool shared_texture);
-  void ReleaseAcceleratedFrame(uint64_t slot_token);
-  void RetireAcceleratedBrowser(int browser_id);
-  // Lets the window drop resources Sabine retired; resources this window was
-  // never handed are ignored.
-  void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids);
+  void RetireAcceleratedResources(const std::vector<uint64_t>& resource_ids) {
+    accelerated_.RetireResources(resource_ids);
+  }
   void RepaintAll();
   void OpenDevToolsFrontend(const std::string& port, const std::string& target);
 #if defined(OS_MAC)
-  void UseSurfaceService(const std::string& service_name);
+  void UseSurfaceService(const std::string& service_name) {
+    accelerated_.UseSurfaceService(service_name);
+  }
 #endif
 #if defined(OS_WIN)
-  void UseParentProcess(int pid);
+  void UseParentProcess(int pid) { transport_.parent_process().Open(pid); }
 #endif
-  void UseAcceleratedPaint(bool enabled);
-  void WatchAcceleratedPaint();
+  void UseAcceleratedPaint(bool enabled) { accelerated_.Enable(enabled); }
 
  private:
   using BrowserList = std::list<CefRefPtr<CefBrowser>>;
 
   friend class Downloads;
+  friend class Guests;
   friend class PageDialogs;
 #if defined(OS_LINUX)
   friend class PrintDialogs;
 #endif
-  friend class SabineGuestRequestContextHandler;
+  friend class sabine_osr::AcceleratedPaint;
 
-  // Accelerated paint: Chromium's shared textures, copied into frames the
-  // window composites.
-  struct CopiedAccelFrame {
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint64_t resource_id = 0;
-    uint32_t resource_slot = 0;
-    uint64_t shared_handle = 0;
-    uint64_t slot_token = 0;
-    sabine_osr::PixelRegion damage;
-    uint64_t sequence = 0;
-  };
-
-  // Where a surface's accelerated frames go in the window.
-  struct AcceleratedTarget {
-    uint32_t kind = 0;
-    std::string guest_id;
-    int32_t x = 0;
-    int32_t y = 0;
-  };
-
-  // What a copied frame holds: its color format and the part the page fills.
-  struct AcceleratedContent {
-    uint32_t format = 0;
-    CefRect visible;
-  };
-
-  std::optional<AcceleratedTarget> AcceleratedTargetFor(
+  std::optional<sabine_osr::AcceleratedTarget> AcceleratedTargetFor(
       CefRefPtr<CefBrowser> browser,
       PaintElementType type);
-  bool SendAcceleratedFrame(const AcceleratedTarget& target,
-                            const CopiedAccelFrame& copied,
-                            const AcceleratedContent& content);
-  bool CopyAcceleratedFrame(const sabine_osr::AcceleratedSurfaceKey& surface,
-                            const sabine_osr::PixelRegion& damage,
-                            const CefAcceleratedPaintInfo& info,
-                            CopiedAccelFrame* out);
-  // Fills `out` for a frame `copied` into a slot, announcing the slot's
-  // resource with `announce` the first time; `announce` gives the handle
-  // the window opens it by, where it needs one.
-  template <typename Announce>
-  bool ShareCopiedSlot(const sabine_osr::CopiedSlot& copied,
-                       Announce announce,
-                       CopiedAccelFrame* out);
-  void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
-  void ReleaseAcceleratedSlot(uint64_t slot_token);
-  void RetireAcceleratedSurfaces(int browser_id);
-  void SendAcceleratedRetire(const std::vector<uint64_t>& resource_ids);
-  // Chromium reports damage against the capture before it, so a frame that
-  // follows one Sabine never copied has to be copied whole.
-  bool FollowsCopiedCapture(
-      const sabine_osr::AcceleratedSurfaceKey& surface,
-      const cef_accelerated_paint_info_common_t& frame) const;
-  void ForgetAcceleratedCaptures(int browser_id);
-  void DropAcceleratedFrame(sabine_osr::AcceleratedDrop drop);
-  void ReportAcceleratedPaintUnavailable();
-  void ReportMissingAcceleratedPaint();
-  void RepaintDroppedPaints();
-  bool SendSharedPaint(PaintSurface surface,
-                       const std::string& guest_id,
-                       int32_t origin_x,
-                       int32_t origin_y,
-                       const void* buffer,
-                       int buffer_width,
-                       int buffer_height,
-                       size_t total_bytes);
-#if defined(OS_LINUX)
-  void RepaintAllSoon();
-  bool ShareDmabufCopy(sabine_osr::DmabufCopy result,
-                       const sabine_osr::AccelDmabufCopiedFrame& copied,
-                       CopiedAccelFrame* out);
-
-  // A page frame shown as copied while Chromium may still have been drawing
-  // it, copied again once the page stops painting.
-  struct UnsettledFrame {
-    CefRefPtr<CefBrowser> browser;
-    AcceleratedContent content;
-    std::chrono::steady_clock::time_point painted_at;
-  };
-
-  void SettleWhenPaused(const sabine_osr::AcceleratedSurfaceKey& surface,
-                        CefRefPtr<CefBrowser> browser,
-                        const AcceleratedContent& content);
-  void ScheduleSettle(std::chrono::milliseconds delay);
-  void SettlePausedFrames();
-  void SettleFrame(const sabine_osr::AcceleratedSurfaceKey& surface,
-                   const UnsettledFrame& frame);
-#endif
-
-  sabine_osr::SharedPaintPool shared_paint_;
-  sabine_osr::PaintScratch paint_scratch_;
-  std::vector<char> accel_payload_;
-  // Surfaces whose frame was dropped, painted again once a slot frees up.
-  std::set<sabine_osr::AcceleratedSurfaceKey> dropped_paints_;
-  std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
-  std::set<uint64_t> announced_accelerated_resources_;
-#if defined(OS_WIN)
-  sabine_osr::ParentProcess parent_process_;
-#endif
-#if defined(OS_MAC)
-  std::unique_ptr<sabine_osr::SurfaceBroker> surface_broker_;
-#endif
-  bool accelerated_paint_ = false;
-  bool accelerated_paint_seen_ = false;
-  bool accelerated_paint_failed_ = false;
-#if defined(OS_LINUX)
-  std::map<sabine_osr::AcceleratedSurfaceKey, UnsettledFrame> unsettled_frames_;
-  bool settle_pending_ = false;
-  bool repaint_all_pending_ = false;
-#endif
-  sabine_osr::AcceleratedDrop accelerated_drop_;
-  // End of accelerated paint.
-
-  void StartCommandReader();
-  void CommandReaderStopped();
-  void ReadControls();
-  bool DispatchControl(std::string line,
-                       std::optional<std::string> body,
-                       CefRefPtr<sabine_osr::LatestControl>* move);
-  void QueueResizeControlLine(std::string line);
-  void PostPendingResize();
-  void CloseTransport();
-  bool SendMessage(uint32_t kind,
-                   uint32_t width,
-                   uint32_t height,
-                   int32_t x,
-                   int32_t y,
-                   const void* payload,
-                   uint32_t payload_len);
-  bool SendMessage(uint32_t kind,
-                   std::initializer_list<std::string_view> parts);
-#if !defined(OS_WIN)
-  bool SendMessageWithFd(uint32_t kind,
-                         uint32_t width,
-                         uint32_t height,
-                         int32_t x,
-                         int32_t y,
-                         const void* payload,
-                         uint32_t payload_len,
-                         int fd);
-#endif
-  // Paints too large for the socket go in shared memory; while every slot
-  // is in flight they are dropped and `source` painted again once one frees.
-  bool SendPaintBatch(const sabine_osr::AcceleratedSurfaceKey& source,
-                      PaintSurface surface,
-                      const std::string& guest_id,
-                      int32_t origin_x,
-                      int32_t origin_y,
-                      const void* buffer,
-                      int buffer_width,
-                      int buffer_height,
-                      const RectList& dirty_rects);
+  bool FitsView(int pixel_width, int pixel_height) const;
+  bool QualifyResizeFrame(int pixel_width, int pixel_height);
+  void CompleteResizeFrame(int pixel_width, int pixel_height);
+  void ReleaseSharedPaint(uint32_t slot, uint32_t generation);
+  void ReleaseAcceleratedFrame(uint64_t slot_token);
 
   bool TryHandleDragControl(const std::vector<std::string>& parts);
   void RunDragControl(const std::vector<std::string>& parts);
@@ -443,14 +285,6 @@ class SabineOsrHandler : public CefClient,
                             std::optional<std::string_view> body);
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
-  void ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
-                               CefRefPtr<CefFrame> frame,
-                               const std::string& request,
-                               std::optional<std::string_view> body);
-  bool ResolveClipboardResponse(const std::string& request_id,
-                                bool ok,
-                                const std::string& payload,
-                                const std::optional<std::string>& body);
   void UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             const std::string& state);
@@ -464,10 +298,6 @@ class SabineOsrHandler : public CefClient,
                       const std::string& reason);
   void ApplyWindowState(bool shown, bool occluded, bool suspended);
   void SetPagesFrozen(bool frozen);
-  void UpdateFrameMediaState(CefRefPtr<CefBrowser> browser,
-                             CefRefPtr<CefFrame> frame,
-                             bool playing);
-  void ReportMediaPlaying();
   void ReportPageZoom();
   bool UpdateViewHidden();
   void DispatchWindowState();
@@ -477,57 +307,13 @@ class SabineOsrHandler : public CefClient,
     return suspended_ ? background_frame_rate_ : active_frame_rate_;
   }
 
-  GuestView* GuestForBrowser(const CefRefPtr<CefBrowser>& browser);
-  GuestView* GuestAwaitingBrowser();
-  bool HandleGuestBridgeCommand(const std::string& command,
-                                const std::string& payload,
-                                const std::string& browser_id,
-                                const std::string& request_id);
-  bool RunGuestOperation(const std::string& operation,
-                         const JsonObject& payload,
-                         std::string* response,
-                         std::string* error);
-  void CreateGuest(GuestCreateRequest request, GuestCreateCallback callback);
-  void ContinueCreateGuest(const GuestCreateRequest& request,
-                           CefRefPtr<CefRequestContext> context,
-                           GuestCreateCallback callback);
-  void GuestRequestContextInitialized(const std::string& partition,
-                                      CefRefPtr<CefRequestContext> context);
-  bool CancelPendingGuest(const std::string& id);
-  bool HasPendingGuest(const std::string& id) const;
-  size_t PopupGuestCount() const;
-  void DestroyGuest(const std::string& id);
-  void FocusGuest(const std::string& id);
-  void DismissPopupGuest();
-  void ApplyGuestBounds(GuestView& guest);
-  void ApplyGuestVisibility(GuestView& guest);
-  void ApplyGuestLifecycle();
-  void NotifyGuestScreenInfo();
-  bool SendGuestPaint(const GuestView& guest,
-                      const void* buffer,
-                      int width,
-                      int height,
-                      const RectList& dirty_rects);
-  void SendGuestHidden(const GuestView& guest);
-  // Tells the window the order guests stack in, bottom first, which it draws
-  // them in.
-  void SendGuestOrder();
   void EmitPrimaryEvent(const std::string& name, const std::string& payload);
-  void EmitGuestEvent(const GuestView& guest,
-                      const std::string& name,
-                      const std::string& payload);
-  CefRefPtr<CefRequestContext> CreateGuestRequestContext(
-      const std::string& partition);
-  std::string NextGuestId();
 
-  const std::string endpoint_;
-  const std::string authentication_token_;
-  sabine_osr::Socket socket_;
-  // Keeps the handler while its command reader runs, so the reader thread
-  // never lets go of the last reference.
-  CefRefPtr<SabineOsrHandler> command_reader_;
-  sabine_osr::ControlQueue controls_;
-  sabine_osr::PendingResize resize_;
+  sabine_osr::Transport transport_;
+  sabine_osr::DroppedPaints dropped_paints_;
+  sabine_osr::SoftwarePaint software_paint_;
+  sabine_osr::AcceleratedPaint accelerated_;
+  Guests guests_;
 
   BrowserList browsers_;
   CefRefPtr<CefBrowser> browser_;
@@ -539,15 +325,10 @@ class SabineOsrHandler : public CefClient,
   int last_main_paint_width_ = 0;
   int last_main_paint_height_ = 0;
   CefRect popup_rect_;
-  CefRect guest_popup_rect_;
   int screen_origin_x_ = 0;
   int screen_origin_y_ = 0;
   double page_zoom_ = 1.0;
 
-  GuestRegistry guests_;
-  GuestCreations guest_creations_;
-  std::string focused_guest_id_;
-  bool pending_guest_cover_ = false;
   CefRefPtr<CefBrowser> devtools_inspected_;
   CefRefPtr<CefRegistration> devtools_registration_;
 
