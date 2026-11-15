@@ -12,7 +12,7 @@ use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, ns_string};
 use sabine_platform::{DeepLinkRegistration, NativeMessagingHost};
 
 pub(super) use super::hotkeys::GlobalShortcuts;
-pub(super) use app_delegate::AppEvents;
+pub(super) use app_delegate::{AppEventTargets, AppEvents};
 pub(super) use dock::{set_badge, set_progress};
 pub(super) use launch_agent::write_autostart_entry;
 

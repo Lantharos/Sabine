@@ -1,6 +1,6 @@
 ---
 title: Dock and taskbar
-description: Badges, progress, attention requests and recent files on the app's Dock, taskbar or dock icon.
+description: Badges, progress, attention requests, app actions and recent files on the app's Dock, taskbar or dock icon.
 sidebar:
   order: 11
 ---
@@ -8,7 +8,7 @@ sidebar:
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 The app's icon in the Dock, taskbar or Linux dock can show more than the icon: a badge, a progress
-bar, and the files it opened recently.
+bar, a menu of things to start the app for, and the files it opened recently.
 
 ## Badges
 
@@ -61,6 +61,36 @@ focused, and Wayland compositors mark the window. A critical request keeps the D
 until the app is active and also flashes the window's frame on Windows. From Rust, send
 `WindowControl::RequestAttention { critical }` with `control_window` on the `BridgeEventEmitter`.
 
+## App actions
+
+Actions are things people start the app for straight from its icon, such as a new window. Declare
+them in `Sabine.toml`:
+
+```toml
+[[app.actions]]
+id = "new-window"
+name = "New Window"
+arguments = ["--new-window"]
+```
+
+Choosing one starts the app with the action's arguments. A running single-instance app gets them
+as a second launch would, through [`singleInstance`](/docs/desktop/single-instance/).
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    `sabine bundle` lists the actions in the app's desktop entry, which launchers and docks show
+    when the app's icon is right-clicked. Development runs show none.
+  </TabItem>
+  <TabItem label="Windows">
+    The actions are the tasks of the app's jump list, which the app writes each time it starts.
+    Development runs leave the jump list alone.
+  </TabItem>
+  <TabItem label="macOS">
+    The actions make up the Dock menu while the app runs, and reach it through `singleInstance`
+    whatever its single-instance policy.
+  </TabItem>
+</Tabs>
+
 ## Recent files
 
 Add the files people open to the desktop's list of recent files:
@@ -110,5 +140,8 @@ when the path is not a file. Clearing takes off only the files the app added.
 
 ## Related pages
 
+- [Single instance](/docs/desktop/single-instance/) covers how a running app gets a second
+  launch's arguments.
 - [Links and documents](/docs/desktop/links-and-documents/) covers registering the file types
   the app opens.
+- [Manifest](/docs/reference/manifest/#appactions) lists the `[[app.actions]]` keys.

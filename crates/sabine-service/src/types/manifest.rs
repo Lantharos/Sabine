@@ -68,8 +68,60 @@ pub struct AppSection {
     pub keywords: Vec<String>,
     pub listed: Option<bool>,
     pub autostart_arguments: Option<String>,
+    #[serde(default)]
+    pub actions: Vec<AppAction>,
     pub cargo_manifest: Option<String>,
     pub command: Option<String>,
+}
+
+/// Something people start the app for from its launcher, Dock or taskbar
+/// menu, such as opening a new window. The app starts with its arguments, or
+/// a running app gets them as a second launch would.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AppAction {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub arguments: Vec<String>,
+}
+
+impl AppAction {
+    /// Checks every action, and that no two share an id.
+    pub fn validate_all(actions: &[Self]) -> Result<(), String> {
+        for (index, action) in actions.iter().enumerate() {
+            action.validate()?;
+            if actions[..index].iter().any(|other| other.id == action.id) {
+                return Err(format!("two app actions share the id {}", action.id));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.id.is_empty()
+            || !self
+                .id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return Err(format!(
+                "app action id {:?} may contain only letters, digits and hyphens",
+                self.id
+            ));
+        }
+        if self.name.trim().is_empty()
+            || std::iter::once(&self.name)
+                .chain(&self.arguments)
+                .any(|text| text.chars().any(char::is_control))
+        {
+            return Err(format!(
+                "app action {} needs a name, and its name and arguments may contain no control characters",
+                self.id
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -116,5 +168,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(unknown, ["app.nmae", "sound"]);
+    }
+
+    #[test]
+    fn reads_app_actions() {
+        let (file, _) = SabineFile::parse(
+            "[[app.actions]]\nid = \"new-window\"\nname = \"New Window\"\narguments = [\"--new-window\"]",
+        )
+        .unwrap();
+        let action = &file.app.actions[0];
+        assert_eq!(action.arguments, ["--new-window"]);
+        assert!(AppAction::validate_all(&file.app.actions).is_ok());
+        let invalid = AppAction {
+            id: "new window".into(),
+            ..action.clone()
+        };
+        assert!(AppAction::validate_all(&[invalid]).is_err());
+        assert!(AppAction::validate_all(&[action.clone(), action.clone()]).is_err());
     }
 }

@@ -224,15 +224,43 @@ fn app_icons(id: &str, theme: &Path) -> ServiceResult<Vec<PathBuf>> {
     Ok(icons)
 }
 
-/// The bundle's launcher entry, starting the installed program.
+/// The bundle's launcher entry, starting the installed program with the
+/// arguments each of its commands passes.
 fn launching(entry: &str, executable: &Path) -> String {
+    let program = desktop_exec(&executable.to_string_lossy());
     entry
         .lines()
         .map(|line| match line.strip_prefix("Exec=") {
-            Some(_) => format!("Exec={} %U\n", desktop_exec(&executable.to_string_lossy())),
+            Some(command) => format!("Exec={program}{}\n", arguments(command)),
             None => format!("{line}\n"),
         })
         .collect()
+}
+
+/// What follows the program in an `Exec` value, from the space before the
+/// first argument.
+fn arguments(command: &str) -> String {
+    let command = command.replace("\\\\", "\\");
+    let end = if command.starts_with('"') {
+        let mut characters = command.char_indices().skip(1);
+        let mut end = command.len();
+        while let Some((index, character)) = characters.next() {
+            match character {
+                '\\' => {
+                    characters.next();
+                }
+                '"' => {
+                    end = index + 1;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        end
+    } else {
+        command.find(' ').unwrap_or(command.len())
+    };
+    command[end..].replace('\\', "\\\\")
 }
 
 fn invalid(message: &str) -> ServiceError {
@@ -253,6 +281,15 @@ mod tests {
                 Path::new("/home/a/.local/share/sabine/apps/com.example.tern/install/tern")
             ),
             "[Desktop Entry]\nType=Application\nName=Tern\nExec=\"/home/a/.local/share/sabine/apps/com.example.tern/install/tern\" %U\nIcon=com.example.tern\n"
+        );
+    }
+
+    #[test]
+    fn actions_keep_their_arguments() {
+        let entry = "[Desktop Action new]\nExec=\"/build/te\\\\\"rn\" \"--new\"\n";
+        assert_eq!(
+            launching(entry, Path::new("/opt/tern")),
+            "[Desktop Action new]\nExec=\"/opt/tern\" \"--new\"\n"
         );
     }
 }

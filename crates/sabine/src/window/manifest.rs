@@ -80,6 +80,7 @@ impl SabineWindow {
                 })?;
             self = self.deep_link(sabine_platform::DeepLinkRegistration::new(id, schemes));
         }
+        self.config.desktop_services.app_actions = file.app.actions;
         self.config.documents = super::DocumentTypes {
             #[cfg(target_os = "linux")]
             types: file
