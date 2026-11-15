@@ -17,6 +17,7 @@
 #include "include/cef_parser.h"
 #include "osr/accelerated/paint.h"
 #include "osr/common/registry.h"
+#include "osr/page/spellcheck.h"
 
 using namespace sabine_osr;
 
@@ -77,8 +78,10 @@ SabineOsrHandler::SabineOsrHandler(std::string endpoint,
       bridge_policy_(bridge_policy),
       clipboard_(transport_),
       media_(transport_),
+      permissions_(transport_),
       dialogs_(new PageDialogs(this)),
-      downloads_(new Downloads(this)),
+      downloads_(
+          new Downloads(this, bridge_policy->GetDictionary("downloads"))),
 #if defined(OS_LINUX)
       print_dialogs_(new PrintDialogs(this)),
 #endif
@@ -160,6 +163,13 @@ bool CreateSabineOsrBrowser(CefRefPtr<CefCommandLine> command_line,
 #elif defined(OS_WIN)
   handler->UseParentProcess(SwitchInt(command_line, "sabine-parent-pid", 0));
 #endif
+  std::string spellcheck_error;
+  if (!ApplySpellcheck(profile.context ? profile.context
+                                       : CefRequestContext::GetGlobalContext(),
+                       policy->GetDictionary("spellcheck"),
+                       &spellcheck_error)) {
+    std::cerr << "Sabine OSR: " << spellcheck_error << std::endl;
+  }
   return CefBrowserHost::CreateBrowser(
       window_info, handler, url, browser_settings, policy, profile.context);
 }

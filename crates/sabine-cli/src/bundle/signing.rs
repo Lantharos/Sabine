@@ -39,10 +39,11 @@ impl Signing {
         &self,
         format: BundleFormat,
         staged: &StagedBundle,
+        permissions: &[sabine_service::DeclaredPermission],
     ) -> Result<(), String> {
         match self {
             Self::Macos(macos) => {
-                macos.sign_app(&staged.app_dir)?;
+                macos.sign_app(&staged.app_dir, permissions)?;
                 if format != BundleFormat::Dmg {
                     macos.notarize_app(&staged.app_dir)?;
                 }

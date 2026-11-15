@@ -70,6 +70,29 @@ pub(super) fn runtime_manifest(
     if let Some(sandbox) = &app.sandbox {
         manifest.push_str(&sandbox.manifest());
     }
+    if !app.permissions.is_empty() {
+        manifest.push_str("\n[permissions]\n");
+        for declared in &app.permissions {
+            let value = declared.reason.as_ref().map_or_else(
+                || "true".to_string(),
+                |reason| format!("\"{}\"", quote(reason)),
+            );
+            manifest.push_str(&format!("{} = {value}\n", declared.permission.as_str()));
+        }
+    }
+    let spellcheck = &app.spellcheck;
+    if spellcheck.enabled.is_some() || spellcheck.languages.is_some() {
+        manifest.push_str("\n[spellcheck]\n");
+        if let Some(enabled) = spellcheck.enabled {
+            manifest.push_str(&format!("enabled = {enabled}\n"));
+        }
+        if let Some(languages) = &spellcheck.languages {
+            manifest.push_str(&format!(
+                "languages = {}\n",
+                serde_json::to_string(languages).map_err(|error| error.to_string())?
+            ));
+        }
+    }
     if app.window.splash {
         manifest.push_str("\n[window]\nsplash = true\n");
         if let Some(delay) = app.window.splash_delay_ms {

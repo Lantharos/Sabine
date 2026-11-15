@@ -3,7 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sabine_service::{Sandbox, SandboxSection, manifest::WindowSection};
+use sabine_service::{
+    DeclaredPermission, Sandbox, SandboxSection, SpellcheckSection, manifest::WindowSection,
+};
 
 use super::CargoPackage;
 use super::file::read_sabine_file;
@@ -36,6 +38,9 @@ pub(crate) struct BundleApp {
     pub window: WindowSection,
     pub shared_runtime: bool,
     pub sandbox: Option<Sandbox>,
+    /// What the app's pages may ask people for.
+    pub permissions: Vec<DeclaredPermission>,
+    pub spellcheck: SpellcheckSection,
     /// Files and folders shipped beside the app, by the name it finds them with.
     pub resources: Vec<(String, PathBuf)>,
 }
@@ -57,6 +62,8 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
     let cargo_manifest = sabine.cargo_manifest(&source_dir);
     let updates = resolve_updates(sabine.updates)?;
     let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
+    let permissions = sabine.permissions.resolve(sandbox.as_ref())?;
+    sabine.spellcheck.validate()?;
     let resources = resolve_resources(&source_dir, &sabine.resources)?;
     let cargo = CargoPackage::read(&cargo_manifest)?;
     let cargo_package = cargo.string("name")?;
@@ -170,8 +177,18 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         window: sabine.window,
         shared_runtime: sabine.app.shared_runtime.unwrap_or(true),
         sandbox,
+        permissions,
+        spellcheck: sabine.spellcheck,
         resources,
     })
+}
+
+/// What the app in `source_dir` lets its pages ask for.
+#[cfg(target_os = "macos")]
+pub(crate) fn declared_permissions(source_dir: &Path) -> Result<Vec<DeclaredPermission>, String> {
+    let sabine = read_sabine_file(source_dir)?;
+    let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
+    sabine.permissions.resolve(sandbox.as_ref())
 }
 
 /// `[resources]`: names the app looks files and folders up by, each with

@@ -250,6 +250,8 @@ impl WireReader {
                 items: parse_json(&payload)?,
             },
             KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
+            KIND_PERMISSION_REQUEST => OsrMessage::PermissionRequest(parse_json(&payload)?),
+            KIND_PERMISSION_WITHDRAWN => OsrMessage::PermissionWithdrawn(width),
             KIND_FILE_DIALOG => OsrMessage::FileDialog(parse_json(&payload)?),
             #[cfg(target_os = "linux")]
             KIND_PRINT_DIALOG => OsrMessage::PrintDialog(parse_json(&payload)?),

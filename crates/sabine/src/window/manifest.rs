@@ -98,13 +98,29 @@ impl SabineWindow {
             .transpose()
             .map_err(|message| SabineError::CreationFailed { message })?
             .flatten();
+        let invalid = |message| SabineError::CreationFailed { message };
+        let sandbox = file
+            .sandbox
+            .map(sabine_service::SandboxSection::resolve)
+            .transpose()
+            .map_err(invalid)?;
+        for declared in file
+            .permissions
+            .resolve(sandbox.as_ref())
+            .map_err(invalid)?
+        {
+            self = self.permission(declared.permission);
+        }
+        file.spellcheck.validate().map_err(invalid)?;
+        if let Some(enabled) = file.spellcheck.enabled {
+            self = self.spellcheck(enabled);
+        }
+        if let Some(languages) = file.spellcheck.languages {
+            self = self.spellcheck_languages(languages);
+        }
         #[cfg(target_os = "linux")]
         {
-            self.config.sandbox = file
-                .sandbox
-                .map(sabine_service::SandboxSection::resolve)
-                .transpose()
-                .map_err(|message| SabineError::CreationFailed { message })?;
+            self.config.sandbox = sandbox;
         }
         if let Some(url) = file.crash.upload_url {
             self = self.crash_upload_url(url);

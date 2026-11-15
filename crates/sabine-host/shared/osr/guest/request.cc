@@ -188,6 +188,7 @@ bool ParseGuestCreateRequest(const JsonObject& payload,
   request->partition = payload.String("partition");
   request->allow_bridge = payload.Bool("allowBridge", false);
   request->allow_downloads = payload.Bool("allowDownloads", true);
+  request->permissions = payload.Strings("permissions");
   request->intercepted_shortcuts = payload.Strings("interceptedShortcuts");
   request->intercept_horizontal_wheel =
       payload.Bool("interceptHorizontalWheel", false);

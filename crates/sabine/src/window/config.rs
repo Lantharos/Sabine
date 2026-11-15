@@ -74,6 +74,9 @@ pub(crate) struct SabineWindowConfig {
     pub bridge: BridgeRegistry,
     pub security: ContentSecurity,
     pub local_files: bool,
+    /// What the app's pages may ask the person for.
+    pub permissions: Vec<sabine_service::DeclaredPermission>,
+    pub spellcheck: Spellcheck,
     pub browser: BrowserOptions,
     pub crash_upload_url: Option<String>,
     pub logging: Option<crate::Logging>,
@@ -133,6 +136,8 @@ impl Default for SabineWindowConfig {
             bridge: BridgeRegistry::default(),
             security: ContentSecurity::default(),
             local_files: false,
+            permissions: Vec::new(),
+            spellcheck: Spellcheck::default(),
             browser: BrowserOptions::default(),
             crash_upload_url: None,
             logging: None,
@@ -214,7 +219,19 @@ impl SabineWindowConfig {
                 message: "crash reports upload only to an https URL".to_string(),
             });
         }
+        if let Some(languages) = &self.spellcheck.languages {
+            sabine_service::validate_spellcheck_languages(languages)
+                .map_err(|message| SabineError::CreationFailed { message })?;
+        }
         crate::window::origins::check(self)
+    }
+
+    /// The names of the permissions the app's pages may ask for.
+    pub(crate) fn permission_names(&self) -> Vec<&'static str> {
+        self.permissions
+            .iter()
+            .map(|declared| declared.permission.as_str())
+            .collect()
     }
 
     /// Directory served at `sabine://app/` when the window shows a local entry.
@@ -277,6 +294,22 @@ impl SabineWindowConfig {
     /// Whether pages in this window can play video on native surfaces.
     pub(crate) fn native_media(&self) -> bool {
         crate::media::supported(self)
+    }
+}
+
+/// Spellchecking in a window's pages. What stays unset keeps what the app's
+/// profile has, which pages may have changed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Spellcheck {
+    pub enabled: Option<bool>,
+    /// Languages such as `en-US`, the first one also suggesting
+    /// corrections first.
+    pub languages: Option<Vec<String>>,
+}
+
+impl Spellcheck {
+    pub(crate) fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({ "enabled": self.enabled, "languages": self.languages })
     }
 }
 

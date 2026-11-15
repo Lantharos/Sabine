@@ -13,6 +13,27 @@ export interface GuestBounds {
  */
 export type GuestPopupPolicy = "deny" | "navigateSame" | "openGuest";
 
+/** What a page may ask people for, as `[permissions]` in `Sabine.toml` names it. */
+export type SabinePermission =
+  | "camera"
+  | "microphone"
+  | "screen"
+  | "geolocation"
+  | "notifications"
+  | "midi"
+  | "clipboard"
+  | "pointer-lock"
+  | "keyboard-lock"
+  | "local-fonts"
+  | "window-management"
+  | "idle-detection"
+  | "storage-access"
+  | "protected-media"
+  | "file-system"
+  | "sensors"
+  | "local-network"
+  | "downloads";
+
 export interface GuestCreateOptions {
   id?: string;
   url?: string;
@@ -27,6 +48,8 @@ export interface GuestCreateOptions {
   visible?: boolean;
   popupPolicy?: GuestPopupPolicy;
   allowDownloads?: boolean;
+  /** What the guest may ask people for, of the permissions the app declares. */
+  permissions?: SabinePermission[];
   /** `#RRGGBB` or `#AARRGGBB`. */
   backgroundColor?: string;
 }

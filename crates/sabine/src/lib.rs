@@ -36,11 +36,13 @@ pub use sabine_platform::{
     WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
-pub use sabine_service::AppEnvironment;
+pub use sabine_service::{AppEnvironment, Permission};
 pub use storage::{Secrets, Store, StoreChange};
 pub use window::{
-    AppChrome, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
-    SabineWindowControlAction, SabineWindowControlRegion, WindowVisibility, resource_path,
+    AppChrome, Download, DownloadControl, DownloadDecision, DownloadState, PermissionDecision,
+    PermissionRequest, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
+    SabineWindowControlAction, SabineWindowControlRegion, Spellcheck, WindowVisibility,
+    resource_path,
 };
 
 /// Common imports for app authors.

@@ -71,6 +71,9 @@ pub struct GuestCreateOptions {
     pub popup_policy: GuestPopupPolicy,
     /// When true, the guest may start downloads (emitted as events).
     pub allow_downloads: bool,
+    /// The permissions the guest may ask people for, such as `camera`, of
+    /// those the app declares. A guest asks for no others.
+    pub permissions: Vec<String>,
     /// Optional background color as `#RRGGBB` or `#AARRGGBB`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<String>,
@@ -90,6 +93,7 @@ impl Default for GuestCreateOptions {
             visible: true,
             popup_policy: GuestPopupPolicy::Deny,
             allow_downloads: true,
+            permissions: Vec::new(),
             background_color: None,
         }
     }

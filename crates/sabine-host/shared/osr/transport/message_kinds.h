@@ -47,5 +47,7 @@ constexpr uint32_t kPrintJob = 48;
 constexpr uint32_t kPrintDocument = 49;
 constexpr uint32_t kGuestOrder = 50;
 constexpr uint32_t kTitleChanged = 51;
+constexpr uint32_t kPermissionRequest = 52;
+constexpr uint32_t kPermissionWithdrawn = 53;
 
 #endif

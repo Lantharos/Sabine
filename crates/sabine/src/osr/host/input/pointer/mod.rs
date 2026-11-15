@@ -26,7 +26,7 @@ impl OsrNativeHost {
         primary: bool,
     ) {
         let (x, y) = self.logical_point(position);
-        if self.menu_pointer_moved(x, y) {
+        if self.menu_pointer_moved(x, y) || self.prompt_pointer_moved(x, y) {
             return;
         }
         match source {
@@ -74,7 +74,10 @@ impl OsrNativeHost {
     ) {
         let (x, y) = self.logical_point(position);
         let pressed = state == ElementState::Pressed;
-        if pressed && self.menu_pointer_pressed(x, y) {
+        if pressed && (self.menu_pointer_pressed(x, y) || self.prompt_pointer_pressed(x, y)) {
+            return;
+        }
+        if !pressed && self.context_menu.is_none() && self.prompt_pointer_released(x, y) {
             return;
         }
         #[cfg(windows)]

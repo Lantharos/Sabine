@@ -2,6 +2,8 @@ import type { SabineActivityApi } from "./activity.js";
 import type { SabineClipboardApi } from "./desktop/clipboard.js";
 import type { SabineGuestApi } from "./guest.js";
 import type { SabinePrintApi } from "./desktop/print.js";
+import type { SabineDownloadsApi } from "./page/downloads.js";
+import type { SabineSpellcheckApi } from "./page/spellcheck.js";
 import type { SabineSystemApi } from "./desktop/system.js";
 import type { SabinePopupApi, SabineWindowApi } from "./window/app-window.js";
 
@@ -46,6 +48,8 @@ export interface SabineApi {
   popup: SabinePopupApi;
   system: SabineSystemApi;
   print: SabinePrintApi;
+  downloads: SabineDownloadsApi;
+  spellcheck: SabineSpellcheckApi;
   /** Present in the app's own pages. */
   clipboard?: SabineClipboardApi;
 }

@@ -117,3 +117,6 @@ dispatch2.workspace = true
 mach2.workspace = true
 global-hotkey.workspace = true
 tray-icon.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

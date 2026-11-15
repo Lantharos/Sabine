@@ -31,6 +31,7 @@ struct GuestCreateRequest {
   std::string partition;
   bool allow_bridge = false;
   bool allow_downloads = true;
+  std::vector<std::string> permissions;
   std::vector<std::string> intercepted_shortcuts;
   bool intercept_horizontal_wheel = false;
   bool visible = true;

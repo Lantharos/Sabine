@@ -188,6 +188,7 @@ impl OsrNativeHost {
             self.draw_loading(list, fade.loading, width, height, opacity);
         }
         self.draw_tooltip(list, width, height);
+        self.draw_permission_prompt(list);
         self.draw_context_menu(list);
     }
 }

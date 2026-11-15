@@ -1,5 +1,7 @@
 mod app;
 pub mod manifest;
+mod permissions;
+mod spellcheck;
 mod system;
 mod updates_section;
 
@@ -14,6 +16,8 @@ pub use app::{
     AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, MaintenanceReport,
     PendingAppUpdate, RegisteredApp, UpdatePolicy,
 };
+pub use permissions::{DeclaredPermission, Permission, PermissionsSection};
+pub use spellcheck::{SpellcheckSection, validate_spellcheck_languages};
 pub use system::{
     HeldSystemUpdate, InstalledApp, SabineVersion, SystemCompatibility, SystemReleaseArtifact,
     SystemReleaseManifest, SystemRequirement,

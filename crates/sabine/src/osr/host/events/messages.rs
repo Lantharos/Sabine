@@ -92,6 +92,8 @@ impl OsrNativeHost {
             OsrMessage::PrintDocument(outcome) => self.finish_print_document(outcome),
             OsrMessage::MediaPlaying(playing) => self.set_page_media_playing(playing),
             OsrMessage::ContextMenuDismissed => self.dismiss_context_menu(),
+            OsrMessage::PermissionRequest(ask) => self.ask_permission(ask),
+            OsrMessage::PermissionWithdrawn(id) => self.permission_withdrawn(id),
             OsrMessage::DragOperation(operation) => {
                 self.update_drag_operation(event_loop, operation);
             }

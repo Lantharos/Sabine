@@ -193,6 +193,7 @@ impl OsrNativeHost {
 
     fn browser_disconnected(&mut self) {
         self.abandon_printing();
+        self.forget_permission_requests();
         self.page_media_playing = false;
         self.clear_media();
         self.drop_connection();

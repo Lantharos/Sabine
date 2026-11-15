@@ -1,5 +1,7 @@
 use std::{fs::File, io::Read, path::Path};
 
+use sabine_service::{DeclaredPermission, Permission};
+
 use crate::util::xml;
 
 pub fn validate_executable(path: &Path) -> Result<(), String> {
@@ -19,15 +21,29 @@ pub fn validate_executable(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn info_plist(
-    id: &str,
-    name: &str,
-    version: &str,
-    executable: &str,
-    has_icon: bool,
-    associations: &crate::desktop::types::Associations,
-    listing: &crate::desktop::entry::Listing,
-) -> Result<String, String> {
+/// What an app's `Info.plist` describes.
+pub struct PlistApp<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub version: &'a str,
+    pub executable: &'a str,
+    pub has_icon: bool,
+    pub associations: &'a crate::desktop::types::Associations,
+    pub listing: &'a crate::desktop::entry::Listing,
+    pub permissions: &'a [DeclaredPermission],
+}
+
+pub fn info_plist(app: &PlistApp) -> Result<String, String> {
+    let PlistApp {
+        id,
+        name,
+        version,
+        executable,
+        has_icon,
+        associations,
+        listing,
+        permissions,
+    } = *app;
     associations.validate()?;
     let version = semver::Version::parse(version).map_err(|error| error.to_string())?;
     let version = format!("{}.{}.{}", version.major, version.minor, version.patch);
@@ -56,6 +72,7 @@ pub fn info_plist(
         id,
         associations.documents(),
     ));
+    let usage = usage_descriptions(name, permissions);
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,6 +89,7 @@ pub fn info_plist(
 {icon}
 {category}
 {types}
+{usage}
 </dict></plist>
 "#,
         xml(id),
@@ -79,4 +97,66 @@ pub fn info_plist(
         xml(name),
         xml(executable)
     ))
+}
+
+/// What macOS tells people the first time the app's pages use a camera, a
+/// microphone or their location: the reason `[permissions]` gives, or a
+/// plain one.
+fn usage_descriptions(name: &str, permissions: &[DeclaredPermission]) -> String {
+    let mut usage = String::new();
+    for declared in permissions {
+        let (keys, uses): (&[&str], &str) = match declared.permission {
+            Permission::Camera => (&["NSCameraUsageDescription"], "your camera"),
+            Permission::Microphone => (&["NSMicrophoneUsageDescription"], "your microphone"),
+            Permission::Geolocation => (
+                &[
+                    "NSLocationUsageDescription",
+                    "NSLocationWhenInUseUsageDescription",
+                ],
+                "your location",
+            ),
+            _ => continue,
+        };
+        let reason = declared
+            .reason
+            .clone()
+            .unwrap_or_else(|| format!("{name} uses {uses}."));
+        for key in keys {
+            usage.push_str(&format!(
+                "<key>{key}</key><string>{}</string>\n",
+                xml(&reason)
+            ));
+        }
+    }
+    usage
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gives_macos_the_reasons_pages_use_devices() {
+        let usage = usage_descriptions(
+            "Notes",
+            &[
+                DeclaredPermission {
+                    permission: Permission::Camera,
+                    reason: Some("Scan receipts & notes".to_string()),
+                },
+                DeclaredPermission {
+                    permission: Permission::Microphone,
+                    reason: None,
+                },
+                DeclaredPermission {
+                    permission: Permission::Midi,
+                    reason: None,
+                },
+            ],
+        );
+        assert_eq!(
+            usage,
+            "<key>NSCameraUsageDescription</key><string>Scan receipts &amp; notes</string>\n<key>NSMicrophoneUsageDescription</key><string>Notes uses your microphone.</string>\n"
+        );
+    }
 }

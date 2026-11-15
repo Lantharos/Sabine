@@ -250,6 +250,8 @@ pub(super) enum HostControl {
     Badge(Option<String>),
     #[cfg(target_os = "windows")]
     Progress(sabine_platform::AppProgress),
+    /// The app decided a page's permission request it was asked about.
+    Permission(u32, crate::PermissionDecision),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

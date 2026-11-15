@@ -91,6 +91,10 @@ pub(crate) enum OsrMessage {
         items: Vec<ContextMenuItem>,
     },
     ContextMenuDismissed,
+    /// A page asks for permissions the app declares.
+    PermissionRequest(PermissionAsk),
+    /// Chromium took back a permission request, as when its page went away.
+    PermissionWithdrawn(u32),
     FileDialog(FileDialogRequest),
     /// A page asked to print, and Chromium waits for the print dialog's answer.
     #[cfg(target_os = "linux")]
@@ -191,6 +195,17 @@ pub(crate) enum MenuMark {
     None,
     Check,
     Radio,
+}
+
+/// A page's permission request, from the app's own document or a guest the
+/// app let ask.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub(crate) struct PermissionAsk {
+    pub id: u32,
+    pub origin: String,
+    pub app: bool,
+    pub guest: Option<String>,
+    pub permissions: Vec<String>,
 }
 
 /// A page's request to choose files, as Chromium describes its file input.

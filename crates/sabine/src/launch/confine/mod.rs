@@ -141,7 +141,12 @@ pub(crate) fn apply(
         .runtime(&Runtime {
             own: own_folder,
             instance: instance_socket(config, app_id),
-            media: *microphone || *camera,
+            media: *microphone
+                || *camera
+                || config
+                    .permissions
+                    .iter()
+                    .any(|declared| declared.permission == sabine_service::Permission::Screen),
         })
         .declared(filesystems, devices);
     if *camera {

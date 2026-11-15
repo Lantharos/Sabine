@@ -89,7 +89,8 @@ pub(super) struct Runtime {
     pub(super) own: PathBuf,
     /// The socket later launches of a single-instance app reach it through.
     pub(super) instance: Option<PathBuf>,
-    /// Whether the app records sound or uses cameras through PipeWire.
+    /// Whether the app records sound or screens, or uses cameras, through
+    /// PipeWire.
     pub(super) media: bool,
 }
 
@@ -221,7 +222,7 @@ impl Paths {
     }
 
     /// The desktop's display, sound, and PipeWire when the app records sound
-    /// or uses cameras, the documents the portal hands the app and its own
+    /// or screens or uses cameras, the documents the portal hands the app and its own
     /// folder: none of the other sockets in the person's runtime folder, such
     /// as the session bus, the service manager's or other apps'.
     pub(super) fn runtime(&mut self, runtime: &Runtime) -> &mut Self {

@@ -9,7 +9,7 @@ use crate::osr::protocol::MenuMark;
 use crate::render::{DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand};
 use crate::window::style::Color;
 
-const RADIUS: f32 = 8.0;
+pub(in crate::osr::host::ui) const RADIUS: f32 = 8.0;
 const LINE_HEIGHT: f32 = 18.0;
 
 impl OsrNativeHost {
@@ -129,17 +129,19 @@ fn mark_glyph(entry: &MenuEntry) -> Option<&'static str> {
     }
 }
 
-struct MenuPalette {
-    background: Color,
-    border: Color,
+/// The colors of the surfaces the window draws over the page, after the
+/// desktop's light or dark appearance.
+pub(in crate::osr::host::ui) struct MenuPalette {
+    pub(in crate::osr::host::ui) background: Color,
+    pub(in crate::osr::host::ui) border: Color,
     separator: Color,
-    highlight: Color,
-    text: Color,
+    pub(in crate::osr::host::ui) highlight: Color,
+    pub(in crate::osr::host::ui) text: Color,
     disabled: Color,
 }
 
 impl MenuPalette {
-    fn new(dark: bool) -> Self {
+    pub(in crate::osr::host::ui) fn new(dark: bool) -> Self {
         if dark {
             Self {
                 background: Color::rgb8(37, 37, 41),

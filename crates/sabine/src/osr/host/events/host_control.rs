@@ -41,6 +41,7 @@ impl OsrNativeHost {
             }
             HostControl::ActivityBegin(activity) => self.begin_activity(activity),
             HostControl::ActivityEnd(activity) => self.end_activity(activity),
+            HostControl::Permission(id, decision) => self.app_decided_permission(id, decision),
         }
         Flow::Continue
     }
@@ -74,6 +75,7 @@ pub(in crate::osr::host) fn host_control_from_parts(
             HostControl::Regions(crate::osr::protocol::regions_from_json(Some(&regions)))
         }),
         "square-corners" => bool_control_value(value).map(HostControl::SquareCorners),
+        "permission" => permission_control_value(value),
         _ => None,
     }
 }
@@ -87,4 +89,16 @@ fn activity_control_value(value: &str) -> Option<HostActivity> {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true),
     })
+}
+
+fn permission_control_value(value: &str) -> Option<HostControl> {
+    let value = serde_json::from_str::<serde_json::Value>(value).ok()?;
+    let decision = match value.get("decision")?.as_str()? {
+        "allow" => crate::PermissionDecision::Allow,
+        "deny" => crate::PermissionDecision::Deny,
+        "ask" => crate::PermissionDecision::Ask,
+        _ => return None,
+    };
+    let id = u32::try_from(value.get("id")?.as_u64()?).ok()?;
+    Some(HostControl::Permission(id, decision))
 }

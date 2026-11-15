@@ -39,6 +39,9 @@ struct GuestView {
   bool allow_bridge = false;
   CefRefPtr<CefDictionaryValue> bridge_policy;
   bool allow_downloads = true;
+  // The permissions the guest may ask the person for, of those the app
+  // declares.
+  std::vector<std::string> permissions;
   std::vector<std::string> intercepted_shortcuts;
   bool intercept_horizontal_wheel = false;
   bool pending = false;
