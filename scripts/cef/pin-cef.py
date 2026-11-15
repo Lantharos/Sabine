@@ -19,7 +19,7 @@ PLATFORMS = ["linux64", "linuxarm64", "windows64", "windowsarm64", "macosarm64"]
 
 
 def version_key(version):
-    return [int(part) for part in version.split("+")[0].split(".")]
+    return [int(part) for part in version.split("+")[0].split(".") if part.isdigit()]
 
 
 def minimal_archives(index, version):
