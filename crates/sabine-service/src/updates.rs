@@ -113,32 +113,32 @@ impl SabineService {
             sabine_runtime::RuntimeMode::SharedPreferred
                 | sabine_runtime::RuntimeMode::SystemPreferred
         );
-        let (runtime, installed) = if shared && let Some(runtime) = self.system_runtime() {
-            (runtime, false)
+        let (runtime, downloaded) = if shared && let Some(runtime) = self.system_runtime() {
+            (runtime, None)
         } else if shared && self.runtime.allow_user_install {
             let update = update_user_runtime_with_progress(&self.runtime, progress)?;
-            (update.runtime, update.installed)
+            (update.runtime, Some(update.installed))
         } else {
-            (resolve_runtime(&self.runtime)?, false)
+            (resolve_runtime(&self.runtime)?, None)
         };
         let host = sabine_host::ensure_host(runtime.location.path()).map_err(|error| {
             ServiceError::Update(format!(
                 "the Sabine host to validate the runtime with is unavailable: {error}"
             ))
         })?;
-        if !installed {
+        let Some(installed) = downloaded else {
+            return Ok(runtime);
+        };
+        let probe = format!("probe={}", sabine_host::runtime_probe_fingerprint());
+        let validated = runtime.location.path().join(VALIDATED_MARKER);
+        if !installed && std::fs::read_to_string(&validated).is_ok_and(|seen| seen == probe) {
             return Ok(runtime);
         }
         if let Err(error) = sabine_host::smoke_test_runtime(&host, runtime.location.path()) {
-            quarantine_user_runtime(
-                &runtime,
-                &format!(
-                    "probe={}\n{error}",
-                    sabine_host::runtime_probe_fingerprint()
-                ),
-            )?;
+            quarantine_user_runtime(&runtime, &format!("{probe}\n{error}"))?;
             return Err(ServiceError::Update(error));
         }
+        sabine_runtime::write_file_atomic(&validated, probe.as_bytes())?;
         Ok(runtime)
     }
 
@@ -152,6 +152,8 @@ impl SabineService {
         .ok()
     }
 }
+const VALIDATED_MARKER: &str = ".sabine-validated";
+
 pub fn retry_quarantined_runtimes() -> ServiceResult<()> {
     let root = sabine_runtime::user_runtime_path();
     let current = format!("probe={}", sabine_host::runtime_probe_fingerprint());

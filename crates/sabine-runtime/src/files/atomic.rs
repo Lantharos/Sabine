@@ -6,7 +6,7 @@ use std::{
 
 /// Replaces `path` with `contents` so readers see either the old file or the
 /// complete new one, even across a crash.
-fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
+pub fn write_file_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -19,7 +19,7 @@ fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
 }
 
 pub fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> io::Result<()> {
-    write_atomic(path, &serde_json::to_vec_pretty(value)?)
+    write_file_atomic(path, &serde_json::to_vec_pretty(value)?)
 }
 
 /// Moves a completed `temporary` file over `destination` and makes the rename durable.

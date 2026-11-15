@@ -38,7 +38,7 @@ pub use download::transfer::DownloadProgress;
 pub use error::RuntimeError;
 pub use files::{
     FileLock, copy_directory, make_executable, remove_directory_if_present, remove_file_if_present,
-    replace_file, sync_directory, write_json_atomic,
+    replace_file, sync_directory, write_file_atomic, write_json_atomic,
 };
 pub use install::archive::extract_archive;
 pub use install::assets::prepare_runtime_assets;
