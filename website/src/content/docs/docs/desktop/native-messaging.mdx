@@ -62,8 +62,8 @@ program executable, and signs the programs among them on macOS and Windows along
 Chromium-based browsers and Firefox-based browsers get separate manifests, each listing only its
 own extensions. An empty list grants no extensions of that kind access.
 
-Sabine checks the host before it writes anything, and a host it can't register stops the launch
-with an error naming the problem:
+Sabine checks the host before it writes anything. A host it can't register goes to the app's
+diagnostics with the problem, and the app opens without it:
 
 - `id` contains lowercase letters, digits and underscores, with single dots between nonempty
   parts, such as `com.example.notes`. Sabine rejects other ids instead of renaming them.
@@ -72,8 +72,9 @@ with an error naming the problem:
 - `allowed_extensions` entries are explicit add-on ids, without spaces or wildcards.
 - `executable` is a file, with a path that is valid Unicode.
 
-Sabine writes the registration each time the app launches, so it stays correct when the app moves
-or updates. Development runs, such as `sabine dev`, register no native messaging hosts.
+Sabine checks the registration each time the app launches, while the app starts, and rewrites
+only the files that changed, so it stays correct when the app moves or updates. Development runs,
+such as `sabine dev`, register no native messaging hosts.
 
 ## The host program
 

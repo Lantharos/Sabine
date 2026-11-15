@@ -15,11 +15,15 @@ mod platform;
 mod shortcut_key;
 mod tray;
 
-use std::thread::{self, JoinHandle};
+use std::{
+    fs, io,
+    path::Path,
+    thread::{self, JoinHandle},
+};
 
 use sabine_platform::{
-    AutostartEntry, GlobalShortcutFailure, GlobalShortcutRegistration, PlatformEvent,
-    SingleInstancePolicy,
+    AutostartEntry, DeepLinkRegistration, GlobalShortcutFailure, GlobalShortcutRegistration,
+    NativeMessagingHost, PlatformEvent, SingleInstancePolicy,
 };
 
 use instance::SingleInstanceGuard;
@@ -92,12 +96,10 @@ impl DesktopClaim {
             autostart.set_enabled(entry.enabled).map_err(failed)?;
         }
         if registers {
-            for registration in &services.deep_links {
-                register_deep_links(registration).map_err(failed)?;
-            }
-            for host in &services.native_messaging_hosts {
-                register_native_messaging_host(host).map_err(failed)?;
-            }
+            register_with_desktop(
+                services.deep_links.clone(),
+                services.native_messaging_hosts.clone(),
+            );
         }
         let events = self.event_sender;
         #[cfg(target_os = "macos")]
@@ -236,6 +238,51 @@ pub fn start_desktop_event_forwarder(
             }
         }
     })
+}
+
+/// Registers the app's links and native messaging hosts with the desktop
+/// while the app starts. A registration the desktop refuses goes to the
+/// app's diagnostics and the app opens without it.
+fn register_with_desktop(deep_links: Vec<DeepLinkRegistration>, hosts: Vec<NativeMessagingHost>) {
+    if deep_links.is_empty() && hosts.is_empty() {
+        return;
+    }
+    thread::spawn(move || {
+        for registration in &deep_links {
+            if let Err(error) = register_deep_links(registration) {
+                sabine_runtime::report_error(
+                    "desktop",
+                    format!(
+                        "could not register the links of {}: {error}",
+                        registration.id
+                    ),
+                );
+            }
+        }
+        for host in &hosts {
+            if let Err(error) = register_native_messaging_host(host) {
+                sabine_runtime::report_error(
+                    "desktop",
+                    format!(
+                        "could not register the native messaging host {}: {error}",
+                        host.id
+                    ),
+                );
+            }
+        }
+    });
+}
+
+/// Writes `contents` to `path` unless it already holds them, so launches
+/// after the first leave the desktop's files alone.
+pub(crate) fn write_if_changed(path: &Path, contents: &str) -> io::Result<()> {
+    if fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, contents)
 }
 
 /// Reports a shortcut the desktop refused to the app's diagnostics and its

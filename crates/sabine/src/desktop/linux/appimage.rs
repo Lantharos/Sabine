@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::desktop::write_if_changed;
 use crate::launch::executable::running_appimage;
 
 pub(crate) fn native_host_program(id: &str, executable: PathBuf) -> io::Result<PathBuf> {
@@ -17,11 +18,13 @@ pub(crate) fn native_host_program(id: &str, executable: PathBuf) -> io::Result<P
     else {
         return Ok(executable);
     };
-    let directory = sabine_runtime::sabine_data_dir().join("native-messaging");
-    fs::create_dir_all(&directory)?;
-    let launcher = directory.join(id);
-    fs::write(&launcher, launcher_script(&image.file, &program)?)?;
-    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))?;
+    let launcher = sabine_runtime::sabine_data_dir()
+        .join("native-messaging")
+        .join(id);
+    write_if_changed(&launcher, &launcher_script(&image.file, &program)?)?;
+    if fs::metadata(&launcher)?.permissions().mode() & 0o777 != 0o755 {
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))?;
+    }
     Ok(launcher)
 }
 
