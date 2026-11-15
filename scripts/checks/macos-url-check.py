@@ -23,10 +23,13 @@ folders = set()
 for line in build.stdout.splitlines():
     message = json.loads(line)
     if message.get("reason") == "compiler-artifact":
+        version = message["package_id"].rsplit("#", 1)[1].rsplit("@", 1)[-1].split("-")[0]
+        version = tuple(int(part) for part in version.split("."))
         for filename in message["filenames"]:
             folders.add(str(Path(filename).parent))
-            if filename.endswith(".rlib"):
-                artifacts[message["target"]["name"]] = filename
+            name = message["target"]["name"]
+            if filename.endswith(".rlib") and version >= artifacts.get(name, ((), ""))[0]:
+                artifacts[name] = (version, filename)
 
 with tempfile.TemporaryDirectory(prefix="sabine-url-check-") as temporary:
     root = Path(temporary)
@@ -51,10 +54,17 @@ mod desktop {
                 dispatch2::DispatchQueue::main().exec_async(task);
             }
         }
+        fn main_queue_thread() -> objc2::MainThreadMarker {
+            unsafe { objc2::MainThreadMarker::new_unchecked() }
+        }
         #[path = "@MODULE@"] pub mod app_delegate;
     }
     pub fn install(events: EventQueue) -> impl Drop {
-        macos::app_delegate::AppEvents::install(events)
+        macos::app_delegate::AppEvents::install(macos::app_delegate::AppEventTargets {
+            events,
+            actions: Vec::new(),
+            policy: sabine_platform::SingleInstancePolicy::default(),
+        })
     }
 }
 struct App { done: Arc<AtomicBool> }
@@ -98,8 +108,8 @@ fn main() {
     for folder in sorted(folders):
         command.extend(["-L", f"dependency={folder}"])
     for dependency in ["winit", "objc2", "objc2_app_kit", "objc2_foundation", "dispatch2",
-                       "crossbeam_channel", "sabine_platform", "serde_json"]:
-        command.extend(["--extern", f"{dependency}={artifacts[dependency]}"])
+                       "crossbeam_channel", "sabine_platform", "sabine_service", "serde_json"]:
+        command.extend(["--extern", f"{dependency}={artifacts[dependency][1]}"])
     subprocess.run(command, check=True)
     with (bundle / "Contents/Info.plist").open("wb") as output:
         plistlib.dump({

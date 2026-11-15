@@ -166,7 +166,10 @@ mod tests {
         };
         let answer: serde_json::Value =
             serde_json::from_str(&listeners.deliver(1, &line("requested")).unwrap()).unwrap();
-        assert_eq!(answer["savePath"], "/tmp/a.zip");
+        assert_eq!(
+            answer["savePath"],
+            PathBuf::from("/tmp").join("a.zip").to_str().unwrap()
+        );
         assert_eq!(answer["action"], "accept");
         assert_eq!(listeners.deliver(1, &line("progress")), None);
     }
