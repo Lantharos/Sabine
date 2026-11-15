@@ -10,9 +10,7 @@ mod process_tree;
 pub(crate) use installation::Installation;
 pub(crate) use process::{PrimaryWindow, ProcessCommand};
 pub use process::{SabineProcess, SabineProcessHandle, WindowId};
-pub(crate) use process_tree::{
-    ManagedChild, prepare_child_command, prepare_detachable_child_command,
-};
+pub(crate) use process_tree::{ManagedChild, prepare_detachable_child_command, spawn_child};
 #[cfg(debug_assertions)]
 pub(crate) use sabine_host::ensure_host;
 

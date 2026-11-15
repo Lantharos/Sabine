@@ -9,7 +9,7 @@ use crate::bridge::BridgeEventEmitter;
 use crate::bridge::{prepare_bridge_command, spawn_bridge_dispatch};
 #[cfg(target_os = "linux")]
 use crate::host::ld_library_path;
-use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
+use crate::host::{ManagedChild, browser_profile_dir, spawn_child};
 use crate::host::{PrimaryWindow, ProcessCommand, SabineProcessHandle};
 use crate::launch::metrics::LaunchMetrics;
 use crate::osr::transport::IpcEndpoint;
@@ -290,12 +290,9 @@ pub(crate) fn spawn_osr_host_child(
     #[cfg(target_os = "linux")]
     command.env_remove(crate::window::restore::RESTORE_WINDOWS);
     prepare_bridge_command(&mut command);
-    prepare_child_command(&mut command);
-    let mut child = command
-        .spawn()
-        .map_err(|error| SabineError::CreationFailed {
-            message: format!("failed to launch Sabine OSR host: {error}"),
-        })?;
+    let mut child = spawn_child(command).map_err(|error| SabineError::CreationFailed {
+        message: format!("failed to launch Sabine OSR host: {error}"),
+    })?;
     sabine_runtime::capture_diagnostics(&mut child, "osr");
     let mut message = body.to_string();
     message.push('\n');
