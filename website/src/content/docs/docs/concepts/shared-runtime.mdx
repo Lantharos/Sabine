@@ -153,6 +153,8 @@ A request names the app and carries only what applies to that window: its page, 
 
 Only apps installed for every user share a runtime with each other: their program lies below `/usr/lib/sabine/<app id>/`, which only an administrator or the system image can write. Every other app, such as one a person installed for themselves or an AppImage, gets a runtime of its own. That runtime keeps Chromium's data in a `runtime` folder beside the app's profile, so its windows still share one browser process with each other but never with another app. A page that took over the browser process can then reach only its own app's profile.
 
+One audio process plays the sound of every app in a runtime, so the sound server lists apps installed for every user together as Sabine, and they share one volume. An app that should have a volume of its own opts out of the shared runtime.
+
 The runtime answers only processes of the same user whose executable is the one registered for that app, or one installed for every user. See [Security model](/docs/concepts/security-model/#the-shared-runtime).
 
 ### Profiles

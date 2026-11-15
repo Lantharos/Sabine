@@ -102,6 +102,17 @@ impl SharedLaunch {
         for (name, value) in crashes {
             environment.push(format!("{name}={}", value.to_str()?));
         }
+        if shared {
+            for (name, value) in crate::launch::sound::shared_runtime_environment() {
+                environment.push(format!("{name}={value}"));
+            }
+        } else {
+            for name in crate::launch::sound::VARIABLES {
+                if let Ok(value) = std::env::var(name) {
+                    environment.push(format!("{name}={value}"));
+                }
+            }
+        }
         let expandable = |text: &OsStr| {
             text.as_encoded_bytes()
                 .iter()

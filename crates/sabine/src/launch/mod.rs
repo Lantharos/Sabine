@@ -9,6 +9,8 @@ pub(crate) mod metrics;
 pub(crate) mod sandbox;
 #[cfg(target_os = "linux")]
 pub(crate) mod shared;
+#[cfg(target_os = "linux")]
+pub(crate) mod sound;
 
 use std::ffi::OsString;
 use std::path::PathBuf;

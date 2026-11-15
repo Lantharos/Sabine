@@ -81,6 +81,12 @@ pub(crate) struct SabineWindowConfig {
     pub local_files: bool,
     /// What the app's pages may ask the person for.
     pub permissions: Vec<sabine_service::DeclaredPermission>,
+    /// The name `Sabine.toml` gives the app, which its windows' titles may not be.
+    #[cfg(target_os = "linux")]
+    pub(crate) app_name: Option<String>,
+    /// What the app's sound is to the sound server, from its categories.
+    #[cfg(target_os = "linux")]
+    pub(crate) sound_role: Option<&'static str>,
     pub spellcheck: Spellcheck,
     pub browser: BrowserOptions,
     pub crash_upload_url: Option<String>,
@@ -144,6 +150,10 @@ impl Default for SabineWindowConfig {
             security: ContentSecurity::default(),
             local_files: false,
             permissions: Vec::new(),
+            #[cfg(target_os = "linux")]
+            app_name: None,
+            #[cfg(target_os = "linux")]
+            sound_role: None,
             spellcheck: Spellcheck::default(),
             browser: BrowserOptions::default(),
             crash_upload_url: None,

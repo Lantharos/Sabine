@@ -217,7 +217,7 @@ fn spawn_osr_host_child(
     activation_token: Option<String>,
     restoring: Option<String>,
 ) -> SabineResult<std::process::Child> {
-    let _ = require_app_id(config)?;
+    let app_id = require_app_id(config)?;
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut body = serde_json::json!({
         "runtime_dir": runtime_dir,
@@ -273,7 +273,7 @@ fn spawn_osr_host_child(
         body["restoring"] = restoring.into();
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = (activation_token, restoring);
+    let _ = (activation_token, restoring, app_id);
     let mut command = window_host_command()?;
     sabine_runtime::configure_background_command(&mut command);
     command
@@ -282,7 +282,13 @@ fn spawn_osr_host_child(
         .env_remove("DESKTOP_STARTUP_ID")
         .stderr(Stdio::piped());
     #[cfg(target_os = "linux")]
-    command.env_remove(crate::window::restore::RESTORE_WINDOWS);
+    command
+        .env_remove(crate::window::restore::RESTORE_WINDOWS)
+        .envs(crate::launch::sound::app_environment(
+            app_id,
+            config.app_name.as_deref().unwrap_or(app_id),
+            config.sound_role,
+        ));
     prepare_bridge_command(&mut command);
     let mut child = spawn_child(command).map_err(|error| SabineError::CreationFailed {
         message: format!("failed to launch Sabine OSR host: {error}"),

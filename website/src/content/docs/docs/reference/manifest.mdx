@@ -85,7 +85,7 @@ the app needs at runtime; see [The production manifest](#the-production-manifest
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | string | `dev.sabine.<name>` | The app id: letters, digits, dots, hyphens and underscores, such as `com.example.Tern`. Case counts, and the desktop entry and icon keep it. Names the app's data folders, browser profile, single-instance lock, desktop entries and packages |
-| `name` | string | The Cargo package name, underscores as spaces | The display name, and the window title unless Rust sets one |
+| `name` | string | The Cargo package name, underscores as spaces | The display name, the window title unless Rust sets one, and the name of the app's sound on Linux, which is its `id` without one |
 | `version` | string | The Cargo package version | The app version, in SemVer, which Sabine requires. Updates compare it |
 | `publisher` | string | The first Cargo author's name, then `name` | Who publishes the app, for the MSI manufacturer and AppStream developer |
 | `maintainer` | string | The first Cargo author with an email | `Name <email>`; required for deb packages |
@@ -95,7 +95,7 @@ the app needs at runtime; see [The production manifest](#the-production-manifest
 | `icon` | string | Found in the project | Path to an SVG, PNG, JPEG, WebP, BMP or ICO image every icon is made from |
 | `installer_image` | string | | Path to a PNG, JPEG or WebP image shown on the Windows setup pages |
 | `generic_name` | string | | What kind of app this is, such as `"Terminal"`, for launchers and the AppStream summary |
-| `categories` | array of strings | `["Utility"]` | [freedesktop menu categories](https://specifications.freedesktop.org/menu-spec/latest/category-registry.html); at least one main category |
+| `categories` | array of strings | `["Utility"]` | [freedesktop menu categories](https://specifications.freedesktop.org/menu-spec/latest/category-registry.html); at least one main category. On Linux the first of `Audio`, `Music`, `Video`, `TV`, `Game`, `Telephony`, `VideoConference`, `AudioVideoEditing` and `Recorder` gives the app's sound its role |
 | `keywords` | array of strings | `[]` | Extra words launchers find the app by |
 | `listed` | boolean | `true` | Whether the app appears in launchers. An unlisted app still handles its URL schemes and documents |
 | `autostart_arguments` | string | | Arguments desktops add to the command when someone turns on starting at login, such as `"--background"` |

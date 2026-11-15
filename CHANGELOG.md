@@ -1,5 +1,9 @@
 # Unreleased
 
+- On Linux, an app's sound reaches the sound server under the app's name and id instead of
+  Chromium's, so mixers list each app on its own and remember its volume and mute apart from other
+  apps and from Chromium. Its first sound category, such as `Audio` or `Game`, gives the sound its
+  role. Apps installed for every user, which share one Chromium, are listed together as Sabine.
 - `alert`, `confirm`, `prompt` and leave-page prompts work in every window, drawn over the page
   in the context menu's look instead of returning at once.
 - Apps show their own dialogs with custom buttons and a text field: `show_message` and `confirm`

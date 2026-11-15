@@ -59,6 +59,10 @@ impl SabineWindow {
             self = self.app_id(id);
         }
         if let Some(name) = file.app.name {
+            #[cfg(target_os = "linux")]
+            {
+                self.config.app_name = Some(name.clone());
+            }
             self = self.title(name);
         }
         if let Some(version) = file.app.version {
@@ -121,6 +125,11 @@ impl SabineWindow {
         #[cfg(target_os = "linux")]
         {
             self.config.sandbox = sandbox;
+            self.config.sound_role = file
+                .app
+                .categories
+                .as_deref()
+                .and_then(crate::launch::sound::role);
         }
         if let Some(url) = file.crash.upload_url {
             self = self.crash_upload_url(url);

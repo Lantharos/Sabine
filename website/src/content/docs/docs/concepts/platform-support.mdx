@@ -113,6 +113,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Secrets** need a Secret Service, such as GNOME Keyring, KWallet or KeePassXC. Without one, secrets calls fail, and Chromium encrypts cookies with a fixed key. A confined app reaches it only when its `[sandbox]` talks to `org.freedesktop.secrets`.
 - **Crash reports** of the Chromium that apps installed for every user share stay with the shared process and are never sent.
 - **Screen recording** goes through the desktop's ScreenCast portal and PipeWire, whose picker asks people what to share.
+- **Sound** reaches the sound server under the app's name and id, which it remembers volume and mute by, with the role its first sound category gives it. Chromium names its own icon on each stream, so mixers that read the icon from the stream show Chromium's. Apps installed for every user play through the Chromium they [share](/docs/concepts/shared-runtime/#who-shares) and are listed together as Sabine.
 - **Location** isn't available to pages: Chromium has no location source on Linux without a Google API key.
 - **Flatpak packaging** isn't a bundle target. Apps that run inside a Flatpak-style sandbox start their own Chromium through Zypak.
 
