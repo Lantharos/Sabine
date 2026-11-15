@@ -1,5 +1,5 @@
-#ifndef SABINE_CEF_HOST_OSR_GUEST_INPUT_H_
-#define SABINE_CEF_HOST_OSR_GUEST_INPUT_H_
+#ifndef SABINE_CEF_HOST_OSR_INPUT_INTERCEPT_H_
+#define SABINE_CEF_HOST_OSR_INPUT_INTERCEPT_H_
 
 #include <cstdint>
 #include <string>

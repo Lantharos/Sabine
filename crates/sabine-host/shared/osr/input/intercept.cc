@@ -1,4 +1,4 @@
-#include "osr/guest/input.h"
+#include "osr/input/intercept.h"
 
 #include <cctype>
 #include <cmath>

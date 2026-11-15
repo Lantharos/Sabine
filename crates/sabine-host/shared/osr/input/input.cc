@@ -10,7 +10,7 @@
 #include "osr/browser/screen.h"
 #include "osr/common/strings.h"
 #include "osr/guest/events.h"
-#include "osr/guest/input.h"
+#include "osr/input/intercept.h"
 #include "osr/input/ime.h"
 #include "osr/input/key_codes.h"
 #include "sabine_mouse_navigation_js.h"
