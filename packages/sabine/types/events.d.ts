@@ -1,4 +1,4 @@
-import type { Display, SystemAppearance } from "./desktop/system.js";
+import type { Display, PowerSource, SystemAppearance } from "./desktop/system.js";
 import type { StoreChangedEvent } from "./storage/store.js";
 import type {
   GuestDownloadEvent,
@@ -105,6 +105,11 @@ export declare const events: {
   notificationClick: Listen<NotificationClickEvent>;
   notificationClose: Listen<NotificationEvent>;
   notificationError: Listen<NotificationErrorEvent>;
+  systemSuspend: Listen<null>;
+  systemResume: Listen<null>;
+  screenLocked: Listen<null>;
+  screenUnlocked: Listen<null>;
+  powerSourceChanged: Listen<PowerSource>;
   guestCreated: Listen<GuestInfo>;
   guestDestroyed: Listen<GuestIdEvent>;
   guestLoading: Listen<GuestLoadingEvent>;

@@ -57,7 +57,8 @@ pub(crate) fn launch_process(
         open_urls: config.listeners.open_urls.clone(),
         desktop_event_thread: None,
         desktop_event_stop: None,
-        activity: sabine_bridge::ActivityRegistry::default(),
+        activity: sabine_bridge::ActivityRegistry::keeping_awake(crate::desktop::keep_awake),
+        idle: crate::desktop::IdleWatches::default(),
         metrics,
         windows: WindowContext {
             runtime_dir: runtime_dir.to_path_buf(),
@@ -185,6 +186,7 @@ fn spawn_window(
         &mut child,
         BridgeRuntime::new(handlers),
         process.activity.clone(),
+        process.idle.clone(),
         &process.bridge_emitter,
         config.listeners.clone(),
     );

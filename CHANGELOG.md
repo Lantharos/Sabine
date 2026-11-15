@@ -16,6 +16,13 @@
   `.icon`, `.image` and `.action(NotificationAction::…)` from Rust. A `click` event names the
   button and carries the reply, and Rust hears every click, reply, close and failure through
   `on_desktop_event` as `PlatformEvent::Notification`.
+- Apps hear the system sleep and wake, the screen lock and unlock, and the power source and battery
+  level change: `events.systemSuspend`, `systemResume`, `screenLocked`, `screenUnlocked` and
+  `powerSourceChanged` with `system.power()` in pages, and `PlatformEvent::Power` with
+  `SabineProcessHandle::power_state()` in Rust.
+- `system.watchIdle(seconds, callback)` and `IdleWatch` report people going idle and coming back.
+- An activity begun with `keepAwake: "system"` or `"display"`, or `.keep_awake(KeepAwake::…)` in
+  Rust, keeps the machine from sleeping until it ends, and `SleepBlocker` does the same from Rust.
 
 # Sabine 0.90
 

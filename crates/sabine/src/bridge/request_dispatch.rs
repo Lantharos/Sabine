@@ -13,6 +13,7 @@ use sabine_bridge::{BridgeCommand, BridgeError, BridgeFuture, BridgeOutcome, Bri
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
 use super::writer::BridgeWriter;
+use crate::desktop::IdleWatches;
 
 /// Starts the line of a page's bridge call.
 pub(super) const REQUEST_PREFIX: &str = "SABINE_BRIDGE_REQUEST\t";
@@ -94,6 +95,7 @@ fn dropped_notice(command: &str) -> Arc<[u8]> {
 struct WindowCalls {
     runtime: sabine_bridge::BridgeRuntime,
     activity: sabine_bridge::ActivityRegistry,
+    idle: IdleWatches,
     emitter: BridgeEventEmitter,
     writer: BridgeWriter,
     waiting: AtomicUsize,
@@ -102,6 +104,12 @@ struct WindowCalls {
 impl WindowCalls {
     fn run(&self, BridgeIpcRequest { reply, command }: BridgeIpcRequest) {
         let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            if let Some(outcome) = self
+                .idle
+                .dispatch(&command, &reply.browser_id, &self.emitter)
+            {
+                return outcome;
+            }
             match self
                 .activity
                 .dispatch_bridge_command(&command, &reply.browser_id)
@@ -171,6 +179,7 @@ impl BridgeRequestDispatcher {
     pub(super) fn new(
         runtime: sabine_bridge::BridgeRuntime,
         activity: sabine_bridge::ActivityRegistry,
+        idle: IdleWatches,
         emitter: BridgeEventEmitter,
         writer: BridgeWriter,
     ) -> Self {
@@ -178,6 +187,7 @@ impl BridgeRequestDispatcher {
             window: Arc::new(WindowCalls {
                 runtime,
                 activity,
+                idle,
                 emitter,
                 writer,
                 waiting: AtomicUsize::new(0),
@@ -258,6 +268,7 @@ mod tests {
         let dispatcher = BridgeRequestDispatcher::new(
             BridgeRuntime::new(handlers),
             sabine_bridge::ActivityRegistry::default(),
+            IdleWatches::default(),
             BridgeEventEmitter::default(),
             writer,
         );

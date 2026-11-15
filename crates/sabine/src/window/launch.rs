@@ -83,7 +83,11 @@ impl SabineWindow {
         let launcher = Launcher::new(emitter.clone());
         #[cfg(target_os = "macos")]
         let launcher = Launcher::new();
-        let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart(), launcher);
+        let (handle, commands) = SabineProcessHandle::new(
+            desktop_services.autostart(),
+            launcher,
+            desktop_services.power_status(),
+        );
         self.config.listeners.desktop_events = Some(desktop_services.events());
         desktop_services.attach(&handle);
         self = launcher_commands(self.app_commands(&handle), &handle);
@@ -126,6 +130,7 @@ impl SabineWindow {
         let autostart = handle.clone();
         let opener = handle.clone();
         let closer = handle.clone();
+        let power = handle.clone();
         self.bridge_handler_async("app.takeOpenUrls", move |command| {
             let urls = match command.window {
                 Some(window) => open_urls.take_for_page(window),
@@ -135,6 +140,13 @@ impl SabineWindow {
                 let urls = within_reach(urls).await.map_err(BridgeError::new)?;
                 Ok(BridgeResponse::json(serde_json::json!(urls)))
             }
+        })
+        .bridge_handler(sabine_bridge::POWER_STATE_COMMAND, move |_| {
+            let state = power.power_state();
+            Ok(BridgeResponse::json(serde_json::json!({
+                "source": state.source.map(crate::bridge::power_source_json),
+                "locked": state.locked,
+            })))
         })
         .bridge_handler("app.quit", move |_| {
             quitting.quit();

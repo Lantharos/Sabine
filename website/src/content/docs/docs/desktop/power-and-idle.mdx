@@ -1,0 +1,196 @@
+---
+title: Power and idle
+description: Hear the system sleep and wake, the screen lock and the power source change, notice when people step away, and keep the machine awake.
+sidebar:
+  order: 4
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+## Sleep, lock and power source
+
+Pages hear the system and the session change through the package's `events`:
+
+```ts
+import { events, system } from "@lantharos/sabine";
+
+events.systemSuspend(() => pauseSync());
+events.systemResume(() => resumeSync());
+events.screenLocked(() => setPresence("away"));
+events.screenUnlocked(() => setPresence("online"));
+
+const { source } = await system.power();
+showBattery(source);
+events.powerSourceChanged(showBattery);
+```
+
+| Listener | Payload | Fires when |
+| --- | --- | --- |
+| `systemSuspend` | `null` | The system is about to sleep. |
+| `systemResume` | `null` | The system woke from sleep. |
+| `screenLocked` | `null` | The screen locked. |
+| `screenUnlocked` | `null` | The screen unlocked. |
+| `powerSourceChanged` | `PowerSource` | The machine switched between battery and mains power, or its battery's charge changed. |
+
+`PowerSource` has `onBattery` and `batteryLevel`, the charge in percent, or `null` on a machine
+without a battery. `system.power()` returns `{ source, locked }` as the desktop last reported them;
+`source` is `null` until the desktop has told it, shortly after the app starts, and then
+`powerSourceChanged` fires.
+
+<Aside>
+  `systemSuspend` arrives as the system goes to sleep, which doesn't wait for the app, so save
+  what matters as it changes rather than only then.
+</Aside>
+
+### From Rust
+
+The app hears the same through `SabineWindow::on_desktop_event`, as `PlatformEvent::Power`, and
+reads the current state from its process handle:
+
+```rust
+use sabine::prelude::*;
+use sabine::{PlatformEvent, PowerEvent};
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window.app().on_desktop_event(|process, event| match event {
+            PlatformEvent::Power(PowerEvent::Resumed) => refresh_feeds(),
+            PlatformEvent::Power(PowerEvent::Source(source)) if source.on_battery => {
+                let locked = process.power_state().locked;
+                slow_down_sync(locked);
+            }
+            _ => {}
+        }))
+    });
+}
+
+fn refresh_feeds() {}
+fn slow_down_sync(_locked: bool) {}
+```
+
+| Type | Holds |
+| --- | --- |
+| `PowerEvent` | `Suspending`, `Resumed`, `Locked`, `Unlocked`, or `Source(PowerSource)` |
+| `PowerSource` | `on_battery: bool` and `battery_level: Option<u8>` |
+| `PowerState` | `source: Option<PowerSource>` and `locked: bool`, from `SabineProcessHandle::power_state()` |
+
+## Idle
+
+`system.watchIdle(seconds, callback)` calls back with `"idle"` once nobody used the keyboard,
+pointer or touch for that long, and with `"active"` as soon as someone does again. It resolves with
+a function that stops the watch:
+
+```ts
+import { system } from "@lantharos/sabine";
+
+const stop = await system.watchIdle(300, (state) => {
+  setPresence(state === "idle" ? "away" : "online");
+});
+```
+
+A watch starts out active, belongs to the document that began it, and ends when the page reloads,
+navigates away or its window closes. A window's pages keep up to 16 watches at once. Desktops tell
+when people go idle but not how long ago they last did something, so there is no way to ask for
+the idle time itself.
+
+In Rust, `IdleWatch::start` watches until it is dropped:
+
+```rust
+use std::{sync::Arc, time::Duration};
+
+use sabine::{IdleState, IdleWatch};
+
+async fn watch_presence() -> Result<IdleWatch, String> {
+    IdleWatch::start(
+        Duration::from_secs(300),
+        Arc::new(|state| println!("{}", if state == IdleState::Idle { "away" } else { "back" })),
+    )
+    .await
+}
+```
+
+`watchIdle` rejects, and `IdleWatch::start` fails, on a Linux desktop that can't tell when people
+go idle.
+
+## Keeping the machine awake
+
+A page keeps the machine awake for as long as an [activity](/docs/windows/lifecycle/#activities)
+runs, with the activity's name as the reason the desktop shows:
+
+```ts
+import { activity } from "@lantharos/sabine";
+
+const presenting = await activity.begin({ name: "Presenting slides", keepAwake: "display" });
+// ...
+await presenting.end();
+```
+
+`keepAwake: "system"` keeps the system from sleeping while the screen may still turn off, and
+`"display"` keeps the screen on too. Like every activity, it ends with the page that began it, so a
+reload or crash never leaves the machine awake.
+
+From Rust, give an activity the same option, or hold a `SleepBlocker`:
+
+```rust
+use sabine::{ActivityOptions, KeepAwake, SabineProcess, SleepBlocker};
+
+fn export(process: &SabineProcess) {
+    let exporting = process
+        .begin_activity_with(ActivityOptions::new("Exporting video").keep_awake(KeepAwake::System));
+    std::thread::spawn(move || {
+        render_video();
+        exporting.end();
+    });
+}
+
+async fn present() -> Result<(), String> {
+    let _awake = SleepBlocker::display("Presenting slides").await?;
+    run_slides().await;
+    Ok(())
+}
+
+fn render_video() {}
+async fn run_slides() {}
+```
+
+`SleepBlocker::system(reason)` and `SleepBlocker::display(reason)` keep the machine awake until the
+blocker is dropped, and fail when the desktop refuses. An activity whose request the desktop
+refuses still runs, and the refusal goes to the app's diagnostics.
+
+## On each desktop
+
+<Tabs syncKey="platform">
+  <TabItem label="Linux">
+    Sleep and wake come from logind's `PrepareForSleep`, and the lock from the `LockedHint` of the
+    session the person's user shows on its display, which screen lockers set. The power source
+    comes from UPower: whether the machine is on battery, and the charge of the battery it combines
+    from all of the machine's batteries.
+
+    Idle watches use the compositor's `ext-idle-notify-v1`, asking for input idleness where the
+    compositor offers it, so a window keeping the screen on doesn't count as activity. Where the
+    compositor has no such protocol, Sabine asks GNOME's idle monitor, which confined apps reach
+    through their filtered session bus.
+
+    Keeping awake goes through the XDG desktop portal's Inhibit interface, which keeps the session
+    from suspending and, for `"display"`, from going idle, also inside a sandbox. Where the portal
+    has no Inhibit, logind's sleep lock keeps the system awake, and whether the screen stays on is
+    up to the desktop.
+  </TabItem>
+  <TabItem label="Windows">
+    Sleep, wake, the power source and the session's lock come from Windows' power and session
+    notifications. Idle watches read the time of the last input, once when the threshold could have
+    passed and every second while people are away. Keeping awake makes a power request with the
+    reason, which `powercfg /requests` lists.
+  </TabItem>
+  <TabItem label="macOS">
+    Sleep and wake come from the workspace's notifications, the lock from the screen's locked and
+    unlocked notifications, and the power source from IOKit's power sources. Idle watches read the
+    time since the last input event with the same timing as on Windows. Keeping awake takes an IOKit
+    power assertion with the reason, which `pmset -g assertions` lists.
+  </TabItem>
+</Tabs>
+
+## Related pages
+
+- [Lifecycle](/docs/windows/lifecycle/#activities) covers activities.
+- [Bridge events](/docs/bridge/events/) covers `listen` and events sent from Rust.

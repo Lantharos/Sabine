@@ -23,17 +23,17 @@ pub use log;
 pub use sabine_bridge::{
     ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
     BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,
-    GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
+    GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy, KeepAwake,
     SabineActivityLease, TypedRequest, WindowControl, WindowSize, WithBody,
 };
 pub use sabine_platform::{
     AppBadge, AppProgress, Appearance, AutostartEntry, BackdropMaterial, BackdropPreference,
     BackdropRole, Display, DisplayRect, GlobalShortcutActivation, GlobalShortcutFailure,
-    GlobalShortcutRegistration, NativeMessagingHost, Notification, NotificationAction,
-    NotificationEvent, PlatformEvent, Shortcut, ShortcutModifiers, SingleInstanceActivation,
-    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
-    WindowBackgroundEffect, WindowRegion,
-    WindowRegionRect, WindowRegions, async_runtime,
+    GlobalShortcutRegistration, IdleState, IdleWatch, NativeMessagingHost, Notification,
+    NotificationAction, NotificationEvent, PlatformEvent, PowerEvent, PowerSource, PowerState,
+    Shortcut, ShortcutModifiers, SingleInstanceActivation, SingleInstancePolicy, SleepBlocker,
+    TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency, WindowBackgroundEffect,
+    WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 pub use sabine_service::AppEnvironment;

@@ -13,18 +13,20 @@ mod platform;
 #[cfg(target_os = "windows")]
 #[path = "windows/mod.rs"]
 mod platform;
+mod power;
 mod shortcut_key;
 mod tray;
 
 use std::{
     fs, io,
     path::Path,
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
 use sabine_platform::{
     AutostartEntry, DeepLinkRegistration, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, PlatformEvent, SingleInstancePolicy,
+    NativeMessagingHost, PlatformEvent, PowerStatus, PowerWatcher, SingleInstancePolicy,
 };
 
 use instance::SingleInstanceGuard;
@@ -44,6 +46,7 @@ use platform::{
 };
 #[cfg(target_os = "windows")]
 pub(crate) use platform::{allow_foreground, with_app_icon};
+pub(crate) use power::{IdleWatches, keep_awake};
 pub use tray::TrayHandle;
 pub(crate) use tray::UPDATE_COMMAND as TRAY_UPDATE_COMMAND;
 
@@ -108,6 +111,12 @@ impl DesktopClaim {
             });
         }
         let events = self.event_sender;
+        let power = PowerWatcher::start(Arc::new({
+            let events = events.clone();
+            move |event| {
+                let _ = events.send(PlatformEvent::Power(event));
+            }
+        }));
         #[cfg(target_os = "macos")]
         let app_events = platform::AppEvents::install(platform::AppEventTargets {
             events: events.clone(),
@@ -148,6 +157,7 @@ impl DesktopClaim {
         Ok(DesktopServiceState {
             event_receiver: self.event_receiver,
             events,
+            power,
             autostart,
             tray,
             _shortcuts: shortcuts,
@@ -161,10 +171,12 @@ impl DesktopClaim {
 }
 
 /// The desktop integrations an app process owns: its tray icon, global
-/// shortcuts, single-instance endpoint and the events they produce.
+/// shortcuts, single-instance endpoint, the power and session watch, and
+/// the events they produce.
 pub struct DesktopServiceState {
     event_receiver: crossbeam_channel::Receiver<PlatformEvent>,
     events: EventQueue,
+    power: PowerWatcher,
     autostart: Autostart,
     tray: Option<TrayHandle>,
     _shortcuts: Option<GlobalShortcuts>,
@@ -192,6 +204,10 @@ impl DesktopServiceState {
 
     pub(crate) fn autostart(&self) -> Autostart {
         self.autostart.clone()
+    }
+
+    pub(crate) fn power_status(&self) -> PowerStatus {
+        self.power.status()
     }
 
     /// The queue the app's desktop events arrive on, which window hosts

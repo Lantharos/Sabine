@@ -21,16 +21,19 @@ pub use bridge::{
 };
 pub use commands::activity::{
     ActivityEventEmitter, ActivityHostUpdate, ActivityOptions, ActivityRecord, ActivityRegistry,
+    DOCUMENT_CLOSED_COMMAND, DOCUMENT_OPENED_COMMAND, KeepAwake, KeepAwakeGuard,
     SabineActivityLease, host_update_json,
 };
 pub use commands::window::{WindowControl, WindowSize};
 pub use commands::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, APPEARANCE_EVENT, CONTROLS_OVERLAY_COMMAND,
     CONTROLS_OVERLAY_EVENT, DISPLAYS_COMMAND, DISPLAYS_EVENT, DRAG_FILES_COMMAND,
-    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND, NOTIFICATION_CLOSE_COMMAND,
+    HOLD_REVEAL_COMMAND, IDLE_EVENT, IDLE_UNWATCH_COMMAND, IDLE_WATCH_COMMAND,
+    INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND, NOTIFICATION_CLOSE_COMMAND,
     NOTIFICATION_COMMAND_PREFIX, NOTIFICATION_SHOW_COMMAND, OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND,
-    PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND,
-    SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND, clipboard, media, page_commands,
+    POWER_STATE_COMMAND, PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND, REVEAL_COMMAND,
+    SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND, clipboard, media,
+    page_commands,
 };
 pub use guest::{
     GuestBounds, GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
@@ -46,6 +49,7 @@ pub const INSTALL_SCRIPT: &str = concat!(
     include_str!("scripts/bridge/notifications.js"),
     include_str!("scripts/bridge/drag.js"),
     include_str!("scripts/bridge/activity.js"),
+    include_str!("scripts/bridge/power.js"),
     include_str!("scripts/bridge/guest.js"),
     "})();\n",
 );

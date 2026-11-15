@@ -5,13 +5,14 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use sabine_platform::{PlatformEvent, SingleInstancePolicy};
+use sabine_platform::{PlatformEvent, PowerEvent, PowerSource, SingleInstancePolicy};
 
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
 use super::listeners::WindowReports;
 use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher, REQUEST_PREFIX};
 use super::writer::BridgeWriter;
+use crate::desktop::IdleWatches;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
 use crate::window::{DISPLAYS_LINE, PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowListeners};
 
@@ -60,6 +61,24 @@ pub(crate) fn platform_event_payload(
             }),
         ),
         PlatformEvent::Notification { .. } => return None,
+        PlatformEvent::Power(event) => power_event_payload(event),
+    })
+}
+
+fn power_event_payload(event: PowerEvent) -> (&'static str, serde_json::Value) {
+    match event {
+        PowerEvent::Suspending => ("system.suspend", serde_json::Value::Null),
+        PowerEvent::Resumed => ("system.resume", serde_json::Value::Null),
+        PowerEvent::Locked => ("system.lock", serde_json::Value::Null),
+        PowerEvent::Unlocked => ("system.unlock", serde_json::Value::Null),
+        PowerEvent::Source(source) => ("system.powerSource", power_source_json(source)),
+    }
+}
+
+pub(crate) fn power_source_json(source: PowerSource) -> serde_json::Value {
+    serde_json::json!({
+        "onBattery": source.on_battery,
+        "batteryLevel": source.battery_level,
     })
 }
 
@@ -87,6 +106,7 @@ pub(crate) fn spawn_bridge_dispatch(
     child: &mut Child,
     bridge_runtime: sabine_bridge::BridgeRuntime,
     activity: sabine_bridge::ActivityRegistry,
+    idle: IdleWatches,
     emitter: &BridgeEventEmitter,
     listeners: WindowListeners,
 ) -> BridgeDispatch {
@@ -104,8 +124,13 @@ pub(crate) fn spawn_bridge_dispatch(
         .expect("the window host's output is piped");
     let (ready_sender, ready) = crossbeam_channel::bounded(1);
     let emitter = emitter.clone();
-    let dispatcher =
-        BridgeRequestDispatcher::new(bridge_runtime, activity.clone(), emitter.clone(), writer);
+    let dispatcher = BridgeRequestDispatcher::new(
+        bridge_runtime,
+        activity.clone(),
+        idle.clone(),
+        emitter.clone(),
+        writer,
+    );
     let listeners = Arc::new(listeners);
     let reports = WindowReports::new(window, Arc::clone(&listeners), emitter.clone());
     let thread = thread::spawn(move || {
@@ -120,6 +145,7 @@ pub(crate) fn spawn_bridge_dispatch(
             let _ = ready_sender.try_send(());
         });
         activity.release_window(window);
+        idle.release_window(window);
         emitter.detach(window);
         reports.closed();
     });
@@ -208,6 +234,7 @@ mod tests {
         let dispatcher = BridgeRequestDispatcher::new(
             BridgeRuntime::new(BridgeHandlers::default()),
             ActivityRegistry::default(),
+            IdleWatches::default(),
             emitter.clone(),
             writer,
         );

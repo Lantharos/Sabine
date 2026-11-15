@@ -11,11 +11,12 @@ mod window;
 
 pub use desktop::{
     AppBadge, AppProgress, Appearance, AppearanceWatcher, AutostartEntry, DeepLinkRegistration,
-    GlobalShortcutActivation, GlobalShortcutFailure, GlobalShortcutRegistration,
-    NativeMessagingHost, Notification, NotificationAction, NotificationEvent, NotificationEvents,
-    Notifier, PlatformEvent, RecentDocuments, Shortcut, ShortcutModifiers,
-    SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
-    TrayMenuItemKind, Urgency, secrets, shell,
+    GlobalShortcutActivation, GlobalShortcutFailure, GlobalShortcutRegistration, IdleEvents,
+    IdleState, IdleWatch, NativeMessagingHost, Notification, NotificationAction, NotificationEvent,
+    NotificationEvents, Notifier, PlatformEvent, PowerEvent, PowerEvents, PowerSource, PowerState,
+    PowerStatus, PowerWatcher, RecentDocuments, Shortcut, ShortcutModifiers,
+    SingleInstanceActivation, SingleInstancePolicy, SleepBlocker, TrayActivation, TrayIcon,
+    TrayMenuItem, TrayMenuItemKind, Urgency, secrets, shell,
 };
 pub use display::{Display, DisplayRect, DisplayWatcher, displays};
 #[cfg(target_os = "linux")]

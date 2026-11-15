@@ -52,8 +52,17 @@ pub const PRINT_FILES_COMMAND: &str = "sabine.print.files";
 pub const OPEN_LINK_COMMAND: &str = "sabine.shell.openLink";
 /// Opens a folder in the person's file manager.
 pub const SHOW_FOLDER_COMMAND: &str = "sabine.shell.showFolder";
+/// The power source and screen lock as the desktop last reported them.
+pub const POWER_STATE_COMMAND: &str = "sabine.power.state";
+/// Watches for the person going idle for a number of seconds, until the
+/// page that asked goes away or sends [`IDLE_UNWATCH_COMMAND`].
+pub const IDLE_WATCH_COMMAND: &str = "sabine.idle.watch";
+pub const IDLE_UNWATCH_COMMAND: &str = "sabine.idle.unwatch";
+/// Sent to a window when a watch of its pages sees the person go idle or
+/// come back.
+pub const IDLE_EVENT: &str = "system.idle";
 
-const WINDOW_COMMANDS: [&str; 19] = [
+const WINDOW_COMMANDS: [&str; 21] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
@@ -73,6 +82,8 @@ const WINDOW_COMMANDS: [&str; 19] = [
     PRINT_FILES_COMMAND,
     OPEN_LINK_COMMAND,
     SHOW_FOLDER_COMMAND,
+    IDLE_WATCH_COMMAND,
+    IDLE_UNWATCH_COMMAND,
 ];
 
 /// Every command a window's pages may call: the app's own, Sabine's, and the

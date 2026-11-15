@@ -37,6 +37,20 @@ export interface Display {
   primary: boolean;
 }
 
+export interface PowerSource {
+  onBattery: boolean;
+  /** The battery's charge in percent, on machines with a battery. */
+  batteryLevel: number | null;
+}
+
+export interface PowerState {
+  /** `null` until the desktop has reported it, shortly after the app starts. */
+  source: PowerSource | null;
+  locked: boolean;
+}
+
+export type IdleState = "idle" | "active";
+
 export interface SabineSystemApi {
   /**
    * The desktop's light or dark preference, accent color and glass. Pages
@@ -49,6 +63,19 @@ export interface SabineSystemApi {
    * `events.displaysChanged`.
    */
   displays(): Promise<Display[]>;
+  /**
+   * The power source and screen lock as the desktop last reported them.
+   * Changes arrive through `events.powerSourceChanged`, `events.screenLocked`
+   * and `events.screenUnlocked`.
+   */
+  power(): Promise<PowerState>;
+  /**
+   * Calls `callback` with `"idle"` once nobody used the keyboard, pointer or
+   * touch for `seconds`, and with `"active"` when someone does again. Resolves
+   * with a function that stops watching; the watch also stops when the page
+   * goes away.
+   */
+  watchIdle(seconds: number, callback: (state: IdleState) => void): Promise<() => void>;
 }
 
 export declare const system: SabineSystemApi;

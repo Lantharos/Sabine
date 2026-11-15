@@ -321,4 +321,5 @@ pub enum PlatformEvent {
         window: u32,
         event: crate::NotificationEvent,
     },
+    Power(crate::PowerEvent),
 }

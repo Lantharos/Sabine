@@ -6,15 +6,19 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::bridge::{BridgeCommand, BridgeError, BridgeResponse, BridgeResult};
+use keep_awake::Waker;
+pub use keep_awake::{KeepAwake, KeepAwakeGuard};
+
+mod keep_awake;
 
 const BEGIN_COMMAND: &str = "sabine.activity.begin";
 const END_COMMAND: &str = "sabine.activity.end";
 const LIST_COMMAND: &str = "sabine.activity.list";
 /// Sent by every page as it loads, ending what the documents it replaced in
 /// the same browser began, such as before a reload or a renderer crash.
-const DOCUMENT_OPENED_COMMAND: &str = "sabine.activity.documentOpened";
+pub const DOCUMENT_OPENED_COMMAND: &str = "sabine.activity.documentOpened";
 /// Sent by a page as it goes away, ending what it began.
-const DOCUMENT_CLOSED_COMMAND: &str = "sabine.activity.documentClosed";
+pub const DOCUMENT_CLOSED_COMMAND: &str = "sabine.activity.documentClosed";
 const MAX_PAGE_ACTIVITIES_PER_WINDOW: usize = 32;
 
 pub(super) const COMMANDS: [&str; 5] = [
@@ -29,6 +33,7 @@ pub(super) const COMMANDS: [&str; 5] = [
 pub struct ActivityOptions {
     pub name: String,
     pub keep_running: bool,
+    pub keep_awake: Option<KeepAwake>,
 }
 
 impl ActivityOptions {
@@ -36,7 +41,15 @@ impl ActivityOptions {
         Self {
             name: name.into(),
             keep_running: true,
+            keep_awake: None,
         }
+    }
+
+    /// Keeps the machine from sleeping while the activity runs, with its
+    /// name as the reason.
+    pub fn keep_awake(mut self, keep_awake: KeepAwake) -> Self {
+        self.keep_awake = Some(keep_awake);
+        self
     }
 
     /// Whether the page keeps running while its window is out of sight
@@ -52,6 +65,7 @@ pub struct ActivityRecord {
     pub id: String,
     pub name: String,
     pub keep_running: bool,
+    pub keep_awake: Option<KeepAwake>,
     /// The window whose page began the activity, which it keeps running.
     /// The app's own activities have none and keep every window running.
     pub window: Option<u32>,
@@ -60,6 +74,7 @@ pub struct ActivityRecord {
 #[derive(Clone, Debug, Default)]
 pub struct ActivityRegistry {
     inner: Arc<Mutex<ActivityState>>,
+    waker: Waker,
 }
 
 pub struct SabineActivityLease {
@@ -78,6 +93,8 @@ struct ActivityState {
 struct Entry {
     record: ActivityRecord,
     page: Option<Page>,
+    /// Keeps the machine awake until the activity ends.
+    _awake: Option<KeepAwakeGuard>,
 }
 
 /// The document that began an activity, in the browser that shows it.
@@ -103,9 +120,21 @@ impl ActivityHostUpdate {
 }
 
 impl ActivityRegistry {
+    /// A registry whose activities keep the machine awake through `wake`,
+    /// which is handed the kind of wakefulness and the activity's name and
+    /// keeps the machine awake until what it returns is dropped.
+    pub fn keeping_awake(
+        wake: impl Fn(KeepAwake, &str) -> KeepAwakeGuard + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            waker: Waker::new(wake),
+            ..Self::default()
+        }
+    }
+
     pub fn begin(&self, options: ActivityOptions) -> ActivityRecord {
         let mut state = self.state();
-        state.insert(options, None)
+        state.insert(options, None, &self.waker)
     }
 
     pub fn end(&self, id: &str) -> Option<ActivityRecord> {
@@ -220,7 +249,7 @@ impl ActivityRegistry {
                 "a window's pages can keep at most {MAX_PAGE_ACTIVITIES_PER_WINDOW} activities at once"
             )));
         }
-        Ok(state.insert(options, Some(page)))
+        Ok(state.insert(options, Some(page), &self.waker))
     }
 
     fn release(&self, ends: impl Fn(&Page) -> bool) -> Vec<ActivityRecord> {
@@ -295,19 +324,29 @@ impl ActivityRegistry {
 }
 
 impl ActivityState {
-    fn insert(&mut self, options: ActivityOptions, page: Option<Page>) -> ActivityRecord {
+    fn insert(
+        &mut self,
+        options: ActivityOptions,
+        page: Option<Page>,
+        waker: &Waker,
+    ) -> ActivityRecord {
         self.next_id += 1;
         let record = ActivityRecord {
             id: format!("activity-{}", self.next_id),
             name: normalize_name(&options.name),
             keep_running: options.keep_running,
+            keep_awake: options.keep_awake,
             window: page.as_ref().map(|page| page.window),
         };
+        let awake = record
+            .keep_awake
+            .and_then(|keep_awake| waker.wake(keep_awake, &record.name));
         self.entries.insert(
             record.id.clone(),
             Entry {
                 record: record.clone(),
                 page,
+                _awake: awake,
             },
         );
         record
@@ -369,6 +408,10 @@ fn options_of(params: &Value) -> ActivityOptions {
             .get("keepRunning")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        keep_awake: params
+            .get("keepAwake")
+            .and_then(Value::as_str)
+            .and_then(KeepAwake::parse),
     }
 }
 
@@ -385,111 +428,9 @@ fn record_json(record: &ActivityRecord) -> Value {
         "id": record.id,
         "name": record.name,
         "keepRunning": record.keep_running,
+        "keepAwake": record.keep_awake.map(KeepAwake::as_str),
     })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    struct CountingEmitter(Arc<AtomicUsize>);
-
-    impl ActivityEventEmitter for CountingEmitter {
-        fn emit_activity_update(&self, _update: &ActivityHostUpdate) -> bool {
-            self.0.fetch_add(1, Ordering::SeqCst);
-            true
-        }
-    }
-
-    fn command(name: &str, window: u32, params: Value) -> BridgeCommand {
-        BridgeCommand {
-            name: name.to_string(),
-            params,
-            origin: None,
-            body: None,
-            window: Some(window),
-        }
-    }
-
-    fn begin(registry: &ActivityRegistry, window: u32, document: &str) -> ActivityRecord {
-        let (_, updates) = registry
-            .dispatch_bridge_command(
-                &command(
-                    BEGIN_COMMAND,
-                    window,
-                    json!({ "name": "backup", "document": document }),
-                ),
-                "1",
-            )
-            .expect("activity command");
-        updates[0].record().clone()
-    }
-
-    #[test]
-    fn activities_keep_the_page_running_by_default() {
-        let registry = ActivityRegistry::default();
-        let record = begin(&registry, 7, "a");
-        assert_eq!(record.name, "backup");
-        assert!(record.keep_running);
-        assert_eq!(record.window, Some(7));
-    }
-
-    #[test]
-    fn pages_end_only_their_own_browsers_activities() {
-        let registry = ActivityRegistry::default();
-        let record = begin(&registry, 7, "a");
-        let end = |window, browser| {
-            registry
-                .dispatch_bridge_command(
-                    &command(END_COMMAND, window, json!({ "id": record.id })),
-                    browser,
-                )
-                .expect("activity command")
-        };
-        assert!(end(8, "1").1.is_empty());
-        assert!(end(7, "2").1.is_empty());
-        assert!(matches!(end(7, "1").1[..], [ActivityHostUpdate::End(_)]));
-        assert!(registry.list().is_empty());
-    }
-
-    #[test]
-    fn a_window_keeps_a_bounded_number_of_page_activities() {
-        let registry = ActivityRegistry::default();
-        for _ in 0..MAX_PAGE_ACTIVITIES_PER_WINDOW {
-            begin(&registry, 7, "a");
-        }
-        let (result, updates) = registry
-            .dispatch_bridge_command(&command(BEGIN_COMMAND, 7, json!({ "document": "a" })), "1")
-            .expect("activity command");
-        assert!(result.is_err());
-        assert!(updates.is_empty());
-        begin(&registry, 8, "b");
-    }
-
-    #[test]
-    fn a_new_document_ends_what_the_one_before_it_began() {
-        let registry = ActivityRegistry::default();
-        begin(&registry, 7, "before");
-        let other_window = begin(&registry, 8, "elsewhere");
-        let (_, updates) = registry
-            .dispatch_bridge_command(
-                &command(DOCUMENT_OPENED_COMMAND, 7, json!({ "document": "after" })),
-                "1",
-            )
-            .expect("activity command");
-        assert_eq!(updates.len(), 1);
-        assert_eq!(registry.list(), vec![other_window]);
-    }
-
-    #[test]
-    fn lease_emits_begin_and_end() {
-        let counter = Arc::new(AtomicUsize::new(0));
-        let emitter: Arc<dyn ActivityEventEmitter> = Arc::new(CountingEmitter(counter.clone()));
-        let registry = ActivityRegistry::default();
-        let lease = registry.lease(ActivityOptions::new("job"), Some(emitter));
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
-        lease.end();
-        assert_eq!(counter.load(Ordering::SeqCst), 2);
-    }
-}
+mod tests;

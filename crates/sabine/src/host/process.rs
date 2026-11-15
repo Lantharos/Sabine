@@ -86,6 +86,7 @@ pub struct SabineProcess {
     pub(crate) desktop_event_thread: Option<JoinHandle<()>>,
     pub(crate) desktop_event_stop: Option<crossbeam_channel::Sender<()>>,
     pub(crate) activity: sabine_bridge::ActivityRegistry,
+    pub(crate) idle: crate::desktop::IdleWatches,
     pub(crate) metrics: LaunchMetrics,
     pub(crate) windows: WindowContext,
     #[cfg(target_os = "linux")]

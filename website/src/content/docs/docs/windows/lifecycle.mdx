@@ -127,6 +127,7 @@ try {
 | --- | --- | --- |
 | `name` | `"activity"` | Shown in diagnostics; up to 128 characters |
 | `keepRunning` | `true` | Keeps the page from freezing. With `false`, the activity is only recorded |
+| `keepAwake` | none | `"system"` keeps the system from sleeping, `"display"` keeps the screen on too, with the name as the reason. See [Power and idle](/docs/desktop/power-and-idle/#keeping-the-machine-awake) |
 
 An activity belongs to the document that began it. It keeps only its own window running, and ends
 by itself when the page reloads, navigates away, loses its renderer, or its window closes, so an
@@ -168,7 +169,8 @@ fn run_initial_sync() {
 }
 ```
 
-`begin_activity_with(ActivityOptions::new("Indexing").keep_running(false))` sets the options, and
+`begin_activity_with(ActivityOptions::new("Indexing").keep_running(false))` sets the options,
+`.keep_awake(KeepAwake::System)` keeps the machine awake while it runs, and
 `process.activities()` lists everything running.
 
 ## Frame rates

@@ -5,7 +5,7 @@ use std::sync::{
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
-use sabine_platform::{AppBadge, AppProgress};
+use sabine_platform::{AppBadge, AppProgress, PowerState, PowerStatus};
 
 use super::page_window::PageWindow;
 use super::process::{
@@ -26,6 +26,7 @@ pub struct SabineProcessHandle {
     pub(super) command_sender: crossbeam_channel::Sender<ProcessCommand>,
     autostart: Autostart,
     launcher: Launcher,
+    power: PowerStatus,
 }
 
 impl SabineProcessHandle {
@@ -33,6 +34,7 @@ impl SabineProcessHandle {
     pub(crate) fn new(
         autostart: Autostart,
         launcher: Launcher,
+        power: PowerStatus,
     ) -> (Self, crossbeam_channel::Receiver<ProcessCommand>) {
         let (command_sender, commands) = crossbeam_channel::unbounded();
         (
@@ -40,6 +42,7 @@ impl SabineProcessHandle {
                 command_sender,
                 autostart,
                 launcher,
+                power,
             },
             commands,
         )
@@ -140,5 +143,11 @@ impl SabineProcessHandle {
     /// Takes the files the app added off the desktop's list of recent files.
     pub fn clear_recent_documents(&self) -> Result<(), String> {
         self.launcher.clear_recent_documents()
+    }
+
+    /// The power source and screen lock as the desktop last reported them.
+    /// Changes arrive as [`PlatformEvent::Power`](sabine_platform::PlatformEvent::Power).
+    pub fn power_state(&self) -> PowerState {
+        self.power.get()
     }
 }

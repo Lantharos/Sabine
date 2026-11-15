@@ -19,13 +19,14 @@ const ADDRESS: &str = "DBUS_SESSION_BUS_ADDRESS";
 const DEFAULT_BUS: &str = "bus";
 /// An address no bus answers on, for an app whose bus can't be filtered.
 const NO_BUS: &str = "unix:path=/dev/null";
-/// The desktop portal and document portal, desktop notifications and the
-/// tray's watcher.
-const SABINE_NAMES: [&str; 4] = [
+/// The desktop portal and document portal, desktop notifications, the
+/// tray's watcher and GNOME's idle monitor.
+const SABINE_NAMES: [&str; 5] = [
     "org.freedesktop.portal.Desktop",
     "org.freedesktop.portal.Documents",
     "org.freedesktop.Notifications",
     "org.kde.StatusNotifierWatcher",
+    "org.gnome.Mutter.IdleMonitor",
 ];
 
 /// Keeps the app's filtered bus running: the proxy ends, and removes its

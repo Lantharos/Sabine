@@ -6,12 +6,20 @@ export interface ActivityOptions {
    * Defaults to `true`.
    */
   keepRunning?: boolean;
+  /**
+   * Keeps the machine from sleeping while the activity runs, with `name` as the
+   * reason: `"system"` keeps the system awake and `"display"` the screen on too.
+   */
+  keepAwake?: KeepAwake;
 }
+
+export type KeepAwake = "system" | "display";
 
 export interface ActivityRecord {
   id: string;
   name: string;
   keepRunning: boolean;
+  keepAwake: KeepAwake | null;
 }
 
 export interface ActivityEnd {
