@@ -49,6 +49,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | Inhibit system shortcuts | Shortcuts inhibitor protocol | Low-level keyboard hook | Event tap, needs Accessibility permission |
 | [Single instance](/docs/desktop/single-instance/) | Yes | Yes | Yes, plus Dock and Finder reopen |
 | [Deep links and documents](/docs/desktop/links-and-documents/) | Desktop entry and `mimeapps.list`; documents match by extension or MIME type | Per-user registry; documents match by extension | Bundled apps only; documents match by extension |
+| [Session restore](/docs/windows/session-restore/) | With `xdg_toplevel_tag_v1` | No | No |
 | [Autostart](/docs/desktop/autostart/) | XDG autostart entry | `Run` registry key | LaunchAgent |
 | [Clipboard](/docs/desktop/clipboard-and-drag/) | Owned by Sabine, every type, primary selection | Chromium's, plus other types through the package | Chromium's, plus other types through the package |
 | Drag and drop | Yes | Yes | Yes |
