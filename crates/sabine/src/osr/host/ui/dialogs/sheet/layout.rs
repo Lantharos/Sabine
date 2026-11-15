@@ -4,16 +4,14 @@ use super::Target;
 use super::field::TextField;
 use crate::MessageDialog;
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::ui::surface::{BUTTON_HEIGHT, LINE_HEIGHT, Rect, TEXT_SIZE};
 use crate::render::{GpuRenderer, TextWeight};
 
 pub(super) const PADDING: f32 = 20.0;
 pub(super) const TITLE_SIZE: f32 = 15.0;
 pub(super) const TITLE_LINE: f32 = 20.0;
-pub(super) const MESSAGE_SIZE: f32 = 13.0;
-pub(super) const MESSAGE_LINE: f32 = 18.0;
 pub(super) const FIELD_HEIGHT: f32 = 30.0;
 pub(super) const FIELD_INSET: f32 = 9.0;
-pub(super) const BUTTON_HEIGHT: f32 = 28.0;
 const MAX_WIDTH: f32 = 380.0;
 const EDGE_MARGIN: f32 = 16.0;
 const MESSAGE_GAP: f32 = 6.0;
@@ -22,20 +20,6 @@ const BUTTONS_GAP: f32 = 20.0;
 const BUTTON_INSET: f32 = 14.0;
 const BUTTON_MIN_WIDTH: f32 = 72.0;
 const BUTTON_SPACING: f32 = 8.0;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(super) struct Rect {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) width: f32,
-    pub(super) height: f32,
-}
-
-impl Rect {
-    pub(super) fn contains(self, x: f32, y: f32) -> bool {
-        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
-    }
-}
 
 /// Where a sheet's parts sit for one size of the window, and the part of
 /// its field's text that fits the field.
@@ -65,7 +49,7 @@ impl SheetLayout {
             .buttons
             .iter()
             .map(|label| {
-                (renderer.measure_text(label, MESSAGE_SIZE) + BUTTON_INSET * 2.0)
+                (renderer.measure_text(label, TEXT_SIZE) + BUTTON_INSET * 2.0)
                     .ceil()
                     .max(BUTTON_MIN_WIDTH)
             })
@@ -103,8 +87,8 @@ impl SheetLayout {
         );
         let mut message = block(
             &dialog.message,
-            MESSAGE_SIZE,
-            MESSAGE_LINE,
+            TEXT_SIZE,
+            LINE_HEIGHT,
             TextWeight::Regular,
             MESSAGE_GAP,
         );
@@ -114,7 +98,7 @@ impl SheetLayout {
         if let Some(message) = message.as_mut() {
             let overflow = cursor + controls - room;
             if overflow > 0.0 {
-                message.height = (message.height - overflow).max(MESSAGE_LINE);
+                message.height = (message.height - overflow).max(LINE_HEIGHT);
                 cursor = message.y + message.height;
             }
         }
@@ -176,7 +160,7 @@ impl SheetLayout {
             return;
         };
         let shown = field.shown();
-        self.offsets = renderer.measure_text_offsets(&shown, MESSAGE_SIZE);
+        self.offsets = renderer.measure_text_offsets(&shown, TEXT_SIZE);
         let inner = rect.width - FIELD_INSET * 2.0;
         let caret = field.caret + field.preedit.len();
         let mut start = self.view.start.min(caret);

@@ -1,18 +1,13 @@
-use std::sync::Arc;
-
-use super::layout::{
-    BUTTON_HEIGHT, FIELD_INSET, MESSAGE_LINE, MESSAGE_SIZE, Rect, SheetLayout, TITLE_LINE,
-    TITLE_SIZE,
-};
+use super::layout::{FIELD_INSET, SheetLayout, TITLE_LINE, TITLE_SIZE};
 use super::{OpenSheet, Target};
 use crate::osr::host::native::OsrNativeHost;
-use crate::osr::host::ui::context_menu::draw::{MenuPalette, RADIUS};
-use crate::render::{
-    DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
+use crate::osr::host::ui::surface::{
+    Button, LINE_HEIGHT, Palette, Rect, TEXT_SIZE, button, panel, rounded,
 };
+use crate::render::{DisplayList, RectCommand, TextAlign, TextCommand, TextWeight};
 use crate::window::style::Color;
 
-const CONTROL_RADIUS: f32 = 6.0;
+const FIELD_RADIUS: f32 = 6.0;
 const CARET_INSET: f32 = 7.0;
 
 impl OsrNativeHost {
@@ -23,35 +18,23 @@ impl OsrNativeHost {
         let Some(layout) = &open.layout else {
             return;
         };
-        let appearance = self.appearance();
-        let dark = appearance.is_none_or(|appearance| appearance.dark);
-        let palette = SheetPalette::new(
-            MenuPalette::new(dark),
-            appearance.and_then(|appearance| appearance.accent),
-            dark,
-        );
+        let palette = Palette::new(self.appearance());
         let top = self.titlebar_height();
         list.push(RectCommand {
             x: 0.0,
             y: top,
             width,
             height: height - top,
-            color: palette.scrim,
+            color: Color::rgba8(0, 0, 0, if palette.dark { 92 } else { 46 }),
         });
-        rounded(
-            list,
-            outset(layout.panel, 1.0),
-            RADIUS + 1.0,
-            palette.menu.border,
-        );
-        rounded(list, layout.panel, RADIUS, palette.menu.background);
+        panel(list, layout.panel, &palette);
         if let Some(title) = layout.title {
             list.push(text(
                 &open.dialog.title,
                 title,
                 TITLE_SIZE,
                 TITLE_LINE,
-                palette.menu.text,
+                palette.text,
                 TextWeight::Semibold,
             ));
         }
@@ -59,41 +42,50 @@ impl OsrNativeHost {
             list.push(text(
                 &open.dialog.message,
                 message,
-                MESSAGE_SIZE,
-                MESSAGE_LINE,
-                palette.secondary,
+                TEXT_SIZE,
+                LINE_HEIGHT,
+                palette.text.opacity(0.7),
                 TextWeight::Regular,
             ));
         }
         draw_field(list, open, layout, &palette);
         for (index, rect) in layout.buttons.iter().copied().enumerate() {
-            draw_button(list, open, index, rect, &palette);
+            let target = Some(Target::Button(index));
+            let button_shown = Button {
+                rect,
+                label: &open.dialog.buttons[index],
+                primary: index == open.dialog.default_button,
+                hovered: open.hovered == target,
+                pressed: open.pressed == target,
+                focused: open.focus_visible && Some(open.focus) == target,
+            };
+            button(list, &button_shown, &palette);
         }
     }
 }
 
-fn draw_field(
-    list: &mut DisplayList,
-    open: &OpenSheet,
-    layout: &SheetLayout,
-    palette: &SheetPalette,
-) {
+fn draw_field(list: &mut DisplayList, open: &OpenSheet, layout: &SheetLayout, palette: &Palette) {
     let (Some(field), Some(rect)) = (&open.field, layout.field) else {
         return;
     };
     let focused = open.focus == Target::Field;
     let border = if focused {
-        palette.ring
+        palette.ring()
     } else {
-        palette.menu.border
+        palette.border
     };
-    rounded(list, outset(rect, 1.0), CONTROL_RADIUS + 1.0, border);
-    rounded(list, rect, CONTROL_RADIUS, palette.field);
+    let fill = if palette.dark {
+        Color::rgb8(29, 29, 32)
+    } else {
+        Color::WHITE
+    };
+    rounded(list, rect.outset(1.0), FIELD_RADIUS + 1.0, border);
+    rounded(list, rect, FIELD_RADIUS, fill);
     let line = Rect {
         x: rect.x + FIELD_INSET,
-        y: rect.y + (rect.height - MESSAGE_LINE) * 0.5,
+        y: rect.y + (rect.height - LINE_HEIGHT) * 0.5,
         width: rect.width - FIELD_INSET * 2.0,
-        height: MESSAGE_LINE,
+        height: LINE_HEIGHT,
     };
     let shown = field.shown();
     if shown.is_empty() {
@@ -105,9 +97,9 @@ fn draw_field(
         list.push(text(
             placeholder,
             line,
-            MESSAGE_SIZE,
-            MESSAGE_LINE,
-            palette.menu.disabled,
+            TEXT_SIZE,
+            LINE_HEIGHT,
+            palette.disabled,
             TextWeight::Regular,
         ));
     }
@@ -122,7 +114,7 @@ fn draw_field(
             y: rect.y + CARET_INSET - 1.0,
             width: end - start,
             height: rect.height - (CARET_INSET - 1.0) * 2.0,
-            color: palette.selection,
+            color: palette.accent.unwrap_or(palette.text).opacity(0.28),
         });
     }
     list.push(text(
@@ -131,9 +123,9 @@ fn draw_field(
             width: line.width + 2.0,
             ..line
         },
-        MESSAGE_SIZE,
-        MESSAGE_LINE,
-        palette.menu.text,
+        TEXT_SIZE,
+        LINE_HEIGHT,
+        palette.text,
         TextWeight::Regular,
     ));
     if !field.preedit.is_empty() {
@@ -146,7 +138,7 @@ fn draw_field(
             y: line.y + line.height - 2.0,
             width: end - start,
             height: 1.0,
-            color: palette.menu.text,
+            color: palette.text,
         });
     }
     if focused && selection.is_empty() {
@@ -155,56 +147,9 @@ fn draw_field(
             y: rect.y + CARET_INSET,
             width: 1.0,
             height: rect.height - CARET_INSET * 2.0,
-            color: palette.menu.text,
+            color: palette.text,
         });
     }
-}
-
-fn draw_button(
-    list: &mut DisplayList,
-    open: &OpenSheet,
-    index: usize,
-    rect: Rect,
-    palette: &SheetPalette,
-) {
-    let target = Target::Button(index);
-    let primary = index == open.dialog.default_button;
-    let hovered = open.hovered == Some(target);
-    let pressed = hovered && open.pressed == Some(target);
-    let (fill, label) = match (primary, pressed, hovered) {
-        (true, true, _) => (palette.primary.opacity(0.8), palette.primary_text),
-        (true, false, true) => (palette.primary.opacity(0.9), palette.primary_text),
-        (true, false, false) => (palette.primary, palette.primary_text),
-        (false, true, _) => (palette.pressed, palette.menu.text),
-        (false, false, true) => (palette.hovered, palette.menu.text),
-        (false, false, false) => (palette.menu.highlight, palette.menu.text),
-    };
-    if open.focus_visible && open.focus == target {
-        rounded(list, outset(rect, 3.0), CONTROL_RADIUS + 3.0, palette.ring);
-        rounded(
-            list,
-            outset(rect, 1.5),
-            CONTROL_RADIUS + 1.5,
-            palette.menu.background,
-        );
-    }
-    rounded(list, rect, CONTROL_RADIUS, fill);
-    list.push(TextCommand {
-        text: open.dialog.buttons[index].as_str().into(),
-        x: rect.x,
-        y: rect.y + (BUTTON_HEIGHT - MESSAGE_LINE) * 0.5,
-        width: rect.width,
-        height: MESSAGE_LINE,
-        size: MESSAGE_SIZE,
-        line_height: MESSAGE_LINE,
-        color: label,
-        align: TextAlign::Center,
-        weight: if primary {
-            TextWeight::Semibold
-        } else {
-            TextWeight::Regular
-        },
-    });
 }
 
 fn text(
@@ -216,7 +161,7 @@ fn text(
     weight: TextWeight,
 ) -> TextCommand {
     TextCommand {
-        text: Arc::from(content),
+        text: content.into(),
         x: rect.x,
         y: rect.y,
         width: rect.width,
@@ -226,67 +171,5 @@ fn text(
         color,
         align: TextAlign::Left,
         weight,
-    }
-}
-
-fn rounded(list: &mut DisplayList, rect: Rect, radius: f32, color: Color) {
-    list.push(RoundedRectCommand {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        radius,
-        color,
-    });
-}
-
-fn outset(rect: Rect, by: f32) -> Rect {
-    Rect {
-        x: rect.x - by,
-        y: rect.y - by,
-        width: rect.width + by * 2.0,
-        height: rect.height + by * 2.0,
-    }
-}
-
-/// The context menu's colors, and the few a dialog adds: the dimmed page,
-/// the field, and the default button in the desktop's accent color.
-struct SheetPalette {
-    menu: MenuPalette,
-    scrim: Color,
-    secondary: Color,
-    field: Color,
-    primary: Color,
-    primary_text: Color,
-    hovered: Color,
-    pressed: Color,
-    ring: Color,
-    selection: Color,
-}
-
-impl SheetPalette {
-    fn new(menu: MenuPalette, accent: Option<[u8; 3]>, dark: bool) -> Self {
-        let accent = accent.map(|[r, g, b]| Color::rgb8(r, g, b));
-        let (primary, primary_text) = match accent {
-            Some(accent) => (accent, Color::rgb8(255, 255, 255)),
-            None => (menu.text, menu.background),
-        };
-        let ring = accent.unwrap_or(menu.text).opacity(0.55);
-        Self {
-            scrim: Color::rgba8(0, 0, 0, if dark { 92 } else { 46 }),
-            secondary: menu.text.opacity(if dark { 0.72 } else { 0.68 }),
-            field: if dark {
-                Color::rgb8(29, 29, 32)
-            } else {
-                Color::rgb8(255, 255, 255)
-            },
-            selection: accent.unwrap_or(menu.text).opacity(0.28),
-            hovered: menu.text.opacity(if dark { 0.15 } else { 0.12 }),
-            pressed: menu.text.opacity(if dark { 0.22 } else { 0.18 }),
-            primary,
-            primary_text,
-            ring,
-            menu,
-        }
     }
 }

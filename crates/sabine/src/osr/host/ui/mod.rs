@@ -1,13 +1,10 @@
-pub(in crate::osr::host) mod app_menu;
 pub(in crate::osr::host) mod chrome;
 mod chrome_hits;
-pub(in crate::osr::host) mod context_menu;
 pub(in crate::osr::host) mod cursor;
-mod file_dialog;
+pub(in crate::osr::host) mod dialogs;
 mod loading;
-mod loading_messages;
-pub(in crate::osr::host) mod permission_prompt;
-pub(in crate::osr::host) mod sheet;
+pub(in crate::osr::host) mod menus;
+mod surface;
 #[cfg(target_os = "windows")]
 pub(in crate::osr::host) mod taskbar;
 mod tooltip;

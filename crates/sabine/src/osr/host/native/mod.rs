@@ -151,11 +151,11 @@ pub(super) struct OsrNativeHost {
     /// When the page asked to hold back its first frame until it is ready.
     pub(super) reveal_held_since: Option<Instant>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
-    pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
+    pub(super) context_menu: Option<super::ui::menus::context::ContextMenu>,
     pub(super) permissions: super::page::PagePermissions,
-    pub(super) permission_prompt: Option<super::ui::permission_prompt::PermissionPrompt>,
-    pub(super) sheets: super::ui::sheet::Sheets,
-    pub(super) menus: super::ui::app_menu::Menus,
+    pub(super) permission_prompt: Option<super::ui::dialogs::permission_prompt::PermissionPrompt>,
+    pub(super) sheets: super::ui::dialogs::sheet::Sheets,
+    pub(super) menus: super::ui::menus::app::Menus,
     #[cfg(target_os = "linux")]
     pub(super) pending_activation_token: Option<winit::window::ActivationToken>,
     pub(super) drag: super::input::DragState,

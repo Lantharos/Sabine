@@ -4,10 +4,9 @@ mod message;
 use std::sync::Arc;
 
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::ui::surface::{BUTTON_HEIGHT, LINE_HEIGHT, Rect, TEXT_SIZE};
 
 const PADDING: f32 = 14.0;
-const TEXT_SIZE: f32 = 13.0;
-const LINE_HEIGHT: f32 = 18.0;
 const MAX_LINES: f32 = 3.0;
 /// Wrapping at words leaves lines shorter than the room they have.
 const WRAP_SLACK: f32 = 1.15;
@@ -15,7 +14,6 @@ const MIN_WIDTH: f32 = 280.0;
 const MAX_WIDTH: f32 = 380.0;
 const EDGE_MARGIN: f32 = 8.0;
 const TOP_MARGIN: f32 = 10.0;
-const BUTTON_HEIGHT: f32 = 28.0;
 const BUTTON_PADDING: f32 = 14.0;
 const BUTTON_GAP: f32 = 8.0;
 const ROW_GAP: f32 = 12.0;
@@ -42,29 +40,14 @@ struct PromptButton {
     allows: bool,
 }
 
-/// Where the prompt sits in the window, in logical pixels.
-#[derive(Clone, Copy)]
-struct Frame {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl Frame {
-    fn contains(self, x: f32, y: f32) -> bool {
-        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
-    }
-}
-
 impl PermissionPrompt {
     fn height(&self) -> f32 {
         PADDING * 2.0 + self.text_height + ROW_GAP + BUTTON_HEIGHT
     }
 
-    fn button_frame(&self, panel: Frame, index: usize) -> Frame {
+    fn button_frame(&self, panel: Rect, index: usize) -> Rect {
         let button = &self.buttons[index];
-        Frame {
+        Rect {
             x: panel.x + panel.width - button.offset,
             y: panel.y + panel.height - PADDING - BUTTON_HEIGHT,
             width: button.width,
@@ -72,7 +55,7 @@ impl PermissionPrompt {
         }
     }
 
-    fn button_at(&self, panel: Frame, x: f32, y: f32) -> Option<usize> {
+    fn button_at(&self, panel: Rect, x: f32, y: f32) -> Option<usize> {
         (0..self.buttons.len()).find(|index| self.button_frame(panel, *index).contains(x, y))
     }
 }
@@ -133,9 +116,9 @@ impl OsrNativeHost {
         }
     }
 
-    fn prompt_frame(&self) -> Option<Frame> {
+    fn prompt_frame(&self) -> Option<Rect> {
         let prompt = self.permission_prompt.as_ref()?;
-        Some(Frame {
+        Some(Rect {
             x: ((self.logical_width() - prompt.width) * 0.5).max(0.0),
             y: self.titlebar_height() + TOP_MARGIN,
             width: prompt.width,

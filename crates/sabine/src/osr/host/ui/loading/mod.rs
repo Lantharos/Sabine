@@ -1,3 +1,5 @@
+mod messages;
+
 use std::time::Instant;
 
 use crate::render::{
@@ -5,11 +7,11 @@ use crate::render::{
 };
 use crate::window::style::Color;
 
-use super::loading_messages::loading_message;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{
     LOADING_ANIMATION_INTERVAL, LOADING_MESSAGE_INTERVAL, NativeLoading,
 };
+use messages::loading_message;
 
 impl OsrNativeHost {
     pub(in crate::osr::host) fn draw_loading(

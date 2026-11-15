@@ -5,13 +5,13 @@ use super::panel::{
     TEXT_SIZE,
 };
 use crate::osr::host::native::OsrNativeHost;
+use crate::osr::host::ui::surface::{Palette, RADIUS};
 use crate::osr::protocol::MenuMark;
 use crate::render::{
     DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
 };
 use crate::window::style::Color;
 
-pub(in crate::osr::host::ui) const RADIUS: f32 = 8.0;
 const LINE_HEIGHT: f32 = 18.0;
 
 impl OsrNativeHost {
@@ -19,14 +19,14 @@ impl OsrNativeHost {
         let Some(menu) = &self.context_menu else {
             return;
         };
-        let palette = MenuPalette::new(self.appearance().is_none_or(|appearance| appearance.dark));
+        let palette = Palette::new(self.appearance());
         for open in &menu.panels {
             draw_panel(list, &open.panel, &palette);
         }
     }
 }
 
-fn draw_panel(list: &mut DisplayList, panel: &MenuPanel, palette: &MenuPalette) {
+fn draw_panel(list: &mut DisplayList, panel: &MenuPanel, palette: &Palette) {
     list.push(RoundedRectCommand {
         x: panel.x - 1.0,
         y: panel.y - 1.0,
@@ -69,7 +69,7 @@ fn draw_panel(list: &mut DisplayList, panel: &MenuPanel, palette: &MenuPalette) 
     }
 }
 
-fn draw_entry(list: &mut DisplayList, panel: &MenuPanel, entry: &MenuEntry, palette: &MenuPalette) {
+fn draw_entry(list: &mut DisplayList, panel: &MenuPanel, entry: &MenuEntry, palette: &Palette) {
     let color = if entry.item.enabled {
         palette.text
     } else {
@@ -129,40 +129,5 @@ fn mark_glyph(entry: &MenuEntry) -> Option<&'static str> {
         MenuMark::Check => Some("✓"),
         MenuMark::Radio => Some("•"),
         MenuMark::None => None,
-    }
-}
-
-/// The colors of the surfaces the window draws over the page, after the
-/// desktop's light or dark appearance.
-pub(in crate::osr::host::ui) struct MenuPalette {
-    pub(in crate::osr::host::ui) background: Color,
-    pub(in crate::osr::host::ui) border: Color,
-    pub(in crate::osr::host::ui) separator: Color,
-    pub(in crate::osr::host::ui) highlight: Color,
-    pub(in crate::osr::host::ui) text: Color,
-    pub(in crate::osr::host::ui) disabled: Color,
-}
-
-impl MenuPalette {
-    pub(in crate::osr::host::ui) fn new(dark: bool) -> Self {
-        if dark {
-            Self {
-                background: Color::rgb8(37, 37, 41),
-                border: Color::rgba8(255, 255, 255, 30),
-                separator: Color::rgba8(255, 255, 255, 24),
-                highlight: Color::rgba8(255, 255, 255, 22),
-                text: Color::rgb8(240, 240, 242),
-                disabled: Color::rgba8(240, 240, 242, 105),
-            }
-        } else {
-            Self {
-                background: Color::rgb8(250, 250, 251),
-                border: Color::rgba8(0, 0, 0, 38),
-                separator: Color::rgba8(0, 0, 0, 26),
-                highlight: Color::rgba8(0, 0, 0, 18),
-                text: Color::rgb8(24, 24, 27),
-                disabled: Color::rgba8(24, 24, 27, 110),
-            }
-        }
     }
 }

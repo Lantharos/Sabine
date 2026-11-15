@@ -1,4 +1,4 @@
-pub(in crate::osr::host::ui) mod draw;
+mod draw;
 mod items;
 mod panel;
 mod popup;
