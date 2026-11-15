@@ -48,8 +48,9 @@ yet, the current version, so a release you prepared and committed is published a
    the workspace, `actionlint` when it's installed, extracts the release notes, and runs
    `git diff --check`. `--prepare` stops here.
 
-4. Commits the edits as a signed `Prepare Sabine <version>` commit, pushes it, and waits for CI to
-   pass on that commit.
+4. Commits the edits as a signed `Prepare Sabine <version>` commit, pushes it, and waits for CI and
+   the native CEF host checks to pass on that commit, starting the host checks when the push
+   didn't.
 
 5. Creates a signed `v<version>` tag, pushes it, and waits for the release workflow to finish.
 

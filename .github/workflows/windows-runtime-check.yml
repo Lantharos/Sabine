@@ -19,9 +19,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - run: rustup toolchain install stable --profile minimal
       - run: rustup override set stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo build --locked -p sabine-host --example runtime_probe
       - name: Exercise the published host with each runtime
         shell: pwsh

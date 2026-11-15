@@ -1,10 +1,28 @@
 name: Native CEF host checks
 
 on:
+  push:
+    branches: [main]
+    paths: &host-paths
+      - crates/sabine-host/**
+      - crates/sabine/src/osr/**
+      - crates/sabine-runtime/**
+      - crates/sabine-bridge/**
+      - crates/sabine-cli/src/runtime.rs
+      - crates/sabine-cli/src/runtime/**
+      - Cargo.lock
+      - scripts/cef-cache.py
+      - .github/workflows/native-host.yml
+  pull_request:
+    paths: *host-paths
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   host:
@@ -16,6 +34,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -23,12 +43,28 @@ jobs:
           sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev libx11-dev libgtk-3-dev libnss3-dev libasound2-dev libgbm-dev libvulkan-dev ninja-build
       - run: rustup toolchain install stable --profile minimal
       - run: rustup override set stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: native-host
           cache-on-failure: true
       - name: Build CLI and service
         run: cargo build --locked -p sabine-cli -p sabine-service
+      - name: Find the current CEF runtime
+        id: cef
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/cef-cache.py
+      - name: Restore the CEF runtime and host
+        id: cef-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.cef.outputs.directory }}
+          key: ${{ steps.cef.outputs.key }}-${{ hashFiles('crates/sabine-host/**', 'crates/sabine-bridge/**') }}
+          restore-keys: ${{ steps.cef.outputs.key }}-
+      - name: Drop hosts built from other sources
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          CEF_DIRECTORY: ${{ steps.cef.outputs.directory }}
+        run: Remove-Item (Join-Path $env:CEF_DIRECTORY '.sabine-hosts') -Recurse -Force -ErrorAction Ignore
       - name: Build native CEF host
         shell: pwsh
         run: |
@@ -42,6 +78,18 @@ jobs:
             throw "Native host was not found: $hostPath"
           }
           "SABINE_HOST_PATH=$hostPath" >> $env:GITHUB_ENV
+      - name: Leave the host build tree out of the cache
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          CEF_DIRECTORY: ${{ steps.cef.outputs.directory }}
+        run: Remove-Item (Join-Path $env:CEF_DIRECTORY '.sabine-host-build') -Recurse -Force -ErrorAction Ignore
+      - name: Save the CEF runtime and host
+        if: steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.cef.outputs.directory }}
+          key: ${{ steps.cef-cache.outputs.cache-primary-key }}
       - name: Permit the Linux host sandbox under AppArmor
         if: runner.os == 'Linux'
         run: |

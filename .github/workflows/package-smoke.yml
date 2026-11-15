@@ -15,6 +15,7 @@ permissions:
 jobs:
   targets:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
     steps:
@@ -47,21 +48,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: website/package.json
       - run: rustup toolchain install stable --profile minimal
       - run: rustup override set stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: package-${{ matrix.target }}
           cache-on-failure: true
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes libwayland-dev libfontconfig1-dev libxkbcommon-dev dpkg-dev rpm
-          if [ "${{ matrix.target }}" = "appimage" ]; then
+          if [ "$PACKAGE_TARGET" = "appimage" ]; then
             curl --fail --location --output "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
             echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum --check
             sudo install -m 755 "$RUNNER_TEMP/appimagetool" /usr/local/bin/appimagetool
@@ -82,21 +87,51 @@ jobs:
         run: |
           choco install nsis --yes --no-progress
           "${env:ProgramFiles(x86)}\NSIS" >> $env:GITHUB_PATH
+      - name: Find the current CEF runtime
+        if: runner.os == 'Windows'
+        id: cef
+        run: python scripts/cef-cache.py
+      - name: Restore the CEF runtime and host
+        if: runner.os == 'Windows'
+        id: cef-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.cef.outputs.directory }}
+          key: ${{ steps.cef.outputs.key }}-${{ hashFiles('crates/sabine-host/**', 'crates/sabine-bridge/**') }}
+          restore-keys: ${{ steps.cef.outputs.key }}-
+      - name: Drop hosts built from other sources
+        if: runner.os == 'Windows' && steps.cef-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          CEF_DIRECTORY: ${{ steps.cef.outputs.directory }}
+        run: Remove-Item (Join-Path $env:CEF_DIRECTORY '.sabine-hosts') -Recurse -Force -ErrorAction Ignore
       - name: Build offline Windows setup dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo build --release --workspace
+          cargo build --release --locked --workspace
           if ($LASTEXITCODE -ne 0) { throw "workspace build failed" }
-          $hostPath = cargo run --release -p sabine-cli -- runtime prepare | Select-Object -Last 1
+          $hostPath = cargo run --release --locked -p sabine-cli -- runtime prepare | Select-Object -Last 1
           if ($LASTEXITCODE -ne 0) { throw "native host preparation failed" }
           Copy-Item $hostPath target/release/sabine-host.exe
           Copy-Item ([IO.Path]::ChangeExtension($hostPath, '.dll')) target/release/sabine-host.dll
           Copy-Item (Join-Path (Split-Path $hostPath) 'chrome_elf.dll') target/release/chrome_elf.dll
+      - name: Leave the host build tree out of the cache
+        if: runner.os == 'Windows' && steps.cef-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          CEF_DIRECTORY: ${{ steps.cef.outputs.directory }}
+        run: Remove-Item (Join-Path $env:CEF_DIRECTORY '.sabine-host-build') -Recurse -Force -ErrorAction Ignore
+      - name: Save the CEF runtime and host
+        if: runner.os == 'Windows' && steps.cef-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.cef.outputs.directory }}
+          key: ${{ steps.cef-cache.outputs.cache-primary-key }}
       - name: Generate real app and signing key
         shell: pwsh
         run: |
-          cargo run --release -p sabine-cli -- new release-probe
+          cargo run --release --locked -p sabine-cli -- new release-probe
           $cargoPath = (Join-Path $PWD 'crates/sabine').Replace('\', '/')
           $cargo = Get-Content release-probe/Cargo.toml -Raw
           $cargo = $cargo -replace '(?m)^sabine = .+$', "sabine = { path = `"$cargoPath`" }"
@@ -108,7 +143,7 @@ jobs:
           $config = Get-Content release-probe/Sabine.toml -Raw
           $config = $config.Replace('[app]', "[app]`nmaintainer = `"Package Tests <packages@example.test>`"`nlicense = `"MIT`"")
           [IO.File]::WriteAllText((Join-Path $PWD 'release-probe/Sabine.toml'), $config, [Text.UTF8Encoding]::new($false))
-          $privateKey = cargo run --release -p sabine-cli -- release-keygen --public-output release-probe/update-public-key.txt | Select-Object -Last 1
+          $privateKey = cargo run --release --locked -p sabine-cli -- release-keygen --public-output release-probe/update-public-key.txt | Select-Object -Last 1
           if ([string]::IsNullOrWhiteSpace($privateKey)) {
             throw "release key generation failed"
           }
@@ -122,21 +157,24 @@ jobs:
         shell: pwsh
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          PACKAGE_TARGET: ${{ matrix.target }}
+          PACKAGE_EXTENSION: ${{ matrix.extension }}
+          UPDATE_TARGET: ${{ matrix.update_target }}
         run: |
           $offline = @()
-          if ('${{ runner.os }}' -eq 'Windows') { $offline = @('--offline') }
-          if ('${{ matrix.target }}' -eq 'exe') {
+          if ($IsWindows) { $offline = @('--offline') }
+          if ($env:PACKAGE_TARGET -eq 'exe') {
             New-Item release-probe/ui/public -ItemType Directory -Force | Out-Null
             Set-Content release-probe/ui/public/obsolete.txt 'Owned by the first release'
           }
-          cargo run --release -p sabine-cli -- bundle release-probe --target "${{ matrix.target }}" @offline
+          cargo run --release --locked -p sabine-cli -- bundle release-probe --target $env:PACKAGE_TARGET @offline
           if ($LASTEXITCODE -ne 0) { throw "package build failed" }
           $artifacts = @(Get-ChildItem dist/artifacts -File)
-          if ($artifacts.Count -ne 1 -or $artifacts[0].Extension -cne "${{ matrix.extension }}") {
-            throw "expected one ${{ matrix.extension }} artifact, found $($artifacts.Name -join ', ')"
+          if ($artifacts.Count -ne 1 -or $artifacts[0].Extension -cne $env:PACKAGE_EXTENSION) {
+            throw "expected one $env:PACKAGE_EXTENSION artifact, found $($artifacts.Name -join ', ')"
           }
           Remove-Item Env:GITHUB_REF_NAME
-          cargo run --release -p sabine-cli -- release-manifest release-probe --output dist/sabine-update.json --artifact "${{ matrix.update_target }}=$($artifacts[0].FullName)"
+          cargo run --release --locked -p sabine-cli -- release-manifest release-probe --output dist/sabine-update.json --artifact "$env:UPDATE_TARGET=$($artifacts[0].FullName)"
           $manifest = Get-Content dist/sabine-update.json -Raw | ConvertFrom-Json
           if ([string]::IsNullOrWhiteSpace($manifest.signature)) {
             throw "release manifest signature is missing"

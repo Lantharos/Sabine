@@ -179,6 +179,14 @@ C++ and Objective-C++ follow the repository's `.clang-format`, which is based on
 CI checks formatting with clang-format 23.1.1; `pipx run clang-format==23.1.1` runs the same
 version.
 
+CI also builds the workspace with the oldest supported Rust, the `rust-version` in `Cargo.toml`,
+and checks dependencies for advisories, licenses and sources against `deny.toml` with
+[cargo-deny](https://github.com/EmbarkStudios/cargo-deny):
+
+```sh
+cargo deny check
+```
+
 ### Windows and macOS
 
 Most development happens on Linux, so check that Windows code still compiles from there:
@@ -189,14 +197,17 @@ cargo check --target x86_64-pc-windows-gnu --workspace
 
 This catches `cfg` mistakes in Rust, but it doesn't build the host or prove anything about Windows
 composition, input or GPU behaviour, and neither do Linux tests for macOS. CI runs Clippy and the
-workspace tests natively on Windows and macOS for every push, and a change to platform code still
-needs a run on that platform's hardware.
+workspace tests natively on Linux ARM64, Windows and macOS for every pull request and every push
+to `main`, and a change to platform code still needs a run on that platform's hardware.
+
+The native CEF host checks build the host against the current CEF SDK on Linux, Windows and macOS,
+x86_64 and ARM64, and render a frame with `runtime doctor`. They run when a change touches the host,
+the bridge, the runtime, offscreen rendering or `Cargo.lock`, and before every release.
 
 Manual workflows cover what tests can't:
 
 | Workflow | Checks |
 | --- | --- |
-| Native CEF host checks | Builds the host against the current CEF SDK on Linux, Windows and macOS, x86_64 and ARM64, and renders a frame with `runtime doctor` |
 | Paint check | Opens an animated page in a native window on macOS and Windows, and reports how Chromium painted, CPU use and screenshots |
 | Package smoke test | Builds each package format with signed update metadata, checks the macOS bundle, and installs, launches, repairs and uninstalls the Windows packages |
 | Published Windows runtime checks | Compares a published release on several CEF versions |

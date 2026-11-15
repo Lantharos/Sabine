@@ -85,8 +85,8 @@ def powershell(script, **environment):
 
 
 def prepare_host(root):
-    run("cargo", "build", "-p", "sabine-cli")
-    run("cargo", "build", "--release", "-p", "sabine-service")
+    run("cargo", "build", "--locked", "-p", "sabine-cli")
+    run("cargo", "build", "--release", "--locked", "-p", "sabine-service")
     run(
         "cargo", "build", "--release", "--manifest-path", root / "Cargo.toml",
         env=dict(os.environ, CARGO_TARGET_DIR=str(repository / "target")),

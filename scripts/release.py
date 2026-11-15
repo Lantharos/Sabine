@@ -19,15 +19,27 @@ def run(*args, capture=False):
     return result.stdout.strip() if capture else None
 
 
-def wait_workflow(workflow, revision):
+def workflow_runs(workflow, revision, event):
+    return json.loads(run("gh", "run", "list", "--repo", REPOSITORY, "--workflow", workflow,
+                          "--event", event, "--commit", revision, "--limit", "5", "--json", "databaseId", capture=True))
+
+
+def wait_workflow(workflow, revision, event="push"):
     for _ in range(40):
-        runs = json.loads(run("gh", "run", "list", "--repo", REPOSITORY, "--workflow", workflow,
-                              "--event", "push", "--commit", revision, "--limit", "5", "--json", "databaseId", capture=True))
+        runs = workflow_runs(workflow, revision, event)
         if runs:
             run("gh", "run", "watch", str(runs[0]["databaseId"]), "--repo", REPOSITORY, "--exit-status", "--interval", "20")
             return
         time.sleep(3)
     raise ValueError(f"{workflow} has not appeared for {revision}; check GitHub Actions before retrying")
+
+
+def wait_host_checks(revision):
+    if workflow_runs("native-host.yml", revision, "push"):
+        wait_workflow("native-host.yml", revision)
+        return
+    run("gh", "workflow", "run", "native-host.yml", "--repo", REPOSITORY, "--ref", "main")
+    wait_workflow("native-host.yml", revision, "workflow_dispatch")
 
 
 def check_sources():
@@ -58,7 +70,7 @@ def main():
     for name in changes:
         print(f"  update {name}")
     if args.dry_run:
-        print(f"Would check sources, sign and push the release commit, wait for CI, sign and push {tag}, and wait for release artifacts.")
+        print(f"Would check sources, sign and push the release commit, wait for CI and the native host checks, sign and push {tag}, and wait for release artifacts.")
         return
     if git(ROOT, "branch", "--show-current") != "main":
         raise ValueError("release preparation requires the main branch")
@@ -94,6 +106,7 @@ def main():
         run("git", "push", "origin", "main")
     revision = git(ROOT, "rev-parse", "HEAD")
     wait_workflow("ci.yml", revision)
+    wait_host_checks(revision)
     run("git", "tag", "-s", tag, "-m", f"Sabine {version}")
     run("git", "push", "origin", tag)
     wait_workflow("release.yml", revision)

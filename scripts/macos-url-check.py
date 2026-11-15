@@ -15,7 +15,7 @@ if sys.platform != "darwin":
 
 repository = Path(__file__).resolve().parent.parent
 build = subprocess.run(
-    ["cargo", "build", "-p", "sabine", "--message-format=json"],
+    ["cargo", "build", "--locked", "-p", "sabine", "--message-format=json"],
     cwd=repository, capture_output=True, text=True, check=True,
 )
 artifacts = {}
