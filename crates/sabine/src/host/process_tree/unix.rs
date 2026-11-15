@@ -249,9 +249,8 @@ fn watch(woken: OwnedFd) {
             std::thread::sleep(POLL_INTERVAL);
         }
         signal_groups(libc::SIGKILL);
-        let ends_app = slot(signal).is_some_and(|index| {
-            PREVIOUS[index].handler.load(Ordering::SeqCst) == libc::SIG_DFL
-        });
+        let ends_app = slot(signal)
+            .is_some_and(|index| PREVIOUS[index].handler.load(Ordering::SeqCst) == libc::SIG_DFL);
         if ends_app {
             unsafe {
                 libc::signal(signal, libc::SIG_DFL);

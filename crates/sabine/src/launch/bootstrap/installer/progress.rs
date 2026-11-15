@@ -61,7 +61,13 @@ mod bar {
 
     impl ProgressBar {
         pub(super) fn attach(handle: &std::ffi::OsStr) -> Option<Self> {
-            let window = HWND(handle.to_str()?.parse::<isize>().ok().filter(|handle| *handle != 0)? as _);
+            let window = HWND(
+                handle
+                    .to_str()?
+                    .parse::<isize>()
+                    .ok()
+                    .filter(|handle| *handle != 0)? as _,
+            );
             let (start, end) = unsafe {
                 (
                     SendMessageW(window, PBM_GETPOS, None, None).0 as i32,

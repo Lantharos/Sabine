@@ -49,7 +49,12 @@ pub(crate) fn check(config: &SabineWindowConfig) -> SabineResult<()> {
         .descriptors()
         .iter()
         .flat_map(|descriptor| &descriptor.allowed_origins);
-    for origin in config.security.allowed_origins.iter().chain(command_origins) {
+    for origin in config
+        .security
+        .allowed_origins
+        .iter()
+        .chain(command_origins)
+    {
         trusted_origin(origin).map_err(refused)?;
     }
     Ok(())
@@ -108,7 +113,10 @@ mod tests {
             trusted_origin("http://localhost:5173").unwrap(),
             "http://localhost:5173"
         );
-        assert_eq!(trusted_origin("http://[::1]:8080").unwrap(), "http://[::1]:8080");
+        assert_eq!(
+            trusted_origin("http://[::1]:8080").unwrap(),
+            "http://[::1]:8080"
+        );
     }
 
     #[test]

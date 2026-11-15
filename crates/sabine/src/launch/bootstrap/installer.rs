@@ -16,10 +16,8 @@ pub(crate) fn requested(args: &[OsString]) -> bool {
 }
 
 pub(crate) fn run(config: &SabineWindowConfig, args: &[OsString]) -> ! {
-    let cancelled = || {
-        option(args, "--sabine-install-cancel")
-            .is_some_and(|path| Path::new(path).exists())
-    };
+    let cancelled =
+        || option(args, "--sabine-install-cancel").is_some_and(|path| Path::new(path).exists());
     let result = if args.iter().any(|arg| arg == UNINSTALL_ARG) {
         unregister(config)
     } else {
@@ -92,12 +90,7 @@ fn prepare(
             .ok_or("The installer payload has no directory")?
             .to_path_buf();
         SabineService::default()
-            .install_app_payload(
-                &source,
-                destination,
-                manifest,
-                cancelled,
-            )
+            .install_app_payload(&source, destination, manifest, cancelled)
             .map_err(|error| error.to_string())?;
     } else {
         SabineService::default()
