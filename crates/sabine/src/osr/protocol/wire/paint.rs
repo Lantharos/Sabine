@@ -1,8 +1,6 @@
 use std::io;
 use std::sync::Arc;
 
-#[cfg(unix)]
-use super::header::ReceivedFd;
 use super::header::{read_i32, read_u32, read_u64};
 use super::{BATCH_ENTRY_LEN, MAX_PAINT_BYTES, shared_mem::PaintSlots};
 use crate::osr::protocol::{FrameBytes, OsrPaintBatch, OsrSurface, PaintRect};
@@ -57,7 +55,7 @@ pub(super) fn parse_shared_batch(
     target: BatchSurface,
     header: BatchHeader,
     payload: &[u8],
-    #[cfg(unix)] received_fd: &mut ReceivedFd,
+    #[cfg(unix)] received_fd: Option<std::os::fd::OwnedFd>,
     slots: &mut PaintSlots,
 ) -> io::Result<OsrPaintBatch> {
     let (surface, metadata_start) = batch_surface(target, payload)?;
@@ -65,7 +63,7 @@ pub(super) fn parse_shared_batch(
         .get(metadata_start..metadata_start + SHARED_SLOT_LEN)
         .ok_or_else(|| invalid("truncated OSR shared paint slot"))?;
     #[cfg(unix)]
-    let announced = received_fd.take();
+    let announced = received_fd;
     #[cfg(windows)]
     let announced = Some(read_u64(&slot_metadata[8..16])).filter(|handle| *handle != 0);
     let lease = slots.lease(
@@ -96,13 +94,17 @@ fn batch_surface(target: BatchSurface, payload: &[u8]) -> io::Result<(OsrSurface
 }
 
 fn batch_entries(metadata: &[u8]) -> io::Result<&[u8]> {
-    let count = super::regions::payload_count(metadata)?;
-    let entries_len = count
+    let count = metadata
+        .get(0..4)
+        .map(read_u32)
+        .ok_or_else(|| invalid("truncated OSR paint batch header"))?;
+    let entries_end = (count as usize)
         .checked_mul(BATCH_ENTRY_LEN)
+        .and_then(|len| len.checked_add(4))
         .ok_or_else(|| invalid("OSR paint batch entry count overflow"))?;
     metadata
-        .get(4..4 + entries_len)
-        .ok_or_else(|| invalid("truncated OSR paint batch"))
+        .get(4..entries_end)
+        .ok_or_else(|| invalid("truncated OSR paint batch entries"))
 }
 
 fn parse_rects(

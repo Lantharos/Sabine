@@ -97,26 +97,42 @@ pub(super) fn parse_dmabuf_announcement(
     width: u32,
     height: u32,
     payload: &[u8],
-    fd: Option<i32>,
+    fd: Option<std::os::fd::OwnedFd>,
 ) -> io::Result<(u64, crate::osr::accel::Dmabuf)> {
-    use std::os::fd::{FromRawFd, OwnedFd};
-
-    let fd = fd.map(|fd| unsafe { OwnedFd::from_raw_fd(fd) });
     let (Some(fd), 24) = (fd, payload.len()) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid dma-buf announcement",
-        ));
+        return Err(invalid("invalid dma-buf announcement"));
     };
-    Ok((
-        read_u64(&payload[0..8]),
-        crate::osr::accel::Dmabuf {
-            fd,
-            width,
-            height,
-            modifier: read_u64(&payload[8..16]),
-            stride: read_u32(&payload[16..20]),
-            offset: read_u32(&payload[20..24]),
-        },
-    ))
+    let dmabuf = crate::osr::accel::Dmabuf {
+        fd,
+        width,
+        height,
+        modifier: read_u64(&payload[8..16]),
+        stride: read_u32(&payload[16..20]),
+        offset: read_u32(&payload[20..24]),
+    };
+    if !dmabuf_fits(&dmabuf) {
+        return Err(invalid("dma-buf layout does not fit its buffer"));
+    }
+    Ok((read_u64(&payload[0..8]), dmabuf))
+}
+
+/// Whether `dmabuf` names a frame its buffer holds: rows of at least four
+/// bytes per pixel, all of them before the buffer's end.
+#[cfg(target_os = "linux")]
+fn dmabuf_fits(dmabuf: &crate::osr::accel::Dmabuf) -> bool {
+    use std::os::fd::AsRawFd;
+
+    let end = unsafe { libc::lseek(dmabuf.fd.as_raw_fd(), 0, libc::SEEK_END) };
+    let Ok(size) = u64::try_from(end) else {
+        return false;
+    };
+    let stride = u64::from(dmabuf.stride);
+    dmabuf.width != 0
+        && dmabuf.height != 0
+        && stride >= u64::from(dmabuf.width) * 4
+        && u64::from(dmabuf.offset) + stride * u64::from(dmabuf.height) <= size
+}
+
+fn invalid(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
 }

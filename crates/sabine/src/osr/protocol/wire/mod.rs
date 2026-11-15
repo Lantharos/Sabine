@@ -50,7 +50,7 @@ struct RawMessage {
     y: i32,
     payload: Vec<u8>,
     #[cfg(unix)]
-    fd: header::ReceivedFd,
+    fd: Option<std::os::fd::OwnedFd>,
 }
 
 pub(crate) struct WireReader {
@@ -189,7 +189,7 @@ impl WireReader {
                     batch_header,
                     &payload,
                     #[cfg(unix)]
-                    &mut fd,
+                    fd.take(),
                     &mut self.slots,
                 )?)
             }

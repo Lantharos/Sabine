@@ -1,9 +1,14 @@
 use std::{
     fs::File,
     io,
-    os::fd::{AsRawFd, FromRawFd},
+    os::fd::{AsRawFd, OwnedFd},
     ptr,
 };
+
+/// The seals that keep the browser host from resizing a paint slot under
+/// this process's mapping, which would fault reads past its new end.
+#[cfg(target_os = "linux")]
+const REQUIRED_SEALS: i32 = libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_SEAL;
 
 pub(super) struct SharedMapping {
     ptr: *mut u8,
@@ -15,8 +20,19 @@ unsafe impl Send for SharedMapping {}
 unsafe impl Sync for SharedMapping {}
 
 impl SharedMapping {
-    pub(super) fn map(fd: i32, max_len: usize) -> io::Result<Self> {
-        let file = unsafe { File::from_raw_fd(fd) };
+    /// Maps a paint slot. On Linux the slot must be sealed against resizing;
+    /// a macOS shared memory object keeps the size it was first given.
+    pub(super) fn map(fd: OwnedFd, max_len: usize) -> io::Result<Self> {
+        #[cfg(target_os = "linux")]
+        if unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GET_SEALS) } & REQUIRED_SEALS
+            != REQUIRED_SEALS
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "shared OSR paint buffer is not sealed against resizing",
+            ));
+        }
+        let file = File::from(fd);
         let len = usize::try_from(file.metadata()?.len()).map_err(|_| super::outside_limit())?;
         if len == 0 || len > max_len {
             return Err(super::outside_limit());

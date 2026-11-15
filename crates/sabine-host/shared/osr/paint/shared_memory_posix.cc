@@ -28,7 +28,21 @@ int CreateFd() {
   }
   return -1;
 #else
-  return memfd_create("sabine-osr-paint", MFD_CLOEXEC);
+  return memfd_create("sabine-osr-paint", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+#endif
+}
+
+// The window maps the memory read-only and refuses it unless it can never
+// shrink under that mapping. A macOS shared memory object keeps the size it
+// is first given.
+bool FixSize(int fd, size_t capacity) {
+  if (ftruncate(fd, static_cast<off_t>(capacity)) != 0) {
+    return false;
+  }
+#if defined(__APPLE__)
+  return true;
+#else
+  return fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL) == 0;
 #endif
 }
 
@@ -39,7 +53,7 @@ bool CreateSharedMemory(size_t capacity, SharedMemory* out) {
   if (fd < 0) {
     return false;
   }
-  if (ftruncate(fd, static_cast<off_t>(capacity)) != 0) {
+  if (!FixSize(fd, capacity)) {
     close(fd);
     return false;
   }

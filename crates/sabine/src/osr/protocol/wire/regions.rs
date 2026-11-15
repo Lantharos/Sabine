@@ -2,7 +2,6 @@ use std::io;
 
 use sabine_platform::WindowRegionRect;
 
-use super::BATCH_ENTRY_LEN;
 use super::header::{read_i32, read_u32};
 
 pub(super) fn parse_draggable_regions(
@@ -39,24 +38,6 @@ pub(super) fn parse_draggable_regions(
         }
     }
     Ok((drag, exclusion))
-}
-
-pub(super) fn payload_count(payload: &[u8]) -> io::Result<usize> {
-    let Some(count) = payload.get(0..4).map(read_u32) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "truncated OSR paint batch header",
-        ));
-    };
-    let count = count as usize;
-    let entries_end = 4 + count * BATCH_ENTRY_LEN;
-    if payload.len() < entries_end {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "truncated OSR paint batch entries",
-        ));
-    }
-    Ok(count)
 }
 
 #[cfg(test)]

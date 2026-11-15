@@ -1,19 +1,27 @@
 use crate::osr::transport::IpcStream;
 use std::io::{self, Read};
 #[cfg(unix)]
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use super::HEADER_LEN;
+
+/// Room for more descriptors than any message carries, so extra ones arrive
+/// to be closed rather than truncate the message.
+#[cfg(unix)]
+const CONTROL_LEN: usize = 128;
+
+#[cfg(unix)]
+#[repr(C, align(8))]
+struct Control([u8; CONTROL_LEN]);
 
 #[cfg(unix)]
 pub(super) fn read_header(
     reader: &mut IpcStream,
-) -> io::Result<Option<([u8; HEADER_LEN], ReceivedFd)>> {
+) -> io::Result<Option<([u8; HEADER_LEN], Option<OwnedFd>)>> {
     let mut header = [0_u8; HEADER_LEN];
     let Some((read, fd)) = recv_header_start(reader, &mut header)? else {
         return Ok(None);
     };
-    let fd = ReceivedFd(fd);
     match reader.read_exact(&mut header[read.min(HEADER_LEN)..]) {
         Ok(()) => Ok(Some((header, fd))),
         Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Ok(None),
@@ -32,71 +40,63 @@ pub(super) fn read_header(reader: &mut IpcStream) -> io::Result<Option<[u8; HEAD
 }
 
 #[cfg(unix)]
-pub(super) struct ReceivedFd(Option<i32>);
-
-#[cfg(unix)]
-impl ReceivedFd {
-    pub(super) fn take(&mut self) -> Option<i32> {
-        self.0.take()
-    }
-}
-
-#[cfg(unix)]
-impl Drop for ReceivedFd {
-    fn drop(&mut self) {
-        if let Some(fd) = self.0.take() {
-            unsafe {
-                libc::close(fd);
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
 fn recv_header_start(
     reader: &IpcStream,
     header: &mut [u8; HEADER_LEN],
-) -> io::Result<Option<(usize, Option<i32>)>> {
+) -> io::Result<Option<(usize, Option<OwnedFd>)>> {
     let mut iov = libc::iovec {
         iov_base: header.as_mut_ptr().cast(),
         iov_len: HEADER_LEN,
     };
-    let mut control = [0_u8; 64];
-    let mut message = libc::msghdr {
-        msg_name: std::ptr::null_mut(),
-        msg_namelen: 0,
-        msg_iov: &mut iov,
-        msg_iovlen: 1,
-        msg_control: control.as_mut_ptr().cast(),
-        msg_controllen: control.len() as _,
-        msg_flags: 0,
-    };
+    let mut control = Control([0; CONTROL_LEN]);
+    let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+    message.msg_iov = &mut iov;
+    message.msg_iovlen = 1;
+    message.msg_control = control.0.as_mut_ptr().cast();
+    message.msg_controllen = CONTROL_LEN as _;
     #[cfg(target_os = "linux")]
     let flags = libc::MSG_CMSG_CLOEXEC;
     #[cfg(not(target_os = "linux"))]
     let flags = 0;
     let result = unsafe { libc::recvmsg(reader.as_raw_fd(), &mut message, flags) };
-    if result == 0 {
-        return Ok(None);
-    }
     if result < 0 {
         return Err(io::Error::last_os_error());
     }
-    let fd = unsafe { received_fd(&message) };
-    Ok(Some((result as usize, fd)))
+    let mut fds = unsafe { received_fds(&message) }.into_iter();
+    if message.msg_flags & libc::MSG_CTRUNC != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "an OSR message carried more descriptors than it can hold",
+        ));
+    }
+    if result == 0 {
+        return Ok(None);
+    }
+    Ok(Some((result as usize, fds.next())))
 }
 
+/// Takes ownership of every descriptor `message` carried.
 #[cfg(unix)]
-unsafe fn received_fd(message: &libc::msghdr) -> Option<i32> {
+unsafe fn received_fds(message: &libc::msghdr) -> Vec<OwnedFd> {
+    let mut fds = Vec::new();
     let mut control = unsafe { libc::CMSG_FIRSTHDR(message) };
     while !control.is_null() {
         let header = unsafe { &*control };
         if header.cmsg_level == libc::SOL_SOCKET && header.cmsg_type == libc::SCM_RIGHTS {
-            return Some(unsafe { *(libc::CMSG_DATA(control).cast::<i32>()) });
+            let data = unsafe { libc::CMSG_DATA(control) }.cast::<i32>();
+            let data_len = header.cmsg_len as usize - unsafe { libc::CMSG_LEN(0) } as usize;
+            for index in 0..data_len / size_of::<i32>() {
+                let fd = unsafe { data.add(index).read_unaligned() };
+                #[cfg(not(target_os = "linux"))]
+                unsafe {
+                    libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
+                }
+                fds.push(unsafe { OwnedFd::from_raw_fd(fd) });
+            }
         }
         control = unsafe { libc::CMSG_NXTHDR(message, control) };
     }
-    None
+    fds
 }
 
 pub(super) fn read_u32(bytes: &[u8]) -> u32 {

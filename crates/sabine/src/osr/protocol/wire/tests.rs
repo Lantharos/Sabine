@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 
@@ -96,6 +96,49 @@ fn send_with_fd(connection: &Connection, header: &[u8], fd: i32) {
     }
 }
 
+/// Paint slot memory holding `pixels`, sealed against resizing as the
+/// browser host makes it.
+fn slot_memory(pixels: &[u8]) -> OwnedFd {
+    #[cfg(target_os = "linux")]
+    {
+        let slot = unsealed_memfd(pixels);
+        let seals = libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_SEAL;
+        assert_eq!(
+            unsafe { libc::fcntl(slot.as_raw_fd(), libc::F_ADD_SEALS, seals) },
+            0
+        );
+        slot
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let path = std::env::temp_dir().join(format!("sabine-wire-slot-{}", std::process::id()));
+        std::fs::write(&path, pixels).expect("slot contents");
+        let file = std::fs::File::open(&path).expect("slot file");
+        std::fs::remove_file(&path).expect("unlink slot");
+        file.into()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unsealed_memfd(pixels: &[u8]) -> OwnedFd {
+    use std::os::fd::FromRawFd;
+
+    let fd = unsafe { libc::memfd_create(c"sabine-wire-slot".as_ptr(), libc::MFD_ALLOW_SEALING) };
+    assert!(fd >= 0, "memfd");
+    let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+    file.write_all(pixels).expect("slot contents");
+    file.into()
+}
+
+fn shared_metadata(slot: u32, generation: u32, rects: &[(i32, i32, u32, u32, u64)]) -> Vec<u8> {
+    let mut metadata = Vec::new();
+    metadata.extend_from_slice(&slot.to_le_bytes());
+    metadata.extend_from_slice(&generation.to_le_bytes());
+    metadata.extend_from_slice(&0_u64.to_le_bytes());
+    metadata.extend(paint_entries(rects));
+    metadata
+}
+
 fn paint(connection: &mut Connection) -> OsrPaintBatch {
     match connection.wire.read().expect("read").expect("message") {
         OsrMessage::PaintBatch(batch) => batch,
@@ -139,16 +182,9 @@ fn inline_paint_batch_parses_multiple_rects() {
 #[test]
 fn shared_slot_is_mapped_once_and_released_after_use() {
     let mut connection = connect();
-    let path = std::env::temp_dir().join(format!("sabine-wire-slot-{}", std::process::id()));
-    std::fs::write(&path, [7, 7, 7, 255, 9, 9, 9, 255]).expect("slot contents");
-    let slot = std::fs::File::open(&path).expect("slot file");
-    std::fs::remove_file(&path).expect("unlink slot");
+    let slot = slot_memory(&[7, 7, 7, 255, 9, 9, 9, 255]);
 
-    let mut metadata = Vec::new();
-    metadata.extend_from_slice(&3_u32.to_le_bytes());
-    metadata.extend_from_slice(&1_u32.to_le_bytes());
-    metadata.extend_from_slice(&0_u64.to_le_bytes());
-    metadata.extend(paint_entries(&[(0, 0, 1, 1, 0)]));
+    let metadata = shared_metadata(3, 1, &[(0, 0, 1, 1, 0)]);
     send_with_fd(
         &connection,
         &header(KIND_MAIN_SHARED_BATCH, (2, 1), (0, 0), metadata.len()),
@@ -159,11 +195,7 @@ fn shared_slot_is_mapped_once_and_released_after_use() {
     assert_eq!(first.rects[0].bytes(), &[7, 7, 7, 255]);
     drop(first);
 
-    let mut metadata = Vec::new();
-    metadata.extend_from_slice(&3_u32.to_le_bytes());
-    metadata.extend_from_slice(&1_u32.to_le_bytes());
-    metadata.extend_from_slice(&0_u64.to_le_bytes());
-    metadata.extend(paint_entries(&[(1, 0, 1, 1, 4)]));
+    let metadata = shared_metadata(3, 1, &[(1, 0, 1, 1, 4)]);
     send(
         &mut connection,
         KIND_MAIN_SHARED_BATCH,
@@ -184,14 +216,27 @@ fn shared_slot_is_mapped_once_and_released_after_use() {
     assert_eq!(String::from_utf8(released).unwrap(), expected);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn shared_slot_that_can_shrink_is_rejected() {
+    let mut connection = connect();
+    let slot = unsealed_memfd(&[7, 7, 7, 255]);
+    let metadata = shared_metadata(0, 1, &[(0, 0, 1, 1, 0)]);
+    send_with_fd(
+        &connection,
+        &header(KIND_MAIN_SHARED_BATCH, (1, 1), (0, 0), metadata.len()),
+        slot.as_raw_fd(),
+    );
+    connection.producer.write_all(&metadata).expect("metadata");
+
+    let error = connection.wire.read().expect_err("slot must be sealed");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+}
+
 #[test]
 fn shared_batch_for_unknown_slot_generation_is_rejected() {
     let mut connection = connect();
-    let mut metadata = Vec::new();
-    metadata.extend_from_slice(&0_u32.to_le_bytes());
-    metadata.extend_from_slice(&2_u32.to_le_bytes());
-    metadata.extend_from_slice(&0_u64.to_le_bytes());
-    metadata.extend(paint_entries(&[(0, 0, 1, 1, 0)]));
+    let metadata = shared_metadata(0, 2, &[(0, 0, 1, 1, 0)]);
     send(
         &mut connection,
         KIND_MAIN_SHARED_BATCH,
