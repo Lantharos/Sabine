@@ -1,47 +1,19 @@
 use std::{
-    ffi::OsString,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
-use crate::bridge::BridgeEventEmitter;
-use crate::bridge::{prepare_bridge_command, spawn_bridge_dispatch};
-#[cfg(target_os = "linux")]
-use crate::host::ld_library_path;
-use crate::host::{ManagedChild, browser_profile_dir, prepare_child_command};
-use crate::host::{PrimaryWindow, ProcessCommand, SabineProcessHandle};
-use crate::launch::metrics::LaunchMetrics;
-use crate::osr::transport::IpcEndpoint;
-use crate::window::config::SabineWindowConfig;
-use crate::{SabineError, SabineProcess, SabineResult};
 use sabine_bridge::{BridgeHandlers, BridgeRuntime};
 
-pub(crate) const OSR_HOST_ARG: &str = "--sabine-osr-host";
-
-/// Whether the app was started as one of its own window hosts: with the
-/// window host switch alone, which only the app's own launch passes. Anything
-/// else on the command line makes it an ordinary launch.
-pub(crate) fn starts_window_host(args: &[String]) -> bool {
-    matches!(args, [_, mode] if mode == OSR_HOST_ARG)
-}
-
-pub(crate) fn run_window_host() {
-    if let Err(error) = crate::osr::host::run() {
-        crate::launch::bootstrap::show_failure("The application could not continue", &error);
-        std::process::exit(1);
-    }
-}
-
-pub(crate) fn require_app_id(config: &SabineWindowConfig) -> SabineResult<&str> {
-    let app_id = config.app_id.as_deref().map(str::trim).unwrap_or_default();
-    sabine_service::valid_app_id(app_id)
-        .then_some(app_id)
-        .ok_or_else(|| SabineError::CreationFailed {
-            message: "app_id is required and may contain only letters, digits, dots, hyphens, and underscores"
-                .to_string(),
-        })
-}
+use super::{OSR_HOST_ARG, require_app_id};
+use crate::bridge::{BridgeEventEmitter, prepare_bridge_command, spawn_bridge_dispatch};
+use crate::host::{
+    ManagedChild, PrimaryWindow, ProcessCommand, SabineProcessHandle, prepare_child_command,
+};
+use crate::launch::metrics::LaunchMetrics;
+use crate::window::config::SabineWindowConfig;
+use crate::{SabineError, SabineProcess, SabineResult};
 
 pub(crate) fn launch_process(
     runtime_dir: &Path,
@@ -210,7 +182,7 @@ fn spawn_window(
 /// Only a window someone asked for carries an activation token: the one the
 /// launch opens, or the one an activation opens for a background app. Only
 /// the window the launch opens may open as a window the desktop restores.
-pub(crate) fn spawn_osr_host_child(
+fn spawn_osr_host_child(
     runtime_dir: &Path,
     host_binary: &Path,
     config: &SabineWindowConfig,
@@ -330,214 +302,4 @@ fn window_host_command() -> SabineResult<Command> {
         .map_err(|error| SabineError::CreationFailed {
             message: error.to_string(),
         })
-}
-
-pub(crate) struct CefViewport {
-    pub(in crate::osr) page: crate::osr::host::viewport::PageViewport,
-    pub(crate) frame_rate: u32,
-    pub(crate) accelerated_paint: bool,
-    pub(crate) parent_window: Option<u64>,
-}
-
-/// How a window's browser starts: in a Chromium of the window's own, or in
-/// the runtime Sabine apps share.
-pub(crate) struct BrowserLaunch {
-    pub(crate) own: Command,
-    #[cfg(target_os = "linux")]
-    pub(crate) shared: Option<crate::launch::shared::SharedLaunch>,
-}
-
-pub(crate) fn browser_launch(
-    runtime_dir: &Path,
-    host_binary: &Path,
-    endpoint: &IpcEndpoint,
-    authentication_token: &str,
-    config: &crate::osr::host::OsrHostConfig,
-    viewport: CefViewport,
-) -> Result<BrowserLaunch, String> {
-    let host_binary = host_binary.canonicalize().map_err(|error| {
-        format!(
-            "could not resolve Sabine host {}: {error}",
-            host_binary.display()
-        )
-    })?;
-    sabine_runtime::prepare_runtime_assets(runtime_dir).map_err(|error| error.to_string())?;
-    let host_binary = sabine_host::prepare_host_execution(&host_binary, runtime_dir)?;
-    let binary_dir = sabine_host::runtime_binary_directory(runtime_dir);
-    let token_file = crate::osr::transport::write_token_file(endpoint, authentication_token)
-        .map_err(|error| format!("could not write Sabine OSR token file: {error}"))?;
-    let window = window_switches(endpoint, &token_file, config, &viewport);
-    #[cfg(target_os = "linux")]
-    let shared = config
-        .shared_runtime
-        .then(|| {
-            crate::launch::shared::SharedLaunch::new(
-                &host_binary,
-                runtime_dir,
-                &binary_dir,
-                &config.browser_options(),
-                &browser_profile_key(config),
-                &window,
-            )
-        })
-        .flatten();
-    let own = own_browser_command(runtime_dir, &host_binary, &binary_dir, config, &window)?;
-    Ok(BrowserLaunch {
-        own,
-        #[cfg(target_os = "linux")]
-        shared,
-    })
-}
-
-/// The switches of one window's browser, which apply to it alone.
-fn window_switches(
-    endpoint: &IpcEndpoint,
-    token_file: &Path,
-    config: &crate::osr::host::OsrHostConfig,
-    viewport: &CefViewport,
-) -> Vec<OsString> {
-    let mut switches: Vec<OsString> = vec![
-        format!("--url={}", config.url).into(),
-        "--sabine-osr".into(),
-        format!("--sabine-osr-endpoint={}", endpoint.argument()).into(),
-        format!("--sabine-parent-pid={}", std::process::id()).into(),
-    ];
-    if viewport.accelerated_paint {
-        switches.push("--sabine-shared-texture".into());
-    }
-    if let Some(parent) = viewport.parent_window {
-        switches.push(format!("--sabine-parent-window={parent}").into());
-    }
-    switches.extend([
-        format!("--sabine-osr-token-file={}", token_file.display()).into(),
-        format!("--sabine-width={}", viewport.page.width).into(),
-        format!("--sabine-height={}", viewport.page.height).into(),
-        format!("--sabine-scale={}", viewport.page.scale_argument()).into(),
-        format!("--sabine-bridge-policy={}", config.bridge_policy).into(),
-        format!("--sabine-active-frame-rate={}", viewport.frame_rate.max(1)).into(),
-        format!(
-            "--sabine-background-frame-rate={}",
-            config.lifecycle.background_frame_rate.max(1)
-        )
-        .into(),
-        format!(
-            "--sabine-background-color={}",
-            config.background_color.to_opaque_argb_hex()
-        )
-        .into(),
-    ]);
-    if config.dev_mode {
-        switches.push("--sabine-dev-mode".into());
-    }
-    if config.lifecycle.retain_hidden_frame {
-        switches.push("--sabine-retain-hidden-frame".into());
-    }
-    if let Some(root) = &config.web_root {
-        let mut argument = OsString::from("--sabine-app-root=");
-        argument.push(root);
-        switches.push(argument);
-    }
-    if config.local_files {
-        switches.push("--sabine-local-files".into());
-    }
-    if config.transparent {
-        switches.push("--sabine-transparent".into());
-    }
-    switches
-}
-
-/// A Chromium of the window's own, sharing its profile only with the app's
-/// other windows.
-fn own_browser_command(
-    runtime_dir: &Path,
-    host_binary: &Path,
-    binary_dir: &Path,
-    config: &crate::osr::host::OsrHostConfig,
-    window: &[OsString],
-) -> Result<Command, String> {
-    let cache_dir = browser_profile_dir(&browser_profile_key(config));
-    let cache_dir = std::fs::create_dir_all(&cache_dir)
-        .and_then(|()| dunce::canonicalize(&cache_dir))
-        .map_err(|error| {
-            format!(
-                "could not create Sabine browser profile {}: {error}",
-                cache_dir.display()
-            )
-        })?;
-    #[cfg(target_os = "linux")]
-    let mut command = crate::launch::sandbox::browser_command(host_binary, binary_dir);
-    #[cfg(not(target_os = "linux"))]
-    let mut command = Command::new(host_binary);
-    sabine_runtime::configure_background_command(&mut command);
-    sabine_host::apply_runtime_resource_args(&mut command, runtime_dir);
-    command
-        .args(window)
-        .arg(format!("--root-cache-path={}", cache_dir.display()))
-        .arg(format!(
-            "--cache-path={}",
-            cache_dir.join("browser").display()
-        ));
-    crate::launch::browser::apply_browser_launch_args(
-        &mut command,
-        &config.browser_options(),
-        config.dev_mode,
-    );
-    crate::host::prepare_detachable_child_command(&mut command);
-    command.current_dir(binary_dir);
-    #[cfg(target_os = "linux")]
-    {
-        command.env("LD_LIBRARY_PATH", ld_library_path(binary_dir));
-        command.env("AMD_DEBUG", crate::launch::browser::chromium_amd_debug());
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let release = binary_dir.to_string_lossy();
-        let path = std::env::var("PATH").unwrap_or_default();
-        command.env(
-            "PATH",
-            if path.is_empty() {
-                release.into_owned()
-            } else {
-                format!("{release};{path}")
-            },
-        );
-    }
-    command.arg(format!(
-        "--default-background-color={}",
-        if config.transparent {
-            "0x00000000".to_string()
-        } else {
-            config.background_color.to_opaque_argb_hex()
-        }
-    ));
-    command.stdin(Stdio::null());
-    command.stdout(Stdio::null());
-    command.stderr(Stdio::inherit());
-    Ok(command)
-}
-
-fn browser_profile_key(config: &crate::osr::host::OsrHostConfig) -> String {
-    config
-        .app_id
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .expect("cef_osr_command requires a non-empty app_id")
-        .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{OSR_HOST_ARG, starts_window_host};
-
-    fn launch(args: &[&str]) -> bool {
-        starts_window_host(&args.iter().map(ToString::to_string).collect::<Vec<_>>())
-    }
-
-    #[test]
-    fn only_the_app_s_own_launch_starts_a_window_host() {
-        assert!(launch(&["notes", OSR_HOST_ARG]));
-        assert!(!launch(&["notes"]));
-        assert!(!launch(&["notes", OSR_HOST_ARG, "/tmp/window.json"]));
-        assert!(!launch(&["notes", "report.txt", OSR_HOST_ARG]));
-    }
 }

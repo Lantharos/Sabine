@@ -19,10 +19,12 @@ impl DeviceHealth {
             message: Mutex::new(None),
             wake: Box::new(wake),
         });
-        let observed = health.clone();
+        let lost = health.clone();
         device.set_device_lost_callback(move |reason, message| {
-            observed.fail(format!("{reason:?}: {message}"));
+            lost.fail(format!("{reason:?}: {message}"));
         });
+        let errored = health.clone();
+        device.on_uncaptured_error(Arc::new(move |error| errored.fail(error.to_string())));
         health
     }
 

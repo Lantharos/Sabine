@@ -47,10 +47,7 @@ impl std::fmt::Debug for PaintLease {
 
 impl Drop for PaintLease {
     fn drop(&mut self) {
-        let _ = self.control.send(format!(
-            "paint_release\t{}\t{}\n",
-            self.slot, self.generation
-        ));
+        self.control.release_paint(self.slot, self.generation);
     }
 }
 

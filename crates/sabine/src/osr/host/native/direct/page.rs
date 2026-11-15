@@ -1,6 +1,7 @@
 use winit::event_loop::ActiveEventLoop;
 
-use super::{Backdrop, DirectFrame, DirectOutcome, DirectPresenter, Release};
+use super::{Backdrop, DirectFrame, DirectOutcome, DirectPresenter};
+use crate::osr::control::SlotRelease;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::{OsrHostEvent, uses_sabine_chrome};
 use crate::osr::protocol::OsrAccelFrame;
@@ -58,6 +59,16 @@ impl OsrNativeHost {
                 crate::osr::host::trace_host(&self.config, "direct.shown");
                 self.start_renderer(event_loop, false);
             }
+            DirectOutcome::Hidden(transition) => {
+                if self.settle_direct_presentation(transition) {
+                    self.draw_now();
+                }
+            }
+            DirectOutcome::Revealed(transition) => {
+                if self.settle_direct_presentation(transition) {
+                    self.page_revealed();
+                }
+            }
             DirectOutcome::Failed(reason) => {
                 sabine_runtime::report_error(
                     "render",
@@ -69,7 +80,37 @@ impl OsrNativeHost {
                 }
                 self.send_control("repaint\n");
                 self.start_renderer(event_loop, false);
+                self.draw_now();
             }
+        }
+    }
+
+    fn settle_direct_presentation(&mut self, transition: u64) -> bool {
+        self.direct
+            .as_mut()
+            .is_some_and(|direct| direct.settle(transition))
+    }
+
+    /// Draws the window's next frame now, or once it can.
+    fn draw_now(&mut self) {
+        if !self.render()
+            && let Some(window) = &self.window
+        {
+            window.request_redraw();
+        }
+    }
+
+    /// Lets go of the page frame the window's device drew, now that the
+    /// subsurface shows a newer one from the window's next commit.
+    fn page_revealed(&mut self) {
+        self.direct_handover_ready = false;
+        self.direct_repaint_requested = false;
+        if let Some(renderer) = &mut self.renderer {
+            renderer.remove_image(&ImageId::Main);
+        }
+        self.draw_now();
+        if let Some(direct) = &self.direct {
+            direct.desync();
         }
     }
 
@@ -91,32 +132,30 @@ impl OsrNativeHost {
             return PageRoute::Window;
         };
         if self.renderer.is_none() {
-            return if direct.hidden() || self.holds_last_frame() {
-                PageRoute::Window
-            } else {
+            return if direct.shows_page() && !self.holds_last_frame() {
                 PageRoute::Subsurface
+            } else {
+                PageRoute::Window
             };
         }
-        match (self.page_stays_direct(), direct.hidden()) {
+        match (self.page_stays_direct(), direct.shows_page()) {
             (false, _) => PageRoute::Window,
-            (true, false) => PageRoute::Subsurface,
-            (true, true) => PageRoute::Reveal,
+            (true, true) => PageRoute::Subsurface,
+            (true, false) => PageRoute::Reveal,
         }
     }
 
     /// Whether the subsurface shows the page, so the window's device leaves
     /// it out.
     pub(in crate::osr::host) fn page_in_subsurface(&self) -> bool {
-        self.direct.as_ref().is_some_and(|direct| !direct.hidden())
+        self.direct
+            .as_ref()
+            .is_some_and(DirectPresenter::shows_page)
     }
 
-    fn direct_frame(&self, frame: &OsrAccelFrame, release: Release) -> Option<DirectFrame> {
-        let Some(dmabuf) = frame.resource.clone() else {
-            release();
-            return None;
-        };
+    fn direct_frame(&self, frame: &OsrAccelFrame, release: SlotRelease) -> Option<DirectFrame> {
         Some(DirectFrame {
-            dmabuf,
+            dmabuf: frame.resource.clone()?,
             resource_id: frame.resource_id,
             format: frame.format,
             source: (
@@ -138,47 +177,36 @@ impl OsrNativeHost {
     pub(in crate::osr::host) fn present_directly(
         &mut self,
         frame: &OsrAccelFrame,
-        release: Release,
+        release: SlotRelease,
     ) -> bool {
         let Some(frame) = self.direct_frame(frame, release) else {
             return false;
         };
-        let Some(direct) = &self.direct else {
-            (frame.release)();
+        if !self
+            .direct
+            .as_ref()
+            .is_some_and(|direct| direct.present(frame))
+        {
             return false;
-        };
-        direct.present(frame);
+        }
         self.forget_window_page();
         true
     }
 
     /// Moves the page from the window's device back into the subsurface,
-    /// with a window frame that leaves it out. Hands the slot's release back
-    /// while the compositor still imports the frame's dma-buf.
+    /// with the window frame that follows the compositor taking the frame.
+    /// Returns whether the compositor was handed the frame.
     pub(in crate::osr::host) fn reveal_directly(
         &mut self,
         frame: &OsrAccelFrame,
-        release: Release,
-    ) -> Result<(), Release> {
-        let Some(direct_frame) = self.direct_frame(frame, release) else {
-            return Ok(());
+        release: SlotRelease,
+    ) -> bool {
+        let Some(frame) = self.direct_frame(frame, release) else {
+            return false;
         };
-        let Some(direct) = &mut self.direct else {
-            return Err(direct_frame.release);
-        };
-        direct
-            .reveal_with_next_commit(direct_frame)
-            .map_err(|frame| frame.release)?;
-        self.forget_window_page();
-        if !self.render()
-            && let Some(window) = &self.window
-        {
-            window.request_redraw();
-        }
-        if let Some(direct) = &self.direct {
-            direct.desync();
-        }
-        Ok(())
+        self.direct
+            .as_mut()
+            .is_some_and(|direct| direct.reveal_with_next_commit(frame))
     }
 
     /// Lets go of the page frame the window's device held, now that the
@@ -198,75 +226,67 @@ impl OsrNativeHost {
         let Some(direct) = &self.direct else {
             return;
         };
-        let color = self.config.background_color.to_rgba8();
+        let [red, green, blue, alpha] = self.config.background_color.to_rgba8();
         let backdrop = if self.config.transparent {
-            let scale = self.scale();
-            let physical = |logical: i32| (f64::from(logical.max(0)) * scale).round() as u32;
-            let rects = self
-                .regions()
-                .opaque
-                .map(|opaque| {
-                    opaque.resolved_rects(
-                        self.logical_width().round().max(1.0) as i32,
-                        self.logical_height().round().max(1.0) as i32,
-                    )
-                })
-                .unwrap_or_default()
-                .into_iter()
-                .map(|rect| {
-                    let (left, top) = (physical(rect.x), physical(rect.y));
-                    let right = physical(rect.x.saturating_add(rect.width));
-                    let bottom = physical(rect.y.saturating_add(rect.height));
-                    (
-                        left,
-                        top,
-                        right.saturating_sub(left),
-                        bottom.saturating_sub(top),
-                    )
-                })
-                .collect();
             Backdrop {
-                width: self.surface_size.width,
-                height: self.surface_size.height,
-                color,
+                color: [red, green, blue, alpha],
                 transparent: true,
-                rects,
+                rects: self
+                    .regions()
+                    .opaque
+                    .map(|opaque| {
+                        opaque.resolved_rects(
+                            self.logical_width().round().max(1.0) as i32,
+                            self.logical_height().round().max(1.0) as i32,
+                        )
+                    })
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|rect| (rect.x, rect.y, rect.width, rect.height))
+                    .collect(),
             }
         } else {
             Backdrop {
-                width: 1,
-                height: 1,
-                color,
+                color: [red, green, blue, u8::MAX],
                 transparent: false,
-                rects: vec![(0, 0, 1, 1)],
+                rects: Vec::new(),
             }
         };
         direct.map(backdrop);
     }
 
     /// Notes that the window's own device holds the newest page frame, so
-    /// it can replace the directly shown one.
+    /// it can replace the one the subsurface shows or is about to.
     pub(in crate::osr::host) fn note_main_frame_drawable(&mut self) {
-        self.direct_handover_ready = self.page_in_subsurface();
+        self.direct_handover_ready = self
+            .direct
+            .as_ref()
+            .is_some_and(DirectPresenter::holds_page);
     }
 
-    /// Takes the page out of the subsurface with the window's next frame
-    /// once the window draws something with it and its device holds a page
-    /// frame, asking the browser for one first. Returns whether the window
-    /// can draw now.
+    /// Takes the page out of the subsurface once the window draws something
+    /// with it and its device holds a page frame, asking the browser for
+    /// one first. The window draws once the subsurface took the page down.
+    /// Returns whether the window can draw now.
     pub(in crate::osr::host) fn hand_over_direct_presentation(&mut self) -> bool {
         let stays = self.page_stays_direct();
-        let Some(direct) = self.direct.as_mut().filter(|direct| !direct.hidden()) else {
+        let drawing = self.renderer.is_some();
+        let Some(direct) = self.direct.as_mut() else {
             return true;
         };
-        if self.direct_handover_ready {
-            direct.hide_with_next_commit();
-            self.direct_handover_ready = false;
-            self.direct_repaint_requested = false;
+        if drawing {
+            direct.retire_backdrop();
+        }
+        if direct.hiding() {
+            return false;
+        }
+        if !direct.holds_page() || (stays && !direct.failed()) {
             return true;
         }
-        if stays && !direct.failed() {
-            return true;
+        if std::mem::take(&mut self.direct_handover_ready) {
+            direct.hide_with_next_commit();
+            self.direct_repaint_requested = false;
+            return !direct.hiding();
         }
         if !std::mem::replace(&mut self.direct_repaint_requested, true) {
             self.send_control("repaint\n");

@@ -4,23 +4,18 @@ use crate::render::effective_scale;
 pub(super) fn select_surface_alpha_mode(
     modes: &[wgpu::CompositeAlphaMode],
     transparent: bool,
-) -> wgpu::CompositeAlphaMode {
-    if transparent {
-        for preferred in [
+) -> Result<wgpu::CompositeAlphaMode, RendererError> {
+    let preferred: &[wgpu::CompositeAlphaMode] = if transparent {
+        &[
             wgpu::CompositeAlphaMode::PreMultiplied,
             wgpu::CompositeAlphaMode::PostMultiplied,
             wgpu::CompositeAlphaMode::Inherit,
-        ] {
-            if modes.contains(&preferred) {
-                return preferred;
-            }
-        }
-    }
-    modes
-        .iter()
-        .copied()
-        .find(|mode| *mode == wgpu::CompositeAlphaMode::Opaque)
-        .unwrap_or(modes[0])
+            wgpu::CompositeAlphaMode::Opaque,
+        ]
+    } else {
+        &[wgpu::CompositeAlphaMode::Opaque]
+    };
+    preferred_or_first(modes, preferred, "alpha modes")
 }
 
 /// Presenting never blocks the window thread: Wayland and DirectComposition
@@ -31,7 +26,7 @@ pub(super) fn select_surface_alpha_mode(
 pub(super) fn select_present_mode(
     modes: &[wgpu::PresentMode],
     #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] fullscreen: bool,
-) -> wgpu::PresentMode {
+) -> Result<wgpu::PresentMode, RendererError> {
     #[cfg(target_os = "macos")]
     let preferred: &[wgpu::PresentMode] = if fullscreen {
         &[wgpu::PresentMode::Fifo]
@@ -40,11 +35,22 @@ pub(super) fn select_present_mode(
     };
     #[cfg(not(target_os = "macos"))]
     let preferred = &[wgpu::PresentMode::Mailbox, wgpu::PresentMode::Fifo];
+    preferred_or_first(modes, preferred, "present modes")
+}
+
+/// The first of `preferred` the surface supports, or else the first it
+/// supports at all.
+fn preferred_or_first<T: Copy + PartialEq>(
+    supported: &[T],
+    preferred: &[T],
+    kind: &str,
+) -> Result<T, RendererError> {
     preferred
         .iter()
         .copied()
-        .find(|mode| modes.contains(mode))
-        .unwrap_or(modes[0])
+        .find(|mode| supported.contains(mode))
+        .or_else(|| supported.first().copied())
+        .ok_or_else(|| RendererError::Surface(format!("the surface offers no {kind}")))
 }
 
 impl GpuRenderer {
@@ -66,25 +72,36 @@ impl GpuRenderer {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.scale_factor = scale_factor;
+        self.configure_surface();
+    }
+
+    fn configure_surface(&mut self) {
+        self.surface_suboptimal = false;
         self.surface.configure(&self.device, &self.surface_config);
     }
 
+    /// The texture to draw the next frame into, or none when no frame can
+    /// show now. A window the system hides draws again once it shows.
     pub(super) fn acquire_surface_texture(
         &mut self,
     ) -> Result<Option<wgpu::SurfaceTexture>, RendererError> {
+        if self.surface_suboptimal {
+            self.configure_surface();
+        }
         for attempt in 0..3 {
             match self.surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
                 wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                    self.surface.configure(&self.device, &self.surface_config);
+                    self.surface_suboptimal = true;
                     return Ok(Some(frame));
                 }
-                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                wgpu::CurrentSurfaceTexture::Occluded => return Ok(None),
+                wgpu::CurrentSurfaceTexture::Timeout => {
                     self.window.request_redraw();
                     return Ok(None);
                 }
                 wgpu::CurrentSurfaceTexture::Outdated => {
-                    self.surface.configure(&self.device, &self.surface_config);
+                    self.configure_surface();
                     if attempt + 1 == 3 {
                         self.window.request_redraw();
                         return Ok(None);
@@ -92,7 +109,7 @@ impl GpuRenderer {
                 }
                 wgpu::CurrentSurfaceTexture::Lost => {
                     self.surface = self.source.create(&self.instance)?;
-                    self.surface.configure(&self.device, &self.surface_config);
+                    self.configure_surface();
                     #[cfg(windows)]
                     self.source.commit();
                     if attempt + 1 == 3 {
@@ -112,10 +129,12 @@ impl GpuRenderer {
 #[cfg(target_os = "macos")]
 impl GpuRenderer {
     pub(crate) fn set_fullscreen(&mut self, fullscreen: bool) {
-        let present_mode = select_present_mode(&self.present_modes, fullscreen);
+        let Ok(present_mode) = select_present_mode(&self.present_modes, fullscreen) else {
+            return;
+        };
         if present_mode != self.surface_config.present_mode {
             self.surface_config.present_mode = present_mode;
-            self.surface.configure(&self.device, &self.surface_config);
+            self.configure_surface();
         }
     }
 }

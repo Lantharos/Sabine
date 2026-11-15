@@ -1,10 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
-    io::{self, Read, Write},
-    os::{
-        fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
-        unix::net::UnixStream,
-    },
+    io::{self, Read},
+    os::{fd::AsRawFd, unix::net::UnixStream},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,56 +14,43 @@ use wayland_client::{
     Connection, EventQueue, QueueHandle,
     globals::registry_queue_init,
     protocol::{
-        wl_buffer::WlBuffer,
-        wl_compositor::WlCompositor,
-        wl_shm::{self, WlShm},
-        wl_subcompositor::WlSubcompositor,
-        wl_subsurface::WlSubsurface,
-        wl_surface::WlSurface,
+        wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor,
+        wl_subsurface::WlSubsurface, wl_surface::WlSurface,
     },
 };
 use wayland_protocols::wp::{
-    linux_dmabuf::zv1::client::{
-        zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
-    },
+    linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
+    single_pixel_buffer::v1::client::wp_single_pixel_buffer_manager_v1::WpSinglePixelBufferManagerV1,
     viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
 };
 
+use super::backdrop::{BackdropSurfaces, Pixels};
+use super::buffers::Buffer;
 use super::timing::FrameTiming;
-use super::{Backdrop, Command, DirectFrame, DirectOutcome, Release};
+use super::{Backdrop, Command, DirectFrame, DirectOutcome};
 use crate::osr::accel::Dmabuf;
 use crate::osr::host::input::InputLatency;
 
-const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
-const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
-const DRM_FORMAT_XRGB8888: u32 = u32::from_le_bytes(*b"XR24");
-const DRM_FORMAT_XBGR8888: u32 = u32::from_le_bytes(*b"XB24");
-const DRM_FORMAT_ARGB8888: u32 = u32::from_le_bytes(*b"AR24");
-const DRM_FORMAT_ABGR8888: u32 = u32::from_le_bytes(*b"AB24");
-
-pub(super) struct Buffer {
-    pub(super) buffer: WlBuffer,
-    pub(super) release: Option<Release>,
-    dmabuf: Arc<Dmabuf>,
-}
-
 pub(super) struct State {
-    connection: Connection,
-    handle: QueueHandle<State>,
+    pub(super) handle: QueueHandle<State>,
     parent: WlSurface,
     surface: WlSurface,
     subsurface: WlSubsurface,
     viewport: WpViewport,
-    dmabuf: ZwpLinuxDmabufV1,
+    pub(super) dmabuf: ZwpLinuxDmabufV1,
     shm: WlShm,
-    transparent: bool,
-    background: Option<WlBuffer>,
+    single_pixel: Option<WpSinglePixelBufferManagerV1>,
+    pub(super) transparent: bool,
+    backdrop: Option<BackdropSurfaces>,
+    compositor: WlCompositor,
     subcompositor: WlSubcompositor,
     viewporter: WpViewporter,
     pub(super) modifiers: HashSet<(u32, u64)>,
     pub(super) buffers: HashMap<u64, Buffer>,
-    creating: HashMap<u64, Arc<Dmabuf>>,
-    waiting: Option<DirectFrame>,
+    pub(super) creating: HashMap<u64, Arc<Dmabuf>>,
+    pub(super) waiting: Option<DirectFrame>,
+    /// The window's transition that showing the waiting frame completes.
+    revealing: Option<u64>,
     attached: bool,
     map_requested: bool,
     shown: bool,
@@ -103,16 +87,14 @@ impl State {
         let viewporter: WpViewporter = globals
             .bind(&handle, 1..=1, ())
             .map_err(|_| missing("viewporter"))?;
+        let single_pixel = globals.bind(&handle, 1..=1, ()).ok();
         let timing = latency.map(|latency| FrameTiming::new(latency, &globals, &handle));
         let surface = compositor.create_surface(&handle, ());
         let subsurface = subcompositor.get_subsurface(&surface, &parent, &handle, ());
         subsurface.set_desync();
         let viewport = viewporter.get_viewport(&surface, &handle, ());
-        let no_input = compositor.create_region(&handle, ());
-        surface.set_input_region(Some(&no_input));
-        no_input.destroy();
+        ignore_input(&compositor, &handle, &surface);
         let mut state = Self {
-            connection: connection.clone(),
             handle,
             parent,
             surface,
@@ -120,14 +102,17 @@ impl State {
             viewport,
             dmabuf,
             shm,
+            single_pixel,
             transparent,
-            background: None,
+            backdrop: None,
+            compositor,
             subcompositor,
             viewporter,
             modifiers: HashSet::new(),
             buffers: HashMap::new(),
             creating: HashMap::new(),
             waiting: None,
+            revealing: None,
             attached: false,
             map_requested: false,
             shown: false,
@@ -145,33 +130,23 @@ impl State {
     fn handle(&mut self, command: Command) {
         match command {
             Command::Present(frame) => self.present(frame),
-            Command::Map(backdrop) => match backdrop_buffer(&self.shm, &self.handle, &backdrop) {
-                Ok(buffer) => {
-                    self.background = Some(buffer);
-                    self.map_requested = true;
-                    self.map();
-                }
-                Err(error) => {
-                    self.fail(format!("could not paint the window's background: {error}"))
-                }
-            },
-            Command::Hide(done) => {
+            Command::Map(backdrop) => self.map_with(&backdrop),
+            Command::Hide(transition) => {
                 self.hide();
-                let _ = self.connection.flush();
-                let _ = done.send(());
+                (self.report)(DirectOutcome::Hidden(transition));
             }
-            Command::Reveal(frame, done) => {
-                let revealed = self.reveal(frame);
-                let _ = self.connection.flush();
-                let _ = done.send(revealed);
-            }
+            Command::Reveal(frame, transition) => self.reveal(frame, transition),
             Command::Desync => self.subsurface.set_desync(),
+            Command::RetireBackdrop => {
+                if let Some(backdrop) = &self.backdrop {
+                    backdrop.retire();
+                }
+            }
         }
     }
 
     fn present(&mut self, frame: DirectFrame) {
         if self.failed || self.hidden {
-            (frame.release)();
             return;
         }
         self.forget_retired_buffers();
@@ -183,7 +158,6 @@ impl State {
             return;
         }
         if !self.import(&frame) {
-            (frame.release)();
             return;
         }
         if let Some(replaced) = self.waiting.replace(frame) {
@@ -193,119 +167,45 @@ impl State {
 
     /// Lets go of a frame a newer one replaced before it could show.
     fn drop_waiting(&mut self, frame: DirectFrame) {
-        (frame.release)();
         if let Some(timing) = self.timing.as_mut() {
             timing.carry(frame.inputs);
         }
     }
 
-    /// Shows `frame` together with the window's next commit, or hands it
-    /// back while the compositor has yet to import its dma-buf.
-    fn reveal(&mut self, frame: DirectFrame) -> Result<(), DirectFrame> {
-        self.forget_retired_buffers();
-        if self.failed || !self.buffers.contains_key(&frame.resource_id) {
-            if !self.failed {
-                self.import(&frame);
-            }
-            return Err(frame);
+    /// Shows `frame` in the subsurface again from the window's next commit,
+    /// once the compositor imported its dma-buf.
+    fn reveal(&mut self, frame: DirectFrame, transition: u64) {
+        if self.failed {
+            return;
         }
         self.hidden = false;
-        self.subsurface.set_sync();
-        self.show(frame);
-        Ok(())
+        self.revealing = Some(transition);
+        self.present(frame);
     }
 
-    /// Asks the compositor to import a frame's dma-buf, unless it already
-    /// does. Returns whether the import is under way.
-    fn import(&mut self, frame: &DirectFrame) -> bool {
-        let Some(format) = drm_format(frame.format, self.transparent) else {
-            self.fail(format!("unsupported frame color format {}", frame.format));
-            return false;
+    fn map_with(&mut self, backdrop: &Backdrop) {
+        let pixels = Pixels {
+            single_pixel: self.single_pixel.as_ref(),
+            shm: &self.shm,
+            handle: &self.handle,
         };
-        if !self.modifiers.contains(&(format, frame.dmabuf.modifier)) {
-            self.fail(format!(
-                "the compositor cannot import format {format:#x} with modifier {:#x}",
-                frame.dmabuf.modifier
-            ));
-            return false;
-        }
-        if self.creating.contains_key(&frame.resource_id) {
-            return true;
-        }
-        let dmabuf = &frame.dmabuf;
-        let params = self.dmabuf.create_params(&self.handle, frame.resource_id);
-        params.add(
-            dmabuf.fd.as_fd(),
-            0,
-            dmabuf.offset,
-            dmabuf.stride,
-            (dmabuf.modifier >> 32) as u32,
-            dmabuf.modifier as u32,
+        let surfaces = BackdropSurfaces::new(
+            &pixels,
+            (&self.compositor, &self.subcompositor, &self.viewporter),
+            (&self.parent, &self.surface),
+            backdrop,
         );
-        params.create(
-            dmabuf.width as i32,
-            dmabuf.height as i32,
-            format,
-            zwp_linux_buffer_params_v1::Flags::empty(),
-        );
-        self.creating
-            .insert(frame.resource_id, Arc::clone(&frame.dmabuf));
-        true
-    }
-
-    /// Lets go of the buffers of dma-bufs the browser retired, once the
-    /// compositor gave them back.
-    fn forget_retired_buffers(&mut self) {
-        self.buffers.retain(|_, buffer| {
-            let retired = Arc::strong_count(&buffer.dmabuf) == 1 && buffer.release.is_none();
-            if retired {
-                buffer.buffer.destroy();
+        match surfaces {
+            Ok(surfaces) => {
+                self.backdrop = Some(surfaces);
+                self.map_requested = true;
+                self.map();
             }
-            !retired
-        });
-    }
-
-    pub(super) fn buffer_created(&mut self, resource_id: u64, buffer: WlBuffer) {
-        let Some(dmabuf) = self.creating.remove(&resource_id) else {
-            buffer.destroy();
-            return;
-        };
-        self.buffers.insert(
-            resource_id,
-            Buffer {
-                buffer,
-                release: None,
-                dmabuf,
-            },
-        );
-        if let Some(frame) = self
-            .waiting
-            .take_if(|frame| frame.resource_id == resource_id)
-        {
-            self.show(frame);
+            Err(error) => self.fail(format!("could not paint the window's background: {error}")),
         }
     }
 
-    pub(super) fn buffer_failed(&mut self, resource_id: u64) {
-        self.creating.remove(&resource_id);
-        self.fail("the compositor could not import the page's dma-buf".to_string());
-        if let Some(frame) = self.waiting.take() {
-            (frame.release)();
-        }
-    }
-
-    pub(super) fn buffer_released(&mut self, released: &WlBuffer) {
-        if let Some(release) = self
-            .buffers
-            .values_mut()
-            .find(|buffer| &buffer.buffer == released)
-            .and_then(|buffer| buffer.release.take())
-        {
-            release();
-        }
-    }
-
-    fn show(&mut self, frame: DirectFrame) {
+    pub(super) fn show(&mut self, frame: DirectFrame) {
         let (x, y, width, height) = frame.source;
         let (destination_width, destination_height) = frame.destination;
         let fits = x.saturating_add(width) <= frame.dmabuf.width
@@ -316,12 +216,9 @@ impl State {
             .filter(|_| fits && width > 0 && height > 0)
             .filter(|_| destination_width > 0 && destination_height > 0)
         else {
-            (frame.release)();
             return;
         };
-        if let Some(previous) = buffer.release.replace(frame.release) {
-            previous();
-        }
+        buffer.release = Some(frame.release);
         self.surface.attach(Some(&buffer.buffer), 0, 0);
         self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
         self.viewport.set_source(
@@ -337,6 +234,9 @@ impl State {
         }
         self.surface.commit();
         self.attached = true;
+        if let Some(transition) = self.revealing.take() {
+            (self.report)(DirectOutcome::Revealed(transition));
+        }
         self.map();
     }
 
@@ -344,14 +244,18 @@ impl State {
         if self.shown || !self.map_requested || !self.attached || self.hidden {
             return;
         }
+        let Some(backdrop) = &self.backdrop else {
+            return;
+        };
         self.shown = true;
-        self.parent.attach(self.background.as_ref(), 0, 0);
-        self.parent.damage_buffer(0, 0, i32::MAX, i32::MAX);
+        backdrop.attach_beneath(&self.parent);
         self.parent.commit();
         (self.report)(DirectOutcome::Shown);
     }
 
     fn hide(&mut self) {
+        self.revealing = None;
+        self.waiting = None;
         if self.hidden {
             return;
         }
@@ -359,38 +263,27 @@ impl State {
         self.subsurface.set_sync();
         self.surface.attach(None, 0, 0);
         self.surface.commit();
-        if let Some(frame) = self.waiting.take() {
-            (frame.release)();
-        }
     }
 
-    fn fail(&mut self, reason: String) {
+    pub(super) fn fail(&mut self, reason: String) {
         if !self.failed {
             self.failed = true;
             (self.report)(DirectOutcome::Failed(reason));
-        }
-    }
-
-    fn release_all(&mut self) {
-        for buffer in self.buffers.values_mut() {
-            if let Some(release) = buffer.release.take() {
-                release();
-            }
-        }
-        if let Some(frame) = self.waiting.take() {
-            (frame.release)();
         }
     }
 }
 
 impl Drop for State {
     fn drop(&mut self) {
-        self.release_all();
+        self.waiting = None;
         for (_, buffer) in self.buffers.drain() {
             buffer.buffer.destroy();
         }
-        if let Some(background) = self.background.take() {
-            background.destroy();
+        if let Some(backdrop) = self.backdrop.take() {
+            backdrop.destroy();
+        }
+        if let Some(single_pixel) = self.single_pixel.take() {
+            single_pixel.destroy();
         }
         self.viewport.destroy();
         self.subsurface.destroy();
@@ -401,6 +294,17 @@ impl Drop for State {
     }
 }
 
+/// Lets input on `surface` fall through to the window beneath it.
+pub(super) fn ignore_input(
+    compositor: &WlCompositor,
+    handle: &QueueHandle<State>,
+    surface: &WlSurface,
+) {
+    let no_input = compositor.create_region(handle, ());
+    surface.set_input_region(Some(&no_input));
+    no_input.destroy();
+}
+
 pub(super) fn run(
     mut queue: EventQueue<State>,
     mut state: State,
@@ -408,9 +312,9 @@ pub(super) fn run(
     mut wake: UnixStream,
     stop: Arc<AtomicBool>,
 ) {
-    loop {
-        if queue.dispatch_pending(&mut state).is_err() {
-            return;
+    let ended = loop {
+        if let Err(error) = queue.dispatch_pending(&mut state) {
+            break error.to_string();
         }
         let _ = queue.flush();
         let Some(guard) = queue.prepare_read() else {
@@ -422,7 +326,7 @@ pub(super) fn run(
             match guard.read() {
                 Ok(_) => {}
                 Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => {}
-                Err(_) => return,
+                Err(error) => break error.to_string(),
             }
         } else {
             drop(guard);
@@ -437,7 +341,10 @@ pub(super) fn run(
                 state.handle(command);
             }
         }
-    }
+    };
+    (state.report)(DirectOutcome::Failed(format!(
+        "the compositor connection failed: {ended}"
+    )));
 }
 
 fn wait(connection: i32, wake: i32) -> [bool; 2] {
@@ -450,67 +357,4 @@ fn wait(connection: i32, wake: i32) -> [bool; 2] {
         return [false, false];
     }
     fds.map(|fd| fd.revents != 0)
-}
-
-fn drm_format(color_type: u32, transparent: bool) -> Option<u32> {
-    match (color_type, transparent) {
-        (CEF_COLOR_TYPE_BGRA_8888, false) => Some(DRM_FORMAT_XRGB8888),
-        (CEF_COLOR_TYPE_RGBA_8888, false) => Some(DRM_FORMAT_XBGR8888),
-        (CEF_COLOR_TYPE_BGRA_8888, true) => Some(DRM_FORMAT_ARGB8888),
-        (CEF_COLOR_TYPE_RGBA_8888, true) => Some(DRM_FORMAT_ABGR8888),
-        _ => None,
-    }
-}
-
-/// The window's own buffer beneath the page, which the window's viewport
-/// stretches over the whole window.
-fn backdrop_buffer(
-    shm: &WlShm,
-    handle: &QueueHandle<State>,
-    backdrop: &Backdrop,
-) -> io::Result<WlBuffer> {
-    let [red, green, blue, alpha] = backdrop.color;
-    let premultiply = |channel: u8| (u16::from(channel) * u16::from(alpha) / 255) as u8;
-    let pixel = [
-        premultiply(blue),
-        premultiply(green),
-        premultiply(red),
-        alpha,
-    ];
-    let (width, height) = (backdrop.width.max(1), backdrop.height.max(1));
-    let stride = width as usize * 4;
-    let mut pixels = vec![0u8; stride * height as usize];
-    for &(x, y, rect_width, rect_height) in &backdrop.rects {
-        let (left, right) = (x.min(width), x.saturating_add(rect_width).min(width));
-        for row in y.min(height)..y.saturating_add(rect_height).min(height) {
-            let start = row as usize * stride;
-            pixels[start + left as usize * 4..start + right as usize * 4]
-                .as_chunks_mut::<4>()
-                .0
-                .fill(pixel);
-        }
-    }
-    let fd = unsafe { libc::memfd_create(c"sabine-backdrop".as_ptr(), libc::MFD_CLOEXEC) };
-    if fd < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-    std::fs::File::from(fd.try_clone()?).write_all(&pixels)?;
-    let format = if backdrop.transparent {
-        wl_shm::Format::Argb8888
-    } else {
-        wl_shm::Format::Xrgb8888
-    };
-    let pool = shm.create_pool(fd.as_fd(), pixels.len() as i32, handle, ());
-    let buffer = pool.create_buffer(
-        0,
-        width as i32,
-        height as i32,
-        stride as i32,
-        format,
-        handle,
-        (),
-    );
-    pool.destroy();
-    Ok(buffer)
 }

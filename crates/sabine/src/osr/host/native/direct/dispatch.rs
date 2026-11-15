@@ -18,6 +18,7 @@ use wayland_protocols::wp::{
         zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
         zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
     },
+    single_pixel_buffer::v1::client::wp_single_pixel_buffer_manager_v1::WpSinglePixelBufferManagerV1,
     viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
 };
 
@@ -32,6 +33,7 @@ delegate_noop!(State: WlShmPool);
 delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: WpViewporter);
 delegate_noop!(State: WpViewport);
+delegate_noop!(State: WpSinglePixelBufferManagerV1);
 
 impl Dispatch<WlRegistry, GlobalListContents> for State {
     fn event(

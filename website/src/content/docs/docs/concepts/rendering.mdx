@@ -150,7 +150,7 @@ A Linux window without Sabine's own titlebar or a loading screen hands the page'
 
 The window's first frame shows this way too, so the window doesn't wait for its graphics device to appear. The device starts once that frame is on screen, so it never competes with Chromium for the first frame.
 
-Whenever the window has something to draw over or around the page, such as a popup, a guest, a tooltip, the context menu, native video or a resize in progress, the page moves into the window's device for as long as that lasts. The window asks Chromium for a fresh frame, and the subsurface comes down with the first window frame that draws it, in one commit. Once the window draws nothing over the page again, the next page frame goes back to the subsurface together with a window frame that leaves the page out.
+Whenever the window has something to draw over or around the page, such as a popup, a guest, a tooltip, the context menu, native video or a resize in progress, the page moves into the window's device for as long as that lasts. The window asks Chromium for a fresh frame, and the subsurface comes down with the first window frame that draws it, in one commit. Once the window draws nothing over the page again, the next page frame goes back to the subsurface as soon as the compositor has it, together with a window frame that leaves the page out.
 
 A compositor without `linux-dmabuf`, subsurfaces or viewports, or one that can't import the frame's format, leaves every frame to the window's device.
 

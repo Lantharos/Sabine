@@ -14,7 +14,9 @@ pub(in crate::render::gpu) struct TextRendererState {
     swash_cache: SwashCache,
     viewport: Viewport,
     atlas: TextAtlas,
-    renderer: TextRenderer,
+    /// One renderer for each run of text the display list draws between
+    /// other drawing, so text keeps its place among what covers it.
+    layers: Vec<TextRenderer>,
     buffers: Vec<TextBufferEntry>,
 }
 
@@ -32,29 +34,29 @@ impl TextRendererState {
     ) -> Self {
         let cache = Cache::new(device);
         let viewport = Viewport::new(device, &cache);
-        let mut atlas = TextAtlas::new(device, queue, &cache, format);
-        let renderer =
-            TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
+        let atlas = TextAtlas::new(device, queue, &cache, format);
         Self {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
             viewport,
             atlas,
-            renderer,
+            layers: Vec::new(),
             buffers: Vec::new(),
         }
     }
 
+    /// Lays out the display list's text, split into layers that end after
+    /// the text commands `layer_ends` counts.
     pub(in crate::render::gpu) fn prepare(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         display_list: &DisplayList,
+        layer_ends: &[usize],
         scale: f32,
-        width: u32,
-        height: u32,
+        resolution: Resolution,
     ) -> Result<(), RendererError> {
-        self.viewport.update(queue, Resolution { width, height });
+        self.viewport.update(queue, resolution);
         let commands = display_list
             .commands
             .iter()
@@ -97,30 +99,40 @@ impl TextRendererState {
                 self.buffers.push(entry);
             }
         }
-        let text_count = display_list
-            .commands
-            .iter()
-            .filter(|command| matches!(command, DisplayCommand::Text(_)))
-            .count();
+        let text_count = layer_ends.last().copied().unwrap_or_default();
         self.buffers.truncate(text_count);
-        self.renderer
-            .prepare(
-                device,
-                queue,
-                &mut self.font_system,
-                &mut self.atlas,
-                &self.viewport,
-                text_areas(&self.buffers, scale),
-                &mut self.swash_cache,
-            )
-            .map_err(|error| RendererError::Text(error.to_string()))
+        let mut start = 0;
+        for (layer, &end) in layer_ends.iter().enumerate() {
+            if layer == self.layers.len() {
+                self.layers.push(TextRenderer::new(
+                    &mut self.atlas,
+                    device,
+                    wgpu::MultisampleState::default(),
+                    None,
+                ));
+            }
+            self.layers[layer]
+                .prepare(
+                    device,
+                    queue,
+                    &mut self.font_system,
+                    &mut self.atlas,
+                    &self.viewport,
+                    text_areas(&self.buffers[start..end], scale),
+                    &mut self.swash_cache,
+                )
+                .map_err(|error| RendererError::Text(error.to_string()))?;
+            start = end;
+        }
+        Ok(())
     }
 
     pub(in crate::render::gpu) fn render<'pass>(
         &'pass self,
+        layer: usize,
         pass: &mut wgpu::RenderPass<'pass>,
     ) -> Result<(), RendererError> {
-        self.renderer
+        self.layers[layer]
             .render(&self.atlas, &self.viewport, pass)
             .map_err(|error| RendererError::Text(error.to_string()))
     }
