@@ -1,11 +1,13 @@
+mod app;
 pub(crate) mod bindings;
 pub(crate) mod process_tree;
+mod watch;
 pub(crate) mod web_detect;
 
 use std::{
     net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
-    process::{Command, ExitCode, Stdio},
+    process::{ExitCode, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -16,9 +18,8 @@ use std::{
 
 pub use bindings::run_bindings;
 
-use crate::{runtime, util::shell_command};
+use crate::{project::environment::BuildEnvironment, runtime, util::shell_command};
 use process_tree::ProcessTree;
-use web_detect::DevProject;
 
 pub struct DevOptions {
     pub source: PathBuf,
@@ -38,7 +39,7 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         let _ = runtime::ensure_runtime_ready()?;
     }
 
-    let environment = crate::project::environment::BuildEnvironment::load(
+    let environment = BuildEnvironment::load(
         &project.source,
         project
             .frontend
@@ -47,10 +48,13 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         &[],
         sabine_service::AppEnvironment::Development,
     )?;
-    if !options.web_only && options.command.is_none() {
-        bindings::refresh(&project.source, &environment, options.release)?;
-    }
     let interrupted = interrupt_flag()?;
+    let bindings = (!options.web_only && options.command.is_none()).then(|| {
+        let source = project.source.clone();
+        let environment = environment.clone();
+        let release = options.release;
+        thread::spawn(move || bindings::refresh(&source, &environment, release))
+    });
     let mut frontend = None;
     if let Some(dev_frontend) = &project.frontend {
         if !options.no_install
@@ -83,25 +87,29 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         }
         if options.web_only {
             eprintln!("sabine: web-only mode; Ctrl+C to stop");
-            let code = wait_child(frontend.as_mut(), &interrupted)?;
+            let code = app::wait_frontend(frontend.as_mut(), &interrupted)?;
             return Ok(code);
         }
     } else {
         eprintln!("sabine: static web assets (no frontend dev server)");
+    }
+    if let Some(bindings) = bindings {
+        bindings
+            .join()
+            .map_err(|_| "writing the bindings panicked".to_string())??;
     }
 
     eprintln!(
         "sabine: cargo run --manifest-path {}",
         project.cargo_manifest.display()
     );
-    let result = run_cargo(
-        &project,
-        &options,
-        &environment,
-        project.frontend.as_ref(),
-        frontend.as_mut(),
-        &interrupted,
-    );
+    let result = app::run(app::Session {
+        project: &project,
+        options: &options,
+        environment: &environment,
+        frontend: frontend.as_mut(),
+        interrupted: &interrupted,
+    });
     drop(frontend);
     result
 }
@@ -117,7 +125,7 @@ fn interrupt_flag() -> Result<Arc<AtomicBool>, String> {
 fn spawn_frontend(
     root: &Path,
     command: &str,
-    environment: &crate::project::environment::BuildEnvironment,
+    environment: &BuildEnvironment,
 ) -> Result<ProcessTree, String> {
     let mut process = shell_command(command);
     environment.apply(&mut process);
@@ -185,109 +193,4 @@ fn wait_for_port(
             .map(|error| format!(": {error}"))
             .unwrap_or_default()
     ))
-}
-
-fn run_cargo(
-    project: &DevProject,
-    options: &DevOptions,
-    environment: &crate::project::environment::BuildEnvironment,
-    frontend: Option<&web_detect::DevFrontend>,
-    mut frontend_process: Option<&mut ProcessTree>,
-    interrupted: &AtomicBool,
-) -> Result<ExitCode, String> {
-    let mut command = if let Some(custom) = &options.command {
-        #[cfg(unix)]
-        let mut command = shell_command(&format!("{custom} \"$@\""));
-        #[cfg(unix)]
-        command.arg("sabine-app");
-        #[cfg(windows)]
-        let mut command = shell_command(custom);
-        command.args(&options.args);
-        command
-    } else {
-        let mut command = Command::new("cargo");
-        command
-            .arg("run")
-            .arg("--manifest-path")
-            .arg(&project.cargo_manifest);
-        if options.release {
-            command.arg("--release");
-        }
-        command.arg("--").args(&options.args);
-        command
-    };
-    command.current_dir(&project.source);
-    environment.apply(&mut command);
-    command.env_remove("SABINE_DEV_URL");
-    if let Some(id) = options
-        .app_id
-        .clone()
-        .or_else(|| std::env::var("SABINE_APP_ID").ok())
-        .or_else(|| project.app_id.clone())
-    {
-        command.env(
-            "SABINE_APP_ID",
-            sabine_service::AppEnvironment::Development.app_id(&id),
-        );
-    }
-    if let Some(frontend) = frontend {
-        command.env("SABINE_DEV_URL", &frontend.url);
-    }
-    if let Some(manifest) = &project.sabine_manifest {
-        command.env("SABINE_MANIFEST_PATH", manifest);
-    }
-    let mut cargo = ProcessTree::spawn(&mut command)
-        .map_err(|error| format!("failed to run cargo: {error}"))?;
-    loop {
-        if interrupted.load(Ordering::SeqCst) {
-            let _ = cargo.terminate();
-            return Ok(ExitCode::from(130));
-        }
-        if let Some(status) = cargo
-            .try_wait()
-            .map_err(|error| format!("failed waiting for cargo: {error}"))?
-        {
-            return Ok(exit_code(status));
-        }
-        if let Some(frontend) = frontend_process.as_mut()
-            && let Some(status) = frontend
-                .try_wait()
-                .map_err(|error| format!("failed waiting for frontend: {error}"))?
-        {
-            let _ = cargo.terminate();
-            return Err(format!(
-                "frontend exited while the app was running: {status}"
-            ));
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-}
-
-fn wait_child(
-    child: Option<&mut ProcessTree>,
-    interrupted: &AtomicBool,
-) -> Result<ExitCode, String> {
-    let Some(child) = child else {
-        while !interrupted.load(Ordering::SeqCst) {
-            thread::sleep(Duration::from_millis(100));
-        }
-        return Ok(ExitCode::from(130));
-    };
-    loop {
-        if interrupted.load(Ordering::SeqCst) {
-            let _ = child.terminate();
-            return Ok(ExitCode::from(130));
-        }
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|error| format!("failed waiting for frontend: {error}"))?
-        {
-            return Ok(exit_code(status));
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-}
-
-fn exit_code(status: std::process::ExitStatus) -> ExitCode {
-    ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8)
 }

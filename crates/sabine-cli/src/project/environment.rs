@@ -10,6 +10,7 @@ const SECRETS: [&str; 2] = [
     "SABINE_WINDOWS_CERTIFICATE_PASSWORD",
 ];
 
+#[derive(Clone)]
 pub(crate) struct BuildEnvironment {
     values: BTreeMap<String, String>,
     mode: sabine_service::AppEnvironment,
