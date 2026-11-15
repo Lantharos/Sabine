@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{project::read_sabine_file, util::existing_path};
+use crate::{
+    project::read_sabine_file,
+    util::{existing_path, shell_command},
+};
 use sabine_service::manifest::WebSection;
 
 #[derive(Debug, Clone)]
@@ -109,6 +112,37 @@ fn nonempty(value: Option<&str>) -> Option<String> {
     value
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
+}
+
+/// Installs the dependencies of the JavaScript project at `root` when it has
+/// none yet.
+pub(crate) fn ensure_dependencies(root: &Path) -> Result<(), String> {
+    let manifest = root.join("package.json");
+    if !manifest.is_file() {
+        return Ok(());
+    }
+    let package = read_package_json(&manifest)?;
+    install_dependencies(root, package_manager(root, &package))
+}
+
+pub(crate) fn install_dependencies(root: &Path, package_manager: &str) -> Result<(), String> {
+    if root.join("node_modules").is_dir() {
+        return Ok(());
+    }
+    eprintln!(
+        "sabine: installing JS deps with {package_manager} in {}",
+        root.display()
+    );
+    let status = shell_command(&format!("{package_manager} install"))
+        .current_dir(root)
+        .status()
+        .map_err(|error| format!("failed to run {package_manager} install: {error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "{package_manager} install failed with status {status}"
+        ));
+    }
+    Ok(())
 }
 
 pub fn detect_package_root(source_dir: &Path) -> Option<PathBuf> {

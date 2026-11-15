@@ -4,7 +4,11 @@ use std::{
     process::Command,
 };
 
-use super::{BuildTarget, BundleFormat, linux, macos, stage::StagedBundle, windows};
+use super::{
+    BuildTarget, BundleFormat, linux, macos,
+    stage::StagedBundle,
+    windows::{self, signing::WindowsSigning},
+};
 use crate::project::BundleApp;
 
 /// Packages the staged bundle with the platform's tool and returns the artifact.
@@ -12,6 +16,7 @@ pub(super) fn package_bundle(
     app: &BundleApp,
     format: BundleFormat,
     staged: &StagedBundle,
+    signing: Option<&WindowsSigning>,
 ) -> Result<PathBuf, String> {
     match format {
         BundleFormat::Portable if format.target() == BuildTarget::Windows => {
@@ -28,7 +33,7 @@ pub(super) fn package_bundle(
         BundleFormat::AppImage => linux::package::package_appimage(app, staged),
         BundleFormat::Dmg => macos::package_dmg(app, staged),
         BundleFormat::Msi => windows::package::package_msi(app, staged),
-        BundleFormat::Exe => windows::package::package_exe(app, staged),
+        BundleFormat::Exe => windows::package::package_exe(app, staged, signing),
     }
 }
 

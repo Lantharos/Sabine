@@ -4,6 +4,12 @@ use std::{
     process::Command,
 };
 
+/// Signing secrets the CLI reads itself, kept from the builds it runs.
+const SECRETS: [&str; 2] = [
+    "SABINE_UPDATE_SIGNING_KEY",
+    "SABINE_WINDOWS_CERTIFICATE_PASSWORD",
+];
+
 pub(crate) struct BuildEnvironment {
     values: BTreeMap<String, String>,
     mode: sabine_service::AppEnvironment,
@@ -38,6 +44,9 @@ impl BuildEnvironment {
     }
 
     pub fn apply(&self, command: &mut Command) {
+        for secret in SECRETS {
+            command.env_remove(secret);
+        }
         command
             .envs(&self.values)
             .env("NODE_ENV", self.mode.as_str())

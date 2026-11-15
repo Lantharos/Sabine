@@ -64,7 +64,7 @@ pub(crate) enum BuildTarget {
 }
 
 impl BuildTarget {
-    fn host() -> Self {
+    pub(crate) fn host() -> Self {
         if cfg!(target_os = "windows") {
             Self::Windows
         } else if cfg!(target_os = "macos") {

@@ -1,4 +1,6 @@
 mod artwork;
+#[cfg(windows)]
+mod certificate;
 mod msi;
 mod msi_actions;
 pub(super) mod package;
@@ -14,6 +16,7 @@ pub(super) use pe::WindowsArchitecture;
 // aligned with uninstall; this is not a shell script with a wizard attached.
 
 use crate::{desktop::types::prog_id, project::BundleApp};
+use signing::WindowsSigning;
 use std::{fs, path::Path};
 
 pub(super) fn nsis_script(
@@ -23,6 +26,7 @@ pub(super) fn nsis_script(
     output: &str,
     icon: Option<&str>,
     welcome_bitmap: Option<&Path>,
+    signing: Option<&WindowsSigning>,
 ) -> Result<String, String> {
     let source = dunce::canonicalize(source).map_err(|error| error.to_string())?;
     let name = escape(&app.name);
@@ -47,6 +51,9 @@ pub(super) fn nsis_script(
                 escape(&dunce::simplified(path).to_string_lossy())
             )
         })
+        .unwrap_or_default();
+    let sign_uninstaller = signing
+        .map(WindowsSigning::nsis_uninstaller)
         .unwrap_or_default();
     let (register_handlers, unregister_handlers) = handler_commands(app, &name, &executable);
     let (finish_run, start_menu, start_menu_removal) = if app.listing.listed {
@@ -91,7 +98,7 @@ RequestExecutionLevel user
 InstallDir "$LOCALAPPDATA\Programs\{id}"
 InstallDirRegKey HKCU "Software\{id}" "InstallDir"
 SetCompressor /SOLID lzma
-ShowInstDetails show
+{sign_uninstaller}ShowInstDetails show
 ShowUninstDetails show
 Var SetupRunning
 Var SetupCancelled

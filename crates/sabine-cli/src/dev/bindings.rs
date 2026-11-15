@@ -29,9 +29,8 @@ pub fn run_bindings(source: &Path, check: bool) -> Result<ExitCode, String> {
     })
 }
 
-/// Rewrites the bindings before `sabine dev` starts the page, when the app
-/// has them.
-pub(super) fn refresh(
+/// Rewrites the bindings with `cargo run`, when the app has them.
+pub(crate) fn refresh(
     source: &Path,
     environment: &BuildEnvironment,
     release: bool,
@@ -42,6 +41,28 @@ pub(super) fn refresh(
         }
         _ => Ok(()),
     }
+}
+
+/// Has the app built at `program` write its bindings, when it has them.
+pub(crate) fn write_with(
+    source: &Path,
+    program: &Path,
+    environment: &BuildEnvironment,
+) -> Result<(), String> {
+    let Some(bindings) = configured(source)? else {
+        return Ok(());
+    };
+    let mut command = Command::new(program);
+    environment.apply(&mut command);
+    let status = command
+        .current_dir(source)
+        .env("SABINE_BINDINGS", &bindings.target)
+        .status()
+        .map_err(|error| format!("failed to run {}: {error}", program.display()))?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| "could not write the app's TypeScript bindings".to_string())
 }
 
 impl Bindings {

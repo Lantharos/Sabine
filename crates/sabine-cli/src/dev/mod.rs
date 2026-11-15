@@ -1,4 +1,4 @@
-mod bindings;
+pub(crate) mod bindings;
 pub(crate) mod process_tree;
 pub(crate) mod web_detect;
 
@@ -54,7 +54,7 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         if !options.no_install
             && let Some(package_manager) = dev_frontend.package_manager
         {
-            ensure_node_modules(&dev_frontend.root, package_manager)?;
+            web_detect::install_dependencies(&dev_frontend.root, package_manager)?;
         }
         let url = &dev_frontend.url;
         match (&dev_frontend.command, dev_frontend.port) {
@@ -110,26 +110,6 @@ fn interrupt_flag() -> Result<Arc<AtomicBool>, String> {
     ctrlc::set_handler(move || signal.store(true, Ordering::SeqCst))
         .map_err(|error| format!("failed to install Ctrl+C handler: {error}"))?;
     Ok(interrupted)
-}
-
-fn ensure_node_modules(root: &Path, package_manager: &str) -> Result<(), String> {
-    if root.join("node_modules").is_dir() {
-        return Ok(());
-    }
-    eprintln!(
-        "sabine: installing JS deps with {package_manager} in {}",
-        root.display()
-    );
-    let status = shell_command(&format!("{package_manager} install"))
-        .current_dir(root)
-        .status()
-        .map_err(|error| format!("failed to run {package_manager} install: {error}"))?;
-    if !status.success() {
-        return Err(format!(
-            "{package_manager} install failed with status {status}"
-        ));
-    }
-    Ok(())
 }
 
 fn spawn_frontend(

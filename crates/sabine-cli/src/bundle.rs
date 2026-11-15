@@ -13,23 +13,34 @@ pub use install::install_bundle;
 pub use system::install_system_bundle;
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
 };
 
 use crate::{
-    project::{BundleApp, ConfigOverrides, environment},
+    dev::{bindings, web_detect},
+    install::source::InstallOptions,
+    project::{BundleApp, ConfigOverrides, environment::BuildEnvironment},
     util::shell_command,
 };
 use format::{BuildTarget, BundleFormat};
 use package::package_bundle;
-use stage::{binary_path, stage_bundle};
+use signing::Signing;
+use stage::{StagedBundle, binary_path, stage_bundle};
 
 #[derive(Debug)]
 pub struct BundleOptions {
-    pub source: PathBuf,
-    pub target: String,
+    pub build: BuildOptions,
+    pub targets: Vec<String>,
     pub out: PathBuf,
+    pub build_only: bool,
+    pub json: bool,
+    pub offline: bool,
+}
+
+#[derive(Debug)]
+pub struct BuildOptions {
+    pub source: PathBuf,
     pub release: bool,
     pub no_build: bool,
     pub binary: Option<PathBuf>,
@@ -40,30 +51,170 @@ pub struct BundleOptions {
     pub id: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
-    pub json: bool,
-    pub offline: bool,
     /// The operating system owns updates, so the bundle carries no update source.
     pub system_wide: bool,
     pub env_files: Vec<PathBuf>,
 }
 
+/// An app built for one operating system, ready to stage in its formats.
+struct Build {
+    app: BundleApp,
+    binary: PathBuf,
+}
+
 pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
-    let json = options.json;
-    let signing = signing::Signing::from_env()?;
-    let (app, format, staged) = prepare_bundle(options)?;
-    signing.sign_payload(format, &staged)?;
-    let artifact = package_bundle(&app, format, &staged)?;
-    signing.sign_artifact(format, &artifact)?;
-    if json {
-        println!("{}", bundle_json(&app, format, &staged, &artifact));
+    let formats = parse_formats(&options.targets)?;
+    let target = formats[0].target();
+    if options.offline && target.as_str() != std::env::consts::OS {
+        return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
+    }
+    let signing = if options.build_only {
+        Signing::Unsigned
     } else {
-        println!("Bundled {} to {}", app.name, staged.root.display());
-        println!("artifact: {}", artifact.display());
+        Signing::from_env(target)?
+    };
+    let (json, offline, build_only) = (options.json, options.offline, options.build_only);
+    let out = std::path::absolute(&options.out).map_err(|error| error.to_string())?;
+    let build = build(options.build, formats[0])?;
+    if build_only {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({ "ok": true, "binary": build.binary })
+            );
+        } else {
+            println!("Built {} at {}", build.app.name, build.binary.display());
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    for format in formats {
+        let staged = stage_bundle(&build.app, format, &build.binary, &out, offline)?;
+        signing.sign_payload(format, &staged)?;
+        let artifact = package_bundle(&build.app, format, &staged, signing.windows())?;
+        signing.sign_artifact(format, &artifact)?;
+        if json {
+            println!("{}", bundle_json(&build.app, format, &staged, &artifact));
+        } else {
+            println!(
+                "Bundled {} as {} to {}",
+                build.app.name,
+                format.as_str(),
+                staged.root.display()
+            );
+            println!("artifact: {}", artifact.display());
+        }
     }
     Ok(ExitCode::SUCCESS)
 }
 
-fn build_web(app: &BundleApp, environment: &environment::BuildEnvironment) -> Result<(), String> {
+/// Builds and stages the app as a portable bundle in `out`, for installing
+/// it on this machine.
+fn stage_portable(
+    options: &InstallOptions,
+    env_files: Vec<PathBuf>,
+    out: &Path,
+    system_wide: bool,
+) -> Result<(BundleApp, StagedBundle), String> {
+    let build = build(
+        BuildOptions {
+            source: options.source.clone(),
+            release: true,
+            no_build: false,
+            binary: None,
+            no_web_build: false,
+            web_build: None,
+            web_root: None,
+            web_dist: None,
+            id: options.id.clone(),
+            name: options.name.clone(),
+            version: None,
+            system_wide,
+            env_files,
+        },
+        BundleFormat::Portable,
+    )?;
+    let staged = stage_bundle(
+        &build.app,
+        BundleFormat::Portable,
+        &build.binary,
+        out,
+        false,
+    )?;
+    Ok((build.app, staged))
+}
+
+fn parse_formats(targets: &[String]) -> Result<Vec<BundleFormat>, String> {
+    let formats = targets
+        .iter()
+        .map(|target| {
+            BundleFormat::parse(target).ok_or_else(|| format!("unknown bundle target `{target}`; use linux, portable, deb, rpm, appimage, windows, exe, msi, macos, or dmg"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let Some(first) = formats.first() else {
+        return Err("name at least one bundle target".into());
+    };
+    if formats
+        .iter()
+        .any(|format| format.target() != first.target())
+    {
+        return Err("bundle targets built together must run on the same operating system".into());
+    }
+    Ok(formats)
+}
+
+fn build(options: BuildOptions, format: BundleFormat) -> Result<Build, String> {
+    let mut app = crate::project::resolve_app(
+        &options.source,
+        ConfigOverrides {
+            id: options.id,
+            name: options.name,
+            version: options.version,
+            web_build: options.web_build,
+            web_root: options.web_root,
+            web_dist: options.web_dist,
+        },
+    )?;
+    if options.system_wide {
+        app.updates = None;
+    }
+    let target = format.target();
+    let environment = BuildEnvironment::load(
+        &app.source_dir,
+        None,
+        &options.env_files,
+        sabine_service::AppEnvironment::Production,
+    )?;
+    let binary = if let Some(binary) = options.binary {
+        std::path::absolute(binary).map_err(|error| error.to_string())?
+    } else if options.no_build {
+        binary_path(&app, format, options.release)
+    } else {
+        build_rust(&app, target, options.release, &environment)?
+    };
+    if !binary.is_file() {
+        return Err(format!(
+            "built binary was not found at {}; pass --binary to package an existing executable or --no-build only when the default Cargo output already exists",
+            binary.display()
+        ));
+    }
+    if !options.no_web_build {
+        let web_environment = BuildEnvironment::load(
+            &app.source_dir,
+            app.web.as_ref().map(|web| web.root.as_path()),
+            &options.env_files,
+            sabine_service::AppEnvironment::Production,
+        )?;
+        if target == BuildTarget::host() {
+            bindings::write_with(&app.source_dir, &binary, &environment)?;
+        } else {
+            bindings::refresh(&app.source_dir, &environment, options.release)?;
+        }
+        build_web(&app, &web_environment)?;
+    }
+    Ok(Build { app, binary })
+}
+
+fn build_web(app: &BundleApp, environment: &BuildEnvironment) -> Result<(), String> {
     let Some(web) = &app.web else {
         return Ok(());
     };
@@ -73,6 +224,7 @@ fn build_web(app: &BundleApp, environment: &environment::BuildEnvironment) -> Re
     let Some(command) = &web.build_command else {
         return Ok(());
     };
+    web_detect::ensure_dependencies(&web.root)?;
     println!("Building web assets: {command}");
     let mut process = shell_command(command);
     environment.apply(&mut process);
@@ -95,9 +247,9 @@ fn build_web(app: &BundleApp, environment: &environment::BuildEnvironment) -> Re
 
 fn build_rust(
     app: &BundleApp,
-    format: BundleFormat,
+    target: BuildTarget,
     release: bool,
-    environment: &environment::BuildEnvironment,
+    environment: &BuildEnvironment,
 ) -> Result<PathBuf, String> {
     if !app.cargo_manifest.is_file() {
         return Err(format!(
@@ -105,7 +257,6 @@ fn build_rust(
             app.cargo_manifest.display()
         ));
     }
-    let target = format.target();
     let mut command = Command::new("cargo");
     environment.apply(&mut command);
     command
@@ -121,9 +272,9 @@ fn build_rust(
     }
     if let Some(rust_target) = target.rust_target() {
         command.arg("--target").arg(rust_target);
-    }
-    if target == BuildTarget::Windows {
-        configure_windows_linking(&mut command);
+        if target == BuildTarget::Windows {
+            link_statically_as_gui(&mut command, rust_target);
+        }
     }
     command.env("SABINE_BUILD_TARGET", target.as_str());
     use std::io::{BufRead, BufReader};
@@ -157,29 +308,40 @@ fn build_rust(
     executable.ok_or_else(|| format!("cargo did not produce the {} executable", app.cargo_package))
 }
 
-fn configure_windows_linking(command: &mut Command) {
-    const WINDOWS_FLAGS: &str =
-        "-C\x1ftarget-feature=+crt-static\x1f-C\x1flink-arg=/SUBSYSTEM:WINDOWS";
+/// Windows apps carry the C runtime and start without a console. Cargo
+/// merges these flags with the project's own for the target, unless the
+/// environment's flags replace all of them.
+fn link_statically_as_gui(command: &mut Command, rust_target: &str) {
+    const FLAGS: [&str; 4] = [
+        "-C",
+        "target-feature=+crt-static",
+        "-C",
+        "link-arg=/SUBSYSTEM:WINDOWS",
+    ];
     if let Some(mut flags) = std::env::var_os("CARGO_ENCODED_RUSTFLAGS") {
         if !flags.is_empty() {
             flags.push("\x1f");
         }
-        flags.push(WINDOWS_FLAGS);
+        flags.push(FLAGS.join("\x1f"));
         command.env("CARGO_ENCODED_RUSTFLAGS", flags);
-        return;
+    } else if let Ok(mut flags) = std::env::var("RUSTFLAGS") {
+        if !flags.is_empty() {
+            flags.push(' ');
+        }
+        flags.push_str(&FLAGS.join(" "));
+        command.env("RUSTFLAGS", flags);
+    } else {
+        let flags = FLAGS.map(|flag| format!("{flag:?}")).join(", ");
+        command
+            .arg("--config")
+            .arg(format!("target.{rust_target}.rustflags = [{flags}]"));
     }
-    let mut flags = std::env::var("RUSTFLAGS").unwrap_or_default();
-    if !flags.is_empty() {
-        flags.push(' ');
-    }
-    flags.push_str("-C target-feature=+crt-static -C link-arg=/SUBSYSTEM:WINDOWS");
-    command.env("RUSTFLAGS", flags);
 }
 
 fn bundle_json(
     app: &BundleApp,
     format: BundleFormat,
-    staged: &stage::StagedBundle,
+    staged: &StagedBundle,
     artifact: &std::path::Path,
 ) -> String {
     serde_json::json!({
@@ -194,62 +356,4 @@ fn bundle_json(
         "artifacts": [artifact],
     })
     .to_string()
-}
-
-fn prepare_bundle(
-    options: BundleOptions,
-) -> Result<(BundleApp, BundleFormat, stage::StagedBundle), String> {
-    let Some(format) = BundleFormat::parse(&options.target) else {
-        return Err("unknown bundle target; use linux, portable, deb, rpm, appimage, windows, exe, msi, macos, or dmg".to_string());
-    };
-    if options.offline && format.target().as_str() != std::env::consts::OS {
-        return Err("Offline bundles must be built on their target operating system so the runtime and service match the application".to_string());
-    }
-    let out = std::path::absolute(options.out).map_err(|error| error.to_string())?;
-    let mut app = crate::project::resolve_app(
-        &options.source,
-        ConfigOverrides {
-            id: options.id,
-            name: options.name,
-            version: options.version,
-            web_build: options.web_build,
-            web_root: options.web_root,
-            web_dist: options.web_dist,
-        },
-    )?;
-    if options.system_wide {
-        app.updates = None;
-    }
-
-    let environment = environment::BuildEnvironment::load(
-        &app.source_dir,
-        None,
-        &options.env_files,
-        sabine_service::AppEnvironment::Production,
-    )?;
-    if !options.no_web_build {
-        let web_environment = environment::BuildEnvironment::load(
-            &app.source_dir,
-            app.web.as_ref().map(|web| web.root.as_path()),
-            &options.env_files,
-            sabine_service::AppEnvironment::Production,
-        )?;
-        build_web(&app, &web_environment)?;
-    }
-    let binary = if let Some(binary) = options.binary {
-        std::path::absolute(binary).map_err(|error| error.to_string())?
-    } else if options.no_build {
-        binary_path(&app, format, options.release)
-    } else {
-        build_rust(&app, format, options.release, &environment)?
-    };
-    if !binary.is_file() {
-        return Err(format!(
-            "built binary was not found at {}; pass --binary to package an existing executable or --no-build only when the default Cargo output already exists",
-            binary.display()
-        ));
-    }
-
-    let staged = stage_bundle(&app, format, &binary, &out, options.offline)?;
-    Ok((app, format, staged))
 }

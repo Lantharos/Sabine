@@ -12,7 +12,7 @@ mod util;
 
 use std::process::ExitCode;
 
-use bundle::BundleOptions;
+use bundle::{BuildOptions, BundleOptions};
 use clap::Parser;
 mod cli;
 use cli::{Cli, Command, RuntimeSubcommand};
@@ -143,10 +143,11 @@ fn main() -> ExitCode {
         Command::Bundle {
             env_file,
             source,
-            target,
+            targets,
             out,
             debug,
             no_build,
+            build_only,
             binary,
             no_web_build,
             web_build,
@@ -157,31 +158,28 @@ fn main() -> ExitCode {
             version,
             json,
             offline,
-        } => match bundle::bundle(BundleOptions {
-            source,
-            target,
+        } => report(bundle::bundle(BundleOptions {
+            build: BuildOptions {
+                source,
+                release: !debug,
+                no_build,
+                binary,
+                no_web_build,
+                web_build,
+                web_root,
+                web_dist,
+                id,
+                name,
+                version,
+                system_wide: false,
+                env_files: env_file,
+            },
+            targets,
             out,
-            release: !debug,
-            no_build,
-            binary,
-            no_web_build,
-            web_build,
-            web_root,
-            web_dist,
-            id,
-            name,
-            version,
+            build_only,
             json,
             offline,
-            system_wide: false,
-            env_files: env_file,
-        }) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        })),
         Command::ReleaseManifest {
             source,
             output,
@@ -269,4 +267,11 @@ fn main() -> ExitCode {
             }
         },
     }
+}
+
+fn report(result: Result<ExitCode, String>) -> ExitCode {
+    result.unwrap_or_else(|error| {
+        eprintln!("{error}");
+        ExitCode::FAILURE
+    })
 }

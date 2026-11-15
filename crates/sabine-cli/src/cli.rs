@@ -93,8 +93,9 @@ pub(crate) enum Command {
         env_file: Vec<PathBuf>,
         #[arg(default_value = ".")]
         source: PathBuf,
-        #[arg(long, default_value = "portable")]
-        target: String,
+        /// The packages to build, all for one operating system; repeat it or separate them with commas.
+        #[arg(long = "target", default_value = "portable", value_delimiter = ',')]
+        targets: Vec<String>,
         #[arg(long, default_value = "dist")]
         out: PathBuf,
         /// Package a debug build instead of Cargo's release profile.
@@ -102,6 +103,9 @@ pub(crate) enum Command {
         debug: bool,
         #[arg(long)]
         no_build: bool,
+        /// Build the web assets and the executable without packaging them.
+        #[arg(long, conflicts_with_all = ["no_build", "binary", "no_web_build", "offline"])]
+        build_only: bool,
         #[arg(long)]
         binary: Option<PathBuf>,
         #[arg(long)]

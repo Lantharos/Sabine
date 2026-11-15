@@ -1,4 +1,4 @@
-use super::{BundleOptions, prepare_bundle, stage::StagedBundle};
+use super::stage::StagedBundle;
 use crate::{install::source::InstallOptions, project::BundleApp};
 use std::{
     fs, io,
@@ -16,25 +16,7 @@ pub fn install_system_bundle(
     root: Option<&Path>,
 ) -> Result<ExitCode, String> {
     let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let (app, _, staged) = prepare_bundle(BundleOptions {
-        source: options.source,
-        target: "portable".into(),
-        out: temporary.path().to_path_buf(),
-        release: true,
-        no_build: false,
-        binary: None,
-        no_web_build: false,
-        web_build: None,
-        web_root: None,
-        web_dist: None,
-        id: options.id,
-        name: options.name,
-        version: None,
-        json: false,
-        offline: false,
-        system_wide: true,
-        env_files,
-    })?;
+    let (app, staged) = super::stage_portable(&options, env_files, temporary.path(), true)?;
     let executable = place(&app, &staged, root)?;
     println!(
         "Installed {} {} for every user at {}",
