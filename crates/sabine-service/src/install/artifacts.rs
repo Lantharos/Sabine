@@ -1,6 +1,12 @@
 use std::path::{Path, PathBuf};
 
-use crate::{PrepareProgress, PrepareStage, ServiceError, ServiceResult, SystemReleaseManifest};
+use serde::Deserialize;
+
+use crate::types::is_https_url;
+use crate::{
+    PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult,
+    SystemReleaseManifest,
+};
 
 use super::SERVICE_REPO;
 
@@ -65,17 +71,46 @@ pub(super) fn download_system_artifact(
     })
 }
 
+/// The signed manifest of Sabine `required_version`, or of the newest
+/// release, once its signature and contents check out.
 pub(super) fn fetch_system_manifest(
     required_version: Option<&str>,
 ) -> ServiceResult<SystemReleaseManifest> {
-    let url = std::env::var("SABINE_RELEASE_MANIFEST_URL")
-        .unwrap_or_else(|_| system_manifest_url(required_version));
-    if !url.starts_with("https://") {
+    let url = manifest_override().unwrap_or_else(|| system_manifest_url(required_version));
+    if !is_https_url(&url) {
         return Err(ServiceError::Update(
             "Sabine release manifest must use HTTPS".to_string(),
         ));
     }
-    crate::download::fetch_manifest(&url)
+    let manifest = crate::download::fetch_manifest(&url)?;
+    super::validate_system_release(&manifest)?;
+    Ok(manifest)
+}
+
+/// The stable Sabine releases. None is listed while
+/// `SABINE_RELEASE_MANIFEST_URL` names the one release to use.
+pub(super) fn published_versions() -> ServiceResult<Vec<SabineVersion>> {
+    #[derive(Deserialize)]
+    struct Release {
+        tag_name: String,
+        draft: bool,
+        prerelease: bool,
+    }
+    if manifest_override().is_some() {
+        return Ok(Vec::new());
+    }
+    let releases: Vec<Release> = crate::download::fetch_manifest(&format!(
+        "https://api.github.com/repos/{SERVICE_REPO}/releases?per_page=100"
+    ))?;
+    Ok(releases
+        .into_iter()
+        .filter(|release| !release.draft && !release.prerelease)
+        .filter_map(|release| SabineVersion::parse(release.tag_name.trim_start_matches('v')))
+        .collect())
+}
+
+pub(super) fn manifest_override() -> Option<String> {
+    std::env::var("SABINE_RELEASE_MANIFEST_URL").ok()
 }
 
 fn system_manifest_url(required_version: Option<&str>) -> String {
