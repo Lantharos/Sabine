@@ -3,27 +3,29 @@ mod progress;
 use crate::window::config::SabineWindowConfig;
 use progress::SetupProgress;
 use sabine_service::{SabineService, prepare_machine_with_progress};
+use std::ffi::{OsStr, OsString};
+use std::path::Path;
 
 pub(crate) const INSTALL_ARG: &str = "--sabine-install";
 pub(crate) const UNINSTALL_ARG: &str = "--sabine-uninstall";
 const PREPARE_SHARE: f32 = 0.9;
 
-pub(crate) fn requested(args: &[String]) -> bool {
+pub(crate) fn requested(args: &[OsString]) -> bool {
     args.iter()
         .any(|arg| arg == INSTALL_ARG || arg == UNINSTALL_ARG)
 }
 
-pub(crate) fn run(config: &SabineWindowConfig, args: &[String]) -> ! {
+pub(crate) fn run(config: &SabineWindowConfig, args: &[OsString]) -> ! {
     let cancelled = || {
         option(args, "--sabine-install-cancel")
-            .is_some_and(|path| std::path::Path::new(path).exists())
+            .is_some_and(|path| Path::new(path).exists())
     };
     let result = if args.iter().any(|arg| arg == UNINSTALL_ARG) {
         unregister(config)
     } else {
         prepare(
             config,
-            option(args, "--sabine-install-to"),
+            option(args, "--sabine-install-to").map(Path::new),
             cancelled,
             SetupProgress::from_args(args),
         )
@@ -46,16 +48,16 @@ pub(crate) fn run(config: &SabineWindowConfig, args: &[String]) -> ! {
     }
 }
 
-fn option<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+fn option<'a>(args: &'a [OsString], name: &str) -> Option<&'a OsStr> {
     args.iter()
         .position(|arg| arg == name)
         .and_then(|index| args.get(index + 1))
-        .map(String::as_str)
+        .map(OsString::as_os_str)
 }
 
 fn prepare(
     config: &SabineWindowConfig,
-    destination: Option<&str>,
+    destination: Option<&Path>,
     cancelled: impl Fn() -> bool,
     mut progress: SetupProgress,
 ) -> Result<(), String> {
@@ -92,7 +94,7 @@ fn prepare(
         SabineService::default()
             .install_app_payload(
                 &source,
-                std::path::Path::new(destination),
+                destination,
                 manifest,
                 cancelled,
             )

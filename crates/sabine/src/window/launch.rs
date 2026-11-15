@@ -14,7 +14,7 @@ use crate::osr;
 
 impl SabineWindow {
     pub fn launch(mut self) -> SabineResult<SabineProcess> {
-        let args = std::env::args().collect::<Vec<_>>();
+        let args = std::env::args_os().collect::<Vec<_>>();
         if bootstrap::installer::requested(&args) {
             bootstrap::installer::run(&self.config, &args);
         }
@@ -61,7 +61,7 @@ impl SabineWindow {
             &self.config.documents,
         );
         self.config.listeners.open_urls.receive_arguments(
-            &std::env::args().skip(1).collect::<Vec<_>>(),
+            &std::env::args_os().skip(1).collect::<Vec<_>>(),
             std::env::current_dir().ok().as_deref(),
             &openable,
         );

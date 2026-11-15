@@ -12,6 +12,7 @@ use sabine_runtime::{
 use sabine_service::{AppManifest, SabineService, prepare_machine_with_progress};
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::OsString,
     io::Write,
     process::{Command, Stdio},
 };
@@ -38,7 +39,13 @@ pub(crate) fn show_failure(title: &str, error: &dyn std::fmt::Display) {
 
 pub(crate) const BOOTSTRAP_ARG: &str = "--sabine-bootstrap";
 
-pub(crate) fn run_from_args(args: &[String]) -> bool {
+/// Runs the mode Sabine started this process in, whose arguments Sabine
+/// wrote itself.
+pub(crate) fn run_from_args(args: &[OsString]) -> bool {
+    let args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
     if let Some(index) = args.iter().position(|arg| arg == CONFIRM_UPDATE_ARG) {
         let accepted =
             args.get(index + 1)

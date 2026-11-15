@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// A status icon in the system tray or menu bar. `title` names the icon for
@@ -281,13 +282,13 @@ pub struct GlobalShortcutFailure {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SingleInstanceActivation {
     pub policy: SingleInstancePolicy,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<OsString>,
     pub working_directory: Option<PathBuf>,
     pub activation_token: Option<String>,
 }
 
 impl SingleInstanceActivation {
-    pub fn new(policy: SingleInstancePolicy, arguments: Vec<String>) -> Self {
+    pub fn new(policy: SingleInstancePolicy, arguments: Vec<OsString>) -> Self {
         Self {
             policy,
             arguments,

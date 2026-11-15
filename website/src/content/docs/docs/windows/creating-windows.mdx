@@ -75,7 +75,7 @@ says the process was one of Sabine's internal modes:
 
 ```rust
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = std::env::args_os().collect::<Vec<_>>();
     if sabine::dispatch_host_mode_from_args(&args) {
         return;
     }

@@ -89,7 +89,7 @@ events.singleInstance(({ policy, arguments: args, workingDirectory, activationTo
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `policy` | `"allowMultiple" \| "reuseExisting" \| "focusExisting"` | The app's policy. |
-| `arguments` | `string[]` | The later launch's command line, starting with the program itself. |
+| `arguments` | `string[]` | The later launch's command line, starting with the program itself. Rust gets arguments that aren't valid Unicode, such as a file name in another encoding, unchanged; a page sees them with replacement characters. |
 | `workingDirectory` | `string \| null` | The directory the later launch ran in. |
 | `activationToken` | `string \| null` | Pass to `appWindow.focus` so the desktop lets the window take focus. |
 
@@ -161,7 +161,7 @@ exit with a success status when you see it.
 use sabine::{SabineError, SabineWindow, SingleInstancePolicy};
 
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = std::env::args_os().collect::<Vec<_>>();
     if sabine::dispatch_host_mode_from_args(&args) {
         return;
     }

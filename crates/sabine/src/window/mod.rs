@@ -71,7 +71,7 @@ impl SabineWindow {
         build: impl FnOnce(Self) -> SabineResult<Self>,
         launched: impl FnOnce(&mut SabineProcess),
     ) -> ! {
-        let args = std::env::args().collect::<Vec<_>>();
+        let args = std::env::args_os().collect::<Vec<_>>();
         if crate::dispatch_host_mode_from_args(&args) {
             std::process::exit(0);
         }

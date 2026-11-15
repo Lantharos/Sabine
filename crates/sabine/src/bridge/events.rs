@@ -45,8 +45,8 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
             "singleInstance.activate",
             serde_json::json!({
                 "policy": single_instance_policy_name(activation.policy),
-                "arguments": activation.arguments,
-                "workingDirectory": activation.working_directory,
+                "arguments": activation.arguments.iter().map(|argument| argument.to_string_lossy()).collect::<Vec<_>>(),
+                "workingDirectory": activation.working_directory.as_deref().map(std::path::Path::to_string_lossy),
                 "activationToken": activation.activation_token,
             }),
         ),

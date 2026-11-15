@@ -10,6 +10,7 @@ mod platform;
 
 use std::{
     env,
+    ffi::{OsStr, OsString},
     io::{self, Read},
     sync::{
         Arc, OnceLock,
@@ -205,10 +206,10 @@ fn activation(policy: SingleInstancePolicy, value: &Value) -> Option<SingleInsta
         .get("arguments")?
         .as_array()?
         .iter()
-        .map(|value| value.as_str().map(str::to_string))
+        .map(decode)
         .collect::<Option<Vec<_>>>()?;
     let mut activation = SingleInstanceActivation::new(policy, arguments);
-    if let Some(cwd) = value.get("cwd").and_then(Value::as_str) {
+    if let Some(cwd) = value.get("cwd").and_then(decode) {
         activation = activation.working_directory(cwd);
     }
     if let Some(token) = value
@@ -238,8 +239,8 @@ fn notify(peer: &Peer) -> io::Result<bool> {
 
 fn send(peer: &Peer) -> io::Result<bool> {
     let mut activation = serde_json::json!({
-        "arguments": env::args().collect::<Vec<_>>(),
-        "cwd": env::current_dir().ok().map(|path| path.display().to_string()),
+        "arguments": env::args_os().map(|argument| encode(&argument)).collect::<Vec<_>>(),
+        "cwd": env::current_dir().ok().map(|path| encode(path.as_os_str())),
     });
     let stream = platform::connect(peer, &mut activation)?;
     let body = serde_json::to_vec(&activation).map_err(io::Error::other)?;
@@ -250,6 +251,51 @@ fn send(peer: &Peer) -> io::Result<bool> {
         ));
     }
     deliver(stream, &body)
+}
+
+/// An argument or folder as an activation carries it: as text when it is
+/// Unicode, and otherwise as the system's own units, so a file named in
+/// another encoding still opens.
+fn encode(text: &OsStr) -> Value {
+    text.to_str().map_or_else(|| units(text), Value::from)
+}
+
+fn decode(value: &Value) -> Option<OsString> {
+    match value {
+        Value::String(text) => Some(text.into()),
+        Value::Array(units) => from_units(units),
+        _ => None,
+    }
+}
+
+#[cfg(unix)]
+fn units(text: &OsStr) -> Value {
+    std::os::unix::ffi::OsStrExt::as_bytes(text).into()
+}
+
+#[cfg(unix)]
+fn from_units(units: &[Value]) -> Option<OsString> {
+    let bytes = units
+        .iter()
+        .map(|unit| u8::try_from(unit.as_u64()?).ok())
+        .collect::<Option<Vec<_>>>()?;
+    Some(std::os::unix::ffi::OsStringExt::from_vec(bytes))
+}
+
+#[cfg(target_os = "windows")]
+fn units(text: &OsStr) -> Value {
+    std::os::windows::ffi::OsStrExt::encode_wide(text)
+        .collect::<Vec<_>>()
+        .into()
+}
+
+#[cfg(target_os = "windows")]
+fn from_units(units: &[Value]) -> Option<OsString> {
+    let wide = units
+        .iter()
+        .map(|unit| u16::try_from(unit.as_u64()?).ok())
+        .collect::<Option<Vec<_>>>()?;
+    Some(std::os::windows::ffi::OsStringExt::from_wide(&wide))
 }
 
 #[cfg(unix)]

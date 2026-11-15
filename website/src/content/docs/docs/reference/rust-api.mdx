@@ -55,7 +55,7 @@ impl SabineWindow {
     pub fn launch(self) -> SabineResult<SabineProcess>;
 }
 
-pub fn dispatch_host_mode_from_args(args: &[String]) -> bool;
+pub fn dispatch_host_mode_from_args(args: &[OsString]) -> bool;
 ```
 
 `SabineWindow::main` is the recommended entry point. It runs Sabine's internal modes when the executable was started as a window host, setup window or notice, loads `Sabine.toml`, hands a window configured from it to `build`, launches it, waits, and exits with the window's exit status. When `build` returns an error, or the launch fails, it shows a native notice and exits with status 1. A launch handed to an already running instance exits with status 0.
@@ -126,7 +126,7 @@ A custom `main` must let Sabine run its internal modes before parsing arguments,
 
 ```rust
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = std::env::args_os().collect::<Vec<_>>();
     if sabine::dispatch_host_mode_from_args(&args) {
         return;
     }
@@ -811,7 +811,7 @@ pub struct GlobalShortcutActivation {
 
 pub struct SingleInstanceActivation {
     pub policy: SingleInstancePolicy,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<OsString>,
     pub working_directory: Option<PathBuf>,
     pub activation_token: Option<String>,
 }

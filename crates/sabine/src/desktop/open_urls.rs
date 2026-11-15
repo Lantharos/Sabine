@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    ffi::{OsStr, OsString},
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -42,14 +43,14 @@ impl OpenUrls {
     /// excludes the program itself.
     pub(crate) fn receive_arguments(
         &self,
-        arguments: &[String],
+        arguments: &[OsString],
         directory: Option<&Path>,
         openable: &Openable,
     ) -> bool {
         self.receive(
             arguments
                 .iter()
-                .filter(|argument| !argument.starts_with('-'))
+                .filter(|argument| !argument.as_encoded_bytes().starts_with(b"-"))
                 .filter_map(|argument| openable.url(argument, directory)),
         )
     }
@@ -126,8 +127,8 @@ impl Openable {
         }
     }
 
-    fn url(&self, argument: &str, directory: Option<&Path>) -> Option<String> {
-        if let Ok(url) = url::Url::parse(argument) {
+    fn url(&self, argument: &OsStr, directory: Option<&Path>) -> Option<String> {
+        if let Some(Ok(url)) = argument.to_str().map(url::Url::parse) {
             if url.scheme() == "file" {
                 return url
                     .to_file_path()
