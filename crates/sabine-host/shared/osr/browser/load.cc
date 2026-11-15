@@ -18,7 +18,7 @@ void SabineOsrHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
                                    const CefString& errorText,
                                    const CefString& failedUrl) {
   CEF_REQUIRE_UI_THREAD();
-  if (errorCode == ERR_ABORTED) {
+  if (errorCode == ERR_ABORTED || !frame->IsMain()) {
     return;
   }
   if (GuestView* guest = GuestForBrowser(browser)) {
