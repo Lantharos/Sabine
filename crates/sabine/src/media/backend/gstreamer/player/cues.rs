@@ -58,10 +58,9 @@ unsafe fn read_cue(gst: &Gst, sample: *mut c_void) -> Option<Cue> {
 }
 
 unsafe fn is_markup(gst: &Gst, sample: *mut c_void) -> bool {
-    let name = gst::text("format");
     unsafe {
         let structure = (gst.gst_caps_get_structure)((gst.gst_sample_get_caps)(sample), 0);
-        let format = (gst.gst_structure_get_string)(structure, name.as_ptr());
+        let format = (gst.gst_structure_get_string)(structure, c"format".as_ptr());
         !format.is_null() && CStr::from_ptr(format).to_bytes() == b"pango-markup"
     }
 }

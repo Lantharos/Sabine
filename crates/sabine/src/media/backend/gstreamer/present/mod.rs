@@ -8,7 +8,7 @@ use std::sync::Arc;
 use glow::HasContext;
 use khronos_egl as khronos;
 
-use super::gst::{self, Gst, Handle, types};
+use super::gst::{Gst, Handle, types};
 use super::wayland::Target;
 use crate::media::command::{Events, Failures};
 use crate::media::geometry::Frame;
@@ -132,21 +132,16 @@ impl Presenter {
 
     unsafe fn read_sample(&self, handle: Handle) -> Sample {
         let gst = self.gst;
-        let (width_name, height_name, aspect_name) = (
-            gst::text("width"),
-            gst::text("height"),
-            gst::text("pixel-aspect-ratio"),
-        );
         let (mut width, mut height) = (0, 0);
         let (mut aspect_numerator, mut aspect_denominator) = (1, 1);
         unsafe {
             let buffer = (gst.gst_sample_get_buffer)(handle.0);
             let structure = (gst.gst_caps_get_structure)((gst.gst_sample_get_caps)(handle.0), 0);
-            (gst.gst_structure_get_int)(structure, width_name.as_ptr(), &mut width);
-            (gst.gst_structure_get_int)(structure, height_name.as_ptr(), &mut height);
+            (gst.gst_structure_get_int)(structure, c"width".as_ptr(), &mut width);
+            (gst.gst_structure_get_int)(structure, c"height".as_ptr(), &mut height);
             (gst.gst_structure_get_fraction)(
                 structure,
-                aspect_name.as_ptr(),
+                c"pixel-aspect-ratio".as_ptr(),
                 &mut aspect_numerator,
                 &mut aspect_denominator,
             );

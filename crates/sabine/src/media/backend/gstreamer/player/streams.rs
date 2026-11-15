@@ -65,11 +65,10 @@ unsafe fn read_track(gst: &Gst, stream: *mut c_void) -> Option<Track> {
     };
     let id = unsafe { stream_id(gst, stream) }?;
     let tags = unsafe { (gst.gst_stream_get_tags)(stream) };
-    let tag = |name: &str| {
+    let tag = |name: &CStr| {
         if tags.is_null() {
             return None;
         }
-        let name = gst::text(name);
         let mut value = std::ptr::null_mut();
         unsafe {
             (gst.gst_tag_list_get_string)(tags, name.as_ptr(), &mut value);
@@ -77,16 +76,16 @@ unsafe fn read_track(gst: &Gst, stream: *mut c_void) -> Option<Track> {
         }
     };
     let codec = match kind {
-        Kind::Video => tag("video-codec"),
-        Kind::Audio => tag("audio-codec"),
-        Kind::Subtitle => tag("subtitle-codec"),
+        Kind::Video => tag(c"video-codec"),
+        Kind::Audio => tag(c"audio-codec"),
+        Kind::Subtitle => tag(c"subtitle-codec"),
     }
-    .or_else(|| tag("codec"));
+    .or_else(|| tag(c"codec"));
     let track = Track {
         id,
         kind,
-        language: tag("language-code"),
-        label: tag("title"),
+        language: tag(c"language-code"),
+        label: tag(c"title"),
         codec,
         preferred: unsafe { (gst.gst_stream_get_stream_flags)(stream) } & types::STREAM_FLAG_SELECT
             != 0,

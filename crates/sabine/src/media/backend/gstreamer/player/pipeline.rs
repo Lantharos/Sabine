@@ -7,8 +7,8 @@ use super::cues::cue_ready;
 use super::inbox::{Inbox, Message};
 use crate::media::backend::gstreamer::gst::{self, CudaContext, Gst, Handle, types};
 
-const PLAYBIN_FLAGS: &str = "video+audio+text+soft-volume+native-video";
-const VIDEO_SINK: &str = "glupload ! glcolorconvert ! appsink name=pictures \
+const PLAYBIN_FLAGS: &CStr = c"video+audio+text+soft-volume+native-video";
+const VIDEO_SINK: &CStr = c"glupload ! glcolorconvert ! appsink name=pictures \
      caps=video/x-raw(memory:GLMemory),format=RGBA,texture-target=2D \
      max-buffers=1 drop=true sync=true enable-last-sample=false";
 
@@ -39,7 +39,7 @@ impl Pipeline {
         inbox: &Arc<Inbox>,
     ) -> Result<Self, String> {
         unsafe {
-            let playbin = make(gst, "playbin3")?;
+            let playbin = make(gst, c"playbin3")?;
             let (video, subtitles) = match sinks(gst) {
                 Ok(sinks) => sinks,
                 Err(error) => {
@@ -47,18 +47,17 @@ impl Pipeline {
                     return Err(error);
                 }
             };
-            let pictures_name = gst::text("pictures");
-            let pictures = (gst.gst_bin_get_by_name)(video, pictures_name.as_ptr());
-            gst::set_property(gst, subtitles, "caps", "text/x-raw");
-            gst::set_property(gst, subtitles, "sync", "true");
+            let pictures = (gst.gst_bin_get_by_name)(video, c"pictures".as_ptr());
+            gst::set_property(gst, subtitles, c"caps", c"text/x-raw");
+            gst::set_property(gst, subtitles, c"sync", c"true");
             let element_type = (gst.gst_element_get_type)();
-            gst::set_object_property(gst, playbin, "video-sink", element_type, video);
-            gst::set_object_property(gst, playbin, "text-sink", element_type, subtitles);
-            if let Ok(tempo) = make(gst, "scaletempo") {
-                gst::set_object_property(gst, playbin, "audio-filter", element_type, tempo);
+            gst::set_object_property(gst, playbin, c"video-sink", element_type, video);
+            gst::set_object_property(gst, playbin, c"text-sink", element_type, subtitles);
+            if let Ok(tempo) = make(gst, c"scaletempo") {
+                gst::set_object_property(gst, playbin, c"audio-filter", element_type, tempo);
             }
-            gst::set_property(gst, playbin, "flags", PLAYBIN_FLAGS);
-            gst::set_property(gst, playbin, "uri", uri);
+            gst::set_property(gst, playbin, c"flags", PLAYBIN_FLAGS);
+            gst::set_property(gst, playbin, c"uri", &gst::text(uri));
 
             let mut picture_callbacks =
                 types::AppSinkCallbacks::samples(Some(picture_ready), picture_ready);
@@ -168,14 +167,21 @@ impl Pipeline {
             gst::set_property(
                 self.gst,
                 self.playbin.0,
-                "volume",
-                &volume.clamp(0.0, 1.0).to_string(),
+                c"volume",
+                &gst::text(&volume.to_string()),
             )
         };
     }
 
     pub(super) fn set_muted(&self, muted: bool) {
-        unsafe { gst::set_property(self.gst, self.playbin.0, "mute", &muted.to_string()) };
+        unsafe {
+            gst::set_property(
+                self.gst,
+                self.playbin.0,
+                c"mute",
+                if muted { c"true" } else { c"false" },
+            )
+        };
     }
 
     pub(super) fn select_streams(&self, ids: &[String]) {
@@ -209,7 +215,7 @@ impl Drop for Pipeline {
 
 unsafe fn sinks(gst: &Gst) -> Result<(*mut c_void, *mut c_void), String> {
     let video = unsafe { parse_bin(gst, VIDEO_SINK) }?;
-    match unsafe { make(gst, "appsink") } {
+    match unsafe { make(gst, c"appsink") } {
         Ok(subtitles) => Ok((video, subtitles)),
         Err(error) => {
             unsafe { (gst.gst_object_unref)(video) };
@@ -218,18 +224,19 @@ unsafe fn sinks(gst: &Gst) -> Result<(*mut c_void, *mut c_void), String> {
     }
 }
 
-unsafe fn make(gst: &Gst, factory: &str) -> Result<*mut c_void, String> {
-    let name = gst::text(factory);
-    let element = unsafe { (gst.gst_element_factory_make)(name.as_ptr(), std::ptr::null()) };
+unsafe fn make(gst: &Gst, factory: &CStr) -> Result<*mut c_void, String> {
+    let element = unsafe { (gst.gst_element_factory_make)(factory.as_ptr(), std::ptr::null()) };
     if element.is_null() {
-        Err(format!("the GStreamer {factory} element is not installed"))
+        Err(format!(
+            "the GStreamer {} element is not installed",
+            factory.to_string_lossy()
+        ))
     } else {
         Ok(element)
     }
 }
 
-unsafe fn parse_bin(gst: &Gst, description: &str) -> Result<*mut c_void, String> {
-    let description = gst::text(description);
+unsafe fn parse_bin(gst: &Gst, description: &CStr) -> Result<*mut c_void, String> {
     let mut error = std::ptr::null_mut();
     let bin = unsafe {
         (gst.gst_parse_bin_from_description)(description.as_ptr(), types::TRUE, &mut error)
@@ -293,26 +300,24 @@ unsafe fn answer_context(bridge: &BusBridge, message: *mut c_void, element: *mut
     if unsafe { (gst.gst_message_parse_context_type)(message, &mut context_type) } == 0 {
         return;
     }
-    let context_type = unsafe { CStr::from_ptr(context_type) }.to_string_lossy();
-    let context = match context_type.as_ref() {
-        "gst.gl.GLDisplay" => unsafe {
-            let context =
-                (gst.gst_context_new)(gst::text("gst.gl.GLDisplay").as_ptr(), types::TRUE);
+    let context_type = unsafe { CStr::from_ptr(context_type) };
+    let context = match context_type.to_bytes() {
+        b"gst.gl.GLDisplay" => unsafe {
+            let context = (gst.gst_context_new)(c"gst.gl.GLDisplay".as_ptr(), types::TRUE);
             (gst.gst_context_set_gl_display)(context, bridge.gl_display.0);
             Handle(context)
         },
-        "gst.gl.app_context" => unsafe {
-            let name = gst::text("gst.gl.app_context");
-            let context = (gst.gst_context_new)(name.as_ptr(), types::TRUE);
+        b"gst.gl.app_context" => unsafe {
+            let context = (gst.gst_context_new)(c"gst.gl.app_context".as_ptr(), types::TRUE);
             let structure = (gst.gst_context_writable_structure)(context);
             let mut value = types::GValue::default();
             (gst.g_value_init)(&mut value, (gst.gst_gl_context_get_type)());
             (gst.g_value_set_object)(&mut value, bridge.gl_context.0);
-            (gst.gst_structure_set_value)(structure, gst::text("context").as_ptr(), &value);
+            (gst.gst_structure_set_value)(structure, c"context".as_ptr(), &value);
             (gst.g_value_unset)(&mut value);
             Handle(context)
         },
-        gst::CUDA_CONTEXT_TYPE => {
+        name if name == gst::CUDA_CONTEXT_TYPE.to_bytes() => {
             if let Some(cuda) = bridge.cuda.get_or_init(|| CudaContext::create(gst)) {
                 unsafe { (gst.gst_element_set_context)(element, cuda.context.0) };
             }

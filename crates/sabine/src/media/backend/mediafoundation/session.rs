@@ -95,7 +95,7 @@ impl Session {
                 .SetLoop(options.looping)
                 .map_err(|error| error.message())?;
             media
-                .SetVolume(options.volume.clamp(0.0, 1.0))
+                .SetVolume(options.volume)
                 .map_err(|error| error.message())?;
             media
                 .SetMuted(options.muted)
@@ -184,7 +184,7 @@ impl Session {
                 Command::Rate(rate) => media
                     .SetDefaultPlaybackRate(rate)
                     .and_then(|()| media.SetPlaybackRate(rate)),
-                Command::Volume(volume) => media.SetVolume(volume.clamp(0.0, 1.0)),
+                Command::Volume(volume) => media.SetVolume(volume),
                 Command::Muted(muted) => media.SetMuted(muted),
                 Command::Loop(looping) => media.SetLoop(looping),
                 Command::Tracks(_) => Ok(()),

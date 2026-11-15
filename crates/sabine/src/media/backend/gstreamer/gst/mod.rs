@@ -56,8 +56,7 @@ pub(super) unsafe fn take_error(gst: &Gst, error: *mut types::GError) -> String 
 ///
 /// # Safety
 /// `object` must be a live `GObject`.
-pub(super) unsafe fn set_property(gst: &Gst, object: *mut c_void, name: &str, value: &str) {
-    let (name, value) = (text(name), text(value));
+pub(super) unsafe fn set_property(gst: &Gst, object: *mut c_void, name: &CStr, value: &CStr) {
     unsafe { (gst.gst_util_set_object_arg)(object, name.as_ptr(), value.as_ptr()) };
 }
 
@@ -68,11 +67,10 @@ pub(super) unsafe fn set_property(gst: &Gst, object: *mut c_void, name: &str, va
 pub(super) unsafe fn set_object_property(
     gst: &Gst,
     object: *mut c_void,
-    name: &str,
+    name: &CStr,
     value_type: types::GType,
     value: *mut c_void,
 ) {
-    let name = text(name);
     let mut holder = types::GValue::default();
     unsafe {
         (gst.g_value_init)(&mut holder, value_type);
