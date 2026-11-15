@@ -51,6 +51,40 @@
 - `[spellcheck]`, `.spellcheck_languages(...)` and `spellcheck.set(...)` pick the languages pages
   check spelling in, and `spellcheck.addWord` adds words to the app's dictionary.
 
+- Apps change their windows while they run: title, size, minimum and maximum size, position,
+  always on top, resizing, minimizing, maximizing and fullscreen, with `control_window` and
+  `WindowControl` in Rust and `appWindow.setTitle`, `setSize` and the rest in pages. A window
+  shows its page's `document.title` unless the app names it.
+- Pages open and close windows of the app with `appWindow.open(url)` and `appWindow.close(id)`,
+  and `system.displays()` with `events.displaysChanged` describe the displays.
+- `Store` and `store.*` keep JSON values for the app, and `Secrets` and `secrets.*` keep text in
+  the Secret Service, Credential Manager or login keychain.
+- Chromium writes crash reports into the app's data folder, `[crash] upload_url` sends them where
+  the app says, and `CrashReports` lists and removes them. `.logging(...)` keeps the app's log and
+  its pages' console in a file that starts over at 4 MB.
+- `sabine new` asks for the app's id and starts from vanilla, React, Svelte, Vue or Solid.
+  `sabine info` describes the setup, `sabine icon` makes the icon set, `sabine dev` rebuilds and
+  restarts the app when its Rust changes, and `sabine bundle` takes several targets at once.
+- Sabine installs exactly the Chromium build it was released with, checked against the size and
+  SHA-256 it ships, and unpacks runtimes and apps without letting links point outside them.
+- A store app's version has to be a version number, and installs and clean-ups stay inside the
+  app's own folder.
+- Apps confined with `[sandbox]` keep their own Chromium, reach only their own sockets, and talk
+  over the session bus through a filter that lets through the names they list in `talk`.
+- Bridge origins are `https`, or `http` on the computer itself. Popups in guests open only for
+  `http` and `https` pages a click opened, and files from `sabine://file` can't run scripts.
+- Clipboard writes from pages no longer hand files to other apps, and binary clipboard data
+  travels as bytes. Tray icons come from the app's resources or bytes instead of any path.
+- Signing keeps passwords off command lines: notarization uses an App Store Connect API key
+  (`SABINE_NOTARY_API_KEY`, `_KEY_ID` and `_ISSUER`) or a keychain profile, and Windows signs
+  through a temporary certificate store. App release workflows take named secrets
+  (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`) instead of all of them.
+- The package has no default export, and typed bindings refuse 64-bit integers, which JavaScript
+  can't hold exactly.
+- Windows render without spinning while hidden, recover from GPU errors, keep their frames moving
+  when Chromium falls behind, and redraw only what changed; window processes end Chromium gently
+  so it saves cookies and storage, and files with names that aren't UTF-8 open.
+
 # Sabine 0.90
 
 - On Kestrel, a window hears which material its glass has: Luca, a blur of what is behind it, or
