@@ -45,9 +45,16 @@ impl WindowReports {
         });
     }
 
+    /// Reports the window closed, and returns once every listener has heard
+    /// all it reported, so the app's process outlives none of them.
     pub(super) fn closed(&self) {
         let reports = self.clone();
-        run_in_order(move || reports.listeners.closed(reports.window));
+        let (heard, all_heard) = crossbeam_channel::bounded(1);
+        run_in_order(move || {
+            reports.listeners.closed(reports.window);
+            let _ = heard.send(());
+        });
+        let _ = all_heard.recv();
     }
 }
 
