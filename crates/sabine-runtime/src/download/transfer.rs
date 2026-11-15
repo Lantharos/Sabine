@@ -107,6 +107,7 @@ impl Transfer<'_> {
     ) -> Result<bool, TransferError> {
         let mut request = ureq::get(self.url)
             .config()
+            .https_only(true)
             .timeout_global(Some(self.timeout))
             .timeout_connect(Some(Duration::from_secs(15)))
             .timeout_recv_response(Some(Duration::from_secs(30)))
@@ -116,9 +117,12 @@ impl Transfer<'_> {
         if self.offset > 0 {
             request = request.header("Range", format!("bytes={}-", self.offset));
         }
-        let response = request
-            .call()
-            .map_err(|error| TransferError::Retry(error.to_string()))?;
+        let response = request.call().map_err(|error| match error {
+            ureq::Error::RequireHttpsOnly(_) => {
+                TransferError::Fatal(failed(format!("{} is not HTTPS", self.url)))
+            }
+            error => TransferError::Retry(error.to_string()),
+        })?;
         let code = response.status().as_u16();
         if code == 429 || code >= 500 {
             return Err(TransferError::Retry(format!(
