@@ -117,7 +117,9 @@ impl ApplicationHandler for OsrNativeHost {
                 self.send_screen_origin();
                 self.sync_active_frame_rate();
             }
-            WindowEvent::RedrawRequested if self.config.visible && self.presented => {
+            WindowEvent::RedrawRequested
+                if self.config.visible && self.presented && !self.occluded =>
+            {
                 self.render();
             }
             WindowEvent::PointerMoved {

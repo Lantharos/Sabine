@@ -3,7 +3,8 @@ use std::sync::Arc;
 use sabine_platform::WindowEffect;
 
 use crate::render::{
-    DisplayCommand, DisplayList, ImageCommand, ImageId, RectCommand, RoundedRectCommand,
+    DisplayCommand, DisplayList, GpuRenderer, ImageCommand, ImageId, RectCommand,
+    RoundedRectCommand,
 };
 use crate::window::style::Color;
 
@@ -101,35 +102,41 @@ impl OsrNativeHost {
         }
     }
 
-    fn fill_display_list(&self, list: &mut DisplayList, width: f32, height: f32) {
+    /// Clears the frame to the window's background. Only a see-through
+    /// window with Sabine's rounded chrome draws its tinted backdrop, which
+    /// leaves the corners clear.
+    fn fill_backdrop(&self, list: &mut DisplayList, width: f32, height: f32) {
+        let background = self.config.background_color;
         let opaque_swapchain = self
             .renderer
             .as_ref()
-            .is_some_and(|renderer| renderer.surface_alpha_is_opaque());
-        let background = if self.config.transparent && !opaque_swapchain {
-            Color::rgba(0.0, 0.0, 0.0, 0.0)
-        } else {
-            self.config.background_color
-        };
-        list.reset(background);
-        if !self.config.transparent || uses_sabine_chrome(self.config.chrome) {
-            let radius = if self.config.chrome.uses_native_decorations() || !self.rounds_corners() {
-                0.0
-            } else {
-                12.0
-            };
-            list.push(RoundedRectCommand {
-                x: 0.0,
-                y: 0.0,
-                width,
-                height,
-                radius,
-                color: self
-                    .config
-                    .background_color
-                    .opacity(if self.config.transparent { 0.38 } else { 1.0 }),
-            });
+            .is_some_and(GpuRenderer::surface_alpha_is_opaque);
+        if !self.config.transparent || opaque_swapchain {
+            list.reset(Color::rgb(background.r, background.g, background.b));
+            return;
         }
+        if !uses_sabine_chrome(self.config.chrome) {
+            list.reset(Color::rgba(0.0, 0.0, 0.0, 0.0));
+            return;
+        }
+        let tint = background.opacity(0.38);
+        if self.config.chrome.uses_native_decorations() || !self.rounds_corners() {
+            list.reset(tint);
+            return;
+        }
+        list.reset(Color::rgba(0.0, 0.0, 0.0, 0.0));
+        list.push(RoundedRectCommand {
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+            radius: 12.0,
+            color: tint,
+        });
+    }
+
+    fn fill_display_list(&self, list: &mut DisplayList, width: f32, height: f32) {
+        self.fill_backdrop(list, width, height);
         // Solid underlay for opaque regions so glass windows only show blur
         // through the sidebar (or other non-opaque areas), not the content pane.
         if self.config.transparent

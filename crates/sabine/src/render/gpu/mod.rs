@@ -3,8 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use winit::window::Window;
 
-use crate::render::rect_pipeline::to_wgpu_color;
-use crate::render::{DisplayCommand, DisplayList, ImageId};
+use crate::render::rect_pipeline::clear_color;
+use crate::render::{DisplayList, ImageId};
 
 mod device;
 mod draw;
@@ -46,6 +46,9 @@ pub struct GpuRenderer {
     surface: wgpu::Surface<'static>,
     source: instance::SurfaceSource,
     surface_config: wgpu::SurfaceConfiguration,
+    /// The surface presented a frame that no longer matches the window, and
+    /// is configured again before the next one.
+    surface_suboptimal: bool,
     pipelines: Pipelines,
     rect_vertex_buffer: DynamicVertexBuffer,
     image_vertex_buffer: DynamicVertexBuffer,
@@ -137,9 +140,10 @@ impl GpuRenderer {
             .iter()
             .copied()
             .find(wgpu::TextureFormat::is_srgb)
-            .unwrap_or(capabilities.formats[0]);
-        let present_mode = select_present_mode(&capabilities.present_modes, false);
-        let alpha_mode = select_surface_alpha_mode(&capabilities.alpha_modes, transparent);
+            .or_else(|| capabilities.formats.first().copied())
+            .ok_or_else(|| RendererError::Surface("the surface offers no formats".to_string()))?;
+        let present_mode = select_present_mode(&capabilities.present_modes, false)?;
+        let alpha_mode = select_surface_alpha_mode(&capabilities.alpha_modes, transparent)?;
         let surface_alpha_is_opaque = matches!(
             alpha_mode,
             wgpu::CompositeAlphaMode::Opaque | wgpu::CompositeAlphaMode::Auto
@@ -187,6 +191,7 @@ impl GpuRenderer {
             queue,
             surface,
             surface_config,
+            surface_suboptimal: false,
             pipelines,
             rect_vertex_buffer: DynamicVertexBuffer::default(),
             image_vertex_buffer: DynamicVertexBuffer::default(),
@@ -272,10 +277,7 @@ impl GpuRenderer {
         if geometry.has_cutouts() {
             self.pipelines.prepare_cutouts(&self.device);
         }
-        let has_text = display_list
-            .commands
-            .iter()
-            .any(|command| matches!(command, DisplayCommand::Text(_)));
+        let has_text = !geometry.text_layer_ends.is_empty();
         if has_text {
             let text = self.text.get_or_insert_with(|| {
                 TextRendererState::new(&self.device, &self.queue, self.surface_config.format)
@@ -284,9 +286,12 @@ impl GpuRenderer {
                 &self.device,
                 &self.queue,
                 display_list,
+                &geometry.text_layer_ends,
                 self.scale_factor,
-                self.surface_config.width,
-                self.surface_config.height,
+                glyphon::Resolution {
+                    width: self.surface_config.width,
+                    height: self.surface_config.height,
+                },
             )?;
         }
 
@@ -323,7 +328,7 @@ impl GpuRenderer {
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(to_wgpu_color(display_list.background)),
+                        load: wgpu::LoadOp::Clear(clear_color(display_list.background)),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -334,6 +339,7 @@ impl GpuRenderer {
             });
 
             pass.set_bind_group(0, &self.pipelines.globals_bind_group, &[]);
+            let text = self.text.as_ref();
             for draw in &geometry.draws {
                 match draw {
                     Draw::Rects { vertices, cutout } => {
@@ -353,11 +359,13 @@ impl GpuRenderer {
                         pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         pass.draw(image.vertices.clone(), 0..1);
                     }
+                    Draw::Text(layer) => {
+                        if let Some(text) = text {
+                            text.render(*layer, &mut pass)?;
+                            pass.set_bind_group(0, &self.pipelines.globals_bind_group, &[]);
+                        }
+                    }
                 }
-            }
-
-            if has_text && let Some(text) = &self.text {
-                text.render(&mut pass)?;
             }
         }
 

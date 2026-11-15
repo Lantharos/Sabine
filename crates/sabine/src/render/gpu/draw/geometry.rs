@@ -16,11 +16,15 @@ pub(in crate::render::gpu) struct FrameGeometry {
     pub(in crate::render::gpu) rect_vertices: Vec<RectVertex>,
     pub(in crate::render::gpu) image_vertices: Vec<ImageVertex>,
     pub(in crate::render::gpu) draws: Vec<Draw>,
+    /// How many of the frame's text commands come before the end of each
+    /// text layer.
+    pub(in crate::render::gpu) text_layer_ends: Vec<usize>,
 }
 
 pub(in crate::render::gpu) enum Draw {
     Rects { vertices: Range<u32>, cutout: bool },
     Image(ImageDraw),
+    Text(usize),
 }
 
 impl FrameGeometry {
@@ -43,6 +47,16 @@ impl FrameGeometry {
             }),
         }
     }
+
+    fn push_text(&mut self) {
+        if let Some(&Draw::Text(layer)) = self.draws.last() {
+            self.text_layer_ends[layer] += 1;
+            return;
+        }
+        let end = self.text_layer_ends.last().copied().unwrap_or_default() + 1;
+        self.draws.push(Draw::Text(self.text_layer_ends.len()));
+        self.text_layer_ends.push(end);
+    }
 }
 
 impl GpuRenderer {
@@ -54,6 +68,7 @@ impl GpuRenderer {
         frame.rect_vertices.clear();
         frame.image_vertices.clear();
         frame.draws.clear();
+        frame.text_layer_ends.clear();
         for command in &display_list.commands {
             let start = frame.rect_vertices.len() as u32;
             match command {
@@ -74,7 +89,7 @@ impl GpuRenderer {
                         frame.draws.push(Draw::Image(draw));
                     }
                 }
-                DisplayCommand::Text(_) => {}
+                DisplayCommand::Text(_) => frame.push_text(),
             }
         }
     }

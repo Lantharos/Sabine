@@ -118,8 +118,10 @@ pub(crate) fn push_rounded_rect_command(
     );
 }
 
-pub(crate) fn to_wgpu_color(color: Color) -> wgpu::Color {
-    let [r, g, b] = color.linear_rgb();
+/// The color a frame is cleared to, premultiplied as blending over a
+/// transparent frame leaves the colors drawn into it.
+pub(crate) fn clear_color(color: Color) -> wgpu::Color {
+    let [r, g, b] = color.linear_rgb().map(|channel| channel * color.a);
     wgpu::Color {
         r: f64::from(r),
         g: f64::from(g),

@@ -84,6 +84,9 @@ impl OsrNativeHost {
         self.occluded = occluded;
         self.media.set_occluded(occluded);
         self.schedule_lifecycle_sync(if occluded { "occluded" } else { "visible" });
+        if !occluded && let Some(window) = &self.window {
+            window.request_redraw();
+        }
     }
 
     pub(in crate::osr::host) fn remember_size(&self) {
