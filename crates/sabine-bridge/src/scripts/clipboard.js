@@ -5,10 +5,13 @@
 // `window.sabine.clipboard` for any other type. The browser host evaluates
 // this file in every frame, calls the result with a private transport and
 // whether the frame shows the app's own pages, and hands the function it
-// returns each reply from the window.
+// returns each reply from the window. Each item's bytes travel together,
+// one after another, beside a list of the items' types and sizes.
 
 ((post, trusted) => {
   const { stringify, parse } = JSON;
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
   const pending = new Map();
   let nextRequest = 0;
 
@@ -18,7 +21,7 @@
     clearTimeout(entry?.timer);
     return entry;
   };
-  const request = (op, body) =>
+  const request = (op, fields, bytes) =>
     new Promise((resolve, reject) => {
       const id = ++nextRequest;
       const timer = setTimeout(() => {
@@ -27,7 +30,9 @@
       }, 30000);
       pending.set(id, { resolve, reject, timer });
       try {
-        post(stringify({ ...body, id, op }));
+        const message = stringify({ ...fields, id, op });
+        if (bytes) post(message, bytes);
+        else post(message);
       } catch (error) {
         settle(id);
         reject(error);
@@ -38,26 +43,43 @@
       settle(id).reject(new DOMException("The page was hidden", "AbortError"));
     }
   });
-  const read = (selection, types) => request("read", { selection, types });
-  const write = (selection, items) => request("write", { selection, items });
-
-  const encode = async (type, value) => {
-    if (typeof value === "string") return { type, text: value };
-    const bytes =
-      value instanceof Uint8Array
-        ? value
-        : new Uint8Array(value instanceof Blob ? await value.arrayBuffer() : value);
-    return type.startsWith("text/")
-      ? { type, text: new TextDecoder().decode(bytes) }
-      : { type, base64: bytes.toBase64() };
+  const unpack = (items, body) => {
+    let offset = 0;
+    return items.map(({ type, size }) => {
+      const bytes = new Uint8Array(body, offset, size);
+      offset += size;
+      return { type, value: type.startsWith("text/") ? decoder.decode(bytes) : bytes };
+    });
   };
-  const decode = (item) => item.text ?? Uint8Array.fromBase64(item.base64);
+  const pack = (entries) => {
+    const body = new Uint8Array(entries.reduce((size, [, bytes]) => size + bytes.byteLength, 0));
+    let offset = 0;
+    const items = entries.map(([type, bytes]) => {
+      body.set(bytes, offset);
+      offset += bytes.byteLength;
+      return { type, size: bytes.byteLength };
+    });
+    return { items, body: body.buffer };
+  };
+  const read = (selection, types) =>
+    request("read", { selection, types }).then(({ value, body }) => unpack(value, body));
+  const write = (selection, entries) => {
+    const { items, body } = pack(entries.map(([type, value]) => [type, typeof value === "string" ? encoder.encode(value) : value]));
+    return request("write", { selection, items }, body).then(({ value }) => value);
+  };
+
+  const bytesOf = async (value) => {
+    if (typeof value === "string") return encoder.encode(value);
+    if (value instanceof Blob) return new Uint8Array(await value.arrayBuffer());
+    if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    return new Uint8Array(value);
+  };
   const encodeClipboardItems = async (clipboardItems) => {
-    const items = [];
+    const entries = [];
     for (const item of clipboardItems) {
-      for (const type of item.types) items.push(await encode(type, await item.getType(type)));
+      for (const type of item.types) entries.push([type, await bytesOf(await item.getType(type))]);
     }
-    return items;
+    return entries;
   };
 
   const textControl = () => {
@@ -75,16 +97,16 @@
   const selectedItems = () => {
     const text = selectedText();
     if (!text) return [];
-    const items = [{ type: "text/plain", text }];
+    const entries = [["text/plain", text]];
     const selection = getSelection();
     if (!textControl() && selection?.rangeCount) {
       const container = document.createElement("div");
       for (let index = 0; index < selection.rangeCount; index++) {
         container.append(selection.getRangeAt(index).cloneContents());
       }
-      items.push({ type: "text/html", text: container.innerHTML });
+      entries.push(["text/html", container.innerHTML]);
     }
-    return items;
+    return entries;
   };
 
   const carriesCopyAndPaste = navigator.platform.startsWith("Linux");
@@ -98,7 +120,7 @@
   if (carriesCopyAndPaste) {
     const exportCopy = (event) => {
       if (trusted) {
-        setTimeout(() => native.read().then(encodeClipboardItems).then((items) => write("clipboard", items)).catch(() => {}));
+        setTimeout(() => native.read().then(encodeClipboardItems).then((entries) => write("clipboard", entries)).catch(() => {}));
         return;
       }
       const fallback = selectedItems();
@@ -108,10 +130,10 @@
         exported = true;
         removeEventListener(event.type, complete);
         const transfer = event.clipboardData;
-        const items = event.defaultPrevented
-          ? transfer.types.filter((type) => type !== "Files").map((type) => ({ type, text: transfer.getData(type) }))
+        const entries = event.defaultPrevented
+          ? transfer.types.filter((type) => type !== "Files").map((type) => [type, transfer.getData(type)])
           : fallback;
-        if (items.length) write("clipboard", items).catch(() => {});
+        if (entries.length) write("clipboard", entries).catch(() => {});
       };
       addEventListener(event.type, complete);
       setTimeout(complete);
@@ -122,7 +144,7 @@
 
     const exportPrimary = () => {
       const text = selectedText();
-      if (text) write("primary", [{ type: "text/plain", text }]).catch(() => {});
+      if (text) write("primary", [["text/plain", text]]).catch(() => {});
     };
     const editable = () => {
       const control = textControl();
@@ -150,8 +172,8 @@
       const transfer = new DataTransfer();
       for (const item of items) {
         if (plain && item.type !== "text/plain") continue;
-        if (item.text !== undefined) transfer.setData(item.type, item.text);
-        else transfer.items.add(new File([decode(item)], `clipboard.${item.type.split("/")[1]}`, { type: item.type }));
+        if (typeof item.value === "string") transfer.setData(item.type, item.value);
+        else transfer.items.add(new File([item.value], `clipboard.${item.type.split("/")[1]}`, { type: item.type }));
       }
       const paste = new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true, composed: true });
       if (!target.dispatchEvent(paste)) return;
@@ -186,7 +208,7 @@
       writeText: {
         value: async (text) => {
           await native.writeText(text);
-          await write("clipboard", [{ type: "text/plain", text: String(text) }]);
+          await write("clipboard", [["text/plain", String(text)]]);
         },
       },
       write: {
@@ -200,7 +222,7 @@
 
   if (trusted) {
     const readRecord = async (selection, types) =>
-      Object.fromEntries((await read(selection, types)).map((item) => [item.type, decode(item)]));
+      Object.fromEntries((await read(selection, types)).map((item) => [item.type, item.value]));
     if (clipboard) {
       Object.defineProperties(clipboard, {
         readText: { value: async () => (await readRecord("clipboard", ["text/plain"]))["text/plain"] ?? "" },
@@ -208,7 +230,7 @@
           value: async () => {
             const items = await read("clipboard");
             if (!items.length) return [];
-            return [new ClipboardItem(Object.fromEntries(items.map((item) => [item.type, new Blob([decode(item)], { type: item.type })])))];
+            return [new ClipboardItem(Object.fromEntries(items.map((item) => [item.type, new Blob([item.value], { type: item.type })])))];
           },
         },
       });
@@ -217,15 +239,15 @@
     window.sabine.clipboard = Object.freeze({
       read: ({ selection = "clipboard", types } = {}) => readRecord(selection, types),
       write: async (data, { selection = "clipboard" } = {}) =>
-        write(selection, await Promise.all(Object.entries(data).map(([type, value]) => encode(type, value)))),
+        write(selection, await Promise.all(Object.entries(data).map(async ([type, value]) => [type, await bytesOf(value)]))),
     });
   }
 
-  return (message) => {
+  return (message, body) => {
     const reply = parse(message);
     const entry = settle(reply.id);
     if (!entry) return;
-    if (reply.ok) entry.resolve(reply.value);
+    if (reply.ok) entry.resolve({ value: reply.value, body });
     else entry.reject(new DOMException(reply.value?.message ?? "The clipboard is unavailable", "NotAllowedError"));
   };
 })

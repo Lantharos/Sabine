@@ -31,7 +31,7 @@ use super::Command;
 use super::activation;
 use super::drag::Drag;
 use super::objects::{Offer, Source};
-use crate::clipboard::content::read_plan;
+use crate::clipboard::content::{MAX_READ_BYTES, read_plan};
 use crate::clipboard::pipe::{pipe, read_to_end};
 use crate::clipboard::{ClipboardContent, DropEvent, Reply, Selection, TokenReply, Waker};
 
@@ -249,12 +249,14 @@ pub(super) fn receive(
 ) -> Result<ClipboardContent, String> {
     let deadline = Instant::now() + READ_TIMEOUT;
     let mut content = ClipboardContent::default();
+    let mut remaining = MAX_READ_BYTES;
     for (source, reported) in plan {
         let (reader, writer) = pipe().map_err(|error| error.to_string())?;
         offer.receive(source, writer.as_fd());
         drop(writer);
         connection.flush().map_err(|error| error.to_string())?;
-        let bytes = read_to_end(reader, deadline).map_err(|error| error.to_string())?;
+        let bytes = read_to_end(reader, deadline, remaining).map_err(|error| error.to_string())?;
+        remaining -= bytes.len();
         content.push(reported, bytes);
     }
     Ok(content)

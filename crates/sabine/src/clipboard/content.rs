@@ -12,6 +12,9 @@ const TEXT_ALIASES: [&str; 5] = [
     "TEXT",
 ];
 const DEFAULT_TYPES: [&str; 3] = [TEXT, "text/html", URI_LIST];
+/// The most one read takes from the clipboard, every type together: as much
+/// as one bridge message carries to a page.
+pub(crate) const MAX_READ_BYTES: usize = crate::bridge::frame::MAX_BODY_BYTES;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +37,8 @@ impl Selection {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ClipboardContent {
     items: Vec<(String, Arc<[u8]>)>,
+    #[cfg(target_os = "linux")]
+    shared_files: Vec<std::path::PathBuf>,
 }
 
 impl ClipboardContent {
@@ -51,20 +56,28 @@ impl ClipboardContent {
         self.items.is_empty()
     }
 
-    /// The files among the items, from the URIs in `text/uri-list`.
+    /// Lets receivers in a sandbox open the files in `text/uri-list` through
+    /// the document portal. Only the app's own pages share files: a list any
+    /// other page writes stays a list of names.
     #[cfg(target_os = "linux")]
-    pub(crate) fn files(&self) -> Vec<std::path::PathBuf> {
-        self.bytes_for(URI_LIST)
+    pub(crate) fn share_files(&mut self) {
+        self.shared_files = self
+            .bytes_for(URI_LIST)
             .map(|list| super::transfer::files_in(&list))
-            .unwrap_or_default()
+            .unwrap_or_default();
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn shared_files(&self) -> &[std::path::PathBuf] {
+        &self.shared_files
     }
 
     /// The types to advertise: every item, plus the older names of plain text,
-    /// and first the file transfer when the items carry files, which receivers
-    /// in a sandbox look for.
+    /// and first the file transfer when the content shares files, which
+    /// receivers in a sandbox look for.
     #[cfg(target_os = "linux")]
     pub(crate) fn offered_types(&self) -> Vec<String> {
-        let transfer: &[&str] = if self.files().is_empty() {
+        let transfer: &[&str] = if self.shared_files.is_empty() {
             &[]
         } else {
             &super::transfer::TYPES

@@ -35,7 +35,7 @@ use crate::clipboard::{ClipboardContent, Selection, transfer};
 /// with the portal first when it asks for a file transfer.
 fn serve(content: &ClipboardContent, mime: &str, fd: std::os::fd::OwnedFd) {
     if transfer::carries(mime) {
-        let files = content.files();
+        let files = content.shared_files().to_vec();
         send(fd, move || transfer::key(&files));
     } else if let Some(bytes) = content.bytes_for(mime) {
         send(fd, move || Some(bytes));

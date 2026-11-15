@@ -1,4 +1,3 @@
-use base64::{Engine, engine::general_purpose::STANDARD};
 use sabine_bridge::clipboard::{READ_COMMAND, WRITE_COMMAND};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -6,8 +5,8 @@ use serde_json::{Value, json};
 use super::BridgeRequest;
 #[cfg(not(target_os = "linux"))]
 use crate::clipboard::SystemClipboard;
-use crate::clipboard::{ClipboardContent, Selection};
-use crate::osr::host::events::bridge_response_line;
+use crate::clipboard::{ClipboardContent, MAX_READ_BYTES, Selection};
+use crate::osr::host::events::{bridge_bytes_response, bridge_response_line};
 use crate::osr::host::native::OsrNativeHost;
 
 #[derive(Deserialize)]
@@ -21,14 +20,17 @@ struct ReadRequest {
 struct WriteRequest {
     selection: Selection,
     items: Vec<Item>,
+    #[cfg(target_os = "linux")]
+    trusted: bool,
 }
 
+/// One item of the bytes a request carries: its type and how many of the
+/// bytes, in order, are its own.
 #[derive(Deserialize)]
 struct Item {
     #[serde(rename = "type")]
     mime: String,
-    text: Option<String>,
-    base64: Option<String>,
+    size: usize,
 }
 
 impl OsrNativeHost {
@@ -50,22 +52,32 @@ impl OsrNativeHost {
     }
 
     pub(super) fn answer_clipboard(&mut self, request: &BridgeRequest) {
-        match request.command {
-            READ_COMMAND => self.read_clipboard(request),
-            WRITE_COMMAND => {
-                let result = self.write_clipboard(request.payload);
-                self.send_bridge_response(
-                    request.browser_id,
-                    request.request_id,
-                    result.map(|()| Value::Null),
-                );
-            }
-            _ => self.send_bridge_response(
-                request.browser_id,
-                request.request_id,
-                Err(format!("{} is not a clipboard command", request.command)),
-            ),
+        if request.command == READ_COMMAND {
+            self.read_clipboard(request);
+            return;
         }
+        self.send_bridge_response(
+            request.browser_id,
+            request.request_id,
+            Err(format!("{} is not a clipboard command", request.command)),
+        );
+    }
+
+    /// Writes what a page copied, whose bytes ride with its request. Returns
+    /// false for every other request carrying bytes, so it reaches the app.
+    pub(in crate::osr::host) fn answer_clipboard_write(&mut self, line: &str, body: &[u8]) -> bool {
+        let Some(request) =
+            BridgeRequest::parse(line).filter(|request| request.command == WRITE_COMMAND)
+        else {
+            return false;
+        };
+        let result = self.write_clipboard(request.payload, body);
+        self.send_bridge_response(
+            request.browser_id,
+            request.request_id,
+            result.map(|()| Value::Null),
+        );
+        true
     }
 
     fn read_clipboard(&mut self, request: &BridgeRequest) {
@@ -95,15 +107,28 @@ impl OsrNativeHost {
             read.selection,
             read.types,
             Box::new(move |content| {
-                if let Some(writer) = writer {
-                    let payload = content.map(|content| items_json(&content));
-                    let _ = writer.send(bridge_response_line(&browser_id, &request_id, payload));
+                let Some(writer) = writer else {
+                    return;
+                };
+                let sent = match content.and_then(|content| packed(&content)) {
+                    Ok((items, body)) => writer.send_bytes(bridge_bytes_response(
+                        &browser_id,
+                        &request_id,
+                        &items,
+                        &body,
+                    )),
+                    Err(error) => {
+                        writer.send(bridge_response_line(&browser_id, &request_id, Err(error)))
+                    }
+                };
+                if let Err(error) = sent {
+                    sabine_runtime::report_error("clipboard", error);
                 }
             }),
         );
     }
 
-    fn write_clipboard(&self, payload: &str) -> Result<(), String> {
+    fn write_clipboard(&self, payload: &str, body: &[u8]) -> Result<(), String> {
         let write =
             serde_json::from_str::<WriteRequest>(payload).map_err(|error| error.to_string())?;
         let clipboard = self
@@ -111,15 +136,17 @@ impl OsrNativeHost {
             .as_ref()
             .ok_or_else(|| "The clipboard is unavailable".to_string())?;
         let mut content = ClipboardContent::default();
+        let mut rest = body;
         for item in write.items {
-            let bytes = match (item.text, item.base64) {
-                (Some(text), _) => text.into_bytes(),
-                (None, Some(encoded)) => STANDARD
-                    .decode(encoded)
-                    .map_err(|error| error.to_string())?,
-                (None, None) => return Err(format!("{} has no data", item.mime)),
-            };
+            let (bytes, after) = rest
+                .split_at_checked(item.size)
+                .ok_or_else(|| format!("{} is missing its data", item.mime))?;
             content.push(item.mime, bytes);
+            rest = after;
+        }
+        #[cfg(target_os = "linux")]
+        if write.trusted {
+            content.share_files();
         }
         if !content.is_empty() {
             clipboard.write(write.selection, content)?;
@@ -128,15 +155,19 @@ impl OsrNativeHost {
     }
 }
 
-fn items_json(content: &ClipboardContent) -> Value {
-    content
+/// The items' types and sizes, and their bytes one after another.
+fn packed(content: &ClipboardContent) -> Result<(Value, Vec<u8>), String> {
+    let size = content.items().map(|(_, bytes)| bytes.len()).sum::<usize>();
+    if size > MAX_READ_BYTES {
+        return Err("The clipboard holds more than 32 MiB".to_string());
+    }
+    let mut body = Vec::with_capacity(size);
+    let items = content
         .items()
         .map(|(mime, bytes)| {
-            if mime.starts_with("text/") {
-                json!({ "type": mime, "text": String::from_utf8_lossy(bytes) })
-            } else {
-                json!({ "type": mime, "base64": STANDARD.encode(bytes) })
-            }
+            body.extend_from_slice(bytes);
+            json!({ "type": mime, "size": bytes.len() })
         })
-        .collect()
+        .collect();
+    Ok((items, body))
 }

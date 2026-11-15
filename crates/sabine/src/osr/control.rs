@@ -149,6 +149,12 @@ impl ControlWriter {
         self.finish_send(self.queue.push_ordered(line))
     }
 
+    /// Sends a message carrying bytes, waiting while the browser is behind,
+    /// so it never runs on the window's thread.
+    pub(super) fn send_bytes(&self, frame: Vec<u8>) -> Result<(), String> {
+        self.finish_send(self.queue.push_relayed(frame))
+    }
+
     pub(super) fn send_motion(&self, line: String) -> Result<(), String> {
         self.finish_send(self.queue.push_motion(line))
     }

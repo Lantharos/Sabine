@@ -426,10 +426,12 @@ class SabineOsrHandler : public CefClient,
                            const std::string& value);
   void ForwardClipboardRequest(CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefFrame> frame,
-                               const std::string& request);
+                               const std::string& request,
+                               std::optional<std::string_view> body);
   bool ResolveClipboardResponse(const std::string& request_id,
                                 bool ok,
-                                const std::string& payload);
+                                const std::string& payload,
+                                const std::optional<std::string>& body);
   void UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             const std::string& state);
