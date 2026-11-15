@@ -152,6 +152,7 @@ pub(crate) fn attach_open_window(
         window_config.bridge.register_descriptor(descriptor.clone());
     }
     window_config.listeners.open_urls = process.open_urls.clone();
+    window_config.logging = process.windows.primary.logging.clone();
     let mut handlers = process.windows.bridge_handlers.clone();
     handlers.extend(own_handlers);
     let (child, _) = spawn_window(process, &window_config, handlers, url, None, None)?;
@@ -250,6 +251,7 @@ fn spawn_osr_host_child(
                 .collect::<serde_json::Map<String, serde_json::Value>>(),
             "commands": sabine_bridge::page_commands(config.bridge.commands(), config.native_media()),
             "bytes": true,
+            "consoleLog": config.logs_page_console(),
         },
         "regions": crate::osr::protocol::regions_to_json(&config.regions),
         "drag_regions": crate::osr::protocol::rects_to_json(&config.drag_regions),

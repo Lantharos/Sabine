@@ -5,12 +5,54 @@
 #include <string>
 #include <vector>
 
+#include "common/bridge_policy.h"
 #include "common/json.h"
 #include "include/wrapper/cef_helpers.h"
 #include "osr/common/strings.h"
 #include "osr/guest/events.h"
 
 using namespace sabine_osr;
+
+namespace {
+
+constexpr char kConsoleCommand[] = "sabine.log.console";
+
+const char* ConsoleLevel(cef_log_severity_t level) {
+  switch (level) {
+    case LOGSEVERITY_VERBOSE:
+      return "debug";
+    case LOGSEVERITY_WARNING:
+      return "warn";
+    case LOGSEVERITY_ERROR:
+    case LOGSEVERITY_FATAL:
+      return "error";
+    default:
+      return "info";
+  }
+}
+
+}  // namespace
+
+bool SabineOsrHandler::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                                        cef_log_severity_t level,
+                                        const CefString& message,
+                                        const CefString& source,
+                                        int line) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!bridge_policy_->GetBool("consoleLog") || guests_.ForBrowser(browser))
+    return false;
+  CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+  if (!frame || !sabine_bridge::AllowsCommand(BridgePolicyFor(browser),
+                                              frame->GetURL(), kConsoleCommand))
+    return false;
+  HandleBridgeCommand(browser, frame, std::string(), kConsoleCommand,
+                      "{\"level\":\"" + std::string(ConsoleLevel(level)) +
+                          "\",\"message\":" + JsString(message.ToString()) +
+                          ",\"source\":" + JsString(source.ToString()) +
+                          ",\"line\":" + std::to_string(line) + "}",
+                      std::nullopt);
+  return false;
+}
 
 void SabineOsrHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
                                    CefRefPtr<CefFrame> frame,

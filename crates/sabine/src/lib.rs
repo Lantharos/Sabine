@@ -13,12 +13,13 @@ mod window;
 
 pub use bridge::BridgeEventEmitter;
 pub use desktop::TrayHandle;
-pub use diagnostics::{CrashReport, CrashReports};
+pub use diagnostics::{CrashReport, CrashReports, Logging};
 pub use error::{SabineError, SabineResult};
 pub use host::{SabineProcess, SabineProcessHandle, WindowId};
 #[cfg(target_os = "linux")]
 pub use launch::confine::documents;
 pub use launch::metrics::{SabineLaunchMetric, SabineLaunchMetricsSnapshot};
+pub use log;
 pub use sabine_bridge::{
     ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
     BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,

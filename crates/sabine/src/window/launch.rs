@@ -24,6 +24,12 @@ impl SabineWindow {
         let metrics = LaunchMetrics::new(metrics_label(&self.config));
         metrics.mark("launch.start");
         self.config.validate()?;
+        if let Some(logging) = &self.config.logging {
+            logging.install(
+                osr::launch::require_app_id(&self.config)?,
+                self.config.dev_mode(),
+            );
+        }
         metrics.mark("config.ready");
         let claim = DesktopClaim::acquire(&self.config)?;
         metrics.mark("single_instance.ready");
@@ -75,6 +81,9 @@ impl SabineWindow {
         let app_id = osr::launch::require_app_id(&self.config)?.to_string();
         let store = Store::open(&app_id);
         self = self.storage_commands(&store, &Secrets::new(&app_id));
+        if self.config.logs_page_console() {
+            self = self.page_console_command();
+        }
         self.allow_configured_url_origins();
         let mut url = self.entry_url()?;
         if self.config.dev_url.is_some() {

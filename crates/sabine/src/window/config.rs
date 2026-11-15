@@ -76,6 +76,7 @@ pub(crate) struct SabineWindowConfig {
     pub local_files: bool,
     pub browser: BrowserOptions,
     pub crash_upload_url: Option<String>,
+    pub logging: Option<crate::Logging>,
     pub listeners: super::WindowListeners,
     pub launched: Option<super::LaunchListener>,
     pub quit: Option<super::QuitListener>,
@@ -134,6 +135,7 @@ impl Default for SabineWindowConfig {
             local_files: false,
             browser: BrowserOptions::default(),
             crash_upload_url: None,
+            logging: None,
             listeners: super::WindowListeners::default(),
             launched: None,
             quit: None,
@@ -261,6 +263,13 @@ impl SabineWindowConfig {
             }
             _ => PasswordStore::Keyring,
         }
+    }
+
+    /// Whether the browser forwards the console messages of the app's pages.
+    pub(crate) fn logs_page_console(&self) -> bool {
+        self.logging
+            .as_ref()
+            .is_some_and(crate::Logging::forwards_page_console)
     }
 
     /// Whether pages in this window can play video on native surfaces.

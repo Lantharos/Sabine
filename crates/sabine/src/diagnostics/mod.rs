@@ -2,5 +2,7 @@
 //! reports and the app's log.
 
 mod crash;
+mod logging;
 
 pub use crash::{CrashReport, CrashReports};
+pub use logging::Logging;

@@ -66,6 +66,20 @@ impl AppEnvironment {
             .join(self.app_id(app_id))
     }
 
+    /// The folder an app keeps its logs in: `$XDG_STATE_HOME/<app id>/logs`
+    /// on Linux, `~/Library/Logs/<app id>` on macOS and
+    /// `%LOCALAPPDATA%\<app id>\logs` on Windows.
+    pub fn app_log_dir(self, app_id: &str) -> PathBuf {
+        let app_id = self.app_id(app_id);
+        #[cfg(target_os = "macos")]
+        let folder = dirs::home_dir().map(|home| home.join("Library/Logs").join(app_id));
+        #[cfg(target_os = "linux")]
+        let folder = dirs::state_dir().map(|state| state.join(app_id).join("logs"));
+        #[cfg(target_os = "windows")]
+        let folder = dirs::data_local_dir().map(|local| local.join(app_id).join("logs"));
+        folder.unwrap_or_else(|| std::env::temp_dir().join("sabine-logs"))
+    }
+
     /// Keeps an existing production data location and isolates development below it.
     /// This computes the path without creating directories or moving existing data.
     pub fn data_dir(self, production: impl AsRef<Path>) -> PathBuf {
