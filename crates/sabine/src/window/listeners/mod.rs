@@ -5,7 +5,9 @@ use std::{fmt, sync::Arc};
 
 use sabine_platform::{Appearance, Display, PlatformEvent};
 
+use crate::desktop::EventQueue;
 use crate::desktop::open_urls::OpenUrls;
+use crate::osr::protocol::{NOTIFICATION_EVENT_LINE, notification_event_from_json};
 use crate::{SabineProcessHandle, WindowId};
 pub(crate) use closing::{CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener};
 pub use visibility::WindowVisibility;
@@ -31,6 +33,8 @@ pub(crate) struct WindowListeners {
     pub(crate) displays: Option<DisplaysListener>,
     /// The app's queue of links and documents, which all its windows share.
     pub(crate) open_urls: OpenUrls,
+    /// Where the app hears what happened to its windows' notifications.
+    pub(crate) desktop_events: Option<EventQueue>,
 }
 
 impl WindowListeners {
@@ -46,6 +50,17 @@ impl WindowListeners {
         if line.starts_with(APPEARANCE_LINE) {
             if let Some(listener) = &self.appearance {
                 listener.deliver(window, line);
+            }
+            return true;
+        }
+        if let Some(event) = line
+            .strip_prefix(NOTIFICATION_EVENT_LINE)
+            .and_then(|event| event.strip_prefix('\t'))
+        {
+            if let (Some(events), Some(event)) =
+                (&self.desktop_events, notification_event_from_json(event))
+            {
+                let _ = events.send(PlatformEvent::Notification { window, event });
             }
             return true;
         }

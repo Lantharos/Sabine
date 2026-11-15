@@ -154,6 +154,8 @@ pub(crate) fn attach_open_window(
     }
     window_config.listeners.open_urls = process.open_urls.clone();
     window_config.logging = process.windows.primary.logging.clone();
+    window_config.listeners.desktop_events =
+        process.windows.primary.listeners.desktop_events.clone();
     let mut handlers = process.windows.bridge_handlers.clone();
     handlers.extend(own_handlers);
     let (child, _) = spawn_window(process, &window_config, handlers, url, None, None)?;

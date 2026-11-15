@@ -2,6 +2,7 @@ mod activation;
 mod clipboard;
 mod displays;
 mod media;
+mod notification_images;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod paste_gesture;

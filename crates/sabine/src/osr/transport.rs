@@ -218,7 +218,7 @@ fn socket_is_live(path: &Path) -> bool {
 }
 
 #[cfg(windows)]
-fn runtime_ipc_dir(_app_id: &str) -> io::Result<PathBuf> {
+pub(crate) fn runtime_ipc_dir(_app_id: &str) -> io::Result<PathBuf> {
     Ok(std::env::temp_dir().join("sabine"))
 }
 

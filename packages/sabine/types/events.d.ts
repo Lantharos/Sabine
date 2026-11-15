@@ -73,6 +73,14 @@ export interface NotificationEvent {
   id: string;
 }
 
+/** A click on a notification, or on one of its buttons. */
+export interface NotificationClickEvent extends NotificationEvent {
+  /** The `action` of the button, or `null` for a click on the notification itself. */
+  action: string | null;
+  /** What people typed into a reply button's field, or `null`. */
+  reply: string | null;
+}
+
 export interface NotificationErrorEvent extends NotificationEvent {
   message: string;
 }
@@ -94,7 +102,7 @@ export declare const events: {
   displaysChanged: Listen<Display[]>;
   storeChanged: Listen<StoreChangedEvent>;
   pen: Listen<PenEvent>;
-  notificationClick: Listen<NotificationEvent>;
+  notificationClick: Listen<NotificationClickEvent>;
   notificationClose: Listen<NotificationEvent>;
   notificationError: Listen<NotificationErrorEvent>;
   guestCreated: Listen<GuestInfo>;

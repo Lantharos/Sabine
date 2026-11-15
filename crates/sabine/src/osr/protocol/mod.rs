@@ -1,13 +1,17 @@
 mod config_json;
 mod encode;
+mod notification_json;
 mod wire;
 
 pub(crate) use config_json::{
     control_regions_from_json, control_regions_to_json, lifecycle_from_json, lifecycle_to_json,
-    notification_from_json, notification_to_json, rects_from_json, rects_to_json,
-    regions_from_json, regions_to_json,
+    rects_from_json, rects_to_json, regions_from_json, regions_to_json,
 };
 pub(crate) use encode::encode_component;
+pub(crate) use notification_json::{
+    NOTIFICATION_EVENT_LINE, notification_event_from_json, notification_event_to_json,
+    notification_from_json, notification_to_json,
+};
 pub(crate) use wire::PaintSlots;
 pub(crate) use wire::WireReader;
 

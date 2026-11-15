@@ -84,6 +84,7 @@ impl SabineWindow {
         #[cfg(target_os = "macos")]
         let launcher = Launcher::new();
         let (handle, commands) = SabineProcessHandle::new(desktop_services.autostart(), launcher);
+        self.config.listeners.desktop_events = Some(desktop_services.events());
         desktop_services.attach(&handle);
         self = launcher_commands(self.app_commands(&handle), &handle);
         let app_id = osr::launch::require_app_id(&self.config)?.to_string();

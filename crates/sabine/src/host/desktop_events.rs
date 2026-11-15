@@ -49,8 +49,9 @@ impl SabineProcess {
                 if let Some(listener) = &listener {
                     listener.deliver(&handle, &event);
                 }
-                let (name, payload) = platform_event_payload(event);
-                let _ = emitter.emit(name, payload);
+                if let Some((name, payload)) = platform_event_payload(event) {
+                    let _ = emitter.emit(name, payload);
+                }
             },
         ));
     }

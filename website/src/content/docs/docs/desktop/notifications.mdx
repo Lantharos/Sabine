@@ -1,6 +1,6 @@
 ---
 title: Notifications
-description: Show desktop notifications from the page or from Rust, replace them, and react when people click or dismiss them.
+description: Show desktop notifications with pictures, buttons and replies from the page or from Rust, replace them, and react when people use them.
 sidebar:
   order: 3
 ---
@@ -20,6 +20,7 @@ resolves `"granted"`, and the notifications permission query reports `granted`.
 const notification = new Notification("Upload finished", {
   body: "Holiday photos.zip is ready to share",
   tag: "upload",
+  icon: "/icons/upload.png",
   urgency: "low",
   category: "transfer.complete",
 });
@@ -33,10 +34,18 @@ notification.addEventListener("error", (event) => console.warn(event.message));
 | --- | --- | --- |
 | `body` | `""` | The text below the title. |
 | `tag` | none | A notification shown with the tag of an earlier one replaces it. |
+| `icon` | none | A picture in place of the app's icon, such as the sender's photo. |
+| `image` | none | A larger picture shown in the notification. |
+| `actions` | `[]` | Buttons, see [Buttons and replies](#buttons-and-replies). |
 | `silent` | `false` | Show it without a sound. |
 | `urgency` | `"normal"` | `"low"`, `"normal"` or `"critical"`. |
 | `category` | none | A [freedesktop category](https://specifications.freedesktop.org/notification-spec/latest/categories.html) such as `"email.arrived"` or `"im.received"`. Only Linux notification servers use it. |
 | `data` | `null` | Any value you want to keep on the notification object. |
+
+`icon` and `image` are URLs, relative to the page, and the page loads them as it loads any image:
+app files, `data:` and `blob:` URLs, and other sites that allow it. A picture the page can't load,
+or one over 256 KiB, is left out and the notification still shows. Sabine keeps each picture once,
+by its contents, in the app's runtime folder, which the desktop clears when people log out.
 
 `urgency` and `category` are Sabine's additions to the standard options. TypeScript's DOM types
 don't list them, so pass them through an object typed as `NotificationOptions & { urgency?: string;
@@ -49,12 +58,45 @@ A notification fires the standard events:
 | Event | When |
 | --- | --- |
 | `show` | Sabine handed the notification to the desktop. |
-| `click` | Someone clicked it. Sabine also brings its window forward. |
+| `click` | Someone clicked it or one of its buttons. Sabine also brings its window forward, unless they sent a reply. |
 | `close` | It was dismissed, closed with `notification.close()`, or replaced by one with the same tag. |
 | `error` | The desktop couldn't show it. The `ErrorEvent`'s `message` says why. |
 
-`onshow`, `onclick`, `onclose` and `onerror` work as well. Notifications have no action buttons, so
-`Notification.maxActions` is `0`.
+`onshow`, `onclick`, `onclose` and `onerror` work as well.
+
+### Buttons and replies
+
+`actions` adds up to `Notification.maxActions` buttons, which is `5`. A button with `type: "text"`
+is a reply button: people type an answer right in the notification, where the desktop offers
+that.
+
+```ts
+const message = new Notification("Ana", {
+  body: "Are we still on for Friday?",
+  icon: ana.avatarUrl,
+  actions: [
+    { action: "reply", title: "Reply", type: "text", placeholder: "Message" },
+    { action: "mute", title: "Mute" },
+  ],
+});
+
+message.addEventListener("click", (event) => {
+  if (event.action === "reply" && event.reply !== null) send(ana, event.reply);
+  else if (event.action === "mute") mute(ana);
+  else openChat(ana);
+});
+```
+
+| Field | Meaning |
+| --- | --- |
+| `action` | The button's id, which the `click` event carries back. |
+| `title` | The button's label. |
+| `type` | `"text"` for a reply button, otherwise a plain button. |
+| `placeholder` | The text shown in a reply button's empty field. |
+
+The `click` event carries `action`, the clicked button's id or `""` for the notification itself,
+and `reply`, the text people sent or `null`. On a desktop without replies, a reply button is a
+plain button and its click carries no text, so open a place to answer in the app instead.
 
 ### Replacing and closing
 
@@ -89,7 +131,7 @@ open.
 
 ```rust
 use sabine::prelude::*;
-use sabine::{Notification, Urgency};
+use sabine::{Notification, NotificationAction, Urgency};
 
 fn main() {
     SabineWindow::main_with_process(
@@ -98,8 +140,11 @@ fn main() {
             process.notify(
                 &Notification::new("new-mail", "New message from Ana")
                     .body("Are we still on for Friday?")
+                    .icon("/home/ana/.cache/mail/avatars/ana.png")
                     .urgency(Urgency::Normal)
-                    .category("email.arrived"),
+                    .category("email.arrived")
+                    .action(NotificationAction::reply("reply", "Reply", "Message"))
+                    .action(NotificationAction::button("archive", "Archive")),
             );
         },
     );
@@ -110,19 +155,63 @@ fn main() {
 | --- | --- | --- |
 | `Notification::new(id, title)` | | Showing a notification with the id of one on screen replaces it. |
 | `.body(text)` | empty | The text below the title. |
+| `.icon(path)` | none | A picture file in place of the app's icon. |
+| `.image(path)` | none | A larger picture file shown in the notification. |
+| `.action(NotificationAction)` | none | Adds a button; desktops show the first `Notification::MAX_ACTIONS`, which is 5. |
 | `.silent(bool)` | `false` | Show it without a sound. |
 | `.urgency(Urgency)` | `Urgency::Normal` | `Urgency::Low`, `Urgency::Normal` or `Urgency::Critical`. |
 | `.category(text)` | none | A freedesktop category, read only by Linux notification servers. |
 
-Clicks, closes and failures reach that window's pages as the bridge events `notification.click`,
-`notification.close` and `notification.error`, each carrying the notification's `id`, and a
-`message` for errors:
+`NotificationAction::button(id, label)` is a plain button, and
+`NotificationAction::reply(id, label, placeholder)` a reply button.
+
+### Hearing what happens
+
+The app hears what happens to every window's notifications through
+`SabineWindow::on_desktop_event`, as `PlatformEvent::Notification` with the id of the window that
+showed it:
+
+```rust
+use sabine::prelude::*;
+use sabine::{NotificationEvent, PlatformEvent};
+
+fn main() {
+    SabineWindow::main(|window| {
+        Ok(window.app().on_desktop_event(|_, event| {
+            let PlatformEvent::Notification { event, .. } = event else {
+                return;
+            };
+            match event {
+                NotificationEvent::Action { action, reply: Some(text), .. } if action == "reply" => {
+                    send_reply(text)
+                }
+                NotificationEvent::Action { action, .. } if action == "archive" => archive(),
+                _ => {}
+            }
+        }))
+    });
+}
+
+fn send_reply(_text: &str) {}
+fn archive() {}
+```
+
+| Event | When |
+| --- | --- |
+| `NotificationEvent::Clicked { id, .. }` | Someone clicked the notification. |
+| `NotificationEvent::Action { id, action, reply, .. }` | Someone clicked a button, or sent a reply with `reply` holding the text. |
+| `NotificationEvent::Closed(id)` | It was dismissed, closed or replaced. |
+| `NotificationEvent::Failed { id, message }` | The desktop couldn't show it. |
+
+That window's pages hear the same as the bridge events `notification.click`,
+`notification.close` and `notification.error`. Each carries the notification's `id`, clicks also
+`action` and `reply`, both `null` for a click on the notification itself, and errors a `message`:
 
 ```ts
 import { events } from "@lantharos/sabine";
 
-events.notificationClick(({ id }) => {
-  if (id === "new-mail") openInbox();
+events.notificationClick(({ id, action }) => {
+  if (id === "new-mail" && action === null) openInbox();
 });
 ```
 
@@ -146,13 +235,18 @@ Urgency decides how much a notification interrupts, as far as the desktop allows
     While a notification server runs on the session bus, as it does on KDE Plasma, XFCE and most
     other desktops, Sabine talks to it directly through `org.freedesktop.Notifications`. The
     notification carries the window's title as its app name and the app id as its desktop entry, and
-    uses `silent`, `urgency` and `category`. Clicks and dismissals are reported.
+    uses `silent`, `urgency` and `category`. The icon is the notification's app icon and the image
+    its `image-path` hint. Buttons show on servers that support actions. Servers with the
+    `inline-reply` capability, such as KDE Plasma's, show the first reply button as a text field;
+    a notification has one, and its other reply buttons are plain buttons. Clicks and dismissals
+    are reported.
 
     Otherwise Sabine uses the XDG desktop portal, which desktops such as GNOME route to their own
     notification service. The portal names the app by its installed desktop entry; an app without
-    one still shows its notifications. The portal has no setting for sounds or categories, and
-    doesn't report notifications people dismiss, so `close` fires only when the app closes or
-    replaces a notification.
+    one still shows its notifications. It shows the icon and buttons, but no image, and reply
+    buttons take text where the portal supports the `im.reply-with-text` button purpose. The portal
+    has no setting for sounds or categories, and doesn't report notifications people dismiss, so
+    `close` fires only when the app closes or replaces a notification.
 
     On Wayland, the desktop hands an activation token over with each click, which Sabine uses so
     the window can take focus.
@@ -160,13 +254,18 @@ Urgency decides how much a notification interrupts, as far as the desktop allows
   <TabItem label="Windows">
     Notifications are toasts. Windows ties toasts to an AppUserModelID, so the app takes its app id
     as its AppUserModelID and registers its name for it under the current user. Toasts show the app
-    name without the app being installed or having a Start menu shortcut. Clicks and dismissals
-    are reported.
+    name without the app being installed or having a Start menu shortcut. The icon replaces the
+    app's logo, the image shows inside the toast, and each reply button gets a text box. Clicks and
+    dismissals are reported.
   </TabItem>
   <TabItem label="macOS">
     Notifications go through the user notification center, which only serves bundled apps. The
     first notification asks people whether the app may show notifications. Notifications show as
     banners even while the app is in front, and clicks and dismissals are reported.
+
+    macOS always shows the app's own icon, so `icon` is left out. The image is attached to the
+    notification, and buttons and reply fields are the notification's actions, which macOS shows
+    when people expand it.
 
     <Aside type="caution">
       An app run outside its `.app` bundle, such as with `cargo run`, can't show notifications;

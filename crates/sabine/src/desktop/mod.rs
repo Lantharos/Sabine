@@ -51,7 +51,7 @@ use crate::osr::launch::require_app_id;
 use crate::window::config::SabineWindowConfig;
 use crate::{SabineError, SabineResult};
 
-type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
+pub(crate) type EventQueue = crossbeam_channel::Sender<PlatformEvent>;
 
 /// The app's claim on its single instance, made before anything else at
 /// launch so a second launch hands off at once, and the queue its desktop
@@ -147,6 +147,7 @@ impl DesktopClaim {
         );
         Ok(DesktopServiceState {
             event_receiver: self.event_receiver,
+            events,
             autostart,
             tray,
             _shortcuts: shortcuts,
@@ -163,6 +164,7 @@ impl DesktopClaim {
 /// shortcuts, single-instance endpoint and the events they produce.
 pub struct DesktopServiceState {
     event_receiver: crossbeam_channel::Receiver<PlatformEvent>,
+    events: EventQueue,
     autostart: Autostart,
     tray: Option<TrayHandle>,
     _shortcuts: Option<GlobalShortcuts>,
@@ -190,6 +192,12 @@ impl DesktopServiceState {
 
     pub(crate) fn autostart(&self) -> Autostart {
         self.autostart.clone()
+    }
+
+    /// The queue the app's desktop events arrive on, which window hosts
+    /// also report their notifications' events to.
+    pub(crate) fn events(&self) -> EventQueue {
+        self.events.clone()
     }
 
     /// Lets later launches and the app's installer reach `process` through

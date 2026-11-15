@@ -11,6 +11,6 @@ mod writer;
 pub(crate) use bindings::export_requested_bindings;
 pub use emitter::BridgeEventEmitter;
 pub(crate) use events::{
-    FOCUSED_LINE, parse_host_control, platform_event_payload, prepare_bridge_command,
-    spawn_bridge_dispatch,
+    FOCUSED_LINE, parse_host_control, platform_event_payload,
+    prepare_bridge_command, spawn_bridge_dispatch,
 };

@@ -18,8 +18,12 @@ use crate::window::{DISPLAYS_LINE, PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowList
 /// A window host writes this when people move focus to its window.
 pub(crate) const FOCUSED_LINE: &str = "SABINE_WINDOW_FOCUSED";
 
-pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, serde_json::Value) {
-    match event {
+/// The event every page of the app hears, if any: a window's pages hear
+/// about its notifications from the window itself.
+pub(crate) fn platform_event_payload(
+    event: PlatformEvent,
+) -> Option<(&'static str, serde_json::Value)> {
+    Some(match event {
         PlatformEvent::OpenUrls(_) => ("app.openUrlsAvailable", serde_json::Value::Null),
         PlatformEvent::Tray(activation) => (
             "tray.activate",
@@ -55,7 +59,8 @@ pub(crate) fn platform_event_payload(event: PlatformEvent) -> (&'static str, ser
                 "activationToken": activation.activation_token,
             }),
         ),
-    }
+        PlatformEvent::Notification { .. } => return None,
+    })
 }
 
 fn single_instance_policy_name(policy: SingleInstancePolicy) -> &'static str {

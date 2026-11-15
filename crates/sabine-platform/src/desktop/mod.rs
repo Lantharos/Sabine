@@ -14,5 +14,7 @@ pub use integration::{
     TrayMenuItemKind,
 };
 pub use launcher::{AppBadge, AppProgress};
-pub use notifications::{Notification, NotificationEvent, NotificationEvents, Notifier, Urgency};
+pub use notifications::{
+    Notification, NotificationAction, NotificationEvent, NotificationEvents, Notifier, Urgency,
+};
 pub use recent::RecentDocuments;

@@ -1,40 +1,9 @@
-use sabine_platform::{
-    Notification, Urgency, WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions,
-};
+use sabine_platform::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
 use serde_json::Value;
 
 use crate::{SabineLifecyclePolicy, SabineWindowControlAction, SabineWindowControlRegion};
 
 use std::time::Duration;
-
-pub(crate) fn notification_to_json(notification: &Notification) -> Value {
-    serde_json::json!({
-        "id": notification.id,
-        "title": notification.title,
-        "body": notification.body,
-        "silent": notification.silent,
-        "urgency": notification.urgency.as_str(),
-        "category": notification.category,
-    })
-}
-
-pub(crate) fn notification_from_json(value: &str) -> Option<Notification> {
-    let value = serde_json::from_str::<Value>(value).ok()?;
-    let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default();
-    let notification = Notification::new(value.get("id")?.as_str()?, value.get("title")?.as_str()?)
-        .body(text("body"))
-        .silent(
-            value
-                .get("silent")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-        )
-        .urgency(Urgency::parse(text("urgency")).unwrap_or_default());
-    Some(match value.get("category").and_then(Value::as_str) {
-        Some(category) => notification.category(category),
-        None => notification,
-    })
-}
 
 pub(crate) fn regions_to_json(regions: &WindowRegions) -> Value {
     serde_json::json!({
@@ -294,16 +263,5 @@ mod tests {
         let expected = SabineLifecyclePolicy::hidden_window();
         let actual = lifecycle_from_json(Some(&lifecycle_to_json(&expected)));
         assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn notifications_survive_the_trip_to_the_window_host() {
-        let expected = Notification::new("mail-7", "Ayesha")
-            .body("The photos are in the shared folder.")
-            .silent(true)
-            .urgency(Urgency::Low)
-            .category("email.arrived");
-        let actual = notification_from_json(&notification_to_json(&expected).to_string());
-        assert_eq!(actual, Some(expected));
     }
 }

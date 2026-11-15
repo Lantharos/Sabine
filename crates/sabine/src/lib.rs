@@ -29,9 +29,10 @@ pub use sabine_bridge::{
 pub use sabine_platform::{
     AppBadge, AppProgress, Appearance, AutostartEntry, BackdropMaterial, BackdropPreference,
     BackdropRole, Display, DisplayRect, GlobalShortcutActivation, GlobalShortcutFailure,
-    GlobalShortcutRegistration, NativeMessagingHost, Notification, PlatformEvent, Shortcut,
-    ShortcutModifiers, SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon,
-    TrayMenuItem, TrayMenuItemKind, Urgency, WindowBackgroundEffect, WindowRegion,
+    GlobalShortcutRegistration, NativeMessagingHost, Notification, NotificationAction,
+    NotificationEvent, PlatformEvent, Shortcut, ShortcutModifiers, SingleInstanceActivation,
+    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency,
+    WindowBackgroundEffect, WindowRegion,
     WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};

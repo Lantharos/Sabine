@@ -5,6 +5,7 @@ mod toast;
 #[cfg(target_os = "macos")]
 mod user_notifications;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
@@ -27,9 +28,21 @@ pub struct Notification {
     /// freedesktop notification categories. Only Linux notification servers
     /// read it.
     pub category: Option<String>,
+    /// A picture in place of the app's icon, such as the sender's photo.
+    /// macOS always shows the app's icon.
+    pub icon: Option<PathBuf>,
+    /// A larger picture shown in the notification. The XDG desktop portal
+    /// shows none.
+    pub image: Option<PathBuf>,
+    /// The buttons below the notification. Desktops show the first
+    /// [`Self::MAX_ACTIONS`].
+    pub actions: Vec<NotificationAction>,
 }
 
 impl Notification {
+    /// The most buttons a notification shows on every desktop.
+    pub const MAX_ACTIONS: usize = 5;
+
     pub fn new(id: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -38,6 +51,9 @@ impl Notification {
             silent: false,
             urgency: Urgency::Normal,
             category: None,
+            icon: None,
+            image: None,
+            actions: Vec::new(),
         }
     }
 
@@ -59,6 +75,58 @@ impl Notification {
     pub fn category(mut self, category: impl Into<String>) -> Self {
         self.category = Some(category.into());
         self
+    }
+
+    pub fn icon(mut self, path: impl Into<PathBuf>) -> Self {
+        self.icon = Some(path.into());
+        self
+    }
+
+    pub fn image(mut self, path: impl Into<PathBuf>) -> Self {
+        self.image = Some(path.into());
+        self
+    }
+
+    pub fn action(mut self, action: NotificationAction) -> Self {
+        self.actions.push(action);
+        self
+    }
+
+    fn shown_actions(&self) -> impl Iterator<Item = &NotificationAction> {
+        self.actions.iter().take(Self::MAX_ACTIONS)
+    }
+}
+
+/// A button on a notification. A reply button lets people type an answer
+/// into the notification where the desktop offers that, and is a plain
+/// button elsewhere.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NotificationAction {
+    pub id: String,
+    pub label: String,
+    /// The placeholder of a reply button's text field, which makes it a
+    /// reply button; empty for none.
+    pub reply: Option<String>,
+}
+
+impl NotificationAction {
+    pub fn button(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            reply: None,
+        }
+    }
+
+    pub fn reply(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        Self {
+            reply: Some(placeholder.into()),
+            ..Self::button(id, label)
+        }
     }
 }
 
@@ -92,13 +160,20 @@ impl Urgency {
     }
 }
 
-/// What happened to a shown notification. A click carries the activation
-/// token the desktop handed over with it, which lets the window come forward
-/// on Wayland.
+/// What happened to a shown notification. Clicks carry the activation token
+/// the desktop handed over with them, which lets the window come forward on
+/// Wayland.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NotificationEvent {
     Clicked {
         id: String,
+        activation_token: Option<String>,
+    },
+    /// A button was clicked, or a reply sent with the text people typed.
+    Action {
+        id: String,
+        action: String,
+        reply: Option<String>,
         activation_token: Option<String>,
     },
     Closed(String),
@@ -106,6 +181,17 @@ pub enum NotificationEvent {
         id: String,
         message: String,
     },
+}
+
+impl NotificationEvent {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Clicked { id, .. }
+            | Self::Action { id, .. }
+            | Self::Closed(id)
+            | Self::Failed { id, .. } => id,
+        }
+    }
 }
 
 pub type NotificationEvents = Arc<dyn Fn(NotificationEvent) + Send + Sync>;

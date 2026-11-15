@@ -315,4 +315,10 @@ pub enum PlatformEvent {
     GlobalShortcut(GlobalShortcutActivation),
     GlobalShortcutFailed(GlobalShortcutFailure),
     SingleInstance(SingleInstanceActivation),
+    /// Something happened to a notification that the window with this id
+    /// showed.
+    Notification {
+        window: u32,
+        event: crate::NotificationEvent,
+    },
 }

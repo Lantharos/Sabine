@@ -11,6 +11,11 @@
   or hands them to the running instance.
 - `app.addRecentDocument` and `app.clearRecentDocuments` add files to the desktop's recent files,
   and take the app's own off again.
+- Notifications carry an icon, a larger image and up to five buttons, and a reply button lets
+  people answer inline where the desktop offers it: `icon`, `image` and `actions` from pages,
+  `.icon`, `.image` and `.action(NotificationAction::…)` from Rust. A `click` event names the
+  button and carries the reply, and Rust hears every click, reply, close and failure through
+  `on_desktop_event` as `PlatformEvent::Notification`.
 
 # Sabine 0.90
 
