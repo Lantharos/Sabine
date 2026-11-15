@@ -6,6 +6,9 @@ version = 2
 yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes in through glyphon and winit's Adwaita decorations, which have no maintained replacement yet" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant comes in through accesskit_unix and atspi, which are still on zbus 5" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names comes in through accesskit_unix and atspi, which are still on zbus 5" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive comes in through accesskit_unix and atspi, which are still on zbus 5" },
 ]
 
 [licenses]
@@ -14,6 +17,7 @@ allow = [
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CC0-1.0",
     "bzip2-1.0.6",
     "CDLA-Permissive-2.0",
     "ISC",
