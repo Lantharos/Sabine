@@ -19,6 +19,8 @@ pub struct BridgeEventEmitter {
     square_corners: Arc<Mutex<bool>>,
     /// The displays as the app's windows last reported them.
     displays: Arc<Mutex<Vec<Display>>>,
+    #[cfg(target_os = "windows")]
+    pub(super) taskbar: Arc<Mutex<super::taskbar::TaskbarShown>>,
 }
 
 #[derive(Default)]
@@ -101,6 +103,8 @@ impl BridgeEventEmitter {
         if *square_corners {
             writer.send(Frame::shared(&square_corners_control(true), None));
         }
+        #[cfg(target_os = "windows")]
+        let _taskbar = self.send_taskbar(&writer);
         let mut targets = lock(&self.targets);
         targets.windows.retain(|target| target.window != window);
         for activity in activities
@@ -308,7 +312,12 @@ impl BridgeEventEmitter {
         front.is_some_and(|window| self.host_control(Some(window), command, value))
     }
 
-    fn deliver(&self, window: Option<WindowId>, line: String, body: Option<&[u8]>) -> bool {
+    pub(super) fn deliver(
+        &self,
+        window: Option<WindowId>,
+        line: String,
+        body: Option<&[u8]>,
+    ) -> bool {
         let writers = lock(&self.targets)
             .windows
             .iter()
@@ -366,7 +375,7 @@ pub(super) fn event_line(name: &str, payload: &serde_json::Value) -> String {
     )
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|error| error.into_inner())
 }
 

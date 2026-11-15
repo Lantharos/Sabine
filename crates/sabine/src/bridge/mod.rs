@@ -4,6 +4,8 @@ mod events;
 pub(crate) mod frame;
 mod listeners;
 mod request_dispatch;
+#[cfg(target_os = "windows")]
+mod taskbar;
 mod writer;
 
 pub(crate) use bindings::export_requested_bindings;

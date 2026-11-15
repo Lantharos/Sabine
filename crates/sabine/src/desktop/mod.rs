@@ -1,6 +1,7 @@
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod hotkeys;
 mod instance;
+mod launcher;
 mod native_messaging;
 pub(crate) mod open_urls;
 #[cfg(target_os = "linux")]
@@ -29,6 +30,9 @@ use sabine_platform::{
 use instance::SingleInstanceGuard;
 #[cfg(target_os = "linux")]
 pub(crate) use instance::startup_activation_token;
+pub(crate) use launcher::{Launcher, launcher_commands};
+#[cfg(target_os = "windows")]
+pub(crate) use launcher::{progress_from_json, progress_to_json};
 #[cfg(target_os = "linux")]
 use platform::ShortcutHost;
 #[cfg(not(target_os = "linux"))]

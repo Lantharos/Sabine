@@ -24,12 +24,15 @@ wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-scanner.workspace = true
+roxmltree.workspace = true
+xdg-mime.workspace = true
 zbus = { workspace = true, features = ["proxy"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
+dispatch2.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["block2", "NSButton", "NSColor", "NSColorSpace", "NSControl", "NSApplication", "NSEvent", "NSImage", "NSScreen", "NSWindow", "NSWorkspace", "objc2-core-graphics"] }
+objc2-app-kit = { workspace = true, features = ["block2", "NSButton", "NSColor", "NSColorSpace", "NSControl", "NSApplication", "NSDocumentController", "NSEvent", "NSImage", "NSScreen", "NSWindow", "NSWorkspace", "objc2-core-graphics"] }
 objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop"] }
 objc2-core-graphics = { workspace = true, features = ["CGDirectDisplay", "CGEvent", "CGEventTypes", "CGRemoteOperation"] }
 objc2-foundation = { workspace = true, features = ["block2", "NSBundle", "NSDictionary", "NSError", "NSNotification", "NSOperation", "NSSet", "NSString", "NSURL", "NSValue"] }
@@ -48,6 +51,7 @@ windows = { workspace = true, features = [
     "Win32_System_Com",
     "Win32_System_LibraryLoader",
     "Win32_System_Registry",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",

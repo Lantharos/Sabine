@@ -52,6 +52,7 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
   setPosition(x, y) { return controlWindow({ op: "setPosition", x: pixels(x), y: pixels(y) }); },
   setAlwaysOnTop(enabled) { return controlWindow({ op: "setAlwaysOnTop", enabled: Boolean(enabled) }); },
   setResizable(enabled) { return controlWindow({ op: "setResizable", enabled: Boolean(enabled) }); },
+  requestAttention(critical = false) { return controlWindow({ op: "requestAttention", critical: Boolean(critical) }); },
   async inhibitShortcuts(enabled) {
     await window.sabine.bridge.invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
   },

@@ -179,6 +179,8 @@ pub(super) struct OsrNativeHost {
     pub(super) published_appearance: Option<(sabine_platform::Appearance, BackdropMaterial)>,
     pub(super) displays: super::page::Displays,
     pub(super) notifier: Option<sabine_platform::Notifier>,
+    #[cfg(target_os = "windows")]
+    pub(super) taskbar: super::ui::taskbar::TaskbarButton,
     pub(super) printing: super::print::Printing,
     #[cfg(target_os = "linux")]
     pub(super) paste_gesture: Option<Instant>,
@@ -337,6 +339,8 @@ impl OsrNativeHost {
             }),
             published_appearance: None,
             notifier: None,
+            #[cfg(target_os = "windows")]
+            taskbar: Default::default(),
             printing: Default::default(),
             #[cfg(target_os = "linux")]
             paste_gesture: None,

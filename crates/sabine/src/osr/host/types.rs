@@ -232,7 +232,7 @@ pub(super) enum LifecycleState {
     Frozen,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum HostControl {
     Show,
     Hide,
@@ -246,7 +246,10 @@ pub(super) enum HostControl {
     SquareCorners(bool),
     Notify(sabine_platform::Notification),
     Print(super::print::PrintFiles),
-    Window(sabine_bridge::WindowControl),
+    #[cfg(target_os = "windows")]
+    Badge(Option<String>),
+    #[cfg(target_os = "windows")]
+    Progress(sabine_platform::AppProgress),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

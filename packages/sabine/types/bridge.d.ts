@@ -70,6 +70,18 @@ export declare const bridge: {
   listen: typeof listen;
 };
 
+/**
+ * A progress bar on the app's Dock or taskbar icon: a number from 0 to 1 for
+ * work going normally, a state with its value, or `null` to hide it. Linux
+ * docks draw paused and failed work like any other and show no
+ * indeterminate bar.
+ */
+export type AppProgress =
+  | number
+  | null
+  | { state: "normal" | "paused" | "error"; value: number }
+  | { state: "indeterminate" };
+
 export declare const app: {
   /** Consumes pending URLs from initial launch and subsequent OS activations. */
   takeOpenUrls(): Promise<string[]>;
@@ -83,4 +95,18 @@ export declare const app: {
    * autostart entry; development runs change nothing.
    */
   setAutostart(enabled: boolean): Promise<void>;
+  /**
+   * Shows a badge on the app's Dock or taskbar icon: a count, which hides at
+   * zero, a few characters, or `null` for none. Linux docks show only counts,
+   * so text rejects there.
+   */
+  setBadge(badge: number | string | null): Promise<void>;
+  setProgress(progress: AppProgress): Promise<void>;
+  /**
+   * Adds a file the person opened to the desktop's list of recent files.
+   * Rejects when the path is not a file.
+   */
+  addRecentDocument(path: string): Promise<void>;
+  /** Takes the files the app added off the desktop's list of recent files. */
+  clearRecentDocuments(): Promise<void>;
 };

@@ -22,6 +22,7 @@ pub(crate) fn launch_process(
         SabineProcessHandle,
         crossbeam_channel::Receiver<ProcessCommand>,
     ),
+    bridge_emitter: BridgeEventEmitter,
     metrics: LaunchMetrics,
 ) -> SabineResult<SabineProcess> {
     let app_id = require_app_id(config)?;
@@ -51,7 +52,7 @@ pub(crate) fn launch_process(
         handle,
         quitting: false,
         bridge_threads: Vec::new(),
-        bridge_emitter: BridgeEventEmitter::default(),
+        bridge_emitter,
         desktop_services: None,
         open_urls: config.listeners.open_urls.clone(),
         desktop_event_thread: None,

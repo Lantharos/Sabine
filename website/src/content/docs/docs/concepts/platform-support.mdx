@@ -53,6 +53,10 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | [Deep links and documents](/docs/desktop/links-and-documents/) | Desktop entry and `mimeapps.list`; documents match by extension or MIME type | Per-user registry; documents match by extension | Bundled apps only; documents match by extension |
 | [Session restore](/docs/windows/session-restore/) | With `xdg_toplevel_tag_v1` | No | No |
 | [Autostart](/docs/desktop/autostart/) | XDG autostart entry | `Run` registry key | LaunchAgent |
+| [Badges](/docs/desktop/dock-and-taskbar/#badges) | Counts, on docks that follow `LauncherEntry` | Overlay icon | Dock tile badge |
+| [Dock and taskbar progress](/docs/desktop/dock-and-taskbar/#progress) | On docks that follow `LauncherEntry`; no indeterminate | Taskbar button | Dock tile |
+| [Attention requests](/docs/desktop/dock-and-taskbar/#asking-for-attention) | Through `xdg_activation_v1` | Flashing taskbar button | Bouncing Dock icon |
+| [Recent files](/docs/desktop/dock-and-taskbar/#recent-files) | `recently-used.xbel` | Recent items and jump list | Open Recent and Dock menu |
 | [Clipboard](/docs/desktop/clipboard-and-drag/) | Owned by Sabine, every type, primary selection | Chromium's, plus other types through the package | Chromium's, plus other types through the package |
 | Drag and drop | Yes | Yes | Yes |
 | [Printing](/docs/desktop/printing/) | XDG print portal | System print dialog | System print dialog |
@@ -82,6 +86,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Window positions** belong to the compositor, so there is no `setPosition`.
 - **Displays** have no work area or primary display, which Wayland doesn't tell apps.
 - **The tray** needs a StatusNotifierWatcher. Desktops that don't host StatusNotifierItems themselves, such as GNOME without an extension, show no tray icon. The icon registers again whenever the watcher restarts.
+- **Badges and progress** go out as the `com.canonical.Unity.LauncherEntry` signal, which KDE Plasma, Dash to Dock and Dash to Panel follow and GNOME's own dash doesn't. Docks show only counts and no indeterminate progress, so `AppBadge::Text` and `AppProgress::Indeterminate` don't exist on Linux.
 - **Global shortcuts** go through the GlobalShortcuts portal. The desktop decides whether to bind them and may ask the person first; a refused shortcut is reported as `globalShortcut.failed` and the rest keep working.
 - **Clipboard.** Chromium renders off screen and can't reach the compositor's clipboard, so the window host owns it: through `ext-data-control` when the compositor offers it, otherwise through the seat's data device on the window's connection. Pages get every MIME type, and the primary selection.
 - **Touch keyboard.** When a field gains focus, Sabine asks the compositor to show its on-screen keyboard through the text input protocol, where the compositor supports it.

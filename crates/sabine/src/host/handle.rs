@@ -5,11 +5,13 @@ use std::sync::{
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
+use sabine_platform::{AppBadge, AppProgress};
+
 use super::page_window::PageWindow;
 use super::process::{
     PRIMARY_READY_TIMEOUT, PendingWindow, ProcessCommand, WindowId, WindowRequest,
 };
-use crate::desktop::Autostart;
+use crate::desktop::{Autostart, Launcher};
 use crate::{SabineResult, SabineWindow};
 
 /// How long a launch or the installer waits for the app to answer whether it
@@ -23,16 +25,21 @@ const STEP_DOWN_ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 pub struct SabineProcessHandle {
     pub(super) command_sender: crossbeam_channel::Sender<ProcessCommand>,
     autostart: Autostart,
+    launcher: Launcher,
 }
 
 impl SabineProcessHandle {
     /// A handle and the queue its commands reach the process on.
-    pub(crate) fn new(autostart: Autostart) -> (Self, crossbeam_channel::Receiver<ProcessCommand>) {
+    pub(crate) fn new(
+        autostart: Autostart,
+        launcher: Launcher,
+    ) -> (Self, crossbeam_channel::Receiver<ProcessCommand>) {
         let (command_sender, commands) = crossbeam_channel::unbounded();
         (
             Self {
                 command_sender,
                 autostart,
+                launcher,
             },
             commands,
         )
@@ -110,5 +117,28 @@ impl SabineProcessHandle {
     /// the app off in their system settings. Development runs change nothing.
     pub fn set_autostart(&self, enabled: bool) -> Result<(), String> {
         self.autostart.set_enabled(enabled)
+    }
+
+    /// Shows a badge on the app's Dock or taskbar icon, such as the number of
+    /// unread messages, or takes it off with `None`.
+    pub fn set_badge(&self, badge: Option<AppBadge>) {
+        self.launcher.set_badge(badge);
+    }
+
+    /// Shows a progress bar on the app's Dock or taskbar icon, or hides it
+    /// with [`AppProgress::Hidden`].
+    pub fn set_progress(&self, progress: AppProgress) {
+        self.launcher.set_progress(progress);
+    }
+
+    /// Adds a file the person opened to the desktop's list of recent files,
+    /// which the app's jump list, Dock menu and file choosers show.
+    pub fn add_recent_document(&self, path: impl AsRef<std::path::Path>) -> Result<(), String> {
+        self.launcher.add_recent_document(path.as_ref())
+    }
+
+    /// Takes the files the app added off the desktop's list of recent files.
+    pub fn clear_recent_documents(&self) -> Result<(), String> {
+        self.launcher.clear_recent_documents()
     }
 }

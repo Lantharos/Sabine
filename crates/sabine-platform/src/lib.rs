@@ -10,11 +10,11 @@ mod tasks;
 mod window;
 
 pub use desktop::{
-    Appearance, AppearanceWatcher, AutostartEntry, DeepLinkRegistration, GlobalShortcutActivation,
-    GlobalShortcutFailure, GlobalShortcutRegistration, NativeMessagingHost, Notification,
-    NotificationEvent, NotificationEvents, Notifier, PlatformEvent, Shortcut, ShortcutModifiers,
-    SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
-    TrayMenuItemKind, Urgency, shell,
+    AppBadge, AppProgress, Appearance, AppearanceWatcher, AutostartEntry, DeepLinkRegistration,
+    GlobalShortcutActivation, GlobalShortcutFailure, GlobalShortcutRegistration,
+    NativeMessagingHost, Notification, NotificationEvent, NotificationEvents, Notifier,
+    PlatformEvent, RecentDocuments, Shortcut, ShortcutModifiers, SingleInstanceActivation,
+    SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency, shell,
 };
 pub use display::{Display, DisplayRect, DisplayWatcher, displays};
 #[cfg(target_os = "linux")]
@@ -23,6 +23,8 @@ pub use shortcut_inhibit::ShortcutInhibitor;
 #[cfg(target_os = "windows")]
 pub use shortcut_inhibit::SystemKey;
 pub use tasks::async_runtime;
+#[cfg(target_os = "windows")]
+pub use window::Taskbar;
 pub use window::{
     BackdropMaterial, BackdropPreference, BackdropRole, WindowBackdrop, WindowBackgroundEffect,
     WindowChrome, WindowEffect, WindowOptions, WindowRegion, WindowRegionAdaptive,

@@ -8,7 +8,7 @@ use objc2_app_kit::{NSApplication, NSApplicationDelegate};
 use objc2_foundation::{NSArray, NSObject, NSObjectProtocol, NSURL};
 use sabine_platform::{PlatformEvent, SingleInstanceActivation, SingleInstancePolicy};
 
-use super::UiQueue;
+use super::{UiQueue, main_queue_thread};
 use crate::desktop::EventQueue;
 
 thread_local! {
@@ -88,9 +88,4 @@ fn install(main_thread: MainThreadMarker, events: EventQueue) {
     };
     application.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     DELEGATE.with(|current| *current.borrow_mut() = Some(delegate));
-}
-
-fn main_queue_thread() -> MainThreadMarker {
-    // SAFETY: tasks on the main dispatch queue run on the main thread.
-    unsafe { MainThreadMarker::new_unchecked() }
 }

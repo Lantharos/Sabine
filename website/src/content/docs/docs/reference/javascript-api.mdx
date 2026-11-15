@@ -196,6 +196,33 @@ Turns the app's autostart entry on or off while it runs. Rejects when the app ha
 entry; development runs resolve without changing anything. See
 [Starting at login](/docs/desktop/autostart/#turning-it-on-and-off-while-the-app-runs).
 
+### `app.setBadge(badge)` and `app.setProgress(progress)`
+
+```ts
+setBadge(badge: number | string | null): Promise<void>;
+setProgress(progress: AppProgress): Promise<void>;
+
+type AppProgress =
+  | number
+  | null
+  | { state: "normal" | "paused" | "error"; value: number }
+  | { state: "indeterminate" };
+```
+
+Show a badge or a progress bar on the app's Dock or taskbar icon. A count of zero and `null` show
+no badge, a number is normal progress from 0 to 1, and `null` hides the bar. Text badges and
+indeterminate progress reject on Linux. See [Dock and taskbar](/docs/desktop/dock-and-taskbar/).
+
+### `app.addRecentDocument(path)` and `app.clearRecentDocuments()`
+
+```ts
+addRecentDocument(path: string): Promise<void>;
+clearRecentDocuments(): Promise<void>;
+```
+
+Add a file to the desktop's list of recent files, or take off every file the app added. Adding
+rejects when the path is not a file.
+
 ## `events`
 
 Typed listeners for the events Sabine sends. Each takes a callback and returns a function that
@@ -341,6 +368,7 @@ These return a promise that rejects when the desktop can't make the change.
 | `setPosition(x, y)` | Moves the window's top left corner, in the physical pixels of [display](#system) bounds. Rejects on Wayland, where the desktop places windows. |
 | `setAlwaysOnTop(enabled)` | Keeps the window above other windows. On Wayland only with `kestrel_window_v1`. |
 | `setResizable(enabled)` | Whether people can resize the window. |
+| `requestAttention(critical?)` | Bounces the Dock icon or flashes the taskbar button until the window is focused. See [Dock and taskbar](/docs/desktop/dock-and-taskbar/#asking-for-attention). |
 | `unmaximize()` | Restores a maximized window. |
 
 ### Title

@@ -98,7 +98,7 @@ windows = { version = "0.62.2", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 shell-words = "1.1.1"
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSBezierPath", "NSColor", "NSDockTile", "NSImage", "NSPasteboard", "NSPasteboardItem", "NSPrintInfo", "objc2-quartz-core"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSAttributedString", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSString", "NSURL", "NSValue"] }
 objc2-core-foundation.workspace = true
 objc2-io-surface.workspace = true

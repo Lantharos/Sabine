@@ -58,4 +58,12 @@ pub enum WindowControl {
     SetFullscreen {
         enabled: bool,
     },
+    /// Asks people to look at the window: the Dock icon bounces once on
+    /// macOS, the taskbar button flashes on Windows until the window is
+    /// focused, and Wayland compositors mark the window. A critical request
+    /// keeps the Dock icon bouncing until the app is active, and also
+    /// flashes the window's frame on Windows.
+    RequestAttention {
+        critical: bool,
+    },
 }
