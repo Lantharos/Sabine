@@ -6,19 +6,12 @@
 #include <cstdint>
 #include <vector>
 
-#include "osr/accelerated/damage.h"
+#include "osr/accelerated/slot_ring.h"
 
 namespace sabine_osr {
 
-struct AccelIOSurfaceCopiedFrame {
+struct AccelIOSurfaceCopiedFrame : CopiedSlot {
   IOSurfaceRef surface = nullptr;
-  uint64_t resource_id = 0;
-  uint32_t slot_index = 0;
-  uint64_t slot_token = 0;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  // Surfaces this call replaced, whose compositor references can be dropped.
-  std::vector<uint64_t> retired_resource_ids;
 };
 
 // CEF recycles its IOSurface as soon as OnAcceleratedPaint returns, so each

@@ -103,7 +103,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                                           PaintElementType type,
                                           const RectList& dirtyRects,
                                           const CefAcceleratedPaintInfo& info) {
-  if (!browser) {
+  if (!browser || accelerated_paint_failed_) {
     return;
   }
   static bool traced_first_callback = false;
@@ -238,6 +238,8 @@ bool SabineOsrHandler::SendAcceleratedFrame(const AcceleratedTarget& target,
   meta.resource_slot = copied.resource_slot;
   meta.shared_handle = copied.shared_handle;
   meta.slot_token = copied.slot_token;
+  meta.damage = copied.damage;
+  meta.sequence = copied.sequence;
   BuildAccelPayload(target.guest_id, meta, &accel_payload_);
   const bool sent = SendMessage(target.kind, copied.width, copied.height,
                                 target.x, target.y, accel_payload_.data(),

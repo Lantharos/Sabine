@@ -115,10 +115,10 @@ bool FinishCopy(VulkanContext* vulkan, CopySubmission* submission) {
   if (!submission->pending) {
     return true;
   }
-  VkResult result = vulkan->vkWaitForFences(
-      vulkan->device, 1, &submission->done, VK_TRUE, kCopyTimeoutNs);
+  VkResult result = vulkan->Observe(vulkan->vkWaitForFences(
+      vulkan->device, 1, &submission->done, VK_TRUE, kCopyTimeoutNs));
   if (result == VK_TIMEOUT) {
-    result = vulkan->vkDeviceWaitIdle(vulkan->device);
+    result = vulkan->Observe(vulkan->vkDeviceWaitIdle(vulkan->device));
   }
   if (result != VK_SUCCESS) {
     return false;
@@ -126,6 +126,14 @@ bool FinishCopy(VulkanContext* vulkan, CopySubmission* submission) {
   vulkan->vkResetFences(vulkan->device, 1, &submission->done);
   submission->pending = false;
   return true;
+}
+
+bool CopyFinished(VulkanContext* vulkan,
+                  const CopySubmission& submission,
+                  uint64_t copy) {
+  return !submission.pending || submission.submitted != copy ||
+         vulkan->Observe(vulkan->vkGetFenceStatus(
+             vulkan->device, submission.done)) == VK_SUCCESS;
 }
 
 bool FramesMayStillBeDrawing() {
@@ -153,11 +161,12 @@ bool SubmitCopy(VulkanContext* vulkan,
   }
   submit.commandBufferCount = 1;
   submit.pCommandBuffers = &submission->commands;
-  if (vulkan->vkQueueSubmit(vulkan->queue, 1, &submit, submission->done) !=
-      VK_SUCCESS) {
+  if (vulkan->Observe(vulkan->vkQueueSubmit(vulkan->queue, 1, &submit,
+                                            submission->done)) != VK_SUCCESS) {
     return false;
   }
   submission->pending = true;
+  ++submission->submitted;
   if (attaches &&
       AttachCopyFence(vulkan, submission->copied, *source_fd, target_fd)) {
     return true;

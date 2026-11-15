@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "osr/accelerated/damage.h"
@@ -23,16 +24,46 @@ struct RingSlot {
   PixelRegion stale;
 };
 
+// A frame copied into one of a surface's slots, as the window is handed it,
+// with the resources the copy replaced, whose imports can be dropped.
+struct CopiedSlot {
+  uint64_t resource_id = 0;
+  uint32_t slot_index = 0;
+  uint64_t slot_token = 0;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  // The pixels that differ from the surface's previous frame, numbered one
+  // less, which the window may present instead of the whole frame.
+  PixelRegion damage;
+  uint64_t sequence = 0;
+  std::vector<uint64_t> retired_resource_ids;
+};
+
 template <typename Slot, typename Extra>
 struct SurfaceRing {
   std::array<Slot, kSlotsPerSurface> slots;
   uint32_t next = 0;
   Extra extra;
+  // What changed since the last frame handed out.
+  PixelRegion unsent;
+  uint64_t sequence = 0;
 
   void Damage(const PixelRegion& damage) {
     for (Slot& slot : slots) {
       slot.stale.Unite(damage);
     }
+    unsent.Unite(damage);
+  }
+
+  // Hands out the frame just copied into slot `index`, with what changed
+  // since the previous frame and the pixels `redrawn` that it shows anew.
+  void Hand(uint32_t index, const PixelRegion& redrawn, CopiedSlot* out) {
+    PixelRegion damage = std::exchange(unsent, {});
+    damage.Unite(redrawn);
+    out->slot_index = index;
+    out->damage = damage.Within(static_cast<int>(out->width),
+                                static_cast<int>(out->height));
+    out->sequence = ++sequence;
   }
 
   // The next slot the compositor is not sampling, taken in turn so a slot
@@ -64,8 +95,6 @@ class SlotRings {
     const auto found = rings_.find(key);
     return found == rings_.end() ? nullptr : &found->second;
   }
-
-  bool empty() const { return rings_.empty(); }
 
   uint64_t NewResourceId() { return next_resource_id_++; }
 

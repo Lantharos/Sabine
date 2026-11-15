@@ -115,11 +115,21 @@ impl SurfaceRegistry {
         self.retirements.load(Ordering::Acquire)
     }
 
-    /// Drops the surfaces in `kept` that were retired since they were taken.
-    pub(crate) fn forget_retired(&self, kept: &mut HashMap<u64, SharedSurface>) {
-        if let Ok(surfaces) = self.surfaces.lock() {
-            kept.retain(|id, _| surfaces.contains_key(id));
+    /// Drops the surfaces in `kept` that were retired since they were taken,
+    /// returning their ids.
+    pub(crate) fn forget_retired(&self, kept: &mut HashMap<u64, SharedSurface>) -> Vec<u64> {
+        let Ok(surfaces) = self.surfaces.lock() else {
+            return Vec::new();
+        };
+        let retired = kept
+            .keys()
+            .copied()
+            .filter(|id| !surfaces.contains_key(id))
+            .collect::<Vec<_>>();
+        for id in &retired {
+            kept.remove(id);
         }
+        retired
     }
 }
 

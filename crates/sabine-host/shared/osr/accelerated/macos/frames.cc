@@ -1,21 +1,7 @@
 #include "osr/accelerated/macos/iosurface_copy.h"
-#include "osr/common/registry.h"
-#include "osr/handler.h"
+#include "osr/accelerated/share.h"
 
 using namespace sabine_osr;
-
-namespace {
-
-void RetireEverywhere(const std::vector<uint64_t>& resource_ids) {
-  if (resource_ids.empty()) {
-    return;
-  }
-  for (SabineOsrHandler* handler : RegisteredHandlers()) {
-    handler->RetireAcceleratedResources(resource_ids);
-  }
-}
-
-}  // namespace
 
 void SabineOsrHandler::UseSurfaceService(const std::string& service_name) {
   if (!service_name.empty()) {
@@ -39,17 +25,12 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
   if (!copied_frame) {
     return false;
   }
-  if (!announced_accelerated_resources_.count(copied.resource_id)) {
-    if (!surface_broker_->Announce(copied.resource_id, copied.surface)) {
-      ReleaseAcceleratedIOSurfaceFrame(copied.slot_token);
-      return false;
-    }
-    announced_accelerated_resources_.insert(copied.resource_id);
-  }
-  *out = {
-      copied.width,     copied.height, copied.resource_id, copied.slot_index, 0,
-      copied.slot_token};
-  return true;
+  return ShareCopiedSlot(
+      copied,
+      [&](uint64_t*) {
+        return surface_broker_->Announce(copied.resource_id, copied.surface);
+      },
+      out);
 }
 
 void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {

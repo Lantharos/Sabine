@@ -51,6 +51,7 @@ pub(super) struct State {
     pub(super) waiting: Option<DirectFrame>,
     /// The window's transition that showing the waiting frame completes.
     revealing: Option<u64>,
+    committed: Option<Committed>,
     attached: bool,
     map_requested: bool,
     shown: bool,
@@ -113,6 +114,7 @@ impl State {
             creating: HashMap::new(),
             waiting: None,
             revealing: None,
+            committed: None,
             attached: false,
             map_requested: false,
             shown: false,
@@ -220,7 +222,23 @@ impl State {
         };
         buffer.release = Some(frame.release);
         self.surface.attach(Some(&buffer.buffer), 0, 0);
-        self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
+        let committed = Committed {
+            sequence: frame.sequence,
+            source: frame.source,
+            destination: frame.destination,
+        };
+        match self.committed.replace(committed) {
+            Some(previous) if committed.follows(previous) => {
+                let damage = frame.damage;
+                self.surface.damage_buffer(
+                    damage.x as i32,
+                    damage.y as i32,
+                    damage.width as i32,
+                    damage.height as i32,
+                );
+            }
+            _ => self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX),
+        }
         self.viewport.set_source(
             f64::from(x),
             f64::from(y),
@@ -260,6 +278,7 @@ impl State {
             return;
         }
         self.hidden = true;
+        self.committed = None;
         self.subsurface.set_sync();
         self.surface.attach(None, 0, 0);
         self.surface.commit();
@@ -270,6 +289,23 @@ impl State {
             self.failed = true;
             (self.report)(DirectOutcome::Failed(reason));
         }
+    }
+}
+
+/// The frame the subsurface shows, so the frame right after it damages only
+/// the pixels that changed.
+#[derive(Clone, Copy)]
+struct Committed {
+    sequence: u64,
+    source: (u32, u32, u32, u32),
+    destination: (i32, i32),
+}
+
+impl Committed {
+    fn follows(self, previous: Self) -> bool {
+        previous.sequence.wrapping_add(1) == self.sequence
+            && previous.source == self.source
+            && previous.destination == self.destination
     }
 }
 

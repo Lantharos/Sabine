@@ -16,8 +16,10 @@ namespace {
 
 constexpr size_t kSourcesPerSurface = 6;
 // While a graphics driver restarts, no device may be available for a few
-// seconds, so the copy device keeps being reopened before it gives up.
+// seconds, so the copy device keeps being reopened, now and then, before it
+// gives up for good.
 constexpr std::chrono::seconds kReopenTimeout{20};
+constexpr std::chrono::milliseconds kReopenInterval{250};
 
 struct OwnedSlot : RingSlot {
   DmabufImage image;
@@ -38,6 +40,9 @@ struct Source {
   VkFormat format = VK_FORMAT_UNDEFINED;
   uint64_t last_use = 0;
   DmabufImage image;
+  // The slot whose copy read this source last, and which of its copies.
+  uint32_t reader = 0;
+  uint64_t read_by = 0;
 };
 
 struct SurfaceSources {
@@ -45,13 +50,20 @@ struct SurfaceSources {
   // The use stamp of the source the last frame was copied from.
   uint64_t last_source = 0;
   SharedFormat last_format = SharedFormat::kBgra;
+  // What the last frame took from a frame Chromium may still have drawn.
+  PixelRegion shown_unsettled;
 };
 
 using SurfaceSlots = SurfaceRing<OwnedSlot, SurfaceSources>;
 
+struct DeviceLoss {
+  std::chrono::steady_clock::time_point lost_at;
+  std::chrono::steady_clock::time_point tried_at;
+};
+
 SlotRings<OwnedSlot, SurfaceSources> g_surfaces;
 uint64_t g_use = 0;
-std::optional<std::chrono::steady_clock::time_point> g_device_lost_at;
+std::optional<DeviceLoss> g_device_loss;
 
 bool Matches(const Source& source,
              const struct stat& buffer,
@@ -65,51 +77,72 @@ bool Matches(const Source& source,
              static_cast<uint32_t>(info.extra.coded_size.height);
 }
 
-// Forgets the sources Chromium no longer draws into, after the copies that
-// still read them finished.
-void Evict(VulkanContext* vulkan,
-           std::vector<Source>& sources,
-           const CefAcceleratedPaintInfo& info) {
-  const auto current =
-      std::partition(sources.begin(), sources.end(), [&](const Source& source) {
-        return source.image.width ==
-                   static_cast<uint32_t>(info.extra.coded_size.width) &&
-               source.image.height ==
-                   static_cast<uint32_t>(info.extra.coded_size.height);
-      });
-  if (current == sources.end() && sources.size() < kSourcesPerSurface) {
-    return;
-  }
-  vulkan->vkDeviceWaitIdle(vulkan->device);
-  for (auto source = current; source != sources.end(); ++source) {
+bool StillRead(VulkanContext* vulkan,
+               SurfaceSlots& slots,
+               const Source& source) {
+  return !CopyFinished(vulkan, slots.slots[source.reader].submission,
+                       source.read_by);
+}
+
+// Forgets the sources of another size, which Chromium no longer draws into,
+// once no copy reads them any more.
+void ForgetResized(VulkanContext* vulkan,
+                   SurfaceSlots& slots,
+                   const CefAcceleratedPaintInfo& info) {
+  std::vector<Source>& sources = slots.extra.sources;
+  for (auto source = sources.begin(); source != sources.end();) {
+    const bool current =
+        source->image.width ==
+            static_cast<uint32_t>(info.extra.coded_size.width) &&
+        source->image.height ==
+            static_cast<uint32_t>(info.extra.coded_size.height);
+    if (current || StillRead(vulkan, slots, *source)) {
+      ++source;
+      continue;
+    }
     DestroyDmabuf(vulkan, &source->image);
-  }
-  sources.erase(current, sources.end());
-  if (sources.size() >= kSourcesPerSurface) {
-    auto oldest = std::min_element(sources.begin(), sources.end(),
-                                   [](const Source& a, const Source& b) {
-                                     return a.last_use < b.last_use;
-                                   });
-    DestroyDmabuf(vulkan, &oldest->image);
-    sources.erase(oldest);
+    source = sources.erase(source);
   }
 }
 
+// Makes room for another source by forgetting the one used longest ago,
+// after the copy that reads it finished.
+bool MakeRoom(VulkanContext* vulkan, SurfaceSlots& slots) {
+  std::vector<Source>& sources = slots.extra.sources;
+  if (sources.size() < kSourcesPerSurface) {
+    return true;
+  }
+  const auto oldest = std::min_element(
+      sources.begin(), sources.end(),
+      [](const Source& a, const Source& b) { return a.last_use < b.last_use; });
+  if (StillRead(vulkan, slots, *oldest) &&
+      !FinishCopy(vulkan, &slots.slots[oldest->reader].submission)) {
+    return false;
+  }
+  DestroyDmabuf(vulkan, &oldest->image);
+  sources.erase(oldest);
+  return true;
+}
+
 Source* SourceFor(VulkanContext* vulkan,
-                  std::vector<Source>& sources,
+                  SurfaceSlots& slots,
                   const CefAcceleratedPaintInfo& info,
                   VkFormat format) {
   struct stat buffer{};
   if (fstat(info.planes[0].fd, &buffer) != 0) {
     return nullptr;
   }
+  ForgetResized(vulkan, slots, info);
+  std::vector<Source>& sources = slots.extra.sources;
   for (auto& source : sources) {
     if (Matches(source, buffer, info, format)) {
       source.last_use = ++g_use;
       return &source;
     }
   }
-  Evict(vulkan, sources, info);
+  if (!MakeRoom(vulkan, slots)) {
+    return nullptr;
+  }
   Source source;
   source.device = buffer.st_dev;
   source.inode = buffer.st_ino;
@@ -228,11 +261,13 @@ bool EnsureSlot(VulkanContext* vulkan,
 // A frame copied as it arrives comes with Chromium's dma-buf `source_fd`; a
 // settled frame is copied again from a buffer Chromium already took back.
 bool CopyIntoSlot(VulkanContext* vulkan,
-                  const Source& source,
+                  SurfaceSlots& slots,
+                  uint32_t slot_index,
+                  Source& source,
                   SharedFormat format,
                   std::optional<int> source_fd,
-                  OwnedSlot* slot,
                   AccelDmabufCopiedFrame* out) {
+  OwnedSlot* slot = &slots.slots[slot_index];
   const uint32_t width = source.image.width;
   const uint32_t height = source.image.height;
   if (!FinishCopy(vulkan, &slot->submission) ||
@@ -251,6 +286,8 @@ bool CopyIntoSlot(VulkanContext* vulkan,
       return false;
     }
     slot->filled = true;
+    source.reader = slot_index;
+    source.read_by = slot->submission.submitted;
   }
   slot->unsettled =
       FramesMayStillBeDrawing() && source_fd ? changed : PixelRegion{};
@@ -262,6 +299,8 @@ bool CopyIntoSlot(VulkanContext* vulkan,
   out->modifier = slot->image.modifier;
   out->stride = slot->image.stride;
   out->offset = slot->image.offset;
+  slots.Hand(slot_index, slots.extra.shown_unsettled, out);
+  slots.extra.shown_unsettled = slot->unsettled;
   return true;
 }
 
@@ -279,15 +318,13 @@ DmabufCopy CopyFrame(VulkanContext* vulkan,
   if (!slot_index) {
     return DmabufCopy::kSlotsBusy;
   }
-  Source* source =
-      SourceFor(vulkan, slots.extra.sources, info, UnormFormat(format));
-  if (!source || !CopyIntoSlot(vulkan, *source, format, info.planes[0].fd,
-                               &slots.slots[*slot_index], out)) {
+  Source* source = SourceFor(vulkan, slots, info, UnormFormat(format));
+  if (!source || !CopyIntoSlot(vulkan, slots, *slot_index, *source, format,
+                               info.planes[0].fd, out)) {
     return DmabufCopy::kFailed;
   }
   slots.extra.last_source = source->last_use;
   slots.extra.last_format = format;
-  out->slot_index = *slot_index;
   return DmabufCopy::kCopied;
 }
 
@@ -302,17 +339,28 @@ void DestroySurface(VulkanContext* vulkan, SurfaceSlots& slots) {
   }
 }
 
+// Once no device came back in time, the shared context stays empty, so no
+// later frame tries again.
 DmabufCopy ReopenAndCopy(const AcceleratedSurfaceKey& surface,
                          const CefAcceleratedPaintInfo& info,
                          const PixelRegion& damage,
                          AccelDmabufCopiedFrame* out) {
+  const auto now = std::chrono::steady_clock::now();
+  if (now - g_device_loss->tried_at < kReopenInterval) {
+    return DmabufCopy::kReopening;
+  }
+  g_device_loss->tried_at = now;
   VulkanContext* vulkan = ReopenSharedVulkanContext();
   if (!vulkan) {
-    const bool waiting =
-        std::chrono::steady_clock::now() - *g_device_lost_at < kReopenTimeout;
-    return waiting ? DmabufCopy::kReopening : DmabufCopy::kFailed;
+    if (now - g_device_loss->lost_at < kReopenTimeout) {
+      return DmabufCopy::kReopening;
+    }
+    g_device_loss.reset();
+    std::fprintf(stderr, "Sabine CEF: no copy device came back\n");
+    std::fflush(stderr);
+    return DmabufCopy::kFailed;
   }
-  g_device_lost_at.reset();
+  g_device_loss.reset();
   out->device_reopened = true;
   std::fprintf(stderr, "Sabine CEF: the copy device is back\n");
   std::fflush(stderr);
@@ -332,7 +380,7 @@ DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
   if (info.plane_count < 1) {
     return DmabufCopy::kFailed;
   }
-  if (g_device_lost_at) {
+  if (g_device_loss) {
     return ReopenAndCopy(surface, info, damage, out);
   }
   VulkanContext* vulkan = SharedVulkanContext();
@@ -340,7 +388,7 @@ DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
     return DmabufCopy::kFailed;
   }
   const DmabufCopy result = CopyFrame(vulkan, surface, info, damage, out);
-  if (result != DmabufCopy::kFailed || !VulkanDeviceLost(vulkan)) {
+  if (result != DmabufCopy::kFailed || !vulkan->lost) {
     return result;
   }
   std::fprintf(stderr,
@@ -351,7 +399,7 @@ DmabufCopy CopyAcceleratedDmabufFrame(const AcceleratedSurfaceKey& surface,
       [vulkan](SurfaceSlots& slots) { DestroySurface(vulkan, slots); });
   out->retired_resource_ids.insert(out->retired_resource_ids.end(),
                                    retired.begin(), retired.end());
-  g_device_lost_at = std::chrono::steady_clock::now();
+  g_device_loss = DeviceLoss{std::chrono::steady_clock::now(), {}};
   return ReopenAndCopy(surface, info, damage, out);
 }
 
@@ -359,11 +407,11 @@ DmabufCopy CopyFinishedDmabufFrame(const AcceleratedSurfaceKey& surface,
                                    AccelDmabufCopiedFrame* out) {
   SurfaceSlots* found = g_surfaces.Find(surface);
   VulkanContext* vulkan = SharedVulkanContext();
-  if (!found || g_device_lost_at || !vulkan) {
+  if (!found || g_device_loss || !vulkan) {
     return DmabufCopy::kFailed;
   }
   SurfaceSlots& slots = *found;
-  const std::vector<Source>& sources = slots.extra.sources;
+  std::vector<Source>& sources = slots.extra.sources;
   const auto source = std::find_if(
       sources.begin(), sources.end(), [&](const Source& candidate) {
         return candidate.last_use == slots.extra.last_source;
@@ -375,14 +423,15 @@ DmabufCopy CopyFinishedDmabufFrame(const AcceleratedSurfaceKey& surface,
   if (!slot_index) {
     return DmabufCopy::kSlotsBusy;
   }
-  OwnedSlot& slot = slots.slots[*slot_index];
-  slot.stale = PixelRegion::Whole(static_cast<int>(source->image.width),
-                                  static_cast<int>(source->image.height));
-  if (!CopyIntoSlot(vulkan, *source, slots.extra.last_format, std::nullopt,
-                    &slot, out)) {
+  const PixelRegion whole =
+      PixelRegion::Whole(static_cast<int>(source->image.width),
+                         static_cast<int>(source->image.height));
+  slots.slots[*slot_index].stale = whole;
+  slots.unsent.Unite(whole);
+  if (!CopyIntoSlot(vulkan, slots, *slot_index, *source,
+                    slots.extra.last_format, std::nullopt, out)) {
     return DmabufCopy::kFailed;
   }
-  out->slot_index = *slot_index;
   return DmabufCopy::kCopied;
 }
 

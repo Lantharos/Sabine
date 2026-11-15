@@ -14,6 +14,12 @@ pub(crate) fn import_dmabuf(
         .as_ref()
         .ok_or("the browser host did not share this frame's dma-buf")?;
     let format = texture_format(frame.format)?;
+    if (dmabuf.width, dmabuf.height) != (frame.coded_width, frame.coded_height) {
+        return Err(format!(
+            "the dma-buf is {}x{}, not the {}x{} its frame names",
+            dmabuf.width, dmabuf.height, frame.coded_width, frame.coded_height
+        ));
+    }
     let size = wgpu::Extent3d {
         width: dmabuf.width,
         height: dmabuf.height,

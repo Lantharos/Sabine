@@ -168,6 +168,8 @@ impl OsrNativeHost {
                 self.logical_width().round() as i32,
                 self.logical_height().round() as i32,
             ),
+            damage: frame.damage,
+            sequence: frame.sequence,
             release,
             inputs: self.painted_inputs(),
         })

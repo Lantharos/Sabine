@@ -6,6 +6,7 @@
 #include <CoreVideo/CVPixelBuffer.h>
 #include <IOSurface/IOSurface.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <map>
 
@@ -42,16 +43,34 @@ struct OwnedSurfaceSlot : RingSlot {
 // CEF hands out the same few pooled surfaces frame after frame, so each one
 // is wrapped as a Metal texture once and kept while it stays in the pool.
 struct CachedSource {
+  CachedSource(IOSurfaceRef surface, id<MTLTexture> texture)
+      : surface(surface), texture(texture) {
+    CFRetain(surface);
+  }
+  CachedSource(const CachedSource&) = delete;
+  CachedSource& operator=(const CachedSource&) = delete;
+  ~CachedSource() {
+    [texture release];
+    CFRelease(surface);
+  }
+
   IOSurfaceRef surface = nullptr;
   id<MTLTexture> texture = nil;
+  uint64_t last_use = 0;
 };
 
-using SurfaceSlots = SurfaceRing<OwnedSurfaceSlot, NoExtra>;
+// The pooled surfaces of one browser surface, each kept until the pool
+// moves to another size or the cache fills.
+struct SurfaceSources {
+  std::map<IOSurfaceRef, CachedSource> sources;
+};
+
+using SurfaceSlots = SurfaceRing<OwnedSurfaceSlot, SurfaceSources>;
 
 id<MTLDevice> g_device = nil;
 id<MTLCommandQueue> g_queue = nil;
-SlotRings<OwnedSurfaceSlot> g_surfaces;
-std::map<IOSurfaceRef, CachedSource> g_sources;
+SlotRings<OwnedSurfaceSlot, SurfaceSources> g_surfaces;
+uint64_t g_use = 0;
 
 bool EnsureDevice() {
   if (g_queue) {
@@ -112,35 +131,33 @@ id<MTLTexture> WrapSurface(IOSurfaceRef surface, MTLPixelFormat format) {
                                       plane:0];
 }
 
-void ReleaseSources() {
-  for (auto& [surface, source] : g_sources) {
-    [source.texture release];
-    CFRelease(source.surface);
-  }
-  g_sources.clear();
-}
-
-id<MTLTexture> SourceTexture(IOSurfaceRef surface, MTLPixelFormat format) {
-  const auto cached = g_sources.find(surface);
-  if (cached != g_sources.end() &&
-      cached->second.texture.pixelFormat == format &&
-      cached->second.texture.width == IOSurfaceGetWidth(surface) &&
-      cached->second.texture.height == IOSurfaceGetHeight(surface)) {
+id<MTLTexture> SourceTexture(SurfaceSources& cache,
+                             IOSurfaceRef surface,
+                             MTLPixelFormat format) {
+  const size_t width = IOSurfaceGetWidth(surface);
+  const size_t height = IOSurfaceGetHeight(surface);
+  std::map<IOSurfaceRef, CachedSource>& sources = cache.sources;
+  std::erase_if(sources, [&](const auto& entry) {
+    const id<MTLTexture> texture = entry.second.texture;
+    return texture.width != width || texture.height != height ||
+           (entry.first == surface && texture.pixelFormat != format);
+  });
+  if (const auto cached = sources.find(surface); cached != sources.end()) {
+    cached->second.last_use = ++g_use;
     return cached->second.texture;
   }
-  const bool resized =
-      !g_sources.empty() &&
-      g_sources.begin()->second.texture.width != IOSurfaceGetWidth(surface);
-  if (cached != g_sources.end() || resized ||
-      g_sources.size() >= kMaxCachedSources) {
-    ReleaseSources();
+  if (sources.size() >= kMaxCachedSources) {
+    sources.erase(std::min_element(
+        sources.begin(), sources.end(), [](const auto& a, const auto& b) {
+          return a.second.last_use < b.second.last_use;
+        }));
   }
   id<MTLTexture> texture = WrapSurface(surface, format);
   if (!texture) {
     return nil;
   }
-  CFRetain(surface);
-  g_sources[surface] = CachedSource{surface, texture};
+  sources.try_emplace(surface, surface, texture).first->second.last_use =
+      ++g_use;
   return texture;
 }
 
@@ -246,18 +263,18 @@ bool CopyAcceleratedIOSurfaceFrame(const AcceleratedSurfaceKey& surface,
     return false;
   }
   @autoreleasepool {
-    id<MTLTexture> source = SourceTexture(source_surface, format);
+    SurfaceSlots& slots = g_surfaces[surface];
+    slots.Damage(damage);
+    id<MTLTexture> source = SourceTexture(slots.extra, source_surface, format);
     if (!source) {
       return false;
     }
-    SurfaceSlots& slots = g_surfaces[surface];
-    slots.Damage(damage);
     const std::optional<uint32_t> slot_index = slots.FreeSlot();
     if (!slot_index || !CopyIntoSlot(source, source_surface, format,
                                      &slots.slots[*slot_index], out)) {
       return false;
     }
-    out->slot_index = *slot_index;
+    slots.Hand(*slot_index, {}, out);
     return true;
   }
 }
@@ -267,12 +284,7 @@ void ReleaseAcceleratedIOSurfaceFrame(uint64_t slot_token) {
 }
 
 std::vector<uint64_t> RetireAcceleratedIOSurfaceBrowser(int browser_id) {
-  std::vector<uint64_t> retired =
-      g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
-  if (g_surfaces.empty()) {
-    ReleaseSources();
-  }
-  return retired;
+  return g_surfaces.RetireBrowser(browser_id, [](SurfaceSlots&) {});
 }
 
 }  // namespace sabine_osr

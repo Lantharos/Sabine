@@ -7,24 +7,10 @@
 #include <windows.h>
 
 #include "osr/accelerated/protocol.h"
+#include "osr/accelerated/share.h"
 #include "osr/accelerated/windows/d3d11_copy.h"
-#include "osr/common/registry.h"
-#include "osr/handler.h"
 
 using namespace sabine_osr;
-
-namespace {
-
-void RetireEverywhere(const std::vector<uint64_t>& resource_ids) {
-  if (resource_ids.empty()) {
-    return;
-  }
-  for (SabineOsrHandler* handler : RegisteredHandlers()) {
-    handler->RetireAcceleratedResources(resource_ids);
-  }
-}
-
-}  // namespace
 
 void SabineOsrHandler::UseParentProcess(int pid) {
   parent_process_.Open(pid);
@@ -42,18 +28,13 @@ bool SabineOsrHandler::CopyAcceleratedFrame(
   if (!copied_frame) {
     return false;
   }
-  uint64_t shared_handle = 0;
-  if (!announced_accelerated_resources_.count(copied.resource_id)) {
-    shared_handle = parent_process_.Duplicate(copied.shared_handle);
-    if (shared_handle == 0) {
-      ReleaseAcceleratedD3d11Frame(copied.slot_token);
-      return false;
-    }
-    announced_accelerated_resources_.insert(copied.resource_id);
-  }
-  *out = {copied.width,      copied.height, copied.resource_id,
-          copied.slot_index, shared_handle, copied.slot_token};
-  return true;
+  return ShareCopiedSlot(
+      copied,
+      [&](uint64_t* shared_handle) {
+        *shared_handle = parent_process_.Duplicate(copied.shared_handle);
+        return *shared_handle != 0;
+      },
+      out);
 }
 
 void SabineOsrHandler::DiscardAcceleratedFrame(const CopiedAccelFrame& frame) {

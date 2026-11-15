@@ -24,6 +24,8 @@ struct CopySubmission {
   // Signalled with the copy and attached to the dma-bufs it touched.
   VkSemaphore copied = VK_NULL_HANDLE;
   bool pending = false;
+  // Counts the copies submitted, so a copy can be told apart from later ones.
+  uint64_t submitted = 0;
 };
 
 bool CreateCopySubmission(VulkanContext* vulkan, CopySubmission* submission);
@@ -33,6 +35,11 @@ void DestroyCopySubmission(VulkanContext* vulkan, CopySubmission* submission);
 // device finish everything first, so nothing is reused while it still runs;
 // false means the device was lost meanwhile.
 bool FinishCopy(VulkanContext* vulkan, CopySubmission* submission);
+
+// Whether the copy numbered `copy` has finished, without waiting for it.
+bool CopyFinished(VulkanContext* vulkan,
+                  const CopySubmission& submission,
+                  uint64_t copy);
 
 // Submits the recorded copy from Chromium's dma-buf `source_fd` into the
 // dma-buf `target_fd`. Chromium takes its buffer back when the paint callback

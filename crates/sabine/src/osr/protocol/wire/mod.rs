@@ -99,8 +99,12 @@ impl WireReader {
     }
 
     /// Reads the next message for the window, taking in the shared resources
-    /// the browser host announces or retires between them.
+    /// the browser host announces between them.
     pub(crate) fn read(&mut self) -> io::Result<Option<OsrMessage>> {
+        #[cfg(target_os = "macos")]
+        if let Some(resource_ids) = self.resources.take_retired() {
+            return Ok(Some(OsrMessage::AccelRetired(resource_ids)));
+        }
         loop {
             let Some(raw) = self.read_raw()? else {
                 return Ok(None);
@@ -200,8 +204,9 @@ impl WireReader {
             }
             #[cfg(any(windows, target_os = "linux"))]
             KIND_ACCEL_RETIRE => {
-                self.resources.retire(parse_retired_resources(&payload)?);
-                return Ok(None);
+                let resource_ids = parse_retired_resources(&payload)?;
+                self.resources.retire(&resource_ids);
+                OsrMessage::AccelRetired(resource_ids)
             }
             #[cfg(target_os = "linux")]
             KIND_ACCEL_DMABUF => {

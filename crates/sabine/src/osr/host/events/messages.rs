@@ -41,6 +41,11 @@ impl OsrNativeHost {
                     self.release_accel_slot(frame.slot_token);
                 }
             }
+            OsrMessage::AccelRetired(resource_ids) => {
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.forget_external_resources(&resource_ids);
+                }
+            }
             OsrMessage::AccelUnavailable => {
                 self.paint_in_software("the browser could not share its frames");
                 #[cfg(target_os = "linux")]

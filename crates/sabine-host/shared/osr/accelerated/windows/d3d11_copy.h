@@ -5,19 +5,12 @@
 #include <vector>
 #include <windows.h>
 
-#include "osr/accelerated/damage.h"
+#include "osr/accelerated/slot_ring.h"
 
 namespace sabine_osr {
 
-struct AccelD3d11CopiedFrame {
+struct AccelD3d11CopiedFrame : CopiedSlot {
   HANDLE shared_handle = nullptr;
-  uint64_t resource_id = 0;
-  uint32_t slot_index = 0;
-  uint64_t slot_token = 0;
-  uint32_t width = 0;
-  uint32_t height = 0;
-  /// Resources this call replaced, whose compositor handles can be closed.
-  std::vector<uint64_t> retired_resource_ids;
 };
 
 /// Copy CEF's pooled shared texture into a Sabine-owned shared texture before

@@ -8,12 +8,13 @@ use crate::osr::control::SlotRelease;
 use crate::render::ImageId;
 use crate::render::gpu::{CachedTexture, GpuRenderer, RendererError};
 
-/// The producer slot an external frame was copied into, and the texture that
-/// slot currently holds.
+/// The producer slot an external frame was copied into, the texture that
+/// slot currently holds, and the size the frame says that texture has.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ExternalSlot {
     pub index: u32,
     pub resource_id: u64,
+    pub size: (u32, u32),
 }
 
 #[derive(Clone)]
@@ -26,7 +27,8 @@ pub(in crate::render::gpu) struct ImportedTexture {
 
 impl GpuRenderer {
     /// Show a frame from a producer-owned texture. Each slot's texture is
-    /// imported once and reused until the producer replaces it.
+    /// imported once and reused until the producer replaces or retires it,
+    /// or a frame names it with another size, which `import` has to confirm.
     pub(crate) fn set_external_bgra_texture(
         &mut self,
         id: &ImageId,
@@ -89,6 +91,9 @@ impl GpuRenderer {
                 .iter()
                 .find(|imported| imported.slot == slot.index)
                 .filter(|imported| imported.resource_id == slot.resource_id)
+                .filter(|imported| {
+                    (imported.texture.width(), imported.texture.height()) == slot.size
+                })
         });
         if let Some(imported) = cached {
             return Ok(imported.clone());
@@ -104,6 +109,14 @@ impl GpuRenderer {
         imports.retain(|existing| existing.slot != slot.index);
         imports.push(imported.clone());
         Ok(imported)
+    }
+
+    /// Drops the imports of producer textures that were retired. A frame
+    /// still on screen keeps its texture until it is replaced.
+    pub(crate) fn forget_external_resources(&mut self, resource_ids: &[u64]) {
+        for imports in self.external_imports.values_mut() {
+            imports.retain(|imported| !resource_ids.contains(&imported.resource_id));
+        }
     }
 
     pub(in crate::render::gpu) fn retire_external_texture(&mut self, id: &ImageId) {

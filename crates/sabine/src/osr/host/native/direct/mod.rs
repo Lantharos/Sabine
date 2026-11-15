@@ -28,6 +28,7 @@ use winit::window::Window;
 use crate::osr::accel::Dmabuf;
 use crate::osr::control::SlotRelease;
 use crate::osr::host::input::{InputLatency, InputStamp};
+use crate::osr::protocol::TextureRect;
 
 use worker::State;
 
@@ -39,6 +40,8 @@ pub(in crate::osr::host) struct DirectFrame {
     pub(in crate::osr::host) format: u32,
     pub(in crate::osr::host) source: (u32, u32, u32, u32),
     pub(in crate::osr::host) destination: (i32, i32),
+    pub(in crate::osr::host) damage: TextureRect,
+    pub(in crate::osr::host) sequence: u64,
     pub(in crate::osr::host) release: SlotRelease,
     pub(in crate::osr::host) inputs: Vec<InputStamp>,
 }

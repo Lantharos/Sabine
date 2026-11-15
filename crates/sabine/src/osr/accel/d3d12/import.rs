@@ -55,6 +55,15 @@ pub(crate) fn import_d3d12(
         }
         .map_err(|error| format!("ID3D12Device::OpenSharedHandle: {error}"))?;
         let resource = resource.ok_or_else(|| "D3D12 shared resource was null".to_string())?;
+        let resource_desc = unsafe { resource.GetDesc() };
+        if resource_desc.Width != u64::from(frame.coded_width)
+            || resource_desc.Height != frame.coded_height
+        {
+            return Err(format!(
+                "the shared texture is {}x{}, not the {}x{} its frame names",
+                resource_desc.Width, resource_desc.Height, frame.coded_width, frame.coded_height
+            ));
+        }
         unsafe {
             wgpu::hal::dx12::Device::texture_from_raw(
                 resource,

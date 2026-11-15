@@ -25,7 +25,7 @@
 #include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
 #include "include/cef_values.h"
-#include "osr/accelerated/damage.h"
+#include "osr/accelerated/slot_ring.h"
 #include "osr/browser/clipboard.h"
 #include "osr/browser/media_state.h"
 #include "osr/dialogs/dialogs.h"
@@ -269,6 +269,8 @@ class SabineOsrHandler : public CefClient,
     uint32_t resource_slot = 0;
     uint64_t shared_handle = 0;
     uint64_t slot_token = 0;
+    sabine_osr::PixelRegion damage;
+    uint64_t sequence = 0;
   };
 
   // Where a surface's accelerated frames go in the window.
@@ -295,6 +297,13 @@ class SabineOsrHandler : public CefClient,
                             const sabine_osr::PixelRegion& damage,
                             const CefAcceleratedPaintInfo& info,
                             CopiedAccelFrame* out);
+  // Fills `out` for a frame `copied` into a slot, announcing the slot's
+  // resource with `announce` the first time; `announce` gives the handle
+  // the window opens it by, where it needs one.
+  template <typename Announce>
+  bool ShareCopiedSlot(const sabine_osr::CopiedSlot& copied,
+                       Announce announce,
+                       CopiedAccelFrame* out);
   void DiscardAcceleratedFrame(const CopiedAccelFrame& frame);
   void ReleaseAcceleratedSlot(uint64_t slot_token);
   void RetireAcceleratedSurfaces(int browser_id);

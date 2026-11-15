@@ -43,6 +43,9 @@ impl FrameBytes {
 pub(crate) enum OsrMessage {
     PaintBatch(OsrPaintBatch),
     AccelFrame(OsrAccelFrame),
+    /// The browser host let go of these shared textures, so their imports
+    /// can go too.
+    AccelRetired(Vec<u64>),
     /// The browser host cannot share accelerated frames on this machine.
     AccelUnavailable,
     /// Hide the built-in popup overlay (`__sabine_popup`).
@@ -290,6 +293,14 @@ pub(crate) struct OsrAccelFrame {
     pub visible_y: u32,
     pub visible_width: u32,
     pub visible_height: u32,
+    /// The pixels that changed since the surface's frame before this one,
+    /// which a page in a subsurface tells the compositor about.
+    #[cfg(target_os = "linux")]
+    pub damage: TextureRect,
+    /// Counts the surface's frames, so a frame that follows one the window
+    /// never saw can be told apart.
+    #[cfg(target_os = "linux")]
+    pub sequence: u64,
     pub x: i32,
     pub y: i32,
     pub format: u32,
@@ -300,6 +311,15 @@ pub(crate) struct OsrAccelFrame {
     /// Producer slot released only after the compositor finishes sampling it.
     pub slot_token: u64,
     pub resource: Option<crate::osr::accel::SharedResource>,
+}
+
+/// A rectangle of an accelerated frame's texture, in its pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextureRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Clone, Debug)]

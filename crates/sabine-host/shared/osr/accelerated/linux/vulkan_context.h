@@ -27,6 +27,7 @@ namespace sabine_osr {
   X(vkDestroyFence)                       \
   X(vkResetFences)                        \
   X(vkWaitForFences)                      \
+  X(vkGetFenceStatus)                     \
   X(vkCreateSemaphore)                    \
   X(vkDestroySemaphore)                   \
   X(vkCreateImage)                        \
@@ -62,6 +63,13 @@ struct VulkanContext {
   // dma-bufs, so its copies finish before the callback returns.
   bool implicit_fences = false;
   std::vector<uint64_t> shared_modifiers[2];
+  // Whether a call that waits on or submits to the device found it lost.
+  bool lost = false;
+
+  VkResult Observe(VkResult result) {
+    lost |= result == VK_ERROR_DEVICE_LOST;
+    return result;
+  }
 
 #define SABINE_VULKAN_MEMBER(name) PFN_##name name = nullptr;
   SABINE_VULKAN_DEVICE_FUNCTIONS(SABINE_VULKAN_MEMBER)
@@ -83,8 +91,6 @@ VulkanContext* SharedVulkanContext();
 // Vulkan instance, since the old one still lists the devices from before a
 // driver reset. Returns null while no device can share dma-bufs.
 VulkanContext* ReopenSharedVulkanContext();
-
-bool VulkanDeviceLost(VulkanContext* context);
 
 }  // namespace sabine_osr
 
