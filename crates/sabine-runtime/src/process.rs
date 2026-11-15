@@ -58,7 +58,7 @@ pub fn process_alive(pid: u32) -> bool {
 /// A process by its id and the moment it started, which together never repeat
 /// even when the system hands the id to a later process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ProcessIdentity {
+pub struct ProcessIdentity {
     pub pid: u32,
     pub started: u64,
 }

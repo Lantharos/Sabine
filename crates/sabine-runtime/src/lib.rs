@@ -51,7 +51,9 @@ pub use install::{
     remove_user_runtime_version, update_user_runtime_with_progress,
 };
 pub use lease::RuntimeLease;
-pub use process::{background_command, configure_background_command, find_program, process_alive};
+pub use process::{
+    ProcessIdentity, background_command, configure_background_command, find_program, process_alive,
+};
 pub use types::{RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode};
 
 pub use diagnostics::{capture_diagnostics, diagnostic_path, record_diagnostic, report_error};
