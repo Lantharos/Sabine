@@ -1,6 +1,35 @@
-use std::path::Path;
+use std::{
+    borrow::Cow,
+    fmt,
+    fs::OpenOptions,
+    io::{self, Cursor, Read},
+    path::{Path, PathBuf},
+};
+
+use image::{DynamicImage, ImageReader, Limits, imageops::FilterType};
 
 const FALLBACK_SIZE: u32 = 32;
+/// Far more than any tray image takes, as a file or as decoded pixels.
+const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_DECODED_SIDE: u32 = 4096;
+/// The most pixels across trays show an icon with, even on dense screens.
+const TRAY_SIZE: u32 = 128;
+
+/// Where a tray image comes from: a file the app names, or bytes a page
+/// sends.
+pub(crate) enum IconSource {
+    File(PathBuf),
+    Bytes(Vec<u8>),
+}
+
+impl fmt::Display for IconSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::File(path) => path.display().fmt(formatter),
+            Self::Bytes(_) => formatter.write_str("from the page"),
+        }
+    }
+}
 
 pub(super) struct TrayImage {
     rgba: Vec<u8>,
@@ -8,14 +37,20 @@ pub(super) struct TrayImage {
     height: u32,
 }
 
-/// Decodes the icon at `path`. Without one, or when it cannot be read, the
-/// tray shows a plain dot so the app stays reachable.
-pub(super) fn load(path: Option<&Path>) -> TrayImage {
-    let Some(path) = path else {
+/// Decodes the icon, at most as large as trays show it. Without one, or
+/// when it cannot be read, the tray shows a plain dot so the app stays
+/// reachable.
+pub(super) fn load(source: Option<&IconSource>) -> TrayImage {
+    let Some(source) = source else {
         return fallback();
     };
-    match image::open(path) {
+    match decode(source) {
         Ok(image) => {
+            let image = if image.width() > TRAY_SIZE || image.height() > TRAY_SIZE {
+                image.resize(TRAY_SIZE, TRAY_SIZE, FilterType::Lanczos3)
+            } else {
+                image
+            };
             let image = image.into_rgba8();
             let (width, height) = image.dimensions();
             TrayImage {
@@ -27,11 +62,50 @@ pub(super) fn load(path: Option<&Path>) -> TrayImage {
         Err(error) => {
             sabine_runtime::report_error(
                 "desktop",
-                format!("could not read the tray icon {}: {error}", path.display()),
+                format!("could not read the tray icon {source}: {error}"),
             );
             fallback()
         }
     }
+}
+
+fn decode(source: &IconSource) -> Result<DynamicImage, String> {
+    let bytes = match source {
+        IconSource::File(path) => Cow::Owned(read_file(path).map_err(|error| error.to_string())?),
+        IconSource::Bytes(bytes) => Cow::Borrowed(bytes.as_slice()),
+    };
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err("the image is larger than 8 MiB".to_string());
+    }
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|error| error.to_string())?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_DECODED_SIDE);
+    limits.max_image_height = Some(MAX_DECODED_SIDE);
+    limits.max_alloc = Some(MAX_FILE_BYTES * 8);
+    reader.limits(limits);
+    reader.decode().map_err(|error| error.to_string())
+}
+
+/// Reads at most one byte past the limit of a regular file. It opens without
+/// waiting, so a name that leads to a pipe or device is turned down instead
+/// of holding up the tray.
+fn read_file(path: &Path) -> io::Result<Vec<u8>> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "it is not a file",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 impl TrayImage {
@@ -94,5 +168,31 @@ fn fallback() -> TrayImage {
         rgba,
         width: FALLBACK_SIZE,
         height: FALLBACK_SIZE,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_images_shrink_to_what_trays_show() {
+        let mut png = Vec::new();
+        image::RgbaImage::new(1024, 512)
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .expect("png");
+        let image = load(Some(&IconSource::Bytes(png)));
+        assert_eq!((image.width, image.height), (TRAY_SIZE, TRAY_SIZE / 2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pipe_is_turned_down_without_waiting_for_a_writer() {
+        let pipe = std::env::temp_dir().join(format!("sabine-tray-{}", std::process::id()));
+        let name = std::ffi::CString::new(pipe.as_os_str().as_encoded_bytes()).expect("path");
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        let decoded = decode(&IconSource::File(pipe.clone()));
+        let _ = std::fs::remove_file(&pipe);
+        assert!(decoded.is_err());
     }
 }

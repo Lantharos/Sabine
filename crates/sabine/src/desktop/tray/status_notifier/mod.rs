@@ -12,7 +12,7 @@ use sabine_platform::{TrayIcon, TrayMenuItem};
 use tokio::sync::mpsc;
 use zbus::{Connection, connection, fdo::DBusProxy, object_server::SignalEmitter};
 
-use super::icon;
+use super::icon::{self, IconSource};
 use crate::desktop::{EventQueue, sanitize_id};
 use item::{Item, Pixmap, Shown};
 use menu::Menu;
@@ -28,7 +28,7 @@ enum Request {
 }
 
 enum Change {
-    Icon(Option<PathBuf>),
+    Icon(Option<IconSource>),
     Tooltip(Option<String>),
     Menu(Vec<TrayMenuItem>),
 }
@@ -57,8 +57,12 @@ impl TrayHandle {
     }
 
     /// Shows the image at `path`, or a plain dot without one.
-    pub fn set_icon(&self, path: Option<PathBuf>, _template: bool) {
-        let _ = self.requests.send(Request::Show(Change::Icon(path)));
+    pub fn set_icon(&self, path: Option<PathBuf>, template: bool) {
+        self.show_icon(path.map(IconSource::File), template);
+    }
+
+    pub(in crate::desktop) fn show_icon(&self, source: Option<IconSource>, _template: bool) {
+        let _ = self.requests.send(Request::Show(Change::Icon(source)));
     }
 
     pub fn set_tooltip(&self, tooltip: Option<String>) {
@@ -82,7 +86,7 @@ async fn serve(
     let shown = Arc::new(Mutex::new(Shown {
         title: icon.title.clone(),
         tooltip: icon.tooltip.clone(),
-        pixmap: pixmap(icon.icon_path.clone()).await,
+        pixmap: pixmap(icon.icon_path.clone().map(IconSource::File)).await,
     }));
     let item = Item {
         id: sanitize_id(&icon.id),
@@ -133,8 +137,8 @@ async fn show(
     change: Change,
 ) -> zbus::Result<()> {
     match change {
-        Change::Icon(path) => {
-            lock(shown).pixmap = pixmap(path).await;
+        Change::Icon(source) => {
+            lock(shown).pixmap = pixmap(source).await;
             Item::new_icon(emitter).await
         }
         Change::Tooltip(tooltip) => {
@@ -169,8 +173,8 @@ async fn register(connection: &Connection) {
         .await;
 }
 
-async fn pixmap(path: Option<PathBuf>) -> Pixmap {
-    tokio::task::spawn_blocking(move || icon::load(path.as_deref()).into_pixmap())
+async fn pixmap(source: Option<IconSource>) -> Pixmap {
+    tokio::task::spawn_blocking(move || icon::load(source.as_ref()).into_pixmap())
         .await
         .unwrap_or_else(|_| icon::load(None).into_pixmap())
 }
