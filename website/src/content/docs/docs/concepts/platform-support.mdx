@@ -25,10 +25,13 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 
 | Service | Used for |
 | --- | --- |
-| XDG desktop portal | File dialogs, global shortcuts, printing, appearance, opening links and folders, notifications without a notification server |
+| XDG desktop portal | File dialogs, global shortcuts, printing, appearance, opening links and folders, keeping the machine awake, notifications without a notification server |
 | `org.freedesktop.Notifications` | Notifications, when a notification server runs |
 | `org.freedesktop.secrets` | Secrets, and the key Chromium encrypts cookies with |
 | StatusNotifierWatcher | The tray icon |
+| logind | Sleep and wake, the screen lock, and keeping the system awake without the portal |
+| UPower | The power source and battery charge |
+| `ext_idle_notify_v1`, or GNOME's idle monitor | Idle watches |
 | A user systemd instance | The shared Chromium runtime, and starting the Sabine daemon |
 | GStreamer with `playbin3` | Native video, loaded only when a page first plays one |
 | `ext_background_effect_v1` | Glass blur |
@@ -48,6 +51,11 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | [Dialogs for other apps' windows](/docs/windows/creating-windows/#dialogs-for-other-apps-windows) | With `zxdg_importer_v2`; modal with `xdg_wm_dialog_v1` | No | No |
 | [Tray](/docs/desktop/tray/) | StatusNotifierItem with dbusmenu | Notification area | Menu bar, image only |
 | [Notifications](/docs/desktop/notifications/) | Notification server or portal | Toasts | User notifications, bundled apps only |
+| Notification pictures | Icon and image on notification servers; icon only through the portal | Icon and image | Image only; macOS shows the app's icon |
+| Notification buttons and replies | Buttons where the server supports actions; replies with `inline-reply` servers or the portal's reply purpose | Buttons and reply boxes | Buttons and reply fields |
+| [Sleep, lock and power source](/docs/desktop/power-and-idle/) | logind and UPower | Yes | Yes |
+| [Idle watches](/docs/desktop/power-and-idle/#idle) | `ext_idle_notify_v1` or GNOME's idle monitor | Checks the last input time | Checks the last input time |
+| [Keeping awake](/docs/desktop/power-and-idle/#keeping-the-machine-awake) | Inhibit portal, or logind for the system only | Power requests | Power assertions |
 | [Global shortcuts](/docs/desktop/shortcuts/) | GlobalShortcuts portal | Yes | Yes |
 | Inhibit system shortcuts | Shortcuts inhibitor protocol | Low-level keyboard hook | Event tap, needs Accessibility permission |
 | [Single instance](/docs/desktop/single-instance/) | Yes | Yes | Yes, plus Dock and Finder reopen |

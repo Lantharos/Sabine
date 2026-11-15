@@ -244,9 +244,14 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | `rendererCrashed` | `RendererCrashedEvent` | The page's or a guest's renderer stopped. |
 | `storeChanged` | `StoreChangedEvent` | A key of the [store](#store) changed, from any window or the app's Rust side. |
 | `pen` | `PenEvent` | A pen or its eraser comes near the screen or leaves it, touches or lifts, a barrel button goes down or up, or the pen tilts. |
-| `notificationClick` | `NotificationEvent` | A desktop notification the window showed was clicked. |
+| `notificationClick` | `NotificationClickEvent` | A desktop notification the window showed, or one of its buttons, was clicked. |
 | `notificationClose` | `NotificationEvent` | One of its notifications was dismissed or closed. |
 | `notificationError` | `NotificationErrorEvent` | One of its notifications could not be shown. |
+| `systemSuspend` | `null` | The system is about to sleep. |
+| `systemResume` | `null` | The system woke from sleep. |
+| `screenLocked` | `null` | The screen locked. |
+| `screenUnlocked` | `null` | The screen unlocked. |
+| `powerSourceChanged` | `PowerSource` | The machine switched between battery and mains power, or its battery's charge changed. |
 | `guestCreated` | `GuestInfo` | A guest finished opening. |
 | `guestDestroyed` | `GuestIdEvent` | A guest closed. |
 | `guestLoading` | `GuestLoadingEvent` | A guest started or finished loading. |
@@ -297,8 +302,18 @@ interface NotificationEvent {
   id: string; // the id the app gave it, or tag:<tag> for one the page showed with a tag
 }
 
+interface NotificationClickEvent extends NotificationEvent {
+  action: string | null; // the button's action, or null for the notification itself
+  reply: string | null; // what people typed into a reply button's field
+}
+
 interface NotificationErrorEvent extends NotificationEvent {
   message: string;
+}
+
+interface PowerSource {
+  onBattery: boolean;
+  batteryLevel: number | null; // percent, on machines with a battery
 }
 
 interface PenEvent {
@@ -334,7 +349,8 @@ to use the first as a tool instead.
 The guest payloads are listed under [Guests](#guest-types). The desktop pages explain each event:
 [Tray](/docs/desktop/tray/), [Shortcuts](/docs/desktop/shortcuts/),
 [Single instance](/docs/desktop/single-instance/),
-[Notifications](/docs/desktop/notifications/) and
+[Notifications](/docs/desktop/notifications/),
+[Power and idle](/docs/desktop/power-and-idle/) and
 [Appearance and shell](/docs/desktop/appearance-and-shell/).
 
 ## `appWindow`
@@ -775,23 +791,26 @@ const activity: {
 interface ActivityOptions {
   name?: string; // up to 128 characters, default "activity"
   keepRunning?: boolean; // default true
+  keepAwake?: "system" | "display"; // default none
 }
 
 interface ActivityHandle {
   id: string;
   name: string;
   keepRunning: boolean;
+  keepAwake: "system" | "display" | null;
   end(): Promise<{ id: string; ended: boolean }>;
 }
 
 interface ActivityList {
-  activities: { id: string; name: string; keepRunning: boolean }[];
+  activities: { id: string; name: string; keepRunning: boolean; keepAwake: "system" | "display" | null }[];
   keepingRunning: number;
 }
 ```
 
 An activity keeps the page running while its window is out of sight, instead of letting Sabine
-freeze it, unless it is begun with `keepRunning: false`. It belongs to the page that began it and
+freeze it, unless it is begun with `keepRunning: false`. With `keepAwake`, it also keeps the
+system, or the screen too, from sleeping, with its name as the reason. It belongs to the page that began it and
 ends when that page reloads, navigates away, loses its renderer or its window closes. `end()`
 resolves with `ended: false` when the activity had already ended. A window's pages keep up to 32
 activities at once, and `begin` rejects beyond that. `list()` returns the activities
@@ -997,12 +1016,19 @@ system asks the person to unlock it, and reject where no credential store is ava
 const system: {
   appearance(): Promise<SystemAppearance>;
   displays(): Promise<Display[]>;
+  power(): Promise<PowerState>;
+  watchIdle(seconds: number, callback: (state: "idle" | "active") => void): Promise<() => void>;
 };
 
 interface SystemAppearance {
   colorScheme: "light" | "dark";
   accentColor: string | null; // "#rrggbb" where the desktop has one
   backdrop: "luca" | "maris";
+}
+
+interface PowerState {
+  source: PowerSource | null; // null until the desktop has reported it
+  locked: boolean;
 }
 ```
 
@@ -1037,6 +1063,11 @@ const [display] = (await system.displays()).filter((display) => display.primary)
 const width = 800 * display.scaleFactor;
 await appWindow.setPosition(display.bounds.x + (display.bounds.width - width) / 2, display.bounds.y);
 ```
+
+`power()` returns the power source and screen lock as the desktop last reported them.
+`watchIdle` calls back with `"idle"` once nobody used the machine for `seconds`, and with
+`"active"` when someone does again. It resolves with a function that stops the watch, which also
+stops when the page goes away. See [Power and idle](/docs/desktop/power-and-idle/).
 
 ## `tray`
 

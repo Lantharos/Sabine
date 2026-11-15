@@ -289,7 +289,7 @@ pub fn on_desktop_event(self, listener: impl Fn(&SabineProcessHandle, &PlatformE
 pub fn on_quit(self, listener: impl Fn() + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, what happens to every window's notifications, and the system's sleep, lock and power source changes, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
 
 ```rust
 pub struct WindowVisibility {
@@ -428,8 +428,8 @@ impl SabineProcess {
 - `open_window` opens another window with the app's id and bridge handlers, plus the handlers registered on the window you pass, which answer in that window for a command both register. It waits up to 20 seconds for the first window to be ready, since the others join its browser. `close_window` returns `false` for an unknown id.
 - `wait` blocks until every window has closed, then returns the first window's exit status. A background app keeps waiting for its next activation, until `SabineProcessHandle::quit` ends it.
 - `take_open_urls` drains the queue of URLs and documents the app was asked to open, by its arguments, a second launch, or the system.
-- `notify` shows a desktop notification from the first window; its pages hear clicks as `notification.click` events.
-- Activities keep every window's page running while it is out of sight, until the lease is ended or dropped. `ActivityOptions::new(name).keep_running(false)` records an activity without keeping pages awake.
+- `notify` shows a desktop notification from the first window; its pages hear clicks on it and its buttons as `notification.click` events, and `on_desktop_event` hears everything that happens to it.
+- Activities keep every window's page running while it is out of sight, until the lease is ended or dropped. `ActivityOptions::new(name).keep_running(false)` records an activity without keeping pages awake, and `.keep_awake(KeepAwake::System)` or `KeepAwake::Display` keeps the machine from sleeping while it runs.
 - Dropping the `SabineProcess` closes its windows.
 
 Methods that return `bool` report whether at least one window took the message.
@@ -450,10 +450,11 @@ impl SabineProcessHandle {
     pub fn set_progress(&self, progress: AppProgress);
     pub fn add_recent_document(&self, path: impl AsRef<Path>) -> Result<(), String>;
     pub fn clear_recent_documents(&self) -> Result<(), String>;
+    pub fn power_state(&self) -> PowerState;
 }
 ```
 
-A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop. `quit` closes every window and ends the app, also a background app or one whose window hides on close, and `wait` then returns a success status. `set_autostart` turns the app's autostart entry on or off; see [Starting at login](/docs/desktop/autostart/). `set_badge`, `set_progress` and the recent files change what the app's Dock or taskbar icon shows; see [Dock and taskbar](/docs/desktop/dock-and-taskbar/).
+A handle can be sent to other threads and kept in app state while `wait` runs. `present` shows and focuses the app's window, opening it first while a background app runs without one. Pass the activation token from a notification click or single-instance activation on Wayland, so the window may take focus. `open_window` from a handle waits in line until the first window is ready, without blocking the wait loop. `quit` closes every window and ends the app, also a background app or one whose window hides on close, and `wait` then returns a success status. `set_autostart` turns the app's autostart entry on or off; see [Starting at login](/docs/desktop/autostart/). `set_badge`, `set_progress` and the recent files change what the app's Dock or taskbar icon shows; see [Dock and taskbar](/docs/desktop/dock-and-taskbar/). `power_state` returns the power source and screen lock as the desktop last reported them; see [Power and idle](/docs/desktop/power-and-idle/).
 
 ### BridgeEventEmitter
 
@@ -895,6 +896,22 @@ impl Notification {
     pub fn silent(self, silent: bool) -> Self;
     pub fn urgency(self, urgency: Urgency) -> Self;
     pub fn category(self, category: impl Into<String>) -> Self;
+    pub fn icon(self, path: impl Into<PathBuf>) -> Self;
+    pub fn image(self, path: impl Into<PathBuf>) -> Self;
+    pub fn action(self, action: NotificationAction) -> Self;
+    pub const MAX_ACTIONS: usize = 5;
+}
+
+impl NotificationAction {
+    pub fn button(id: impl Into<String>, label: impl Into<String>) -> Self;
+    pub fn reply(id: impl Into<String>, label: impl Into<String>, placeholder: impl Into<String>) -> Self;
+}
+
+pub enum NotificationEvent {
+    Clicked { id: String, activation_token: Option<String> },
+    Action { id: String, action: String, reply: Option<String>, activation_token: Option<String> },
+    Closed(String),
+    Failed { id: String, message: String },
 }
 
 pub enum Urgency { Low, Normal, Critical }
@@ -905,7 +922,7 @@ pub struct Appearance {
 }
 ```
 
-Showing a notification with the id of one already shown replaces it. `Appearance::accent_hex()` returns the accent as a CSS hex color. See [Notifications](/docs/desktop/notifications/) and [Appearance and shell](/docs/desktop/appearance-and-shell/).
+Showing a notification with the id of one already shown replaces it. Desktops show the first `MAX_ACTIONS` buttons, and a reply button is a plain button where the desktop has no replies. `Appearance::accent_hex()` returns the accent as a CSS hex color. See [Notifications](/docs/desktop/notifications/) and [Appearance and shell](/docs/desktop/appearance-and-shell/).
 
 ### Dock and taskbar
 
@@ -954,6 +971,8 @@ pub enum PlatformEvent {
     GlobalShortcut(GlobalShortcutActivation),
     GlobalShortcutFailed(GlobalShortcutFailure),
     SingleInstance(SingleInstanceActivation),
+    Notification { window: WindowId, event: NotificationEvent },
+    Power(PowerEvent),
 }
 
 pub struct GlobalShortcutActivation {
@@ -971,6 +990,37 @@ pub struct SingleInstanceActivation {
 ```
 
 `.on_desktop_event` hands app code each `PlatformEvent`. `SingleInstancePolicy::AllowMultiple` is the default; `.single_instance_id` alone doesn't turn single-instance behavior on. See [Autostart](/docs/desktop/autostart/), [Single instance](/docs/desktop/single-instance/) and [Native messaging](/docs/desktop/native-messaging/).
+
+### Power and idle
+
+```rust
+pub enum PowerEvent { Suspending, Resumed, Locked, Unlocked, Source(PowerSource) }
+
+pub struct PowerSource {
+    pub on_battery: bool,
+    pub battery_level: Option<u8>,
+}
+
+pub struct PowerState {
+    pub source: Option<PowerSource>,
+    pub locked: bool,
+}
+
+pub enum IdleState { Active, Idle }
+
+impl IdleWatch {
+    pub async fn start(threshold: Duration, events: Arc<dyn Fn(IdleState) + Send + Sync>) -> Result<Self, String>;
+}
+
+impl SleepBlocker {
+    pub async fn system(reason: &str) -> Result<Self, String>;
+    pub async fn display(reason: &str) -> Result<Self, String>;
+}
+
+pub enum KeepAwake { System, Display }
+```
+
+An `IdleWatch` reports until it is dropped, and a `SleepBlocker` keeps the machine awake until it is dropped. See [Power and idle](/docs/desktop/power-and-idle/).
 
 ### Effects and regions
 
