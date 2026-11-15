@@ -308,6 +308,7 @@ class SabineOsrHandler : public CefClient,
   void DropAcceleratedFrame(sabine_osr::AcceleratedDrop drop);
   void ReportAcceleratedPaintUnavailable();
   void ReportMissingAcceleratedPaint();
+  void RepaintDroppedPaints();
   bool SendSharedPaint(PaintSurface surface,
                        const std::string& guest_id,
                        int32_t origin_x,
@@ -343,7 +344,7 @@ class SabineOsrHandler : public CefClient,
   sabine_osr::PaintScratch paint_scratch_;
   std::vector<char> accel_payload_;
   // Surfaces whose frame was dropped, painted again once a slot frees up.
-  std::set<sabine_osr::AcceleratedSurfaceKey> dropped_accelerated_paints_;
+  std::set<sabine_osr::AcceleratedSurfaceKey> dropped_paints_;
   std::map<sabine_osr::AcceleratedSurfaceKey, uint64_t> copied_captures_;
   std::set<uint64_t> announced_accelerated_resources_;
 #if defined(OS_WIN)
@@ -391,7 +392,10 @@ class SabineOsrHandler : public CefClient,
                          uint32_t payload_len,
                          int fd);
 #endif
-  bool SendPaintBatch(PaintSurface surface,
+  // Paints too large for the socket go in shared memory; while every slot
+  // is in flight they are dropped and `source` painted again once one frees.
+  bool SendPaintBatch(const sabine_osr::AcceleratedSurfaceKey& source,
+                      PaintSurface surface,
                       const std::string& guest_id,
                       int32_t origin_x,
                       int32_t origin_y,

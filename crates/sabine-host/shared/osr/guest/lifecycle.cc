@@ -428,7 +428,8 @@ bool SabineOsrHandler::SendGuestPaint(const GuestView& guest,
                                       int height,
                                       const RectList& dirty_rects) {
   const CefRect view = guest.ViewBounds();
-  return SendPaintBatch(PaintSurface::kGuest, guest.id, view.x, view.y, buffer,
+  return SendPaintBatch({guest.browser->GetIdentifier(), false},
+                        PaintSurface::kGuest, guest.id, view.x, view.y, buffer,
                         width, height, dirty_rects);
 }
 

@@ -71,19 +71,12 @@ void SabineOsrHandler::RetireAcceleratedResources(
 
 void SabineOsrHandler::ReleaseAcceleratedFrame(uint64_t slot_token) {
   ReleaseAcceleratedSlot(slot_token);
-  for (const AcceleratedSurfaceKey& surface : dropped_accelerated_paints_) {
-    for (const CefRefPtr<CefBrowser>& browser : browsers_) {
-      if (browser->GetIdentifier() == surface.browser_id) {
-        browser->GetHost()->Invalidate(surface.popup ? PET_POPUP : PET_VIEW);
-      }
-    }
-  }
-  dropped_accelerated_paints_.clear();
+  RepaintDroppedPaints();
 }
 
 void SabineOsrHandler::RetireAcceleratedBrowser(int browser_id) {
-  dropped_accelerated_paints_.erase({browser_id, false});
-  dropped_accelerated_paints_.erase({browser_id, true});
+  dropped_paints_.erase({browser_id, false});
+  dropped_paints_.erase({browser_id, true});
 #if defined(OS_LINUX)
   unsettled_frames_.erase({browser_id, false});
 #endif
@@ -177,7 +170,7 @@ void SabineOsrHandler::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
   CopiedAccelFrame copied{};
   if (!CopyAcceleratedFrame(surface, damage, info, &copied)) {
     DropAcceleratedFrame({AcceleratedDropKind::kHandOver});
-    dropped_accelerated_paints_.insert(surface);
+    dropped_paints_.insert(surface);
     return;
   }
   if (static_cast<int>(copied.width) != frame_w ||
