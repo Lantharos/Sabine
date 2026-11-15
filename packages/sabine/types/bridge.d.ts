@@ -1,5 +1,7 @@
 import type { SabineActivityApi } from "./activity.js";
 import type { SabineClipboardApi } from "./desktop/clipboard.js";
+import type { SabineDialogApi } from "./desktop/dialog.js";
+import type { SabineMenuApi } from "./desktop/menu.js";
 import type { SabineGuestApi } from "./guest.js";
 import type { SabinePrintApi } from "./desktop/print.js";
 import type { SabineDownloadsApi } from "./page/downloads.js";
@@ -52,6 +54,10 @@ export interface SabineApi {
   spellcheck: SabineSpellcheckApi;
   /** Present in the app's own pages. */
   clipboard?: SabineClipboardApi;
+  /** Present in the app's own pages. */
+  menu?: SabineMenuApi;
+  /** Present in the app's own pages. */
+  dialog?: SabineDialogApi;
 }
 
 export declare function isAvailable(): boolean;

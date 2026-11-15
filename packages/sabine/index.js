@@ -1,6 +1,7 @@
 export { activity } from "./src/activity.js";
 export { app, bridge, fileUrl, invoke, isAvailable, listen, sabine } from "./src/bridge.js";
 export { clipboard } from "./src/desktop/clipboard.js";
+export { dialog, menu } from "./src/desktop/menu.js";
 export { events } from "./src/events.js";
 export { Guest, guest } from "./src/guest.js";
 export { NativeVideo } from "./src/media/native-video.js";

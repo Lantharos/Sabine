@@ -3,6 +3,8 @@ import type { SabineApi } from "./types/bridge.js";
 export * from "./types/activity.js";
 export * from "./types/bridge.js";
 export * from "./types/desktop/clipboard.js";
+export * from "./types/desktop/dialog.js";
+export * from "./types/desktop/menu.js";
 export * from "./types/events.js";
 export * from "./types/guest.js";
 export * from "./types/media/native-video.js";
