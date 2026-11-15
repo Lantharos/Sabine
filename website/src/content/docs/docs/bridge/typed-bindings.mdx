@@ -46,7 +46,7 @@ struct SaveNote {
 
 #[derive(Serialize, Type)]
 struct Saved {
-    bytes: u64,
+    bytes: u32,
 }
 
 #[derive(Deserialize, Type)]
@@ -61,7 +61,7 @@ enum Kind {
 
 #[derive(Serialize, Type)]
 struct Note {
-    id: u64,
+    id: u32,
     title: String,
     kind: Kind,
 }
@@ -86,7 +86,7 @@ fn save_note(note: SaveNote) -> Result<Saved, BridgeError> {
     let tags = note.tags.join(", ");
     std::fs::write(&note.path, &tags).map_err(fail)?;
     Ok(Saved {
-        bytes: tags.len() as u64,
+        bytes: tags.len() as u32,
     })
 }
 
@@ -157,10 +157,9 @@ export type Saved = {
 ```
 
 Each command is a function in `commands` that takes its params and `CallOptions`, the
-[`invoke`](/docs/bridge/commands/#calling-commands-from-the-page) options that apply to typed
-commands: `signal` and `timeoutMs`. Typed commands don't take or answer with bytes; register a raw
-handler for those. Each
-event is a function in `events` that registers a listener and returns a function that removes it.
+[`invoke`](/docs/bridge/commands/#calling-commands-from-the-page) options `signal` and
+`timeoutMs`. Each event is a function in `events` that registers a listener and returns a
+function that removes it.
 
 ```ts
 import { commands, events as appEvents } from "./bindings";
@@ -175,6 +174,34 @@ stop();
 The package `@lantharos/sabine` exports an `events` object of its own for Sabine's built-in
 events, so import one of the two under another name when a module uses both.
 
+### Commands that take bytes
+
+A handler that takes `WithBody<T>` gets the params as `T` and, as `body`, the bytes the page sent
+with the call. Its function in `commands` takes `InvokeOptions`, which add `body` to
+`CallOptions`:
+
+```rust
+use sabine::WithBody;
+
+#[derive(Deserialize, Type)]
+struct SaveImage {
+    name: String,
+}
+
+window.bridge_typed("images.save", |request: WithBody<SaveImage>| {
+    let bytes = request.body.ok_or_else(|| BridgeError::new("send the image as the body"))?;
+    std::fs::write(&request.params.name, bytes)
+        .map_err(|error| BridgeError::new(error.to_string()))
+})
+```
+
+```ts
+await commands.imagesSave({ name: "cover.png" }, { body: await blob.arrayBuffer() });
+```
+
+Typed commands answer with JSON; register a [raw handler](/docs/bridge/commands/#raw-commands)
+for a command that answers with bytes.
+
 ## How Rust types appear in TypeScript
 
 The bindings follow serde: `rename_all`, `rename`, `tag`, `skip`, `default` and the other serde
@@ -184,7 +211,7 @@ attributes shape the TypeScript types exactly as they shape the JSON.
 | --- | --- |
 | `String`, `&str`, `char` | `string` |
 | `bool` | `boolean` |
-| Every integer and float type | `number` |
+| `f32`, `f64` and integers up to 32 bits | `number` |
 | `Option<T>` | `T \| null`; a params field may also be left out |
 | `Vec<T>`, slices | `T[]` |
 | A field with `#[serde(default)]` in params | an optional field |
@@ -192,8 +219,20 @@ attributes shape the TypeScript types exactly as they shape the JSON.
 | `sabine::Bytes` event payload | `Uint8Array` |
 | Structs and enums | named types, shaped by serde |
 
-Numbers of every width are `number`, because that is what the page's JSON parser makes of them.
-Integers beyond 2⁵³ lose precision in the page; send such values as strings.
+Numbers are `number`, because that is what the page's JSON parser makes of them. A `number`
+holds integers exactly only up to 2⁵³, so `sabine bindings` refuses `i64`, `u64`, `i128`, `u128`,
+`isize` and `usize` and names the type that holds one. Use an integer of 32 bits or fewer, or send
+the value as a string:
+
+```rust
+#[serde_with::serde_as]
+#[derive(Serialize, Type)]
+struct FileInfo {
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    #[specta(type = String)]
+    size: u64,
+}
+```
 
 A command whose params type has no fields, such as `struct ListNotes {}`, gets a function without
 a `params` argument. Use an empty struct like this for commands that take nothing.

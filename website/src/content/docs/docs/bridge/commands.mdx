@@ -37,13 +37,13 @@ use specta::Type;
 #[derive(Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 struct RenameNote {
-    id: u64,
+    id: u32,
     new_title: String,
 }
 
 #[derive(Serialize, Type)]
 struct RenamedNote {
-    id: u64,
+    id: u32,
     title: String,
 }
 
@@ -75,9 +75,9 @@ const { title } = await commands.notesRename({ id: 7, newTitle: "Groceries" });
 
 | Builder method | Handler | Use it for |
 | --- | --- | --- |
-| `bridge_typed(name, handler)` | `Fn(Req) -> Result<Res, BridgeError>` | Most commands: typed params in, JSON out, included in the bindings. |
+| `bridge_typed(name, handler)` | `Fn(Req) -> Result<Res, BridgeError>` | Most commands: typed params in, along with bytes the page sent when `Req` is [`WithBody<T>`](/docs/bridge/typed-bindings/#commands-that-take-bytes), JSON out, included in the bindings. |
 | `bridge_typed_async(name, handler)` | `Fn(Req) -> impl Future<Output = Result<Res, BridgeError>>` | Typed commands that wait on I/O, timers or other tasks. |
-| `bridge_handler(name, handler)` | `Fn(BridgeCommand) -> BridgeResult` | Commands that read the raw call: bytes the page sent, the calling window or origin, or that answer with bytes. |
+| `bridge_handler(name, handler)` | `Fn(BridgeCommand) -> BridgeResult` | Commands that read the raw call, such as the calling window or origin, or that answer with bytes. |
 | `bridge_handler_async(name, handler)` | `Fn(BridgeCommand) -> impl Future<Output = BridgeResult>` | The same, asynchronously. |
 | `bridge_descriptor_handler(descriptor, handler)` | `Fn(BridgeCommand) -> BridgeResult` | A raw command that one more origin may call. See [Security](/docs/bridge/security/#commands-for-one-more-origin). |
 | `bridge_descriptor_handler_async(descriptor, handler)` | `Fn(BridgeCommand) -> impl Future<Output = BridgeResult>` | The same, asynchronously. |
@@ -185,12 +185,12 @@ use specta::Type;
 
 #[derive(Deserialize, Type)]
 struct LoadNote {
-    id: u64,
+    id: u32,
 }
 
 #[derive(Serialize, Type)]
 struct Note {
-    id: u64,
+    id: u32,
     body: String,
 }
 
@@ -205,7 +205,7 @@ async fn load_note(request: LoadNote) -> Result<Note, BridgeError> {
     Ok(Note { id: request.id, body })
 }
 
-fn note_path(id: u64) -> PathBuf {
+fn note_path(id: u32) -> PathBuf {
     AppEnvironment::current()
         .app_data_dir("com.example.notes")
         .join("notes")

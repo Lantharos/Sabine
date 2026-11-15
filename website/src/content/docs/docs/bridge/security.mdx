@@ -122,7 +122,7 @@ did not write: a message, a document, a remote resource. The bridge checks who c
 decides what a call may do.
 
 - **Let serde check the shape.** Typed commands reject params that don't deserialize before your
-  handler runs. Use specific types, such as an enum for a choice and `u64` for an id, instead of
+  handler runs. Use specific types, such as an enum for a choice and `u32` for an id, instead of
   strings that you parse.
 - **Bound sizes and counts.** Params can be up to 1 MiB of JSON and bytes up to 32 MiB per call.
   Check lengths before you allocate or store, and reject what your app has no use for.

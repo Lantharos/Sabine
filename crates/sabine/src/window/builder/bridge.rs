@@ -2,6 +2,7 @@ use std::future::Future;
 
 use sabine_bridge::{
     BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeEvent, BridgeResponse, BridgeResult,
+    TypedRequest,
 };
 use specta::Type;
 
@@ -20,10 +21,11 @@ impl SabineWindow {
 
     /// Registers a command that deserializes params into `Req` and
     /// serializes the handler return value as JSON. The command is part of
-    /// the app's TypeScript bindings.
+    /// the app's TypeScript bindings. A [`WithBody`](crate::WithBody) `Req`
+    /// also receives the bytes the page sends with the call.
     pub fn bridge_typed<Req, Res, F>(mut self, command_name: impl Into<String>, handler: F) -> Self
     where
-        Req: serde::de::DeserializeOwned + Type,
+        Req: TypedRequest,
         Res: serde::Serialize + Type,
         F: Fn(Req) -> Result<Res, BridgeError> + Send + Sync + 'static,
     {
@@ -31,9 +33,7 @@ impl SabineWindow {
         self.bridge_bindings
             .command::<Req, Res>(command_name.clone());
         self.bridge_handler(command_name, move |command| {
-            let request = serde_json::from_value(command.params)
-                .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")))?;
-            json_response(handler(request)?)
+            json_response(handler(Req::from_command(command)?)?)
         })
     }
 
@@ -46,7 +46,7 @@ impl SabineWindow {
         handler: F,
     ) -> Self
     where
-        Req: serde::de::DeserializeOwned + Type,
+        Req: TypedRequest,
         Res: serde::Serialize + Type,
         F: Fn(Req) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Res, BridgeError>> + Send + 'static,
@@ -55,9 +55,7 @@ impl SabineWindow {
         self.bridge_bindings
             .command::<Req, Res>(command_name.clone());
         self.bridge_handler_async(command_name, move |command| {
-            let request = serde_json::from_value::<Req>(command.params)
-                .map_err(|error| BridgeError::new(format!("invalid bridge params: {error}")));
-            let answer = request.map(&handler);
+            let answer = Req::from_command(command).map(&handler);
             async move { json_response(answer?.await?) }
         })
     }

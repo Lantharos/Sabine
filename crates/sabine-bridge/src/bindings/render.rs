@@ -22,6 +22,17 @@ struct Command {
     name: String,
     params: Params,
     result: DataType,
+    body: bool,
+}
+
+impl Command {
+    fn options(&self) -> &'static str {
+        if self.body {
+            "InvokeOptions"
+        } else {
+            "CallOptions"
+        }
+    }
 }
 
 struct Event {
@@ -48,13 +59,14 @@ pub(super) fn render(bindings: &BridgeBindings) -> Result<String, String> {
     let mut inlined = HashSet::new();
     let commands = bindings
         .commands
-        .keys()
+        .iter()
         .zip(inputs)
         .zip(&outputs)
-        .map(|((name, params), result)| Command {
+        .map(|(((name, signature), params), result)| Command {
             name: name.clone(),
             params: params_of(params, &types, &mut inlined),
             result: result.clone(),
+            body: signature.body,
         })
         .collect::<Vec<_>>();
     let events = bindings
@@ -150,10 +162,12 @@ fn runtime(
     commands: &[Command],
     events: &[Event],
 ) -> Result<String, specta_typescript::Error> {
+    let options = |body| commands.iter().any(|command| command.body == body);
     let imports = [
         (!commands.is_empty()).then_some("invoke"),
         (!events.is_empty()).then_some("listen"),
-        (!commands.is_empty()).then_some("type CallOptions"),
+        options(false).then_some("type CallOptions"),
+        options(true).then_some("type InvokeOptions"),
     ];
     let imports = imports.into_iter().flatten().collect::<Vec<_>>();
     if imports.is_empty() {
@@ -178,8 +192,9 @@ fn runtime(
                 Params::Named(dt) => (format!("params: {}, ", exporter.reference(dt)?), "params"),
             };
             out.push_str(&format!(
-                "\t{}: ({params}options?: CallOptions) => invoke<{result}>({name}, {value}, options),\n",
-                camel_case(&command.name)
+                "\t{}: ({params}options?: {}) => invoke<{result}>({name}, {value}, options),\n",
+                camel_case(&command.name),
+                command.options(),
             ));
         }
         out.push_str("};\n");
@@ -230,4 +245,20 @@ fn camel_case(name: &str) -> String {
 
 fn quoted(name: &str) -> String {
     serde_json::Value::from(name).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{BridgeBindings, WithBody};
+
+    #[test]
+    fn commands_that_read_bytes_take_a_body() {
+        let mut bindings = BridgeBindings::default();
+        bindings.command::<WithBody<String>, ()>("file.save");
+        bindings.command::<String, ()>("file.open");
+        let rendered = bindings.render().expect("bindings render");
+        assert!(rendered.contains("import { invoke, type CallOptions, type InvokeOptions }"));
+        assert!(rendered.contains("fileSave: (params: string, options?: InvokeOptions)"));
+        assert!(rendered.contains("fileOpen: (params: string, options?: CallOptions)"));
+    }
 }

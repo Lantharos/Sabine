@@ -14,7 +14,7 @@ mod bridge;
 mod commands;
 mod guest;
 
-pub use bindings::{BridgeBindings, BridgeEvent, Bytes};
+pub use bindings::{BridgeBindings, BridgeEvent, Bytes, TypedRequest, WithBody};
 pub use bridge::{
     BridgeCommand, BridgeCommandDescriptor, BridgeError, BridgeFuture, BridgeHandlers,
     BridgeOutcome, BridgeRegistry, BridgeResponse, BridgeResult, BridgeRuntime, ContentSecurity,

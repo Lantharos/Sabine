@@ -293,7 +293,7 @@ pub struct WindowVisibility {
 ```rust
 pub fn bridge_typed<Req, Res, F>(self, name: impl Into<String>, handler: F) -> Self
 where
-    Req: serde::de::DeserializeOwned + specta::Type,
+    Req: TypedRequest,
     Res: serde::Serialize + specta::Type,
     F: Fn(Req) -> Result<Res, BridgeError> + Send + Sync + 'static;
 
@@ -318,7 +318,7 @@ pub fn bridge_event<T: specta::Type>(self, event: &BridgeEvent<T>) -> Self;
 pub fn bridge_type<T: specta::Type>(self) -> Self;
 ```
 
-Typed commands deserialize their parameters into `Req` and answer with `Res` as JSON, and they appear in the app's generated TypeScript bindings, as do events declared with `bridge_event` and extra types added with `bridge_type`. Raw handlers receive the whole `BridgeCommand`, including binary bodies. Synchronous handlers run on four worker threads per window and shouldn't wait on slow work; async handlers are awaited on `sabine::async_runtime()`. Descriptor handlers let extra origins call one command. Register a command for one desktop under `#[cfg(target_os = "...")]`.
+Typed commands deserialize their parameters into `Req` and answer with `Res` as JSON, and they appear in the app's generated TypeScript bindings, as do events declared with `bridge_event` and extra types added with `bridge_type`. `Req` is any type that derives `Deserialize` and `specta::Type`, or `WithBody<T>` for such a `T` and the bytes the page sent with the call. Raw handlers receive the whole `BridgeCommand`, including binary bodies. Synchronous handlers run on four worker threads per window and shouldn't wait on slow work; async handlers are awaited on `sabine::async_runtime()`. Descriptor handlers let extra origins call one command. Register a command for one desktop under `#[cfg(target_os = "...")]`.
 
 See [Commands](/docs/bridge/commands/), [Typed bindings](/docs/bridge/typed-bindings/) and [Events](/docs/bridge/events/).
 
