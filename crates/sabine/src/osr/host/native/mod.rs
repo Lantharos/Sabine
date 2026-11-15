@@ -1,3 +1,5 @@
+mod connection;
+mod control;
 #[cfg(target_os = "linux")]
 mod direct;
 mod geometry;
@@ -21,12 +23,8 @@ use sabine_platform::{
     BackdropMaterial, WindowChrome as PlatformWindowChrome, WindowOptions, WindowRegionRect,
     WindowRegions,
 };
-use winit::{
-    event_loop::{ActiveEventLoop, EventLoopProxy},
-    window::Window as WinitWindow,
-};
+use winit::{event_loop::EventLoopProxy, window::Window as WinitWindow};
 
-use crate::bridge::frame::Frame;
 use crate::osr::control::{ControlRelay, ControlWriter};
 
 use crate::SabineWindowChrome;
@@ -37,9 +35,10 @@ use sabine_platform::WindowEffect;
 use super::config::OsrHostConfig;
 use super::socket::SocketReader;
 use super::types::{
-    ClickMemory, HostControl, LifecycleState, MouseButtons, OsrHostEvent, PendingResizePaint,
-    SurfaceGeometry, TitlebarControl,
+    ClickMemory, LifecycleState, MouseButtons, OsrHostEvent, PendingResizePaint, SurfaceGeometry,
+    TitlebarControl,
 };
+use connection::start_parent_bridge_reader;
 
 pub(super) struct OsrNativeHost {
     pub(super) config: OsrHostConfig,
@@ -375,84 +374,6 @@ impl OsrNativeHost {
             regions.squared()
         }
     }
-
-    pub(super) fn send_control(&self, line: impl Into<String>) {
-        let Some(writer) = &self.control_writer else {
-            return;
-        };
-        if let Err(error) = writer.send(line.into()) {
-            sabine_runtime::report_error("window", format!("browser control send failed: {error}"));
-        }
-    }
-
-    pub(super) fn send_mouse_motion(&self, line: String) {
-        let Some(writer) = &self.control_writer else {
-            return;
-        };
-        if let Err(error) = writer.send_motion(line) {
-            sabine_runtime::report_error("window", format!("pointer send failed: {error}"));
-        }
-    }
-
-    pub(super) fn send_wheel(&self, wheel: crate::osr::control::Wheel) {
-        let Some(writer) = &self.control_writer else {
-            return;
-        };
-        if let Err(error) = writer.send_wheel(wheel) {
-            sabine_runtime::report_error("window", format!("wheel send failed: {error}"));
-        }
-    }
-
-    pub(super) fn send_touch_move(&self, id: i32, line: String) {
-        let Some(writer) = &self.control_writer else {
-            return;
-        };
-        if let Err(error) = writer.send_touch_move(id, line) {
-            sabine_runtime::report_error("window", format!("touch send failed: {error}"));
-        }
-    }
-
-    pub(super) fn send_pen_move(&self, line: String) {
-        let Some(writer) = &self.control_writer else {
-            return;
-        };
-        if let Err(error) = writer.send_pen_move(line) {
-            sabine_runtime::report_error("window", format!("pen send failed: {error}"));
-        }
-    }
-
-    pub(super) fn begin_close(&mut self, event_loop: &dyn ActiveEventLoop) {
-        if self.closing_deadline.is_some() {
-            return;
-        }
-        if let Some(window) = &self.window {
-            window.set_visible(false);
-        }
-        self.send_control("close\n");
-        self.closing_deadline = Some(Instant::now() + super::types::CLOSE_GRACE);
-        if self.browser_gone() {
-            self.force_close(event_loop);
-        }
-    }
-
-    pub(super) fn force_close(&mut self, event_loop: &dyn ActiveEventLoop) {
-        self.drop_connection();
-        event_loop.exit();
-    }
-
-    pub(super) fn drop_connection(&mut self) {
-        if let Some(socket) = self.socket.take() {
-            let _ = socket.shutdown(std::net::Shutdown::Both);
-        }
-        self.socket_reader = None;
-        self.relay.connect(None);
-        self.control_writer = None;
-        self.pending_messages = None;
-        #[cfg(target_os = "macos")]
-        {
-            self.surface_broker = None;
-        }
-    }
 }
 
 pub(super) fn platform_chrome(chrome: SabineWindowChrome) -> PlatformWindowChrome {
@@ -468,40 +389,4 @@ pub(super) fn present_window(window: &Arc<dyn WinitWindow>) {
     window.set_minimized(false);
     window.focus_window();
     window.request_redraw();
-}
-
-/// Reads what the app sends the window. The window closes once the app's end
-/// closes, as it does when the app crashes.
-fn start_parent_bridge_reader(
-    sender: mpsc::SyncSender<OsrHostEvent>,
-    proxy: EventLoopProxy,
-    relay: ControlRelay,
-) {
-    std::thread::spawn(move || {
-        let mut input = std::io::stdin().lock();
-        while let Ok(Some(frame)) = Frame::read(&mut input) {
-            if frame.body.is_none()
-                && let Some((command, value)) = crate::bridge::parse_host_control(&frame.line)
-                && let Some(control) = super::events::host_control_from_parts(command, value)
-            {
-                if sender.send(OsrHostEvent::HostControl(control)).is_err() {
-                    break;
-                }
-                proxy.wake_up();
-                continue;
-            }
-            if relay.forward(frame.to_bytes()) {
-                if sender.send(OsrHostEvent::FrozenPageMessaged).is_err() {
-                    break;
-                }
-                proxy.wake_up();
-            }
-        }
-        if sender
-            .send(OsrHostEvent::HostControl(HostControl::Quit))
-            .is_ok()
-        {
-            proxy.wake_up();
-        }
-    });
 }
