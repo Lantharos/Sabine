@@ -207,7 +207,7 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 
 | Listener | Payload | Fires when |
 | --- | --- | --- |
-| `appearanceChanged` | `SystemAppearance` | The desktop switches between light and dark or changes its accent color. |
+| `appearanceChanged` | `SystemAppearance` | The desktop switches between light and dark, changes its accent color, or the window's glass changes material. |
 | `trayActivate` | `TrayActivateEvent` | The tray icon or one of its menu items is activated. |
 | `globalShortcut` | `GlobalShortcutEvent` | A registered global shortcut is pressed. |
 | `globalShortcutFailed` | `GlobalShortcutFailedEvent` | The desktop refused a global shortcut. |
@@ -215,6 +215,9 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | `openUrlsAvailable` | `null` | URLs or documents arrived; take them with `app.takeOpenUrls()`. |
 | `rendererCrashed` | `RendererCrashedEvent` | The page's or a guest's renderer stopped. |
 | `pen` | `PenEvent` | A pen or its eraser comes near the screen or leaves it, touches or lifts, a barrel button goes down or up, or the pen tilts. |
+| `notificationClick` | `NotificationEvent` | A desktop notification the window showed was clicked. |
+| `notificationClose` | `NotificationEvent` | One of its notifications was dismissed or closed. |
+| `notificationError` | `NotificationErrorEvent` | One of its notifications could not be shown. |
 | `guestCreated` | `GuestInfo` | A guest finished opening. |
 | `guestDestroyed` | `GuestIdEvent` | A guest closed. |
 | `guestLoading` | `GuestLoadingEvent` | A guest started or finished loading. |
@@ -261,6 +264,14 @@ interface RendererCrashedEvent {
   recovering: boolean; // false after three crashes within a minute
 }
 
+interface NotificationEvent {
+  id: string; // the id the app gave it, or tag:<tag> for one the page showed with a tag
+}
+
+interface NotificationErrorEvent extends NotificationEvent {
+  message: string;
+}
+
 interface PenEvent {
   tool: "pen" | "eraser";
   near: boolean; // close enough to the screen for the window to see it
@@ -293,7 +304,8 @@ to use the first as a tool instead.
 
 The guest payloads are listed under [Guests](#guest-types). The desktop pages explain each event:
 [Tray](/docs/desktop/tray/), [Shortcuts](/docs/desktop/shortcuts/),
-[Single instance](/docs/desktop/single-instance/) and
+[Single instance](/docs/desktop/single-instance/),
+[Notifications](/docs/desktop/notifications/) and
 [Appearance and shell](/docs/desktop/appearance-and-shell/).
 
 ## `appWindow`

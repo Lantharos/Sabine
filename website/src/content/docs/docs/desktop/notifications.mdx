@@ -119,9 +119,9 @@ Clicks, closes and failures reach that window's pages as the bridge events `noti
 `message` for errors:
 
 ```ts
-import { listen } from "@lantharos/sabine";
+import { events } from "@lantharos/sabine";
 
-listen<{ id: string }>("notification.click", ({ id }) => {
+events.notificationClick(({ id }) => {
   if (id === "new-mail") openInbox();
 });
 ```
