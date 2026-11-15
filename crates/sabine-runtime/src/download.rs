@@ -1,20 +1,16 @@
 pub(crate) mod http;
+pub(crate) mod pin;
 pub(crate) mod transfer;
 
 use std::{
-    collections::BTreeMap,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
-use serde::Deserialize;
-use sha1::Sha1;
+use sha2::Sha256;
 
-use crate::discovery::paths::runtime_version_path;
-use crate::discovery::version::{
-    cef_platform_key, channel_preference, major_version, version_sort_key,
-};
 use crate::error::RuntimeError;
-use crate::types::{RuntimeConfig, RuntimeInstallPlan, RuntimeInstallProgress, RuntimeInstallStep};
+use crate::types::{RuntimeInstallProgress, RuntimeInstallStep};
 
 pub(crate) fn download_file(
     url: &str,
@@ -55,68 +51,43 @@ pub fn download_to(
     Ok(())
 }
 
-pub const DEFAULT_CEF_INDEX_URL: &str = "https://cef-builds.spotifycdn.com/index.json";
-
-/// The CEF build index lists every build of every platform, past ten megabytes.
-const CEF_INDEX_LIMIT: u64 = 64 * 1024 * 1024;
-
-pub(crate) fn fetch_cef_index(index_url: &str) -> Result<CefIndex, RuntimeError> {
-    let index = http::fetch_bytes(index_url, CEF_INDEX_LIMIT)?;
-    serde_json::from_slice(&index)
-        .map_err(|error| RuntimeError::InstallationFailed(format!("invalid CEF index: {error}")))
-}
-
-pub(crate) fn archive_url(index_url: &str, archive_name: &str) -> String {
-    let base = index_url
-        .rsplit_once('/')
-        .map(|(base, _)| base)
-        .unwrap_or("");
-    if base.is_empty() {
-        archive_name.to_string()
-    } else {
-        format!("{base}/{archive_name}")
-    }
-}
-
-pub(crate) fn verify_sha1_with_progress(
+/// Checks that `path` holds exactly `size` bytes whose SHA-256 is `expected`.
+pub(crate) fn verify_with_progress(
     path: &Path,
+    size: u64,
     expected: &str,
     progress: &mut impl FnMut(RuntimeInstallProgress),
 ) -> Result<(), RuntimeError> {
-    let total = std::fs::metadata(path)?.len().max(1);
+    let integrity_failed = || RuntimeError::IntegrityFailed {
+        path: path.to_path_buf(),
+    };
+    if std::fs::metadata(path)?.len() != size {
+        return Err(integrity_failed());
+    }
     let mut read_total = 0_u64;
-    let mut last_report = std::time::Instant::now()
-        .checked_sub(std::time::Duration::from_secs(1))
-        .unwrap_or_else(std::time::Instant::now);
-    let actual = crate::digest::digest_reader::<Sha1>(std::fs::File::open(path)?, |read| {
+    let mut last_report = Instant::now()
+        .checked_sub(Duration::from_secs(1))
+        .unwrap_or_else(Instant::now);
+    let actual = crate::digest::digest_reader::<Sha256>(std::fs::File::open(path)?, |read| {
         read_total = read_total.saturating_add(read as u64);
-        if last_report.elapsed() >= std::time::Duration::from_millis(100) {
-            let portion = (read_total as f32 / total as f32).clamp(0.0, 1.0);
+        if last_report.elapsed() >= Duration::from_millis(100) {
+            let portion = (read_total as f32 / size as f32).clamp(0.0, 1.0);
             progress(RuntimeInstallProgress::new(
                 RuntimeInstallStep::Verifying,
                 Some(0.72 + portion * 0.05),
                 "Verifying runtime",
             ));
-            last_report = std::time::Instant::now();
+            last_report = Instant::now();
         }
     })?;
-    actual
-        .eq_ignore_ascii_case(expected)
-        .then_some(())
-        .ok_or_else(|| RuntimeError::IntegrityFailed {
-            path: path.to_path_buf(),
-        })?;
+    if !actual.eq_ignore_ascii_case(expected) {
+        return Err(integrity_failed());
+    }
     progress(RuntimeInstallProgress::new(
         RuntimeInstallStep::Verifying,
         Some(0.78),
         "Verifying runtime",
     ));
-    Ok(())
-}
-
-pub(crate) fn extract_archive(archive: &Path, destination: &Path) -> Result<(), RuntimeError> {
-    let input = std::fs::File::open(archive)?;
-    crate::install::archive::extract_tar(bzip2::read::BzDecoder::new(input), destination)?;
     Ok(())
 }
 
@@ -131,159 +102,19 @@ pub(crate) fn first_extracted_runtime_dir(work_dir: &Path) -> Option<PathBuf> {
         })
 }
 
-pub(crate) fn latest_install_plan(
-    config: &RuntimeConfig,
-) -> Result<RuntimeInstallPlan, RuntimeError> {
-    let platform = cef_platform_key().ok_or_else(|| {
-        RuntimeError::InstallationFailed("unsupported OS or CPU architecture for CEF".to_string())
-    })?;
-    let index_url = config.index_url.as_deref().unwrap_or(DEFAULT_CEF_INDEX_URL);
-    let index = fetch_cef_index(index_url)?;
-    let platform_index = index.platforms.get(platform).ok_or_else(|| {
-        RuntimeError::InstallationFailed(format!("CEF index does not contain platform {platform}"))
-    })?;
-    let mut candidates = platform_index
-        .versions
-        .iter()
-        .filter(|version| major_version(&version.cef_version) >= crate::MIN_CEF_MAJOR)
-        .filter_map(|version| {
-            version
-                .files
-                .iter()
-                .find(|file| file.kind == "minimal")
-                .map(|file| (version, file))
-        })
-        .collect::<Vec<_>>();
-
-    candidates.sort_by_key(|(version, _)| {
-        (
-            channel_preference(version.channel.as_deref()),
-            std::cmp::Reverse(version_sort_key(&version.cef_version)),
-        )
-    });
-
-    let Some((version, file)) = candidates.into_iter().next() else {
-        return Err(RuntimeError::NotFound(format!(
-            "no Minimal CEF build found for {platform} at Chromium {} or newer",
-            crate::MIN_CEF_MAJOR,
-        )));
-    };
-
-    if !safe_archive_name(&file.name)
-        || !version
-            .cef_version
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '+' | '-' | '_'))
-        || file.size == 0
-        || file.size > 2 * 1024 * 1024 * 1024
-        || file.sha1.len() != 40
-        || !file.sha1.bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
-        return Err(RuntimeError::InstallationFailed(
-            "CEF index contains invalid archive metadata".to_string(),
-        ));
-    }
-    let install_dir = runtime_version_path(&version.cef_version);
-    Ok(RuntimeInstallPlan {
-        version: version.cef_version.clone(),
-        archive_name: file.name.clone(),
-        url: archive_url(index_url, &file.name),
-        sha1: file.sha1.clone(),
-        archive_size: file.size,
-        install_dir,
-    })
-}
-
-fn safe_archive_name(name: &str) -> bool {
-    !name.is_empty()
-        && name != "."
-        && name != ".."
-        && name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '+' | '-' | '_'))
-}
-
-#[derive(Deserialize)]
-pub(crate) struct CefIndex {
-    #[serde(flatten)]
-    platforms: BTreeMap<String, CefPlatformIndex>,
-}
-
-#[derive(Deserialize)]
-struct CefPlatformIndex {
-    versions: Vec<CefVersion>,
-}
-
-#[derive(Deserialize)]
-struct CefVersion {
-    cef_version: String,
-    #[serde(default)]
-    channel: Option<String>,
-    files: Vec<CefFile>,
-}
-
-#[derive(Deserialize)]
-struct CefFile {
-    size: u64,
-    name: String,
-    sha1: String,
-    #[serde(rename = "type")]
-    kind: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
-    fn archive_urls_follow_index_location() {
-        assert_eq!(
-            archive_url("https://example.com/cef/index.json", "cef.tar.bz2"),
-            "https://example.com/cef/cef.tar.bz2"
-        );
-    }
-
-    #[test]
-    fn downloads_runtime_archives_with_progress() {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let body = b"sabine-runtime";
-        let server = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 1024];
-            let _ = std::io::Read::read(&mut stream, &mut request);
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                body.len()
-            )
-            .unwrap();
-            std::io::Write::write_all(&mut stream, body).unwrap();
-        });
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+    fn runtime_downloads_refuse_plain_http() {
         let destination = std::env::temp_dir().join(format!(
-            "sabine-runtime-download-{}-{nonce}",
-            std::process::id()
+            "sabine-runtime-download-{}",
+            crate::random_hex(8).unwrap()
         ));
-        let mut progress = Vec::new();
-        download_file(
-            &format!("http://{address}/runtime"),
-            &destination,
-            body.len() as u64,
-            &mut |update| progress.push(update),
-        )
-        .unwrap();
-        server.join().unwrap();
-        assert_eq!(std::fs::read(&destination).unwrap(), body);
-        assert!(
-            progress
-                .iter()
-                .any(|update| update.step == RuntimeInstallStep::Downloading)
-        );
-        std::fs::remove_file(destination).unwrap();
+        let error =
+            download_file("http://127.0.0.1:9/runtime", &destination, 1, &mut |_| {}).unwrap_err();
+        assert!(error.to_string().contains("not HTTPS"), "{error}");
+        assert!(!destination.exists());
     }
 }

@@ -135,7 +135,7 @@ fn list_runtimes(json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Installs the newest CEF runtime and checks that Chromium starts on it.
+/// Installs the CEF runtime this Sabine pins and checks that Chromium starts on it.
 fn install_runtime() -> Result<(), String> {
     let previous = resolve_runtime(&RuntimeConfig::default())
         .ok()
@@ -145,7 +145,7 @@ fn install_runtime() -> Result<(), String> {
         .map_err(|error| format!("failed to install runtime: {error}"))?;
     if previous.as_deref() == Some(runtime.version.as_str()) {
         println!(
-            "Latest CEF runtime {} is already installed at {}.",
+            "CEF runtime {} is already installed at {}.",
             runtime.version,
             runtime.location.path().display()
         );

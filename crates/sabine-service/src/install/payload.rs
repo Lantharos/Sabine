@@ -65,13 +65,6 @@ pub(super) fn install_system_archive(
     let archive = downloads.join(format!("{}-{name}", manifest.version));
     download_system_artifact(&artifact.url, &archive, artifact.size, on_progress)?;
     verify_sha256(&archive, &artifact.sha256)?;
-    let actual_size = fs::metadata(&archive)?.len();
-    if actual_size != artifact.size {
-        return Err(ServiceError::Update(format!(
-            "Sabine system bundle size mismatch: expected {}, got {actual_size}",
-            artifact.size
-        )));
-    }
 
     let staging = versions_dir().join(format!("{}.installing", manifest.version));
     empty_staging(&staging)?;

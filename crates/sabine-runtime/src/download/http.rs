@@ -56,21 +56,18 @@ fn fetch_once(url: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>, Failu
     let mut response = ureq::get(url)
         .header("User-Agent", USER_AGENT)
         .config()
+        .https_only(true)
         .timeout_global(Some(timeout))
         .timeout_connect(Some(Duration::from_secs(15)))
         .http_status_as_error(false)
         .build()
         .call()
-        .map_err(|error| Failure::Retry(format!("request to {url} failed: {error}")))?;
-    let status = response.status().as_u16();
-    if status == 429 || status >= 500 {
-        return Err(Failure::Retry(format!("{url} returned HTTP {status}")));
-    }
-    if status == 410 {
-        return Err(Failure::Gone(format!("{url} is gone")));
-    }
-    if status != 200 {
-        return Err(Failure::Fatal(format!("{url} returned HTTP {status}")));
+        .map_err(|error| match error {
+            ureq::Error::RequireHttpsOnly(_) => Failure::Fatal(format!("{url} is not HTTPS")),
+            error => Failure::Retry(format!("request to {url} failed: {error}")),
+        })?;
+    if let Some(failure) = status_failure(url, response.status().as_u16()) {
+        return Err(failure);
     }
     response
         .body_mut()
@@ -85,42 +82,36 @@ fn fetch_once(url: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>, Failu
         })
 }
 
+fn status_failure(url: &str, status: u16) -> Option<Failure> {
+    match status {
+        200 => None,
+        410 => Some(Failure::Gone(format!("{url} is gone"))),
+        429 | 500.. => Some(Failure::Retry(format!("{url} returned HTTP {status}"))),
+        _ => Some(Failure::Fatal(format!("{url} returned HTTP {status}"))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
-
     use super::*;
-
-    fn answering(status: &str) -> String {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let status = status.to_string();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let _ = stream.read(&mut [0_u8; 1024]);
-            write!(
-                stream,
-                "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
-            .unwrap();
-        });
-        format!("http://{address}/feed.json")
-    }
 
     #[test]
     fn a_document_that_is_gone_is_told_apart_from_one_that_is_missing() {
-        let timeout = Duration::from_secs(5);
+        let url = "https://example.com/feed.json";
+        assert!(status_failure(url, 200).is_none());
         assert!(matches!(
-            fetch_bytes_once(&answering("410 Gone"), 1024, timeout),
-            Err(RuntimeError::Gone(_))
+            status_failure(url, 410).map(RuntimeError::from),
+            Some(RuntimeError::Gone(_))
         ));
+        assert!(matches!(status_failure(url, 404), Some(Failure::Fatal(_))));
+        assert!(matches!(status_failure(url, 503), Some(Failure::Retry(_))));
+    }
+
+    #[test]
+    fn documents_are_only_fetched_over_https() {
         assert!(matches!(
-            fetch_bytes_once(&answering("404 Not Found"), 1024, timeout),
-            Err(RuntimeError::Request(_))
-        ));
-        assert!(matches!(
-            fetch_bytes(&answering("410 Gone"), 1024),
-            Err(RuntimeError::Gone(_))
+            fetch_bytes("http://127.0.0.1:9/feed.json", 1024),
+            Err(RuntimeError::Request(message)) if message.contains("not HTTPS")
         ));
     }
 }

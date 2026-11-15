@@ -40,7 +40,7 @@ pub use files::{
     FileLock, copy_directory, make_executable, remove_directory_if_present, remove_file_if_present,
     replace_file, sync_directory, write_json_atomic,
 };
-pub use install::archive::extract_tar_archive;
+pub use install::archive::extract_archive;
 pub use install::assets::prepare_runtime_assets;
 pub use install::directory::{install_directory, recover_directory_installs};
 pub use install::payload::copy_runtime_payload;
@@ -52,7 +52,9 @@ pub use install::{
 };
 pub use lease::RuntimeLease;
 pub use process::{background_command, configure_background_command, find_program, process_alive};
-pub use types::{RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode};
+pub use types::{
+    RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode, RuntimeUpdate,
+};
 
 pub use diagnostics::{capture_diagnostics, diagnostic_path, record_diagnostic, report_error};
 pub use discovery::detect::detect_runtime;

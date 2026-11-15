@@ -86,7 +86,7 @@ sabine runtime doctor --json
 | `CEF runtime: ok` | Everything is ready | Nothing |
 | `not found` | No runtime is installed | `sabine runtime install` |
 | `outdated` | Only runtimes older than CEF 154 are installed | `sabine runtime install` |
-| `quarantined after a failed health probe` | The newest runtime failed its check; the reason follows | Wait for the next runtime, or report the reason |
+| `quarantined after a failed health probe` | The pinned runtime failed its check; the reason follows | `sabine update` for a newer runtime, or report the reason |
 | `Sabine host is missing` | No host matches the runtime | `sabine runtime prepare` |
 | `Sabine host failed its launch probe` | The host couldn't start Chromium; the error follows | See the sandbox and GPU sections below |
 
@@ -212,7 +212,7 @@ When a page loaded but no frame could be shown within 10 seconds, `window.jsonl`
 
 When shared GPU frames don't work, the window switches to software painting and records `Painting without shared GPU frames:` with the reason in `gpu.jsonl`. Pages keep working, at a higher CPU cost. Common causes:
 
-- **An older runtime on Linux.** Runtimes before CEF 156.0.3 always paint in software. Check `sabine runtime list`; the daemon installs newer ones on its own.
+- **An older runtime on Linux.** Runtimes before CEF 156.0.3 always paint in software. Check `sabine runtime list`; Sabine updates bring newer ones.
 - **Chromium's GPU process failed.** Chromium falls back to software itself. Update the graphics driver, and look in `osr.jsonl` for Chromium's GPU errors.
 - **The window's device can't import the browser's frames,** such as a Linux driver without dma-buf import.
 - **Hybrid graphics on Windows.** Chromium renders on the adapter the window composites on. `SABINE_TRACE=1` prints both; if the window moves to another adapter, Sabine restarts the browser there.

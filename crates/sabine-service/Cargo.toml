@@ -24,8 +24,6 @@ name = "sabine-service-daemon"
 path = "src/bin/daemon.rs"
 
 [dependencies]
-flate2.workspace = true
-zip.workspace = true
 clap.workspace = true
 dirs.workspace = true
 sabine-runtime.workspace = true

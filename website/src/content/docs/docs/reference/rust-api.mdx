@@ -655,7 +655,6 @@ let server = sabine::resource_path("server").expect("the server ships with the a
 ```rust
 pub struct RuntimeConfig {
     pub mode: RuntimeMode,               // SharedPreferred
-    pub index_url: Option<String>,       // the CEF build index to download from
     pub allow_user_install: bool,        // true
     pub allow_bundled: bool,             // true
     pub bundled_dir: Option<PathBuf>,

@@ -36,7 +36,6 @@ impl RuntimeLocation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RuntimeConfig {
     pub mode: RuntimeMode,
-    pub index_url: Option<String>,
     pub allow_user_install: bool,
     pub allow_bundled: bool,
     pub bundled_dir: Option<PathBuf>,
@@ -46,7 +45,6 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             mode: RuntimeMode::SharedPreferred,
-            index_url: None,
             allow_user_install: true,
             allow_bundled: true,
             bundled_dir: None,
@@ -54,14 +52,11 @@ impl Default for RuntimeConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RuntimeInstallPlan {
-    pub version: String,
-    pub archive_name: String,
-    pub archive_size: u64,
-    pub url: String,
-    pub sha1: String,
-    pub install_dir: PathBuf,
+/// The runtime an update leaves in place, and whether it was downloaded just now.
+#[derive(Clone, Debug)]
+pub struct RuntimeUpdate {
+    pub runtime: RuntimeInfo,
+    pub installed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
