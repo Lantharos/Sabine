@@ -11,11 +11,6 @@ on:
         description: Sabine tag the packages were built with
         required: true
         type: string
-      rust_toolchain:
-        description: Rust toolchain used to build the Sabine CLI (Sabine requires 1.98 or newer)
-        required: false
-        type: string
-        default: stable
       app:
         description: Folder of the app inside the repository, for repositories that hold several apps
         required: false
@@ -31,21 +26,39 @@ on:
         description: The Base64 Ed25519 seed the app's GitHub releases are signed with
         required: true
 
+permissions:
+  contents: read
+
+concurrency:
+  group: sabine-handover-${{ github.ref }}-${{ inputs.artifact }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
     env:
-      SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
+      APP: ${{ inputs.app }}
+      SABINE_VERSION: ${{ inputs.sabine_version }}
     steps:
       - uses: actions/checkout@v7
-      - run: rustup toolchain install "${{ inputs.rust_toolchain }}" --profile minimal
-      - run: rustup override set "${{ inputs.rust_toolchain }}"
-      - name: Install CLI build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libfontconfig1-dev libwayland-dev libxkbcommon-dev
+        with:
+          persist-credentials: false
+      - name: Install CLI runtime dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libfontconfig1
       - name: Install matching Sabine CLI
-        run: cargo install --git https://github.com/Lantharos/Sabine --tag "${{ inputs.sabine_version }}" --locked sabine-cli
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          directory="$RUNNER_TEMP/sabine-cli"
+          mkdir -p "$directory"
+          gh release download "$SABINE_VERSION" --repo Lantharos/Sabine --pattern sabine-cli-linux-x86_64.tar.gz --dir "$directory"
+          gh attestation verify "$directory/sabine-cli-linux-x86_64.tar.gz" --repo Lantharos/Sabine --signer-workflow Lantharos/Sabine/.github/workflows/release.yml --source-ref "refs/tags/$SABINE_VERSION"
+          tar -xzf "$directory/sabine-cli-linux-x86_64.tar.gz" -C "$directory"
+          echo "$directory" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.artifact }}-*
@@ -55,6 +68,8 @@ jobs:
           github-token: ${{ github.token }}
       - name: Generate updater manifest
         shell: pwsh
+        env:
+          SABINE_UPDATE_SIGNING_KEY: ${{ secrets.SABINE_UPDATE_SIGNING_KEY }}
         run: |
           $arguments = @()
           Get-ChildItem release -Directory | ForEach-Object {
@@ -67,7 +82,8 @@ jobs:
               $arguments += "$($_.Name)=$((Get-Content $executable -Raw).Trim())"
             }
           }
-          sabine release-manifest '${{ inputs.app }}' --handover-from '${{ github.repository }}' --output release/sabine-update.json @arguments
+          sabine release-manifest $env:APP --handover-from $env:GITHUB_REPOSITORY --output release/sabine-update.json @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Writing the update manifest failed" }
       - name: Flatten release assets
         shell: pwsh
         run: |
