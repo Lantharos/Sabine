@@ -120,6 +120,7 @@ impl OsrNativeHost {
         self.overlays.is_empty()
             && self.tooltip.as_ref().is_none_or(|tooltip| !tooltip.shown)
             && self.context_menu.is_none()
+            && self.permission_prompt.is_none()
             && self.media.holes().next().is_none()
             && self.loading.is_none_or(|loading| !loading.splash_shown())
             && self.loading_fade.is_none()

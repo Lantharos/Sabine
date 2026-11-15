@@ -71,6 +71,8 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 | Drag and drop | Yes | Yes | Yes |
 | [Printing](/docs/desktop/printing/) | XDG print portal | System print dialog | System print dialog |
 | File dialogs | XDG portal | Common item dialog | Sheet |
+| [Permissions](/docs/web/permissions/) | Asked in the window; screen recording through the ScreenCast portal; no location | Asked in the window | Asked in the window, and by macOS for devices and location |
+| [Spellcheck](/docs/web/spellcheck/) | Hunspell, dictionaries downloaded per language | System spellchecker | System spellchecker |
 | Touch | Yes | Yes | No touchscreens |
 | Touch keyboard | Asks the compositor when a field is focused | Comes up on a touch or pen tap | No |
 | Pen | Pressure, pen and eraser, hover, barrel buttons, tilt | Pressure, pen and eraser, hover, barrel button, tilt | Arrives as mouse input |
@@ -107,6 +109,8 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **AppArmor.** Ubuntu and similar distributions need an AppArmor profile for Chromium hosts in a user's home. See [Security model](/docs/concepts/security-model/#the-browser-sandbox).
 - **Secrets** need a Secret Service, such as GNOME Keyring, KWallet or KeePassXC. Without one, secrets calls fail, and Chromium encrypts cookies with a fixed key. A confined app reaches it only when its `[sandbox]` talks to `org.freedesktop.secrets`.
 - **Crash reports** of the Chromium that apps installed for every user share stay with the shared process and are never sent.
+- **Screen recording** goes through the desktop's ScreenCast portal and PipeWire, whose picker asks people what to share.
+- **Location** isn't available to pages: Chromium has no location source on Linux without a Google API key.
 - **Flatpak packaging** isn't a bundle target. Apps that run inside a Flatpak-style sandbox start their own Chromium through Zypak.
 
 ### Windows
@@ -123,6 +127,7 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 - **Apple Silicon only.** Bundles require a native arm64 executable.
 - **Notifications** need a bundled app; macOS asks for permission the first time.
 - **Keychain.** Chromium runs from a bundle Sabine signs on each Mac, whose identity changes with every runtime or Sabine update, so it keeps its cookie key out of the login keychain, which would ask for the password after each one. Keep secrets in the [secrets store](/docs/web/store-and-secrets/#secrets) instead.
+- **Camera, microphone, screen and location** also need macOS's own permission, which it asks for the first time a page uses them. Bundles carry the reasons from `[permissions]` and the entitlements the hardened runtime needs.
 - **URL schemes and document types** must be declared in the bundle before it is signed, so test them with the bundled app rather than a development run.
 - **The tray** shows only the image in the menu bar, not the title. Black-and-white icons, and icons marked as templates, follow the menu bar's appearance.
 - **Tray icons and shortcuts** need the main thread's event loop. `SabineWindow::main` and `SabineProcess::wait()` run it; call `wait()` on the main thread when you manage the process yourself.
@@ -133,6 +138,5 @@ Sabine talks to the desktop through standard protocols and portals. Features who
 ### Every platform
 
 - **Codecs.** Chromium's runtime has no H.264, HEVC or AAC decoders. Play such media through [native video](/docs/web/native-video/), which needs a transparent window.
-- **Browser permissions.** Camera, microphone and geolocation requests are denied, and there is no API to grant them.
 - **Pen data.** Chromium's pen input carries no tilt, twist or barrel pressure, and no button state while the pen touches the screen. Tilt and barrel buttons come through [`events.pen`](/docs/reference/javascript-api/#payloads) instead.
 - **Service worker notifications** aren't supported.

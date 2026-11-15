@@ -5,22 +5,26 @@ use std::{
     process::Command,
 };
 
+use sabine_service::{DeclaredPermission, Permission};
+
 use crate::bundle::signing::run;
 
 /// Code bundles that carry a signature of their own.
 const CODE_BUNDLES: &[&str] = &["app", "framework", "appex", "xpc", "bundle", "plugin"];
 
+const ALLOW_JIT: &str = "com.apple.security.cs.allow-jit";
+
 /// The hardened runtime exceptions Chromium's helpers need: V8 and
 /// SwiftShader compile code as they run, and plugins load unsigned code.
-const HELPER_ENTITLEMENTS: &[(&str, &str)] = &[
-    (
-        " Helper (Renderer).app",
-        include_str!("entitlements/jit.plist"),
-    ),
-    (" Helper (GPU).app", include_str!("entitlements/jit.plist")),
+const HELPER_ENTITLEMENTS: &[(&str, &[&str])] = &[
+    (" Helper (Renderer).app", &[ALLOW_JIT]),
+    (" Helper (GPU).app", &[ALLOW_JIT]),
     (
         " Helper (Plugin).app",
-        include_str!("entitlements/plugin.plist"),
+        &[
+            "com.apple.security.cs.allow-unsigned-executable-memory",
+            "com.apple.security.cs.disable-library-validation",
+        ],
     ),
 ];
 
@@ -41,8 +45,14 @@ pub(in crate::bundle) enum Notary {
 impl MacosSigning {
     /// Signs every piece of code in `bundle` before the bundle that holds
     /// it, ending with `bundle` itself, all with the hardened runtime.
-    pub(in crate::bundle) fn sign_app(&self, bundle: &Path) -> Result<(), String> {
-        let entitlements = Entitlements::write()?;
+    /// The app and Chromium's processes may use the devices the app's pages
+    /// ask for.
+    pub(in crate::bundle) fn sign_app(
+        &self,
+        bundle: &Path,
+        permissions: &[DeclaredPermission],
+    ) -> Result<(), String> {
+        let entitlements = Entitlements::write(&device_entitlements(permissions))?;
         self.sign_contents(bundle, &entitlements)?;
         self.sign(bundle, Hardening::App(&entitlements))
     }
@@ -147,27 +157,68 @@ enum Hardening<'a> {
     App(&'a Entitlements),
 }
 
-/// The helpers' entitlements, written out for `codesign` to read.
+/// The entitlements of the hardened runtime that let the app's processes
+/// use the devices its pages ask for.
+fn device_entitlements(permissions: &[DeclaredPermission]) -> Vec<&'static str> {
+    permissions
+        .iter()
+        .filter_map(|declared| match declared.permission {
+            Permission::Camera => Some("com.apple.security.device.camera"),
+            Permission::Microphone => Some("com.apple.security.device.audio-input"),
+            Permission::Geolocation => Some("com.apple.security.personal-information.location"),
+            _ => None,
+        })
+        .collect()
+}
+
+fn plist(entitlements: &[&str]) -> String {
+    let keys = entitlements
+        .iter()
+        .map(|key| format!("  <key>{key}</key>\n  <true/>\n"))
+        .collect::<String>();
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+{keys}</dict>
+</plist>
+"#
+    )
+}
+
+/// Each app bundle's entitlements, written out for `codesign` to read:
+/// a helper's own with the devices', or the devices' alone.
 struct Entitlements {
     directory: tempfile::TempDir,
+    devices: bool,
 }
 
 impl Entitlements {
-    fn write() -> Result<Self, String> {
+    fn write(devices: &[&str]) -> Result<Self, String> {
         let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
-        for (index, (_, plist)) in HELPER_ENTITLEMENTS.iter().enumerate() {
-            fs::write(directory.path().join(format!("{index}.plist")), plist)
-                .map_err(|error| error.to_string())?;
+        let write = |name: &str, entitlements: &[&str]| {
+            fs::write(directory.path().join(name), plist(entitlements))
+                .map_err(|error| error.to_string())
+        };
+        for (index, (_, own)) in HELPER_ENTITLEMENTS.iter().enumerate() {
+            write(&format!("{index}.plist"), &[own, devices].concat())?;
         }
-        Ok(Self { directory })
+        write("devices.plist", devices)?;
+        Ok(Self {
+            directory,
+            devices: !devices.is_empty(),
+        })
     }
 
     fn of(&self, app: &Path) -> Option<PathBuf> {
         let name = app.file_name()?.to_str()?;
-        HELPER_ENTITLEMENTS
+        let plist = HELPER_ENTITLEMENTS
             .iter()
             .position(|(suffix, _)| name.ends_with(suffix))
-            .map(|index| self.directory.path().join(format!("{index}.plist")))
+            .map(|index| format!("{index}.plist"))
+            .or_else(|| self.devices.then(|| "devices.plist".to_string()))?;
+        Some(self.directory.path().join(plist))
     }
 }
 

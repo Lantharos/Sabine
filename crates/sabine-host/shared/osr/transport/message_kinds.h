@@ -49,5 +49,7 @@ constexpr uint32_t kGuestOrder = 50;
 constexpr uint32_t kTitleChanged = 51;
 constexpr uint32_t kAccessibilityTree = 52;
 constexpr uint32_t kAccessibilityLocations = 53;
+constexpr uint32_t kPermissionRequest = 54;
+constexpr uint32_t kPermissionWithdrawn = 55;
 
 #endif

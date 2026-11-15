@@ -236,6 +236,7 @@ fn spawn_osr_host_child(
         "hide_on_blur": config.hide_on_blur,
         "hide_on_close": config.hide_on_close,
         "asks_before_closing": config.listeners.close_request.is_some(),
+        "asks_permissions": config.listeners.permission.is_some(),
         "skip_taskbar": config.skip_taskbar,
         "always_on_top": config.always_on_top,
         "transparent": config.transparent,
@@ -246,18 +247,7 @@ fn spawn_osr_host_child(
         "backdrop_preference": config.backdrop.preference.as_str(),
         "chrome": config.chrome.as_str(),
         "titlebar_overlay": config.titlebar_overlay,
-        "bridge_policy": {
-            "enabled": true,
-            "documentPrefix": if url.starts_with(crate::launch::APP_URL_PREFIX) { crate::launch::APP_URL_PREFIX } else { "" },
-            "origins": if config.security.remote_content { config.security.allowed_origins.clone() } else { Vec::new() },
-            "commandOrigins": config.bridge.descriptors().iter()
-                .filter(|descriptor| !descriptor.allowed_origins.is_empty())
-                .map(|descriptor| (descriptor.name.clone(), serde_json::json!(descriptor.allowed_origins)))
-                .collect::<serde_json::Map<String, serde_json::Value>>(),
-            "commands": sabine_bridge::page_commands(config.bridge.commands(), config.native_media()),
-            "bytes": true,
-            "consoleLog": config.logs_page_console(),
-        },
+        "bridge_policy": bridge_policy(config, url),
         "regions": crate::osr::protocol::regions_to_json(&config.regions),
         "drag_regions": crate::osr::protocol::rects_to_json(&config.drag_regions),
         "drag_exclusion_regions": crate::osr::protocol::rects_to_json(&config.drag_exclusion_regions),
@@ -304,6 +294,29 @@ fn spawn_osr_host_child(
             message: format!("failed to configure Sabine OSR host: {error}"),
         })?;
     Ok(child)
+}
+
+/// What the window's pages may do: which documents get the bridge, the commands they
+/// call, the permissions they may ask for, and how their downloads and spellcheck go.
+fn bridge_policy(config: &SabineWindowConfig, url: &str) -> serde_json::Value {
+    serde_json::json!({
+        "enabled": true,
+        "documentPrefix": if url.starts_with(crate::launch::APP_URL_PREFIX) { crate::launch::APP_URL_PREFIX } else { "" },
+        "origins": if config.security.remote_content { config.security.allowed_origins.clone() } else { Vec::new() },
+        "commandOrigins": config.bridge.descriptors().iter()
+            .filter(|descriptor| !descriptor.allowed_origins.is_empty())
+            .map(|descriptor| (descriptor.name.clone(), serde_json::json!(descriptor.allowed_origins)))
+            .collect::<serde_json::Map<String, serde_json::Value>>(),
+        "commands": sabine_bridge::page_commands(config.bridge.commands(), config.native_media()),
+        "bytes": true,
+        "consoleLog": config.logs_page_console(),
+        "permissions": config.permission_names(),
+        "downloads": {
+            "decide": config.listeners.downloads.decide.is_some(),
+            "report": config.listeners.downloads.listens(),
+        },
+        "spellcheck": config.spellcheck.to_json(),
+    })
 }
 
 /// The app's own program as a window host. On Linux it runs from the file

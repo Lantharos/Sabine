@@ -3304,6 +3304,7 @@ dependencies = [
  "serde_json",
  "shell-words",
  "specta",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "toml",

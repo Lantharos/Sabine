@@ -1,4 +1,4 @@
-mod draw;
+pub(in crate::osr::host::ui) mod draw;
 mod panel;
 
 use winit::keyboard::{Key, NamedKey};

@@ -1,5 +1,6 @@
 import type { Display, PowerSource, SystemAppearance } from "./desktop/system.js";
 import type { StoreChangedEvent } from "./storage/store.js";
+import type { DownloadEvent } from "./page/downloads.js";
 import type {
   GuestDownloadEvent,
   GuestFaviconEvent,
@@ -110,6 +111,7 @@ export declare const events: {
   screenLocked: Listen<null>;
   screenUnlocked: Listen<null>;
   powerSourceChanged: Listen<PowerSource>;
+  download: Listen<DownloadEvent>;
   guestCreated: Listen<GuestInfo>;
   guestDestroyed: Listen<GuestIdEvent>;
   guestLoading: Listen<GuestLoadingEvent>;

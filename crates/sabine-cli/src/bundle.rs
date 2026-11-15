@@ -90,7 +90,7 @@ pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
     crate::project::updates::require_public_key(build.app.updates.as_ref())?;
     for format in formats {
         let staged = stage_bundle(&build.app, format, &build.binary, &out, offline)?;
-        signing.sign_payload(format, &staged)?;
+        signing.sign_payload(format, &staged, &build.app.permissions)?;
         let artifact = package_bundle(&build.app, format, &staged, signing.windows())?;
         signing.sign_artifact(format, &artifact)?;
         if json {

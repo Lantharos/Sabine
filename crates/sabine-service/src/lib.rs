@@ -61,9 +61,10 @@ pub use types::manifest;
 pub use types::{
     APPIMAGE_PROGRAM_ENV, AppArtifact, AppArtifactKind, AppInstallMode, AppManifest,
     AppReleaseManifest, AppUpdateConfig, AppUpdateSource, AppUpdateStatus, AppUpdatesSection,
-    HeldSystemUpdate, InstalledApp, SABINE_VERSION, SabineVersion, ServiceError,
-    SystemCompatibility, SystemReleaseArtifact, SystemReleaseManifest, SystemRequirement,
-    UpdatePolicy, valid_app_id,
+    DeclaredPermission, HeldSystemUpdate, InstalledApp, Permission, PermissionsSection,
+    SABINE_VERSION, SabineVersion, ServiceError, SpellcheckSection, SystemCompatibility,
+    SystemReleaseArtifact, SystemReleaseManifest, SystemRequirement, UpdatePolicy, valid_app_id,
+    validate_spellcheck_languages,
 };
 pub(crate) use types::{
     RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,

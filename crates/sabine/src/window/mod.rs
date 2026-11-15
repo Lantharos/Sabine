@@ -15,13 +15,17 @@ pub use builder::AppChrome;
 use config::SabineWindowConfig;
 pub use config::{
     DocumentTypes, SabineLifecyclePolicy, SabineWindowChrome, SabineWindowControlAction,
-    SabineWindowControlRegion,
+    SabineWindowControlRegion, Spellcheck,
 };
-pub use listeners::WindowVisibility;
 pub(crate) use listeners::{
     AppearanceListener, CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener, DISPLAYS_LINE,
     DesktopEventListener, DisplaysListener, LaunchListener, PAGE_LOST_LINE, PAGE_STARTED_LINE,
-    QuitListener, VISIBILITY_LINE, VisibilityListener, WindowListeners, appearance_line,
+    PERMISSION_REQUEST_LINE, PermissionListener, QuitListener, VISIBILITY_LINE, VisibilityListener,
+    WindowListeners, appearance_line,
+};
+pub use listeners::{
+    Download, DownloadControl, DownloadDecision, DownloadState, PermissionDecision,
+    PermissionRequest, WindowVisibility,
 };
 pub use manifest::resource_path;
 #[cfg(not(target_os = "windows"))]

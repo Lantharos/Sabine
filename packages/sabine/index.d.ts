@@ -7,6 +7,8 @@ export * from "./types/events.js";
 export * from "./types/guest.js";
 export * from "./types/media/native-video.js";
 export * from "./types/desktop/print.js";
+export * from "./types/page/downloads.js";
+export * from "./types/page/spellcheck.js";
 export * from "./types/desktop/shell.js";
 export * from "./types/desktop/system.js";
 export * from "./types/storage/secrets.js";

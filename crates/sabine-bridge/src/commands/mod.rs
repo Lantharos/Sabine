@@ -62,6 +62,21 @@ pub const IDLE_UNWATCH_COMMAND: &str = "sabine.idle.unwatch";
 /// come back.
 pub const IDLE_EVENT: &str = "system.idle";
 
+/// Pauses, resumes and cancels downloads the window's page started, which
+/// the browser host answers itself.
+pub const DOWNLOAD_COMMANDS: [&str; 3] = [
+    "sabine.download.pause",
+    "sabine.download.resume",
+    "sabine.download.cancel",
+];
+/// Reads and changes spellchecking in the window's profile, which the
+/// browser host answers itself.
+pub const SPELLCHECK_COMMANDS: [&str; 3] = [
+    "sabine.spellcheck.get",
+    "sabine.spellcheck.set",
+    "sabine.spellcheck.addWord",
+];
+
 const WINDOW_COMMANDS: [&str; 21] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
@@ -93,6 +108,8 @@ pub fn page_commands(mut commands: Vec<String>, native_media: bool) -> Vec<Strin
     let builtin = activity::COMMANDS
         .iter()
         .chain(&WINDOW_COMMANDS)
+        .chain(&DOWNLOAD_COMMANDS)
+        .chain(&SPELLCHECK_COMMANDS)
         .chain(&crate::guest::COMMANDS)
         .chain(media);
     for command in builtin {

@@ -35,6 +35,7 @@
 #include "osr/input/ime.h"
 #include "osr/page/clipboard.h"
 #include "osr/page/media_state.h"
+#include "osr/page/permissions.h"
 #include "osr/paint/dropped.h"
 #include "osr/paint/software.h"
 #include "osr/print/document.h"
@@ -105,12 +106,22 @@ class SabineOsrHandler : public CefClient,
     return print_dialogs_;
   }
 #endif
+  bool OnRequestMediaAccessPermission(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame,
+      const CefString& requesting_origin,
+      uint32_t requested_permissions,
+      CefRefPtr<CefMediaAccessCallback> callback) override;
   bool OnShowPermissionPrompt(
       CefRefPtr<CefBrowser> browser,
       uint64_t prompt_id,
       const CefString& requesting_origin,
       uint32_t requested_permissions,
       CefRefPtr<CefPermissionPromptCallback> callback) override;
+  void OnDismissPermissionPrompt(
+      CefRefPtr<CefBrowser> browser,
+      uint64_t prompt_id,
+      cef_permission_request_result_t result) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                  TerminationStatus status,
                                  int error_code,
@@ -295,6 +306,7 @@ class SabineOsrHandler : public CefClient,
                             std::optional<std::string_view> body);
   void HandleWindowCommand(const std::string& command,
                            const std::string& value);
+  void ApplyHostControl(const std::string& command, const std::string& value);
   void UpdateImeSurrounding(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             const std::string& state);
@@ -302,6 +314,11 @@ class SabineOsrHandler : public CefClient,
   void RequestNativeClose();
   void InstallTransparentBackground(CefRefPtr<CefFrame> frame);
   CefRefPtr<CefDictionaryValue> BridgePolicyFor(CefRefPtr<CefBrowser> browser);
+  void AskPermissions(CefRefPtr<CefBrowser> browser,
+                      uint64_t prompt_id,
+                      const CefString& requesting_origin,
+                      std::vector<std::string> requested,
+                      PagePermissions::Answer answer);
 
   void ApplyLifecycle(const std::string& state,
                       int frame_rate,
@@ -348,6 +365,7 @@ class SabineOsrHandler : public CefClient,
   ClipboardRequests clipboard_;
   MediaState media_;
   CefRefPtr<PageAccessibility> accessibility_;
+  PagePermissions permissions_;
   DragSession drag_;
   CefRefPtr<PageDialogs> dialogs_;
   CefRefPtr<Downloads> downloads_;

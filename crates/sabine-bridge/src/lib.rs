@@ -51,6 +51,7 @@ pub const INSTALL_SCRIPT: &str = concat!(
     include_str!("scripts/bridge/activity.js"),
     include_str!("scripts/bridge/power.js"),
     include_str!("scripts/bridge/guest.js"),
+    include_str!("scripts/bridge/page.js"),
     "})();\n",
 );
 

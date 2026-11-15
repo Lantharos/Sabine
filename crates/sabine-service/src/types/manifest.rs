@@ -5,7 +5,7 @@ use std::{
 
 use serde::Deserialize;
 
-use super::AppUpdatesSection;
+use super::{AppUpdatesSection, PermissionsSection, SpellcheckSection};
 use crate::SandboxSection;
 
 /// `Sabine.toml`, as both the CLI and the app read it.
@@ -21,6 +21,10 @@ pub struct SabineFile {
     pub sandbox: Option<SandboxSection>,
     #[serde(default)]
     pub crash: CrashSection,
+    #[serde(default)]
+    pub permissions: PermissionsSection,
+    #[serde(default)]
+    pub spellcheck: SpellcheckSection,
     #[serde(default)]
     pub resources: BTreeMap<String, String>,
     #[serde(default)]

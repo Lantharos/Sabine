@@ -183,6 +183,14 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `vaapi_hardware_decode(bool)` | Linux only. VA-API video decoding for WebCodecs and media; off by default |
 | `debug(u16)` | Opens Chromium's remote debugging on this port, also in production |
 
+### Pages
+
+| Method | Does |
+| --- | --- |
+| `permission(Permission)` | Lets the app's pages, and guests it allows, ask for a permission, as `[permissions]` does. See [Permissions](/docs/web/permissions/) |
+| `spellcheck(bool)` | Turns spellchecking on or off |
+| `spellcheck_languages(impl IntoIterator<Item = impl Into<String>>)` | The languages pages check spelling in, such as `en-US`. See [Spellcheck](/docs/web/spellcheck/) |
+
 ### Size and placement
 
 | Method | Does |
@@ -287,9 +295,12 @@ pub fn on_appearance_changed(self, listener: impl Fn(WindowId, Appearance) + Sen
 pub fn on_displays_changed(self, listener: impl Fn(&[Display]) + Send + Sync + 'static) -> Self;
 pub fn on_desktop_event(self, listener: impl Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync + 'static) -> Self;
 pub fn on_quit(self, listener: impl Fn() + Send + Sync + 'static) -> Self;
+pub fn on_permission_request(self, listener: impl Fn(&PermissionRequest) -> PermissionDecision + Send + Sync + 'static) -> Self;
+pub fn on_download(self, listener: impl Fn(&Download) -> DownloadDecision + Send + Sync + 'static) -> Self;
+pub fn on_download_updated(self, listener: impl Fn(&Download) + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, what happens to every window's notifications, and the system's sleep, lock and power source changes, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, what happens to every window's notifications, and the system's sleep, lock and power source changes, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_permission_request` decides the pages' requests for declared permissions before people are asked, see [Permissions](/docs/web/permissions/#deciding-in-rust). `on_download` decides where the downloads the page starts go, and `on_download_updated` hears how each one goes, see [Downloads](/docs/web/downloads/). `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
 
 ```rust
 pub struct WindowVisibility {
@@ -297,6 +308,31 @@ pub struct WindowVisibility {
     pub visible: bool,
     pub suspended: bool,
 }
+
+pub struct PermissionRequest {
+    pub window: WindowId,
+    pub origin: String,
+    pub permissions: Vec<Permission>,
+    pub guest: Option<String>,
+}
+
+pub enum PermissionDecision { Allow, Deny, Ask }
+
+pub struct Download {
+    pub window: WindowId,
+    pub id: String,
+    pub url: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub total_bytes: Option<u64>,
+    pub received_bytes: u64,
+    pub state: DownloadState,
+    pub save_path: Option<PathBuf>,
+    pub error: Option<String>,
+}
+
+pub enum DownloadState { Requested, Progress, Completed, Cancelled, Interrupted }
+pub enum DownloadDecision { SaveTo(PathBuf), Ask, Cancel }
 ```
 
 ### Bridge commands
@@ -474,6 +510,9 @@ impl BridgeEventEmitter {
     pub fn notify(&self, window: WindowId, notification: &Notification) -> bool;
     pub fn print_files(&self, window: WindowId, paths: &[PathBuf], title: Option<&str>) -> bool;
     pub fn guest_control(&self, window: WindowId, control: &GuestHostControl) -> bool;
+    pub fn download_control(&self, window: WindowId, download_id: &str, control: DownloadControl) -> bool;
+    pub fn set_spellcheck(&self, window: WindowId, spellcheck: &Spellcheck) -> bool;
+    pub fn add_spellcheck_word(&self, window: WindowId, word: &str) -> bool;
 
     pub fn show(&self) -> bool;
     pub fn hide(&self) -> bool;
@@ -491,7 +530,7 @@ impl BridgeEventEmitter {
 }
 ```
 
-`show`, `hide`, `set_visible` and `focus_window` act on the app's window: the one people focused last, or the first one open. `show_window`, `hide_window` and `activate_window` act on the window you name; `activate_window` shows and focuses it. `close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead.
+`show`, `hide`, `set_visible` and `focus_window` act on the app's window: the one people focused last, or the first one open. `show_window`, `hide_window` and `activate_window` act on the window you name; `activate_window` shows and focuses it. `close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead. `download_control` pauses, resumes or cancels a download of the window's page with `DownloadControl::Pause`, `Resume` or `Cancel`. `set_spellcheck` changes what a `Spellcheck { enabled, languages }` sets, leaving what it leaves `None`, and `add_spellcheck_word` adds a word to the app's custom dictionary.
 
 `control_window` changes one open window. A change the desktop can't make, such as keeping a window above others on a Wayland compositor without `kestrel_window_v1`, goes to the app's diagnostics.
 
@@ -655,7 +694,7 @@ pub enum GuestDownloadAction { Accept, Cancel, Pause, Resume }
 pub enum GuestPopupPolicy { Deny, NavigateSame, OpenGuest }
 ```
 
-`GuestCreateOptions` holds `id`, `url`, `html`, `bounds`, `partition`, `allow_bridge` (`false`), `intercepted_shortcuts`, `intercept_horizontal_wheel`, `visible` (`true`), `popup_policy` (`Deny`), `allow_downloads` (`true`) and `background_color`, and implements `Default`. `GuestBounds::new(x, y, width, height)` takes CSS pixels relative to the window. See [Guests](/docs/web/guests/).
+`GuestCreateOptions` holds `id`, `url`, `html`, `bounds`, `partition`, `allow_bridge` (`false`), `intercepted_shortcuts`, `intercept_horizontal_wheel`, `visible` (`true`), `popup_policy` (`Deny`), `allow_downloads` (`true`), `permissions`, the [permissions](/docs/web/permissions/#who-may-ask) it may ask for by name, and `background_color`, and implements `Default`. `GuestBounds::new(x, y, width, height)` takes CSS pixels relative to the window. See [Guests](/docs/web/guests/).
 
 ### Async runtime
 

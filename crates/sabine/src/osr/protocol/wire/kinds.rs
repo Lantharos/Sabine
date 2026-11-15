@@ -55,6 +55,8 @@ pub(super) const KIND_GUEST_ORDER: u32 = 50;
 pub(super) const KIND_TITLE_CHANGED: u32 = 51;
 pub(super) const KIND_ACCESSIBILITY_TREE: u32 = 52;
 pub(super) const KIND_ACCESSIBILITY_LOCATIONS: u32 = 53;
+pub(super) const KIND_PERMISSION_REQUEST: u32 = 54;
+pub(super) const KIND_PERMISSION_WITHDRAWN: u32 = 55;
 
 pub(super) fn is_paint_kind(kind: u32) -> bool {
     matches!(

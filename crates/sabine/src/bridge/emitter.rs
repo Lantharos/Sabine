@@ -299,6 +299,38 @@ impl BridgeEventEmitter {
         self.deliver(update.record().window, activity_control(update), None)
     }
 
+    /// Pauses, resumes or cancels a download the window's page started.
+    pub fn download_control(
+        &self,
+        window: WindowId,
+        download_id: &str,
+        control: crate::DownloadControl,
+    ) -> bool {
+        let value = serde_json::json!({ "downloadId": download_id, "action": control.as_str() });
+        self.host_control(Some(window), "download", &value.to_string())
+    }
+
+    /// Turns spellchecking in one window's pages on or off and picks its
+    /// languages, as `spellcheck` does when the window opens.
+    pub fn set_spellcheck(&self, window: WindowId, spellcheck: &crate::Spellcheck) -> bool {
+        self.host_control(
+            Some(window),
+            "spellcheck.set",
+            &spellcheck.to_json().to_string(),
+        )
+    }
+
+    /// Adds a word to the custom dictionary of the window's profile, which
+    /// spellchecking then accepts in every window of the app.
+    pub fn add_spellcheck_word(&self, window: WindowId, word: &str) -> bool {
+        let value = serde_json::json!({ "word": word });
+        self.host_control(Some(window), "spellcheck.addWord", &value.to_string())
+    }
+
+    pub(crate) fn answer_window(&self, window: WindowId, command: &str, answer: &str) -> bool {
+        self.host_control(Some(window), command, answer)
+    }
+
     fn host_control(&self, window: Option<WindowId>, command: &str, value: &str) -> bool {
         self.deliver(
             window,

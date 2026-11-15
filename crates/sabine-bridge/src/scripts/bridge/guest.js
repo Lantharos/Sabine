@@ -15,6 +15,7 @@ window.sabine.guest = {
       popupPolicy: String(options.popupPolicy || "deny"),
       allowDownloads:
         options.allowDownloads === undefined ? true : Boolean(options.allowDownloads),
+      permissions: (options.permissions || []).map(String),
       backgroundColor: options.backgroundColor
         ? String(options.backgroundColor)
         : undefined,

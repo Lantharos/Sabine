@@ -166,15 +166,16 @@ pub fn install_macos_app(app: &SourceApp, wrapper: &Path) -> Result<(), String> 
     std::fs::create_dir_all(&macos).map_err(|error| error.to_string())?;
     std::fs::write(
         contents.join("Info.plist"),
-        crate::desktop::macos::info_plist(
-            &app.id,
-            &app.name,
-            &app.version,
-            "launch",
-            app.icon.is_some(),
-            &app.associations,
-            &app.listing,
-        )?,
+        crate::desktop::macos::info_plist(&crate::desktop::macos::PlistApp {
+            id: &app.id,
+            name: &app.name,
+            version: &app.version,
+            executable: "launch",
+            has_icon: app.icon.is_some(),
+            associations: &app.associations,
+            listing: &app.listing,
+            permissions: &crate::project::declared_permissions(&app.source)?,
+        })?,
     )
     .map_err(|error| error.to_string())?;
     if let Some(icon) = &app.icon {

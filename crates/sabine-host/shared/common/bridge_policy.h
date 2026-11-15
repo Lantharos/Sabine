@@ -111,15 +111,20 @@ inline bool ExposesBridge(CefRefPtr<CefDictionaryValue> policy,
   return false;
 }
 
-inline std::vector<std::string> Commands(CefRefPtr<CefDictionaryValue> policy) {
-  std::vector<std::string> commands;
-  auto values = policy ? policy->GetList("commands") : nullptr;
+inline std::vector<std::string> Strings(CefRefPtr<CefDictionaryValue> policy,
+                                        const char* key) {
+  std::vector<std::string> strings;
+  auto values = policy ? policy->GetList(key) : nullptr;
   if (values) {
     for (size_t index = 0; index < values->GetSize(); ++index) {
-      commands.push_back(values->GetString(index));
+      strings.push_back(values->GetString(index));
     }
   }
-  return commands;
+  return strings;
+}
+
+inline std::vector<std::string> Commands(CefRefPtr<CefDictionaryValue> policy) {
+  return Strings(policy, "commands");
 }
 
 inline std::vector<std::string> CommandsFor(

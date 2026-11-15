@@ -1,4 +1,6 @@
 mod closing;
+mod downloads;
+mod permissions;
 mod visibility;
 
 use std::{fmt, sync::Arc};
@@ -10,6 +12,10 @@ use crate::desktop::open_urls::OpenUrls;
 use crate::osr::protocol::{NOTIFICATION_EVENT_LINE, notification_event_from_json};
 use crate::{SabineProcessHandle, WindowId};
 pub(crate) use closing::{CLOSE_REQUESTED_LINE, CloseRequestListener, ClosedListener};
+pub(crate) use downloads::{DOWNLOAD_LINE, DownloadListeners};
+pub use downloads::{Download, DownloadControl, DownloadDecision, DownloadState};
+pub(crate) use permissions::{PERMISSION_REQUEST_LINE, PermissionListener};
+pub use permissions::{PermissionDecision, PermissionRequest};
 pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
@@ -31,6 +37,8 @@ pub(crate) struct WindowListeners {
     pub(crate) close_request: Option<CloseRequestListener>,
     pub(crate) closed: Option<ClosedListener>,
     pub(crate) displays: Option<DisplaysListener>,
+    pub(crate) permission: Option<PermissionListener>,
+    pub(crate) downloads: DownloadListeners,
     /// The app's queue of links and documents, which all its windows share.
     pub(crate) open_urls: OpenUrls,
     /// Where the app hears what happened to its windows' notifications.
@@ -70,6 +78,25 @@ impl WindowListeners {
             _ => return false,
         }
         true
+    }
+
+    /// The window host control that answers what `line` asks of the app: a
+    /// page's permission request or download.
+    pub(crate) fn answer(&self, window: WindowId, line: &str) -> Option<(&'static str, String)> {
+        if line.starts_with(PERMISSION_REQUEST_LINE) {
+            return self
+                .permission
+                .as_ref()?
+                .answer(window, line)
+                .map(|answer| ("permission", answer));
+        }
+        if line.starts_with(DOWNLOAD_LINE) {
+            return self
+                .downloads
+                .deliver(window, line)
+                .map(|answer| ("download", answer));
+        }
+        None
     }
 
     /// Whether the app lets a window close that someone asked to close.

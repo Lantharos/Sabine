@@ -27,8 +27,8 @@ talk = ["org.mpris.MediaPlayer2.notes"]
 | `devices` | array of strings | none | `usb`, `serial` or `all` |
 | `talk` | array of strings | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it |
 | `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
-| `microphone` | boolean | `false` | Whether the app records sound |
-| `camera` | boolean | `false` | Whether the app uses cameras |
+| `microphone` | boolean | `false` | Whether the app records sound. Its pages also need `microphone` in [`[permissions]`](/docs/web/permissions/) |
+| `camera` | boolean | `false` | Whether the app uses cameras. Its pages also need `camera` in `[permissions]` |
 | `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox |
 | `reason` | string | | One line, shown to whoever decides, explaining why the app can't run in a sandbox. Only with `unsandboxed = true` |
 
@@ -83,7 +83,7 @@ A confined app:
 - writes the folders named after its app id in the XDG data, config, cache and state folders, its
   Chromium profile, the temporary folders and a runtime folder of its own
 - reaches the desktop's display and sound server, PipeWire when it declares `microphone` or
-  `camera`, and the cameras with `camera`, but no other socket in your runtime folder, such as the
+  `camera` or its pages may record the screen, and the cameras with `camera`, but no other socket in your runtime folder, such as the
   session bus, the service manager or other apps'
 - talks over the session bus only to the names in `talk` and to what Sabine itself uses: the
   desktop and document portals, notifications, the tray, GNOME's idle monitor and whether a screen

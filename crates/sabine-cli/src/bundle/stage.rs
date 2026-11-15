@@ -148,15 +148,16 @@ fn stage_macos(
     copy_binary(binary, &macos.join(executable))?;
     fs::write(
         contents.join("Info.plist"),
-        crate::desktop::macos::info_plist(
-            &app.id,
-            &app.name,
-            &app.version,
+        crate::desktop::macos::info_plist(&crate::desktop::macos::PlistApp {
+            id: &app.id,
+            name: &app.name,
+            version: &app.version,
             executable,
-            app.icon.is_some(),
-            &app.associations,
-            &app.listing,
-        )?,
+            has_icon: app.icon.is_some(),
+            associations: &app.associations,
+            listing: &app.listing,
+            permissions: &app.permissions,
+        })?,
     )
     .map_err(|error| error.to_string())?;
     let install_mode = if format == BundleFormat::Dmg {

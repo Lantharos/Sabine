@@ -71,7 +71,7 @@ The bridge is the only way from a page to your native code, and Sabine has no pe
 - Window and guest operations pass the same document checks as your commands.
 - Every answer is bound to the V8 context and native request it came from. Navigating, cancelling, or reusing a request id can't redirect an answer into another document.
 
-Browser permission prompts are denied, except clipboard access for your app's own documents. Camera and microphone requests are denied, and notification and geolocation requests answer with a denial instead of waiting on a prompt that can't appear. Your own pages still get desktop notifications, which Sabine shows through the window with permission always granted.
+Browser permissions, such as the camera, microphone, screen or location, are denied unless your app declares them in `[permissions]`, and even then only your app's own documents and the guests you let ask may ask. Sabine asks people in the window, and your app can decide first in Rust. Clipboard access stays open to your app's own documents, and they get desktop notifications through the window without asking. See [Permissions](/docs/web/permissions/).
 
 ### Local files
 
@@ -87,6 +87,7 @@ Guests are pages your app embeds, such as a website shown inside the window, and
 - A guest with a partition gets an isolated request context, so its cookies and storage stay apart from your app's and from guests in other partitions.
 - Popups are cancelled and reported to your app unless you choose another popup policy.
 - Downloads start only after your app accepts them, and your app decides where they go.
+- They ask for no browser permission unless your app lists it when creating them, and only for permissions the app declares.
 - Shortcuts your app intercepts never reach the guest.
 
 See [Guests](/docs/web/guests/).

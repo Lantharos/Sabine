@@ -161,6 +161,7 @@ void Guests::ContinueCreate(const GuestCreateRequest& request,
   guest.visible = request.visible;
   guest.allow_bridge = request.allow_bridge;
   guest.allow_downloads = request.allow_downloads;
+  guest.permissions = request.permissions;
   guest.intercepted_shortcuts = request.intercepted_shortcuts;
   guest.intercept_horizontal_wheel = request.intercept_horizontal_wheel;
   guest.popup_policy = request.popup_policy;
@@ -299,6 +300,7 @@ void Guests::OpenPopup(CefRefPtr<CefBrowser> browser,
       request.bounds = guest->bounds;
       request.partition = guest->partition;
       request.allow_downloads = guest->allow_downloads;
+      request.permissions = guest->permissions;
       request.popup_policy = guest->popup_policy;
       request.opened_by_popup = true;
       Create(std::move(request), [](bool success, const std::string& result) {

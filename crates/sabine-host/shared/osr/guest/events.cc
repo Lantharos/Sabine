@@ -20,62 +20,6 @@ std::string CurrentUrl(const GuestView& guest) {
   return url.empty() ? guest.url : url;
 }
 
-const char* InterruptReasonName(cef_download_interrupt_reason_t reason) {
-  switch (reason) {
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED:
-      return "fileAccessDenied";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE:
-      return "fileNoSpace";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_NAME_TOO_LONG:
-      return "fileNameTooLong";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE:
-      return "fileTooLarge";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_VIRUS_INFECTED:
-      return "fileVirusInfected";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED:
-      return "fileBlocked";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_FILE_SECURITY_CHECK_FAILED:
-      return "fileSecurityCheckFailed";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED:
-      return "networkFailed";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_NETWORK_TIMEOUT:
-      return "networkTimeout";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_NETWORK_DISCONNECTED:
-      return "networkDisconnected";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_NETWORK_SERVER_DOWN:
-      return "networkServerDown";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_SERVER_UNAUTHORIZED:
-      return "serverUnauthorized";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM:
-      return "serverCertProblem";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_SERVER_FORBIDDEN:
-      return "serverForbidden";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE:
-      return "serverUnreachable";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_USER_CANCELED:
-      return "canceled";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN:
-      return "shutdown";
-    case CEF_DOWNLOAD_INTERRUPT_REASON_CRASH:
-      return "crash";
-    default:
-      break;
-  }
-  if (reason >= CEF_DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED)
-    return "serverFailed";
-  if (reason >= CEF_DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED)
-    return "networkFailed";
-  return "fileFailed";
-}
-
-std::string DownloadError(CefRefPtr<CefDownloadItem> item,
-                          const std::string& state) {
-  if (state != "interrupted" || !item || !item->IsValid())
-    return std::string();
-  return std::string(",\"error\":\"") +
-         InterruptReasonName(item->GetInterruptReason()) + "\"";
-}
-
 }  // namespace
 
 std::string GuestInfoJson(const GuestView& guest) {
@@ -136,26 +80,6 @@ std::string GuestNewWindowJson(const std::string& id,
   output << "{\"id\":\"" << JsonEscape(id) << "\",\"url\":\"" << JsonEscape(url)
          << "\",\"disposition\":\"" << WindowOpenDispositionName(disposition)
          << "\"}";
-  return output.str();
-}
-
-std::string GuestDownloadJson(const std::string& guest_id,
-                              const std::string& download_id,
-                              CefRefPtr<CefDownloadItem> item,
-                              const std::string& state,
-                              const std::string& filename) {
-  const bool valid = item && item->IsValid();
-  std::ostringstream output;
-  output << "{\"guestId\":\"" << JsonEscape(guest_id) << "\",\"downloadId\":\""
-         << JsonEscape(download_id) << "\",\"url\":\""
-         << JsonEscape(valid ? item->GetURL().ToString() : std::string())
-         << "\",\"filename\":\"" << JsonEscape(filename) << "\",\"mimeType\":\""
-         << JsonEscape(valid ? item->GetMimeType().ToString() : std::string())
-         << "\",\"totalBytes\":" << (valid ? item->GetTotalBytes() : 0)
-         << ",\"receivedBytes\":" << (valid ? item->GetReceivedBytes() : 0)
-         << ",\"state\":\"" << state << "\",\"savePath\":\""
-         << JsonEscape(valid ? item->GetFullPath().ToString() : std::string())
-         << "\"" << DownloadError(item, state) << "}";
   return output.str();
 }
 

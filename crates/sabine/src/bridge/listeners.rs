@@ -13,7 +13,8 @@ type Job = Box<dyn FnOnce() + Send>;
 /// Hands what a window reports to the app's listeners, which run in the
 /// order windows report on a thread of their own, so a listener that takes
 /// its time never holds up a window's bridge. A window someone asked to
-/// close closes once its listener allows it.
+/// close closes once its listener allows it, and the window hears the app's
+/// answers to its pages' permission requests and downloads.
 #[derive(Clone)]
 pub(super) struct WindowReports {
     window: WindowId,
@@ -37,10 +38,17 @@ impl WindowReports {
     pub(super) fn report(&self, line: String) {
         let reports = self.clone();
         run_in_order(move || {
-            if line != CLOSE_REQUESTED_LINE {
+            if line == CLOSE_REQUESTED_LINE {
+                if reports.listeners.allows_close(reports.window) {
+                    reports.emitter.close_window(reports.window);
+                }
+            } else if let Some((command, answer)) = reports.listeners.answer(reports.window, &line)
+            {
+                reports
+                    .emitter
+                    .answer_window(reports.window, command, &answer);
+            } else {
                 reports.listeners.deliver(reports.window, &line);
-            } else if reports.listeners.allows_close(reports.window) {
-                reports.emitter.close_window(reports.window);
             }
         });
     }

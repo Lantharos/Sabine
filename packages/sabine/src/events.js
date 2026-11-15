@@ -26,6 +26,7 @@ export const events = {
   screenLocked: on("system.lock"),
   screenUnlocked: on("system.unlock"),
   powerSourceChanged: on("system.powerSource"),
+  download: on("download"),
   guestCreated: on("guest.created"),
   guestDestroyed: on("guest.destroyed"),
   guestLoading: on("guest.loading"),

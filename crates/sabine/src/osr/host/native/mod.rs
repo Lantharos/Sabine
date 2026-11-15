@@ -152,6 +152,8 @@ pub(super) struct OsrNativeHost {
     pub(super) reveal_held_since: Option<Instant>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
     pub(super) context_menu: Option<super::ui::context_menu::ContextMenu>,
+    pub(super) permissions: super::page::PagePermissions,
+    pub(super) permission_prompt: Option<super::ui::permission_prompt::PermissionPrompt>,
     #[cfg(target_os = "linux")]
     pub(super) pending_activation_token: Option<winit::window::ActivationToken>,
     pub(super) drag: super::input::DragState,
@@ -200,6 +202,7 @@ impl OsrNativeHost {
         #[cfg(target_os = "linux")]
         let memory = crate::osr::host::page::window_memory(&config);
         let input_latency = super::input::InputLatency::traced(&config);
+        let permissions = super::page::PagePermissions::new(config.app_id.as_deref());
         start_parent_bridge_reader(sender.clone(), proxy.clone(), relay.clone());
         let surface_size = winit::dpi::PhysicalSize::new(config.width, config.height);
         let visible = config.visible;
@@ -316,6 +319,8 @@ impl OsrNativeHost {
             reveal_held_since: None,
             tooltip: None,
             context_menu: None,
+            permissions,
+            permission_prompt: None,
             #[cfg(target_os = "linux")]
             pending_activation_token: None,
             drag: Default::default(),

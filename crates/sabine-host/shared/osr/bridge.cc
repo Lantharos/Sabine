@@ -1,5 +1,6 @@
 #include "osr/handler.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -8,6 +9,7 @@
 #include "common/bytes_message.h"
 #include "common/json.h"
 #include "include/wrapper/cef_helpers.h"
+#include "osr/page/spellcheck.h"
 #include "sabine_transparent_background_js.h"
 #if defined(OS_LINUX)
 #include "linux/runtime/renderers.h"
@@ -21,7 +23,31 @@ bool FitsRequestLine(std::string_view field, const char* separators) {
   return field.find_first_of(separators) == std::string_view::npos;
 }
 
+// Commands about the window's own page and profile, which guests never call.
+bool IsPageOnlyCommand(const std::string& command) {
+  return command.rfind("sabine.download.", 0) == 0 ||
+         command.rfind(kSpellcheckCommandPrefix, 0) == 0;
+}
+
 }  // namespace
+
+void SabineOsrHandler::ApplyHostControl(const std::string& command,
+                                        const std::string& value) {
+  std::string error;
+  if (command == "download") {
+    const JsonObject payload = JsonObject::Parse(value);
+    downloads_->RunAction(payload, payload.String("action"), false, &error);
+  } else if (command.rfind("spellcheck.", 0) == 0 && browser_) {
+    std::string result;
+    RunSpellcheckCommand(browser_, "sabine." + command, value, &result, &error);
+  } else {
+    guests_.ApplyHostControl(command, value);
+  }
+  if (!error.empty()) {
+    std::fprintf(stderr, "Sabine: %s failed: %s\n", command.c_str(),
+                 error.c_str());
+  }
+}
 
 bool SabineOsrHandler::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser,
@@ -192,15 +218,25 @@ void SabineOsrHandler::HandleBridgeCommand(
     return;
   }
   if (guest) {
-    if (IsGuestBridgeCommand(command) || command == "sabine.popup.open" ||
-        command == "sabine.popup.close") {
+    if (IsGuestBridgeCommand(command) || IsPageOnlyCommand(command) ||
+        command == "sabine.popup.open" || command == "sabine.popup.close") {
       ResolveBridgeResponse(browser_id, request_id, false,
                             "{\"message\":\"Guest views cannot manage other "
                             "guest views\"}");
       return;
     }
   } else if (guests_.HandleBridgeCommand(command, payload, browser_id,
-                                         request_id)) {
+                                         request_id) ||
+             downloads_->HandleBridgeCommand(command, payload, browser_id,
+                                             request_id)) {
+    return;
+  } else if (command.rfind(kSpellcheckCommandPrefix, 0) == 0) {
+    std::string result;
+    std::string error;
+    const bool ok =
+        RunSpellcheckCommand(browser, command, payload, &result, &error);
+    ResolveBridgeResponse(browser_id, request_id, ok,
+                          ok ? result : JsonMessage(error));
     return;
   }
   if (bridge_commands_.find(command) == bridge_commands_.end() ||

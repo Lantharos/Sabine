@@ -6,10 +6,13 @@ mod notification_images;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod paste_gesture;
+mod permissions;
 mod restore;
 mod shell;
 
 pub(super) use displays::Displays;
+pub(super) use permissions::PagePermissions;
+
 #[cfg(target_os = "linux")]
 pub(super) use restore::window_memory;
 

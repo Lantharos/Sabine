@@ -37,6 +37,8 @@ pub(crate) struct OsrHostConfig {
     pub hide_on_close: bool,
     /// Someone asking the window to close is the app's to answer.
     pub asks_before_closing: bool,
+    /// The app decides its pages' permission requests before the person.
+    pub asks_permissions: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
     pub transparent: bool,
@@ -169,6 +171,10 @@ impl OsrHostConfig {
                 .unwrap_or(false),
             asks_before_closing: value
                 .get("asks_before_closing")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            asks_permissions: value
+                .get("asks_permissions")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
             skip_taskbar: value

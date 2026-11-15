@@ -49,7 +49,9 @@ bool Guests::RunOperation(const std::string& operation,
     return true;
   }
   if (operation == "downloadAction") {
-    return owner_->downloads_->RunGuestAction(payload, error);
+    const std::string action = payload.String("action");
+    return owner_->downloads_->RunAction(
+        payload, action.empty() ? "accept" : action, true, error);
   }
 
   const std::string id = payload.String("id");

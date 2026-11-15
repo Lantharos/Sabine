@@ -2,6 +2,7 @@ mod app_chrome;
 mod bridge;
 mod diagnostics;
 mod listeners;
+mod page;
 
 use std::time::Duration;
 

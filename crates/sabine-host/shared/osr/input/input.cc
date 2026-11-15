@@ -66,7 +66,7 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
   if (ParseHostControl(line, &command, &value)) {
-    guests_.ApplyHostControl(command, value);
+    ApplyHostControl(command, value);
     return;
   }
   const auto parts = Split(line, '\t');
@@ -92,6 +92,12 @@ void SabineOsrHandler::HandleControlLine(
     return;
   }
 #endif
+  if (parts.size() == 3 && parts[0] == "permission") {
+    permissions_.Finish(
+        static_cast<uint32_t>(std::strtoul(parts[1].c_str(), nullptr, 10)),
+        parts[2] == "1");
+    return;
+  }
   if (parts.size() == 2 && parts[0] == "context_menu") {
     dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
     return;

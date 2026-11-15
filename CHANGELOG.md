@@ -29,6 +29,16 @@
   select and scroll. Chromium builds the tree only while assistive technology reads the window.
 - Confined apps on Linux reach the accessibility bus through a filter, as Flatpaks do, so screen
   readers read them without them reading other apps.
+- Pages can use the camera, microphone, screen, location and the other browser permissions an app
+  declares in `[permissions]`. The window asks people at its top and remembers their choice per
+  origin, `.on_permission_request(...)` can decide first, and guests ask only for what
+  `permissions` lists when they're created. Screen recording on Linux goes through the desktop's
+  screen sharing portal, and macOS bundles carry the reasons and entitlements macOS asks for.
+- The app's page has downloads of its own: `.on_download(...)` chooses where they go, the save
+  dialog asks otherwise, `events.download` and `.on_download_updated(...)` follow them, and
+  `downloads.pause`, `resume` and `cancel` control them.
+- `[spellcheck]`, `.spellcheck_languages(...)` and `spellcheck.set(...)` pick the languages pages
+  check spelling in, and `spellcheck.addWord` adds words to the app's dictionary.
 
 # Sabine 0.90
 
