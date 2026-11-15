@@ -21,6 +21,18 @@ pub(crate) type SharedResource = std::sync::Arc<Dmabuf>;
 #[cfg(target_os = "macos")]
 pub(crate) type SharedResource = SharedSurface;
 
+const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
+const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
+
+/// The texture format of a frame in the color type CEF painted it in.
+pub(crate) fn texture_format(color_type: u32) -> Result<wgpu::TextureFormat, String> {
+    match color_type {
+        CEF_COLOR_TYPE_BGRA_8888 => Ok(wgpu::TextureFormat::Bgra8UnormSrgb),
+        CEF_COLOR_TYPE_RGBA_8888 => Ok(wgpu::TextureFormat::Rgba8UnormSrgb),
+        other => Err(format!("unsupported frame color format {other}")),
+    }
+}
+
 pub(crate) fn import_texture(
     device: &wgpu::Device,
     frame: &OsrAccelFrame,

@@ -1,9 +1,7 @@
 use wgpu::hal::api::Vulkan;
 
+use crate::osr::accel::texture_format;
 use crate::osr::protocol::OsrAccelFrame;
-
-const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
-const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
 
 /// Wrap the host's copy of a frame as a texture on wgpu's Vulkan device,
 /// sampling the shared memory directly.
@@ -15,11 +13,7 @@ pub(crate) fn import_dmabuf(
         .resource
         .as_ref()
         .ok_or("the browser host did not share this frame's dma-buf")?;
-    let format = match frame.format {
-        CEF_COLOR_TYPE_BGRA_8888 => wgpu::TextureFormat::Bgra8UnormSrgb,
-        CEF_COLOR_TYPE_RGBA_8888 => wgpu::TextureFormat::Rgba8UnormSrgb,
-        other => return Err(format!("unsupported dma-buf color format {other}")),
-    };
+    let format = texture_format(frame.format)?;
     let size = wgpu::Extent3d {
         width: dmabuf.width,
         height: dmabuf.height,

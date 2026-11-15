@@ -4,10 +4,8 @@ use objc2_metal::{
 };
 use wgpu::hal::api::Metal;
 
+use crate::osr::accel::texture_format;
 use crate::osr::protocol::OsrAccelFrame;
-
-const CEF_COLOR_TYPE_RGBA_8888: u32 = 0;
-const CEF_COLOR_TYPE_BGRA_8888: u32 = 1;
 
 pub(crate) fn import_io_surface(
     device: &wgpu::Device,
@@ -17,16 +15,11 @@ pub(crate) fn import_io_surface(
         .resource
         .as_ref()
         .ok_or("the browser host did not share this frame's surface")?;
-    let (format, pixel_format) = match frame.format {
-        CEF_COLOR_TYPE_BGRA_8888 => (
-            wgpu::TextureFormat::Bgra8UnormSrgb,
-            MTLPixelFormat::BGRA8Unorm_sRGB,
-        ),
-        CEF_COLOR_TYPE_RGBA_8888 => (
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            MTLPixelFormat::RGBA8Unorm_sRGB,
-        ),
-        other => return Err(format!("unsupported shared surface color format {other}")),
+    let format = texture_format(frame.format)?;
+    let pixel_format = if format == wgpu::TextureFormat::Bgra8UnormSrgb {
+        MTLPixelFormat::BGRA8Unorm_sRGB
+    } else {
+        MTLPixelFormat::RGBA8Unorm_sRGB
     };
     let desc = wgpu::TextureDescriptor {
         label: Some("sabine-osr-iosurface"),
