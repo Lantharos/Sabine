@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 use winit::window::Window;
 
+use crate::osr::control::SlotRelease;
 use crate::render::rect_pipeline::clear_color;
 use crate::render::{DisplayList, ImageId};
 
@@ -55,7 +56,7 @@ pub struct GpuRenderer {
     frame: FrameGeometry,
     text: Option<TextRendererState>,
     texture_cache: HashMap<ImageId, CachedTexture>,
-    external_texture_releases: HashMap<ImageId, Box<dyn FnOnce() + Send + 'static>>,
+    external_texture_releases: HashMap<ImageId, SlotRelease>,
     external_imports: HashMap<ImageId, Vec<images::ImportedTexture>>,
     #[cfg(target_os = "linux")]
     producer_waits: Option<device::ProducerWaits>,
@@ -418,16 +419,8 @@ impl Drop for GpuRenderer {
         if self.external_texture_releases.is_empty() {
             return;
         }
-        let releases = self
-            .external_texture_releases
-            .drain()
-            .map(|(_, release)| release)
-            .collect::<Vec<_>>();
-        self.queue.on_submitted_work_done(move || {
-            for release in releases {
-                release();
-            }
-        });
+        let releases = std::mem::take(&mut self.external_texture_releases);
+        self.queue.on_submitted_work_done(move || drop(releases));
         self.submission_poller.notify();
     }
 }

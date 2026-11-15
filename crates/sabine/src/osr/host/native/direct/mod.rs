@@ -1,8 +1,11 @@
+mod backdrop;
+mod buffers;
 mod dispatch;
 mod page;
 mod timing;
 mod worker;
 
+pub(in crate::osr::host) use backdrop::Backdrop;
 pub(in crate::osr::host) use page::PageRoute;
 
 use std::{
@@ -12,10 +15,8 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc,
     },
     thread::{self, JoinHandle},
-    time::Duration,
 };
 
 use crossbeam_channel::Sender;
@@ -25,47 +26,55 @@ use wayland_client::{Connection, Proxy, protocol::wl_surface::WlSurface};
 use winit::window::Window;
 
 use crate::osr::accel::Dmabuf;
+use crate::osr::control::SlotRelease;
 use crate::osr::host::input::{InputLatency, InputStamp};
 
 use worker::State;
 
-const COMMAND_TIMEOUT: Duration = Duration::from_millis(250);
-
-pub(in crate::osr::host) type Release = Box<dyn FnOnce() + Send>;
-
-/// A page frame shown straight from the browser's dma-buf.
+/// A page frame shown straight from the browser's dma-buf. Dropping it
+/// gives the browser its slot back.
 pub(in crate::osr::host) struct DirectFrame {
     pub(in crate::osr::host) dmabuf: Arc<Dmabuf>,
     pub(in crate::osr::host) resource_id: u64,
     pub(in crate::osr::host) format: u32,
     pub(in crate::osr::host) source: (u32, u32, u32, u32),
     pub(in crate::osr::host) destination: (i32, i32),
-    pub(in crate::osr::host) release: Release,
+    pub(in crate::osr::host) release: SlotRelease,
     pub(in crate::osr::host) inputs: Vec<InputStamp>,
-}
-
-/// What the window shows beneath the page: its background color, and for a
-/// transparent window that color only under its opaque region.
-pub(in crate::osr::host) struct Backdrop {
-    pub(in crate::osr::host) width: u32,
-    pub(in crate::osr::host) height: u32,
-    pub(in crate::osr::host) color: [u8; 4],
-    pub(in crate::osr::host) transparent: bool,
-    pub(in crate::osr::host) rects: Vec<(u32, u32, u32, u32)>,
 }
 
 /// What became of the frames handed to the compositor.
 pub(in crate::osr::host) enum DirectOutcome {
     Shown,
+    /// The subsurface takes the page down with the window's next commit.
+    Hidden(u64),
+    /// The subsurface shows the page again from the window's next commit.
+    Revealed(u64),
     Failed(String),
 }
 
 enum Command {
     Present(DirectFrame),
     Map(Backdrop),
-    Hide(mpsc::SyncSender<()>),
-    Reveal(DirectFrame, mpsc::SyncSender<Result<(), DirectFrame>>),
+    Hide(u64),
+    Reveal(DirectFrame, u64),
     Desync,
+    RetireBackdrop,
+}
+
+/// Which of the window and the subsurface shows the page.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Placement {
+    /// The subsurface shows the page, which the window leaves out.
+    Subsurface,
+    /// The subsurface takes the page down, and the window holds its next
+    /// frame back until that is under way.
+    Hiding(u64),
+    /// The window's device draws the page.
+    Window,
+    /// The subsurface shows the page again once the compositor has its
+    /// frame, while the window's device keeps drawing the one it holds.
+    Revealing(u64),
 }
 
 /// Shows the page's frames in a subsurface of the window, imported by the
@@ -80,7 +89,9 @@ pub(in crate::osr::host) struct DirectPresenter {
     wake: UnixStream,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
-    hidden: bool,
+    placement: Placement,
+    transitions: u64,
+    backdrop_retired: bool,
     failed: bool,
 }
 
@@ -151,27 +162,48 @@ impl DirectPresenter {
             wake,
             stop,
             worker: Some(worker),
-            hidden: false,
+            placement: Placement::Subsurface,
+            transitions: 0,
+            backdrop_retired: false,
             failed: false,
         })
     }
 
-    /// Whether the window's device draws the page instead.
-    pub(in crate::osr::host) fn hidden(&self) -> bool {
-        self.hidden
+    /// Whether the subsurface shows the page, so the window leaves it out.
+    pub(in crate::osr::host) fn shows_page(&self) -> bool {
+        self.placement == Placement::Subsurface
+    }
+
+    /// Whether the subsurface shows the page or is about to, so the window
+    /// takes it back only with a frame newer than the subsurface's.
+    pub(in crate::osr::host) fn holds_page(&self) -> bool {
+        matches!(
+            self.placement,
+            Placement::Subsurface | Placement::Revealing(_)
+        )
+    }
+
+    /// Whether the window holds its frames back until the subsurface took
+    /// the page down.
+    pub(in crate::osr::host) fn hiding(&self) -> bool {
+        matches!(self.placement, Placement::Hiding(_))
     }
 
     pub(in crate::osr::host) fn failed(&self) -> bool {
         self.failed
     }
 
-    /// Stops showing frames here after the compositor could not.
+    /// Stops showing frames here after the compositor could not. A page the
+    /// subsurface was taking down is the window's from now on.
     pub(in crate::osr::host) fn note_failure(&mut self) {
         self.failed = true;
+        if self.hiding() {
+            self.placement = Placement::Window;
+        }
     }
 
-    pub(in crate::osr::host) fn present(&self, frame: DirectFrame) {
-        self.send(Command::Present(frame));
+    pub(in crate::osr::host) fn present(&self, frame: DirectFrame) -> bool {
+        self.send(Command::Present(frame))
     }
 
     /// Puts the window on screen with the page's latest frame.
@@ -179,27 +211,45 @@ impl DirectPresenter {
         self.send(Command::Map(backdrop));
     }
 
-    /// Takes the page's subsurface down with the window's next commit, so
-    /// the frame the window's own device draws next replaces it.
-    pub(in crate::osr::host) fn hide_with_next_commit(&mut self) {
-        let (done, hidden) = mpsc::sync_channel(1);
-        self.send(Command::Hide(done));
-        let _ = hidden.recv_timeout(COMMAND_TIMEOUT);
-        self.hidden = true;
+    /// Takes the backdrop the window showed before its device started down
+    /// with the window's next commit, which draws its own.
+    pub(in crate::osr::host) fn retire_backdrop(&mut self) {
+        if !std::mem::replace(&mut self.backdrop_retired, true) {
+            self.send(Command::RetireBackdrop);
+        }
     }
 
-    /// Shows `frame` in the subsurface again from the window's next commit,
-    /// which must leave the page out. The frame comes back while the
-    /// compositor still imports its dma-buf.
-    pub(in crate::osr::host) fn reveal_with_next_commit(
-        &mut self,
-        frame: DirectFrame,
-    ) -> Result<(), DirectFrame> {
-        let (done, revealed) = mpsc::sync_channel(1);
-        self.send(Command::Reveal(frame, done));
-        let revealed = revealed.recv_timeout(COMMAND_TIMEOUT).unwrap_or(Ok(()));
-        self.hidden = revealed.is_err();
-        revealed
+    /// Takes the page's subsurface down with the window's next commit. The
+    /// window draws again once the compositor connection carries that.
+    pub(in crate::osr::host) fn hide_with_next_commit(&mut self) {
+        self.transitions += 1;
+        self.placement = if self.send(Command::Hide(self.transitions)) {
+            Placement::Hiding(self.transitions)
+        } else {
+            Placement::Window
+        };
+    }
+
+    /// Shows `frame` in the subsurface again, from the window commit that
+    /// follows the compositor taking it. Returns whether it was handed on.
+    pub(in crate::osr::host) fn reveal_with_next_commit(&mut self, frame: DirectFrame) -> bool {
+        self.transitions += 1;
+        let sent = self.send(Command::Reveal(frame, self.transitions));
+        if sent {
+            self.placement = Placement::Revealing(self.transitions);
+        }
+        sent
+    }
+
+    /// Takes on the transition the compositor connection now carries, unless
+    /// a later one replaced it. Returns whether it did.
+    pub(in crate::osr::host) fn settle(&mut self, transition: u64) -> bool {
+        self.placement = match self.placement {
+            Placement::Hiding(pending) if pending == transition => Placement::Window,
+            Placement::Revealing(pending) if pending == transition => Placement::Subsurface,
+            _ => return false,
+        };
+        true
     }
 
     /// Lets the subsurface show frames on its own again, after the window's
@@ -208,10 +258,12 @@ impl DirectPresenter {
         self.send(Command::Desync);
     }
 
-    fn send(&self, command: Command) {
-        if self.commands.send(command).is_ok() {
+    fn send(&self, command: Command) -> bool {
+        let sent = self.commands.send(command).is_ok();
+        if sent {
             let _ = (&self.wake).write(&[1]);
         }
+        sent
     }
 }
 

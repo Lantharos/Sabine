@@ -1,3 +1,4 @@
+use crate::osr::control::SlotRelease;
 use crate::osr::protocol::{OsrAccelFrame, OsrSurface};
 use crate::render::{ExternalSlot, ImageId, RendererError};
 
@@ -29,17 +30,14 @@ impl OsrNativeHost {
     }
 
     fn install_accel_frame(&mut self, frame: &OsrAccelFrame) -> Installed {
-        let release_writer = self.control_writer.clone();
-        let slot_token = frame.slot_token;
-        let release_slot: Box<dyn FnOnce() + Send> = Box::new(move || {
-            if let Some(writer) = release_writer {
-                let _ = writer.send(format!("accel_release\t{slot_token}\n"));
-            }
-        });
+        let Some(writer) = self.control_writer.clone() else {
+            return Installed::Rejected;
+        };
+        let release_slot = SlotRelease::new(writer, frame.slot_token);
         let geometry = accel_geometry(frame);
         if frame.surface == OsrSurface::Main && !self.fits_page(geometry) {
+            drop(release_slot);
             self.note_rejected_main_frame(geometry.size());
-            release_slot();
             self.retry_resize_paint();
             return Installed::Rejected;
         }
@@ -54,10 +52,13 @@ impl OsrNativeHost {
                         Installed::Rejected
                     };
                 }
-                PageRoute::Reveal => match self.reveal_directly(frame, release_slot) {
-                    Ok(()) => return Installed::Subsurface,
-                    Err(release_slot) => release_slot,
-                },
+                PageRoute::Reveal => {
+                    return if self.reveal_directly(frame, release_slot) {
+                        Installed::Subsurface
+                    } else {
+                        Installed::Rejected
+                    };
+                }
                 PageRoute::Window => release_slot,
             }
         } else {
@@ -74,10 +75,9 @@ impl OsrNativeHost {
         &mut self,
         frame: &OsrAccelFrame,
         image: &ImageId,
-        release_slot: Box<dyn FnOnce() + Send>,
+        release_slot: SlotRelease,
     ) -> bool {
         let Some(renderer) = self.renderer.as_mut() else {
-            release_slot();
             return false;
         };
         let slot = ExternalSlot {

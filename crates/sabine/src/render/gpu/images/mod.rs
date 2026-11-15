@@ -30,8 +30,8 @@ impl GpuRenderer {
     }
 
     pub(crate) fn clear_images(&mut self) {
-        for (_, completed) in self.external_texture_releases.drain() {
-            self.queue.on_submitted_work_done(completed);
+        for (_, release) in self.external_texture_releases.drain() {
+            self.queue.on_submitted_work_done(move || drop(release));
             self.submission_poller.notify();
         }
         self.external_imports.clear();

@@ -4,6 +4,7 @@
 // sampling finishes. Its crop UVs describe pixel edges, not pixel centers;
 // adding a half-texel inset here resamples the whole page into a blurry mess.
 
+use crate::osr::control::SlotRelease;
 use crate::render::ImageId;
 use crate::render::gpu::{CachedTexture, GpuRenderer, RendererError};
 
@@ -33,21 +34,12 @@ impl GpuRenderer {
         import: impl FnOnce(&wgpu::Device) -> Result<wgpu::Texture, String>,
         source_origin: (u32, u32),
         size: (u32, u32),
-        completed: impl FnOnce() + Send + 'static,
+        release: SlotRelease,
     ) -> Result<(), RendererError> {
-        let imported = match self
-            .check_device()
-            .and_then(|()| self.imported_texture(id, slot, import))
-        {
-            Ok(imported) => imported,
-            Err(error) => {
-                completed();
-                return Err(error);
-            }
-        };
+        self.check_device()?;
+        let imported = self.imported_texture(id, slot, import)?;
         let (width, height) = size;
         if width == 0 || height == 0 {
-            completed();
             return Err(RendererError::Texture(
                 "external image has empty size".to_string(),
             ));
@@ -57,7 +49,6 @@ impl GpuRenderer {
         if source_origin.0.saturating_add(width) > source_width
             || source_origin.1.saturating_add(height) > source_height
         {
-            completed();
             return Err(RendererError::Texture(format!(
                 "external image region {},{} {width}x{height} exceeds {source_width}x{source_height}",
                 source_origin.0, source_origin.1
@@ -83,8 +74,7 @@ impl GpuRenderer {
                 external: true,
             },
         );
-        self.external_texture_releases
-            .insert(id.clone(), Box::new(completed));
+        self.external_texture_releases.insert(id.clone(), release);
         Ok(())
     }
 
@@ -117,8 +107,8 @@ impl GpuRenderer {
     }
 
     pub(in crate::render::gpu) fn retire_external_texture(&mut self, id: &ImageId) {
-        if let Some(completed) = self.external_texture_releases.remove(id) {
-            self.queue.on_submitted_work_done(completed);
+        if let Some(release) = self.external_texture_releases.remove(id) {
+            self.queue.on_submitted_work_done(move || drop(release));
             self.submission_poller.notify();
         }
     }
