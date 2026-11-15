@@ -67,11 +67,7 @@ pub fn sabine_data_dir() -> PathBuf {
 }
 
 fn home_dir() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    let home = std::env::var_os("USERPROFILE");
-    #[cfg(not(target_os = "windows"))]
-    let home = std::env::var_os("HOME");
-    home.map(PathBuf::from).unwrap_or_else(std::env::temp_dir)
+    std::env::home_dir().expect("Sabine keeps its data in the home directory, which is unknown")
 }
 
 pub fn user_runtime_path() -> PathBuf {
