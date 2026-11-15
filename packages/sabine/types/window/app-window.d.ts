@@ -3,12 +3,47 @@ export interface SabineWindowApi {
   hide(): void;
   focus(activationToken?: string): void;
   close(): void;
+  /** Closes another of the app's windows, as its close button does. */
+  close(id: number): Promise<void>;
+  /**
+   * Opens one of the app's own pages in another window, resolved against
+   * this page's URL, and resolves with the window's id. It opens like the
+   * app's first window, with its chrome and glass, as an ordinary window of
+   * its own size. Rejects for pages of other sites.
+   */
+  open(url: string, options?: OpenWindowOptions): Promise<number>;
   minimize(): void;
   maximize(): void;
+  unmaximize(): Promise<void>;
   toggleMaximize(): void;
   setFullscreen(enabled: boolean): void;
   restore(): void;
   startDrag(): void;
+  /**
+   * Names the window. The window otherwise follows the page's
+   * `document.title`, and shows the app's title while the page has none; a
+   * title set here wins over the page's until `setTitle(null)`.
+   */
+  setTitle(title: string | null): Promise<void>;
+  /** Resizes the window, in CSS pixels. */
+  setSize(width: number, height: number): Promise<void>;
+  /** The smallest the window can get, in CSS pixels. `null` lifts the limit. */
+  setMinSize(width: number, height: number): Promise<void>;
+  setMinSize(limit: null): Promise<void>;
+  /** The largest the window can get, in CSS pixels. `null` lifts the limit. */
+  setMaxSize(width: number, height: number): Promise<void>;
+  setMaxSize(limit: null): Promise<void>;
+  /**
+   * Moves the window's outer top left corner, in the physical pixels of
+   * display bounds. Rejects on Wayland, where the desktop places windows.
+   */
+  setPosition(x: number, y: number): Promise<void>;
+  /**
+   * Keeps the window above other windows. On Wayland it rejects unless the
+   * compositor offers `kestrel_window_v1`.
+   */
+  setAlwaysOnTop(enabled: boolean): Promise<void>;
+  setResizable(enabled: boolean): Promise<void>;
   /**
    * While enabled and the window is focused, the desktop's own keyboard
    * shortcuts reach the page instead. Rejects on desktops that do not allow
@@ -94,6 +129,17 @@ export interface SabineWindowApi {
    * changes, such as when the window enters or leaves fullscreen.
    */
   onControlsOverlayChanged(callback: (overlay: ControlsOverlay) => void): () => void;
+}
+
+export interface OpenWindowOptions {
+  /** The window's title while its page has no `document.title`. */
+  title?: string;
+  width?: number;
+  height?: number;
+  minWidth?: number;
+  minHeight?: number;
+  resizable?: boolean;
+  alwaysOnTop?: boolean;
 }
 
 export interface ControlsOverlay {

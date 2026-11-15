@@ -33,7 +33,7 @@ impl OsrNativeHost {
         let activating = false;
         let defer_visibility = self.config.visible && !activating;
         let mut attributes = WindowAttributes::default()
-            .with_title(&*self.config.title)
+            .with_title(&**self.title.shown())
             .with_surface_size(LogicalSize::new(
                 f64::from(self.config.width),
                 f64::from(self.config.height),
@@ -53,6 +53,12 @@ impl OsrNativeHost {
                 WindowLevel::Normal
             })
             .with_transparent(self.config.transparent);
+        if let Some(size) = self.config.max_size {
+            attributes = attributes.with_max_surface_size(LogicalSize::new(
+                f64::from(size.width),
+                f64::from(size.height),
+            ));
+        }
         #[cfg(target_os = "linux")]
         {
             attributes = attributes.with_platform_attributes(Box::new(self.wayland_attributes()));

@@ -275,6 +275,9 @@ impl WireReader {
             KIND_TOOLTIP_CHANGED => {
                 OsrMessage::TooltipChanged(String::from_utf8(payload).unwrap_or_default())
             }
+            KIND_TITLE_CHANGED => {
+                OsrMessage::TitleChanged(String::from_utf8(payload).unwrap_or_default())
+            }
             KIND_IME_SURROUNDING_CHANGED => parse_ime_surrounding(&payload)?,
             KIND_BRIDGE_REQUEST => {
                 OsrMessage::BridgeRequest(crate::bridge::frame::Frame::decode(&payload)?)

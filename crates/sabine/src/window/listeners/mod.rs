@@ -3,7 +3,7 @@ mod visibility;
 
 use std::{fmt, sync::Arc};
 
-use sabine_platform::{Appearance, PlatformEvent};
+use sabine_platform::{Appearance, Display, PlatformEvent};
 
 use crate::desktop::open_urls::OpenUrls;
 use crate::{SabineProcessHandle, WindowId};
@@ -12,6 +12,9 @@ pub use visibility::WindowVisibility;
 pub(crate) use visibility::{VISIBILITY_LINE, VisibilityListener};
 
 pub(crate) const APPEARANCE_LINE: &str = "SABINE_SYSTEM_APPEARANCE";
+/// The displays connected to the computer, as JSON, whenever a window sees
+/// them change.
+pub(crate) const DISPLAYS_LINE: &str = "SABINE_DISPLAYS";
 /// The window's page began loading a document.
 pub(crate) const PAGE_STARTED_LINE: &str = "SABINE_PAGE_STARTED";
 /// The window's page lost its document without leaving it, as when Sabine
@@ -25,6 +28,7 @@ pub(crate) struct WindowListeners {
     pub(crate) appearance: Option<AppearanceListener>,
     pub(crate) close_request: Option<CloseRequestListener>,
     pub(crate) closed: Option<ClosedListener>,
+    pub(crate) displays: Option<DisplaysListener>,
     /// The app's queue of links and documents, which all its windows share.
     pub(crate) open_urls: OpenUrls,
 }
@@ -118,6 +122,27 @@ fn parse_hex(value: &str) -> Option<[u8; 3]> {
 impl fmt::Debug for AppearanceListener {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("AppearanceListener")
+    }
+}
+
+type DisplaysFn = dyn Fn(&[Display]) + Send + Sync;
+
+#[derive(Clone)]
+pub(crate) struct DisplaysListener(Arc<DisplaysFn>);
+
+impl DisplaysListener {
+    pub(crate) fn new(listener: impl Fn(&[Display]) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(listener))
+    }
+
+    pub(crate) fn deliver(&self, displays: &[Display]) {
+        (self.0)(displays);
+    }
+}
+
+impl fmt::Debug for DisplaysListener {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("DisplaysListener")
     }
 }
 

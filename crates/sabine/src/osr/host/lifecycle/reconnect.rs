@@ -22,6 +22,7 @@ impl OsrNativeHost {
         crate::osr::host::trace_host(&self.config, "display.regained");
         self.display_lost = false;
         self.connect_clipboard(event_loop);
+        self.watch_new_displays();
         if self.config.visible {
             self.create_window(event_loop);
             self.send_resize();

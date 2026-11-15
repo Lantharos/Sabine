@@ -112,6 +112,8 @@ pub(crate) enum OsrMessage {
         height: u32,
     },
     TooltipChanged(String),
+    /// The main page's `document.title`.
+    TitleChanged(String),
     ImeSurroundingChanged {
         text: String,
         cursor_utf16: usize,

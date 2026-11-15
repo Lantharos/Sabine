@@ -72,6 +72,15 @@ impl WindowPlacement {
             client,
         })
     }
+
+    pub fn set_keep_above(&self, keep_above: bool) {
+        if keep_above {
+            self.state.set_keep_above();
+        } else {
+            self.state.unset_keep_above();
+        }
+        self.client.flush();
+    }
 }
 
 impl Drop for WindowPlacement {

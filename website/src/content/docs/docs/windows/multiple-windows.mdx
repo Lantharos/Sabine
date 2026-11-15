@@ -145,6 +145,21 @@ on the builder you pass to `open_window`, such as `on_closed`, hear about that w
 several windows show in Rust and send changes to every window as events, so the windows never
 disagree. See [Events](/docs/bridge/events/).
 
+## Opening windows from a page
+
+A page opens one of the app's own pages in another window with `appWindow.open`, and closes any of
+the app's windows by id:
+
+```ts
+const settings = await appWindow.open("settings.html", { title: "Settings", width: 560, height: 420 });
+await appWindow.close(settings);
+```
+
+The URL resolves against the page's own and must stay on the app's origin, so pages can't open
+other sites in a window with the bridge. The window is like the app's first one, with its chrome,
+glass and bridge commands, as an ordinary window: shown, in the taskbar, not remembering its size,
+and closed when it is closed.
+
 ## Closing windows
 
 A page closes its own window with `appWindow.close()`. Rust closes one from any thread with

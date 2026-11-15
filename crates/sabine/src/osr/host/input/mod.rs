@@ -177,5 +177,6 @@ impl ApplicationHandler for OsrNativeHost {
         self.recover_gpu(event_loop);
         self.drive_deadlines(event_loop);
         self.sync_window_state();
+        self.refresh_displays(event_loop);
     }
 }

@@ -52,6 +52,7 @@ pub(super) const KIND_PRINT_DIALOG: u32 = 47;
 pub(super) const KIND_PRINT_JOB: u32 = 48;
 pub(super) const KIND_PRINT_DOCUMENT: u32 = 49;
 pub(super) const KIND_GUEST_ORDER: u32 = 50;
+pub(super) const KIND_TITLE_CHANGED: u32 = 51;
 
 pub(super) fn is_paint_kind(kind: u32) -> bool {
     matches!(

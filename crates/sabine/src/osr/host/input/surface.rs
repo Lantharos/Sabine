@@ -6,7 +6,7 @@ use crate::bridge::FOCUSED_LINE;
 use crate::osr::host::native::OsrNativeHost;
 
 impl OsrNativeHost {
-    pub(super) fn surface_resized(&mut self, size: PhysicalSize<u32>) {
+    pub(in crate::osr::host) fn surface_resized(&mut self, size: PhysicalSize<u32>) {
         self.sync_active_frame_rate();
         let minimized = size.width == 0 || size.height == 0;
         #[cfg(windows)]

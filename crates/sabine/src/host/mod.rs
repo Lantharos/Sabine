@@ -5,6 +5,7 @@ mod desktop_events;
 mod handle;
 #[cfg(target_os = "linux")]
 mod installation;
+mod page_window;
 mod process;
 mod process_tree;
 

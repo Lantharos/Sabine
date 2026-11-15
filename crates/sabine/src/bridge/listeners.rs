@@ -45,6 +45,15 @@ impl WindowReports {
         });
     }
 
+    pub(super) fn displays_changed(&self, displays: Vec<sabine_platform::Display>) {
+        let reports = self.clone();
+        run_in_order(move || {
+            if let Some(listener) = &reports.listeners.displays {
+                listener.deliver(&displays);
+            }
+        });
+    }
+
     /// Reports the window closed, and returns once every listener has heard
     /// all it reported, so the app's process outlives none of them.
     pub(super) fn closed(&self) {

@@ -15,6 +15,7 @@ export const events = {
   singleInstance: on("singleInstance.activate"),
   rendererCrashed: on("runtime.renderer-crashed"),
   appearanceChanged: on("system.appearance"),
+  displaysChanged: on("system.displays"),
   pen: on("pen.state"),
   notificationClick: on("notification.click"),
   notificationClose: on("notification.close"),

@@ -32,6 +32,7 @@ pub(crate) struct SabineWindowConfig {
     pub height: u32,
     pub min_width: u32,
     pub min_height: u32,
+    pub max_size: Option<sabine_bridge::WindowSize>,
     pub maximized: bool,
     /// The window opens at the size and maximized state it closed with.
     pub remember_size: bool,
@@ -97,6 +98,7 @@ impl Default for SabineWindowConfig {
             height: 640,
             min_width: 420,
             min_height: 280,
+            max_size: None,
             maximized: false,
             remember_size: false,
             resizable: true,
@@ -173,6 +175,13 @@ impl SabineWindowConfig {
         if self.width == 0 || self.height == 0 || self.min_width == 0 || self.min_height == 0 {
             return Err(SabineError::CreationFailed {
                 message: "window and minimum dimensions must be greater than zero".to_string(),
+            });
+        }
+        if let Some(max) = self.max_size
+            && (max.width < self.min_width || max.height < self.min_height)
+        {
+            return Err(SabineError::CreationFailed {
+                message: "the maximum window size cannot be smaller than the minimum".to_string(),
             });
         }
         match (self.entry.is_some(), self.url.is_some()) {

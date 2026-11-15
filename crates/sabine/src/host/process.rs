@@ -24,6 +24,10 @@ pub(super) const PRIMARY_READY_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(crate) enum ProcessCommand {
     OpenWindow(PendingWindow),
+    CloseWindow {
+        window: WindowId,
+        closed: crossbeam_channel::Sender<bool>,
+    },
     Present {
         activation_token: Option<String>,
     },
@@ -41,10 +45,16 @@ pub(crate) enum ProcessCommand {
     },
 }
 
+/// A window app code built, or one of the app's pages a page asked for.
+pub(crate) enum WindowRequest {
+    Built(Box<SabineWindow>),
+    Page(super::page_window::PageWindow),
+}
+
 /// A window to open once the app's first window is ready, unless whoever
 /// asked for it stopped waiting.
 pub(crate) struct PendingWindow {
-    pub(super) window: Box<SabineWindow>,
+    pub(super) request: WindowRequest,
     pub(super) response: crossbeam_channel::Sender<SabineResult<WindowId>>,
     pub(super) cancelled: Arc<AtomicBool>,
 }
@@ -162,7 +172,10 @@ impl SabineProcess {
         if pending.cancelled.load(Ordering::SeqCst) {
             return;
         }
-        let opened = self.attach_window(*pending.window);
+        let opened = match pending.request {
+            WindowRequest::Built(window) => self.attach_window(*window),
+            WindowRequest::Page(page) => self.open_page_window(page),
+        };
         if let Err(unanswered) = pending.response.send(opened)
             && let Ok(window) = unanswered.into_inner()
         {
@@ -290,6 +303,9 @@ impl SabineProcess {
             ProcessCommand::StepDown { launch, answer } => self.step_down(launch, answer),
             _ if self.quitting => {}
             ProcessCommand::OpenWindow(pending) => self.open_when_ready(pending),
+            ProcessCommand::CloseWindow { window, closed } => {
+                let _ = closed.send(self.bridge_emitter.close_window(window));
+            }
             ProcessCommand::Present { activation_token } => self.present(activation_token),
             ProcessCommand::PrimaryReady { window, ready } => self.primary_ready(window, ready),
             ProcessCommand::Quit => self.quit(),

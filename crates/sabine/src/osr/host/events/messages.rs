@@ -1,3 +1,4 @@
+use sabine_bridge::WindowControl;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::osr::protocol::{OsrMessage, POPUP_OVERLAY_ID};
@@ -95,11 +96,7 @@ impl OsrNativeHost {
                 self.update_drag_operation(event_loop, operation);
             }
             OsrMessage::MinimizeRequested => self.minimize_window(),
-            OsrMessage::MaximizeRequested => {
-                if let Some(window) = &self.window {
-                    window.set_maximized(true);
-                }
-            }
+            OsrMessage::MaximizeRequested => self.control_window(WindowControl::Maximize),
             OsrMessage::RestoreRequested => {
                 if let Some(window) = &self.window {
                     window.set_fullscreen(None);
@@ -114,11 +111,7 @@ impl OsrNativeHost {
                 }
             }
             OsrMessage::FullscreenRequested(enabled) => {
-                if let Some(window) = &self.window {
-                    window.set_fullscreen(
-                        enabled.then_some(winit::monitor::Fullscreen::Borderless(None)),
-                    );
-                }
+                self.control_window(WindowControl::SetFullscreen { enabled });
             }
             OsrMessage::ShowRequested => {
                 self.ensure_window(event_loop);
@@ -166,6 +159,7 @@ impl OsrNativeHost {
                 height,
             } => self.update_ime_cursor_area(x, y, width, height),
             OsrMessage::TooltipChanged(text) => repaint.redraw |= self.update_tooltip(text),
+            OsrMessage::TitleChanged(title) => self.follow_page_title(title),
             OsrMessage::ImeSurroundingChanged {
                 text,
                 cursor_utf16,

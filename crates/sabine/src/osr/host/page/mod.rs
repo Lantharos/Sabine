@@ -1,5 +1,6 @@
 mod activation;
 mod clipboard;
+mod displays;
 mod media;
 mod notifications;
 #[cfg(target_os = "linux")]
@@ -7,14 +8,15 @@ mod paste_gesture;
 mod restore;
 mod shell;
 
+pub(super) use displays::Displays;
 #[cfg(target_os = "linux")]
 pub(super) use restore::window_memory;
 
 use sabine_bridge::{
-    ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DRAG_FILES_COMMAND,
-    HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND, OPEN_LINK_COMMAND,
-    PAGE_ZOOM_COMMAND, PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND, REVEAL_COMMAND,
-    SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
+    ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DISPLAYS_COMMAND,
+    DRAG_FILES_COMMAND, HOLD_REVEAL_COMMAND, INHIBIT_SHORTCUTS_COMMAND, KEEP_STATE_COMMAND,
+    OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND, PRINT_FILES_COMMAND, RESTORED_STATE_COMMAND,
+    REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -61,6 +63,14 @@ impl OsrNativeHost {
         self.send_bridge_response(request.browser_id, request.request_id, result);
     }
 
+    fn answer_window_control(&mut self, request: &BridgeRequest) {
+        let result = serde_json::from_str(request.payload)
+            .map_err(|error| error.to_string())
+            .and_then(|control| self.apply_window_control(control))
+            .map(|()| serde_json::Value::Null);
+        self.send_bridge_response(request.browser_id, request.request_id, result);
+    }
+
     fn follow_page_zoom(&mut self, request: &BridgeRequest) {
         #[derive(serde::Deserialize)]
         struct PageZoom {
@@ -99,6 +109,8 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            WINDOW_CONTROL_COMMAND => self.answer_window_control(&request),
+            DISPLAYS_COMMAND => self.answer_displays(&request),
             PAGE_ZOOM_COMMAND => self.follow_page_zoom(&request),
             DRAG_FILES_COMMAND => self.answer_drag_files(&request),
             APPEARANCE_COMMAND => self.send_bridge_response(

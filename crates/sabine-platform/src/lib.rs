@@ -2,6 +2,7 @@
 compile_error!("Sabine supports Linux, macOS, and Windows desktop targets");
 
 mod desktop;
+mod display;
 #[cfg(target_os = "linux")]
 mod linux;
 mod shortcut_inhibit;
@@ -15,6 +16,7 @@ pub use desktop::{
     SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
     TrayMenuItemKind, Urgency, shell,
 };
+pub use display::{Display, DisplayRect, DisplayWatcher, displays};
 #[cfg(target_os = "linux")]
 pub use linux::portal;
 pub use shortcut_inhibit::ShortcutInhibitor;

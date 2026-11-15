@@ -4,12 +4,15 @@
 pub(crate) mod activity;
 pub mod clipboard;
 pub mod media;
+pub(crate) mod window;
 
 pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
 pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
+/// Changes the window as a [`WindowControl`](crate::WindowControl) describes.
+pub const WINDOW_CONTROL_COMMAND: &str = "sabine.window.control";
 /// The zoom factor of the window's page, sent by the native host itself
 /// whenever it changes and never by pages.
 pub const PAGE_ZOOM_COMMAND: &str = "sabine.window.pageZoom";
@@ -32,6 +35,11 @@ pub const APPEARANCE_COMMAND: &str = "sabine.system.appearance";
 /// Sent when the desktop switches between light and dark or its accent
 /// color changes.
 pub const APPEARANCE_EVENT: &str = "system.appearance";
+/// The displays connected to the computer.
+pub const DISPLAYS_COMMAND: &str = "sabine.system.displays";
+/// Sent when a display is connected or disconnected, or one changes its
+/// bounds, work area, scale or refresh rate.
+pub const DISPLAYS_EVENT: &str = "system.displays";
 pub const NOTIFICATION_COMMAND_PREFIX: &str = "sabine.notification.";
 pub const NOTIFICATION_SHOW_COMMAND: &str = "sabine.notification.show";
 pub const NOTIFICATION_CLOSE_COMMAND: &str = "sabine.notification.close";
@@ -45,18 +53,20 @@ pub const OPEN_LINK_COMMAND: &str = "sabine.shell.openLink";
 /// Opens a folder in the person's file manager.
 pub const SHOW_FOLDER_COMMAND: &str = "sabine.shell.showFolder";
 
-const WINDOW_COMMANDS: [&str; 17] = [
+const WINDOW_COMMANDS: [&str; 19] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
+    WINDOW_CONTROL_COMMAND,
     ACTIVATION_TOKEN_COMMAND,
     HOLD_REVEAL_COMMAND,
     REVEAL_COMMAND,
     RESTORED_STATE_COMMAND,
     KEEP_STATE_COMMAND,
     APPEARANCE_COMMAND,
+    DISPLAYS_COMMAND,
     NOTIFICATION_SHOW_COMMAND,
     NOTIFICATION_CLOSE_COMMAND,
     DRAG_FILES_COMMAND,

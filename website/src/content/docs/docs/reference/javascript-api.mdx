@@ -208,6 +208,7 @@ events.appearanceChanged(({ colorScheme }) => applyTheme(colorScheme));
 | Listener | Payload | Fires when |
 | --- | --- | --- |
 | `appearanceChanged` | `SystemAppearance` | The desktop switches between light and dark, changes its accent color, or the window's glass changes material. |
+| `displaysChanged` | `Display[]` | A display is connected or disconnected, or changes its bounds, work area, scale or refresh rate. |
 | `trayActivate` | `TrayActivateEvent` | The tray icon or one of its menu items is activated. |
 | `globalShortcut` | `GlobalShortcutEvent` | A registered global shortcut is pressed. |
 | `globalShortcutFailed` | `GlobalShortcutFailedEvent` | The desktop refused a global shortcut. |
@@ -329,6 +330,51 @@ These take effect without an answer.
 | `setFullscreen(enabled)` | Enters or leaves fullscreen. |
 | `restore()` | Leaves fullscreen, maximized and minimized states. |
 | `startDrag()` | Starts moving the window with the pointer, from a `pointerdown` handler. |
+
+These return a promise that rejects when the desktop can't make the change.
+
+| Method | Effect |
+| --- | --- |
+| `setTitle(title)` | Names the window, whatever the page's `document.title` says. `null` hands the title back to the page. |
+| `setSize(width, height)` | Resizes the window, in CSS pixels. |
+| `setMinSize(width, height)`, `setMaxSize(width, height)` | The smallest and largest the window can get. `null` lifts the limit. |
+| `setPosition(x, y)` | Moves the window's top left corner, in the physical pixels of [display](#system) bounds. Rejects on Wayland, where the desktop places windows. |
+| `setAlwaysOnTop(enabled)` | Keeps the window above other windows. On Wayland only with `kestrel_window_v1`. |
+| `setResizable(enabled)` | Whether people can resize the window. |
+| `unmaximize()` | Restores a maximized window. |
+
+### Title
+
+The window shows the page's `document.title`, and the app's title while the page has none. A title
+from `setTitle`, or from `control_window` in Rust, wins over the page's until it is set to `null`.
+
+### `open(url, options?)` and `close(id)`
+
+```ts
+open(url: string, options?: OpenWindowOptions): Promise<number>;
+close(id: number): Promise<void>;
+
+interface OpenWindowOptions {
+  title?: string;
+  width?: number;
+  height?: number;
+  minWidth?: number;
+  minHeight?: number;
+  resizable?: boolean;
+  alwaysOnTop?: boolean;
+}
+```
+
+`open` shows one of the app's own pages in another window and resolves with the window's id. The
+URL resolves against the page's, and must stay on the app's origin; other sites are rejected. The
+window opens like the app's first window, with its chrome, glass and commands, as an ordinary
+window: shown, in the taskbar, and closed when it is closed. Its `title` shows while the page has no
+`document.title`. `close(id)` closes one of the app's windows as its close button does.
+
+```ts
+const settings = await appWindow.open("settings.html", { title: "Settings", width: 560, height: 420 });
+await appWindow.close(settings);
+```
 
 ### State
 
@@ -888,6 +934,7 @@ await shell.openLink("https://example.com/help");
 ```ts
 const system: {
   appearance(): Promise<SystemAppearance>;
+  displays(): Promise<Display[]>;
 };
 
 interface SystemAppearance {
@@ -900,6 +947,34 @@ interface SystemAppearance {
 The desktop's light or dark preference and accent color, and the material of the window's glass,
 see [Luca and Maris on Kestrel](/docs/windows/glass-and-effects/#luca-and-maris-on-kestrel). Pages also get the accent color as the
 `--sabine-accent-color` CSS property, and hear about changes through `events.appearanceChanged`.
+
+```ts
+interface Display {
+  id: number;
+  name: string | null;
+  bounds: DisplayRect;
+  workArea: DisplayRect | null; // without the taskbar, dock or menu bar; null on Wayland
+  scaleFactor: number;
+  refreshRate: number | null; // hertz
+  primary: boolean; // never on Wayland
+}
+
+interface DisplayRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+```
+
+`displays()` lists the displays connected to the computer, in the physical pixels windows are
+positioned in. `events.displaysChanged` follows changes.
+
+```ts
+const [display] = (await system.displays()).filter((display) => display.primary);
+const width = 800 * display.scaleFactor;
+await appWindow.setPosition(display.bounds.x + (display.bounds.width - width) / 2, display.bounds.y);
+```
 
 ## `tray`
 

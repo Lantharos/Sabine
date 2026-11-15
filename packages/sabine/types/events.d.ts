@@ -1,4 +1,4 @@
-import type { SystemAppearance } from "./desktop/system.js";
+import type { Display, SystemAppearance } from "./desktop/system.js";
 import type {
   GuestDownloadEvent,
   GuestFaviconEvent,
@@ -86,6 +86,11 @@ export declare const events: {
   singleInstance: Listen<SingleInstanceEvent>;
   rendererCrashed: Listen<RendererCrashedEvent>;
   appearanceChanged: Listen<SystemAppearance>;
+  /**
+   * The displays connected to the computer, whenever one is connected or
+   * disconnected, or changes its bounds, work area, scale or refresh rate.
+   */
+  displaysChanged: Listen<Display[]>;
   pen: Listen<PenEvent>;
   notificationClick: Listen<NotificationEvent>;
   notificationClose: Listen<NotificationEvent>;

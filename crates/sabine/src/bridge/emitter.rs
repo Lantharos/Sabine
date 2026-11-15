@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use sabine_bridge::{BridgeEvent, Bytes};
-use sabine_platform::WindowRegions;
+use sabine_bridge::{BridgeEvent, Bytes, WindowControl};
+use sabine_platform::{Display, WindowRegions};
 
 use super::frame::Frame;
 use super::writer::BridgeWriter;
@@ -17,6 +17,8 @@ pub struct BridgeEventEmitter {
     /// Held while the setting is sent and while windows attach, so every
     /// window ends up with the latest value.
     square_corners: Arc<Mutex<bool>>,
+    /// The displays as the app's windows last reported them.
+    displays: Arc<Mutex<Vec<Display>>>,
 }
 
 #[derive(Default)]
@@ -184,6 +186,30 @@ impl BridgeEventEmitter {
     /// A window built with `hide_on_close` hides instead.
     pub fn close_window(&self, window: WindowId) -> bool {
         self.host_control(Some(window), "close", "1")
+    }
+
+    /// Changes one window, such as its title, size or whether it stays above
+    /// other windows. A change the desktop cannot make is reported to the
+    /// app's diagnostics.
+    pub fn control_window(&self, window: WindowId, control: &WindowControl) -> bool {
+        serde_json::to_string(control)
+            .is_ok_and(|control| self.host_control(Some(window), "window", &control))
+    }
+
+    /// The displays connected to the computer, as the app's windows last saw
+    /// them. Empty until the app's first window opens.
+    pub fn displays(&self) -> Vec<Display> {
+        lock(&self.displays).clone()
+    }
+
+    /// Keeps the displays a window reported. Returns whether they changed.
+    pub(crate) fn update_displays(&self, displays: &[Display]) -> bool {
+        let mut current = lock(&self.displays);
+        if *current == displays {
+            return false;
+        }
+        *current = displays.to_vec();
+        true
     }
 
     /// Replaces the blur, opaque and input regions of every window, for

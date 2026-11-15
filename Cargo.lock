@@ -2962,6 +2962,7 @@ dependencies = [
  "objc2-user-notifications",
  "raw-window-handle",
  "sabine-runtime",
+ "serde",
  "tokio",
  "wayland-backend",
  "wayland-client",

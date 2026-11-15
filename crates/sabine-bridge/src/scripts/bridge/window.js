@@ -6,6 +6,12 @@ const windowCommand = function (action, value) {
   postNative("window", action, value == null ? "" : String(value));
 };
 
+const controlWindow = async function (control) {
+  await window.sabine.bridge.invoke("sabine.window.control", control);
+};
+const pixels = (value) => Math.round(Number(value));
+const windowSize = (width, height) => width == null ? null : { width: pixels(width), height: pixels(height) };
+
 let windowState = { visible: true, suspended: false };
 window.__sabineWindowStateSet = function (visible, suspended) {
   if (windowState.visible === visible && windowState.suspended === suspended) return;
@@ -25,13 +31,27 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
   show() { windowCommand("show"); },
   hide() { windowCommand("hide"); },
   focus(activationToken) { windowCommand("focus", activationToken); },
-  close() { windowCommand("close"); },
+  close(id) {
+    if (id == null) return windowCommand("close");
+    return window.sabine.bridge.invoke("app.closeWindow", { id }).then(() => {});
+  },
+  open(url, options = {}) {
+    return window.sabine.bridge.invoke("app.openWindow", { ...options, url: String(url) });
+  },
   minimize() { windowCommand("minimize"); },
   maximize() { windowCommand("maximize"); },
+  unmaximize() { return controlWindow({ op: "unmaximize" }); },
   toggleMaximize() { windowCommand("toggle-maximize"); },
   setFullscreen(enabled) { windowCommand(enabled ? "fullscreen" : "exit-fullscreen"); },
   restore() { windowCommand("restore"); },
   startDrag() { windowCommand("start-drag"); },
+  setTitle(title) { return controlWindow({ op: "setTitle", title: title == null ? null : String(title) }); },
+  setSize(width, height) { return controlWindow({ op: "setSize", width: pixels(width), height: pixels(height) }); },
+  setMinSize(width, height) { return controlWindow({ op: "setMinSize", size: windowSize(width, height) }); },
+  setMaxSize(width, height) { return controlWindow({ op: "setMaxSize", size: windowSize(width, height) }); },
+  setPosition(x, y) { return controlWindow({ op: "setPosition", x: pixels(x), y: pixels(y) }); },
+  setAlwaysOnTop(enabled) { return controlWindow({ op: "setAlwaysOnTop", enabled: Boolean(enabled) }); },
+  setResizable(enabled) { return controlWindow({ op: "setResizable", enabled: Boolean(enabled) }); },
   async inhibitShortcuts(enabled) {
     await window.sabine.bridge.invoke("sabine.window.inhibitShortcuts", { enabled: Boolean(enabled) });
   },
@@ -82,6 +102,7 @@ if (commands.has("sabine.window.controlsOverlay")) {
 
 window.sabine.system = {
   appearance() { return window.sabine.bridge.invoke("sabine.system.appearance"); },
+  displays() { return window.sabine.bridge.invoke("sabine.system.displays"); },
 };
 const showAccent = (appearance) => {
   const style = document.documentElement.style;

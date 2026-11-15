@@ -174,8 +174,10 @@ pub(super) struct OsrNativeHost {
     pub(super) compositor: sabine_platform::CompositorSupport,
     #[cfg(target_os = "linux")]
     pub(super) memory: Option<crate::window::restore::WindowMemory>,
+    pub(super) title: super::lifecycle::controls::WindowTitle,
     pub(super) appearance: sabine_platform::AppearanceWatcher,
     pub(super) published_appearance: Option<(sabine_platform::Appearance, BackdropMaterial)>,
+    pub(super) displays: super::page::Displays,
     pub(super) notifier: Option<sabine_platform::Notifier>,
     pub(super) printing: super::print::Printing,
     #[cfg(target_os = "linux")]
@@ -213,6 +215,8 @@ impl OsrNativeHost {
             LifecycleState::Suspended
         };
         let appearance_proxy = proxy.clone();
+        let title = super::lifecycle::controls::WindowTitle::new(Arc::clone(&config.title));
+        let displays = super::page::Displays::watch(proxy.clone());
         Self {
             config,
             sender,
@@ -326,6 +330,8 @@ impl OsrNativeHost {
             compositor: Default::default(),
             #[cfg(target_os = "linux")]
             memory,
+            title,
+            displays,
             appearance: sabine_platform::AppearanceWatcher::start(move || {
                 appearance_proxy.wake_up()
             }),

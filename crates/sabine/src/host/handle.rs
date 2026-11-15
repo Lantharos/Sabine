@@ -5,7 +5,10 @@ use std::sync::{
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
-use super::process::{PRIMARY_READY_TIMEOUT, PendingWindow, ProcessCommand, WindowId};
+use super::page_window::PageWindow;
+use super::process::{
+    PRIMARY_READY_TIMEOUT, PendingWindow, ProcessCommand, WindowId, WindowRequest,
+};
 use crate::desktop::Autostart;
 use crate::{SabineResult, SabineWindow};
 
@@ -38,11 +41,29 @@ impl SabineProcessHandle {
     /// Opens another window, waiting up to 20 seconds for the process to
     /// open it. A window that isn't open by then never opens.
     pub fn open_window(&self, window: SabineWindow) -> SabineResult<WindowId> {
+        self.request_window(WindowRequest::Built(Box::new(window)))
+    }
+
+    pub(crate) fn open_page_window(&self, page: PageWindow) -> SabineResult<WindowId> {
+        self.request_window(WindowRequest::Page(page))
+    }
+
+    /// Closes one of the app's windows as its close button does. Returns
+    /// whether the app has a window with that id.
+    pub(crate) fn close_window(&self, window: WindowId) -> bool {
+        let (closed, answer) = crossbeam_channel::bounded(1);
+        self.command_sender
+            .send(ProcessCommand::CloseWindow { window, closed })
+            .is_ok()
+            && answer.recv().unwrap_or(false)
+    }
+
+    fn request_window(&self, request: WindowRequest) -> SabineResult<WindowId> {
         let (response, result) = crossbeam_channel::bounded(1);
         let cancelled = Arc::new(AtomicBool::new(false));
         self.command_sender
             .send(ProcessCommand::OpenWindow(PendingWindow {
-                window: Box::new(window),
+                request,
                 response,
                 cancelled: Arc::clone(&cancelled),
             }))

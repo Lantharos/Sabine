@@ -221,6 +221,7 @@ fn spawn_osr_host_child(
         "height": config.height,
         "min_width": config.min_width,
         "min_height": config.min_height,
+        "max_size": config.max_size,
         "maximized": config.maximized,
         "remember_size": config.remember_size,
         "resizable": config.resizable,

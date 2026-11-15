@@ -27,6 +27,7 @@ pub(crate) struct OsrHostConfig {
     pub height: u32,
     pub min_width: u32,
     pub min_height: u32,
+    pub max_size: Option<sabine_bridge::WindowSize>,
     pub maximized: bool,
     pub remember_size: bool,
     pub resizable: bool,
@@ -129,6 +130,9 @@ impl OsrHostConfig {
                 .get("min_height")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(280) as u32,
+            max_size: value
+                .get("max_size")
+                .and_then(|size| serde_json::from_value(size.clone()).ok()),
             maximized: value
                 .get("maximized")
                 .and_then(serde_json::Value::as_bool)

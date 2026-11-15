@@ -47,7 +47,7 @@ impl OsrNativeHost {
             color: Color::WHITE.opacity(0.10),
         });
         list.push(TextCommand {
-            text: self.config.title.clone(),
+            text: std::sync::Arc::clone(self.title.shown()),
             x: 0.0,
             y: 8.0,
             width,

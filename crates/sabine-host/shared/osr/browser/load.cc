@@ -97,6 +97,12 @@ void SabineOsrHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
 void SabineOsrHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
                                      const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
+  if (browser_ && browser_->IsSame(browser)) {
+    const std::string value = title;
+    transport_.Send(kTitleChanged, 0, 0, 0, 0, value.data(),
+                    static_cast<uint32_t>(value.size()));
+    return;
+  }
   GuestView* guest = guests_.ForBrowser(browser);
   if (!guest) {
     return;

@@ -1,4 +1,5 @@
 mod browser;
+pub(super) mod controls;
 mod deadlines;
 #[cfg(target_os = "linux")]
 mod reconnect;

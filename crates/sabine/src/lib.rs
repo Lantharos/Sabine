@@ -20,11 +20,11 @@ pub use sabine_bridge::{
     ActivityOptions, ActivityRecord, BridgeCommand, BridgeCommandDescriptor, BridgeError,
     BridgeEvent, BridgeResponse, BridgeResult, Bytes, ContentSecurity, GuestBounds,
     GuestCreateOptions, GuestDownloadAction, GuestHostControl, GuestPopupPolicy,
-    SabineActivityLease, TypedRequest, WithBody,
+    SabineActivityLease, TypedRequest, WindowControl, WindowSize, WithBody,
 };
 pub use sabine_platform::{
-    Appearance, AutostartEntry, BackdropMaterial, BackdropPreference, BackdropRole,
-    GlobalShortcutActivation, GlobalShortcutFailure, GlobalShortcutRegistration,
+    Appearance, AutostartEntry, BackdropMaterial, BackdropPreference, BackdropRole, Display,
+    DisplayRect, GlobalShortcutActivation, GlobalShortcutFailure, GlobalShortcutRegistration,
     NativeMessagingHost, Notification, PlatformEvent, Shortcut, ShortcutModifiers,
     SingleInstanceActivation, SingleInstancePolicy, TrayActivation, TrayIcon, TrayMenuItem,
     TrayMenuItemKind, Urgency, WindowBackgroundEffect, WindowRegion, WindowRegionRect,

@@ -189,6 +189,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | --- | --- |
 | `size(u32, u32)` | The initial size in logical pixels |
 | `min_size(u32, u32)` | The minimum size |
+| `max_size(u32, u32)` | The maximum size |
 | `fixed_size(u32, u32)` | Sets size and minimum size, and makes the window not resizable |
 | `maximized(bool)` | Opens maximized |
 | `remember_size()` | Opens at the size and maximized state the window closed with; `size` and `maximized` apply the first time |
@@ -274,11 +275,12 @@ pub fn on_visibility_changed(self, listener: impl Fn(WindowVisibility) + Send + 
 pub fn on_close_requested(self, listener: impl Fn(WindowId) -> bool + Send + Sync + 'static) -> Self;
 pub fn on_closed(self, listener: impl Fn(WindowId) + Send + Sync + 'static) -> Self;
 pub fn on_appearance_changed(self, listener: impl Fn(WindowId, Appearance) + Send + Sync + 'static) -> Self;
+pub fn on_displays_changed(self, listener: impl Fn(&[Display]) + Send + Sync + 'static) -> Self;
 pub fn on_desktop_event(self, listener: impl Fn(&SabineProcessHandle, &PlatformEvent) + Send + Sync + 'static) -> Self;
 pub fn on_quit(self, listener: impl Fn() + Send + Sync + 'static) -> Self;
 ```
 
-`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
+`on_launched` hands app code that only builds the window a handle to the process. `on_desktop_event` hears every tray click, global shortcut, later launch and link before the pages do, whether or not a window is open, so a background app can open its window from Rust. `on_visibility_changed` reports each change of visibility or suspension, starting with the state the window opens in and ending with a hidden report when it closes. `on_appearance_changed` reports the desktop's light or dark preference and accent color, starting with the appearance the window opens with. `on_displays_changed` hears whenever a display is connected or disconnected, or changes its bounds, work area, scale or refresh rate, starting with the displays as the first window opens. `on_close_requested` answers the person or the desktop asking the window to close: `true` closes it and `false` keeps it open, see [Asking before a window closes](/docs/windows/creating-windows/#asking-before-a-window-closes). `on_closed` hears once the window has closed. `on_quit` runs before the process ends on its own, after its last window closed, when it quits, or when a background app moves to a newly installed version; the process ends once it returns, so the app can finish what it is doing.
 
 ```rust
 pub struct WindowVisibility {
@@ -468,10 +470,51 @@ impl BridgeEventEmitter {
     pub fn hide_window(&self, window: WindowId) -> bool;
     pub fn activate_window(&self, window: WindowId, activation_token: Option<&str>) -> bool;
     pub fn close_window(&self, window: WindowId) -> bool;
+    pub fn control_window(&self, window: WindowId, control: &WindowControl) -> bool;
+
+    pub fn displays(&self) -> Vec<Display>;
 }
 ```
 
 `show`, `hide`, `set_visible` and `focus_window` act on the app's window: the one people focused last, or the first one open. `show_window`, `hide_window` and `activate_window` act on the window you name; `activate_window` shows and focuses it. `close_window` closes one window as its close button does, without asking `on_close_requested`; a window built with `hide_on_close` hides instead.
+
+`control_window` changes one open window. A change the desktop can't make, such as keeping a window above others on a Wayland compositor without `kestrel_window_v1`, goes to the app's diagnostics.
+
+```rust
+pub enum WindowControl {
+    SetTitle { title: Option<String> },
+    SetSize { width: u32, height: u32 },
+    SetMinSize { size: Option<WindowSize> },
+    SetMaxSize { size: Option<WindowSize> },
+    SetPosition { x: i32, y: i32 }, // not on Linux
+    SetAlwaysOnTop { enabled: bool },
+    SetResizable { enabled: bool },
+    Minimize,
+    Maximize,
+    Unmaximize,
+    SetFullscreen { enabled: bool },
+}
+```
+
+```rust
+emitter.control_window(window, &WindowControl::SetSize { width: 960, height: 720 });
+```
+
+Sizes are in logical pixels, like `size` on the builder. `SetPosition` takes the physical pixels display bounds are in; Wayland places windows itself, so it isn't there on Linux. The window shows its page's `document.title`, and the builder's `title` while the page has none; `SetTitle` names the window over the page's title until it is set to `None`.
+
+`displays` lists the displays the app's windows last saw, empty until the first window opens:
+
+```rust
+pub struct Display {
+    pub id: u64,
+    pub name: Option<String>,
+    pub bounds: DisplayRect,
+    pub work_area: Option<DisplayRect>, // None on Wayland
+    pub scale_factor: f64,
+    pub refresh_rate: Option<f64>,      // hertz
+    pub primary: bool,                  // never on Wayland
+}
+```
 
 The emitter is `Clone`, `Send` and `Sync`. Events go to every window unless sent with a `_to` variant. Sending waits while a window's pages haven't taken earlier events, so producers run at the pace pages keep up with. Pages receive bytes as a `Uint8Array`.
 

@@ -183,8 +183,34 @@ desktop lets apps place their windows. Wayland compositors place windows themsel
   first launch uses `.size()` and `.maximized()`, and a remembered size is never smaller than the
   minimum. Sabine keeps it in `window.json` in the app's state folder, under the app id.
 
-The window's title comes from `[app] name` in the manifest unless you set `.title()`. It names the
-window in the taskbar and window switcher, and Sabine's own titlebar shows it.
+The window shows its page's `document.title`, and the app's title while the page has none: `[app]
+name` from the manifest unless you set `.title()`. The title names the window in the taskbar and
+window switcher, and Sabine's own titlebar shows it. To name the window yourself, call
+`appWindow.setTitle(title)` from the page or send `WindowControl::SetTitle` from Rust; that title
+wins over the page's until you set it to `null` or `None`.
+
+## Changing an open window
+
+Pages change their window through `appWindow`, and Rust changes any window with
+`emitter.control_window(window, &control)`:
+
+```rust
+use sabine::{WindowControl, WindowSize};
+
+emitter.control_window(window, &WindowControl::SetSize { width: 960, height: 720 });
+emitter.control_window(window, &WindowControl::SetMinSize { size: Some(WindowSize::new(480, 320)) });
+emitter.control_window(window, &WindowControl::SetAlwaysOnTop { enabled: true });
+```
+
+```ts
+await appWindow.setSize(960, 720);
+await appWindow.setAlwaysOnTop(true);
+```
+
+Title, size, minimum and maximum size, position, always on top, resizing, minimize, maximize,
+unmaximize and fullscreen all change this way. Wayland places windows itself, so there is no
+position there. The [JavaScript API](/docs/reference/javascript-api/#window-controls) lists every
+method, and `system.displays()` lists the displays to place windows on.
 
 ## Visibility and focus
 

@@ -246,6 +246,7 @@ pub(super) enum HostControl {
     SquareCorners(bool),
     Notify(sabine_platform::Notification),
     Print(super::print::PrintFiles),
+    Window(sabine_bridge::WindowControl),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

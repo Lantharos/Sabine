@@ -14,6 +14,7 @@ authors.workspace = true
 [dependencies]
 dunce.workspace = true
 raw-window-handle.workspace = true
+serde.workspace = true
 tokio.workspace = true
 winit.workspace = true
 
@@ -28,9 +29,9 @@ zbus = { workspace = true, features = ["proxy"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["block2", "NSButton", "NSColor", "NSColorSpace", "NSControl", "NSApplication", "NSEvent", "NSImage", "NSWindow", "NSWorkspace", "objc2-core-graphics"] }
+objc2-app-kit = { workspace = true, features = ["block2", "NSButton", "NSColor", "NSColorSpace", "NSControl", "NSApplication", "NSEvent", "NSImage", "NSScreen", "NSWindow", "NSWorkspace", "objc2-core-graphics"] }
 objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop"] }
-objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes", "CGRemoteOperation"] }
+objc2-core-graphics = { workspace = true, features = ["CGDirectDisplay", "CGEvent", "CGEventTypes", "CGRemoteOperation"] }
 objc2-foundation = { workspace = true, features = ["block2", "NSBundle", "NSDictionary", "NSError", "NSNotification", "NSOperation", "NSSet", "NSString", "NSURL", "NSValue"] }
 objc2-user-notifications = { workspace = true, features = ["UNNotificationAction", "UNNotificationCategory"] }
 

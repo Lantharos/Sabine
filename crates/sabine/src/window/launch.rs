@@ -100,6 +100,8 @@ impl SabineWindow {
         let open_urls = self.config.listeners.open_urls.clone();
         let quitting = handle.clone();
         let autostart = handle.clone();
+        let opener = handle.clone();
+        let closer = handle.clone();
         self.bridge_handler_async("app.takeOpenUrls", move |command| {
             let urls = match command.window {
                 Some(window) => open_urls.take_for_page(window),
@@ -126,6 +128,27 @@ impl SabineWindow {
                 .set_autostart(enabled)
                 .map(|()| BridgeResponse::json(serde_json::Value::Null))
                 .map_err(BridgeError::new)
+        })
+        .bridge_handler("app.openWindow", move |command| {
+            let page = serde_json::from_value(command.params)
+                .map_err(|error| BridgeError::new(format!("app.openWindow: {error}")))?;
+            opener
+                .open_page_window(page)
+                .map(|window| BridgeResponse::json(serde_json::json!(window)))
+                .map_err(|error| BridgeError::new(error.to_string()))
+        })
+        .bridge_handler("app.closeWindow", move |command| {
+            let window = command
+                .params
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|id| u32::try_from(id).ok())
+                .ok_or_else(|| BridgeError::new("app.closeWindow requires a window `id`"))?;
+            if closer.close_window(window) {
+                Ok(BridgeResponse::json(serde_json::Value::Null))
+            } else {
+                Err(BridgeError::new(format!("The app has no window {window}")))
+            }
         })
     }
 

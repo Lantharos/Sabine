@@ -13,7 +13,7 @@ use super::listeners::WindowReports;
 use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher, REQUEST_PREFIX};
 use super::writer::BridgeWriter;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
-use crate::window::{PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowListeners};
+use crate::window::{DISPLAYS_LINE, PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowListeners};
 
 /// A window host writes this when people move focus to its window.
 pub(crate) const FOCUSED_LINE: &str = "SABINE_WINDOW_FOCUSED";
@@ -143,6 +143,11 @@ impl WindowHost<'_> {
                 self.emitter.focused(self.window);
             } else if line == PAGE_STARTED_LINE || line == PAGE_LOST_LINE {
                 self.listeners.deliver(self.window, line);
+            } else if let Some(displays) = line
+                .strip_prefix(DISPLAYS_LINE)
+                .and_then(|line| line.strip_prefix('\t'))
+            {
+                self.displays_reported(displays);
             } else if line.starts_with(REQUEST_PREFIX) {
                 if let Some(request) = BridgeIpcRequest::parse(frame, self.window) {
                     self.dispatcher.submit(request);
@@ -150,6 +155,15 @@ impl WindowHost<'_> {
             } else {
                 self.reports.report(frame.line);
             }
+        }
+    }
+
+    fn displays_reported(&self, json: &str) {
+        let Ok(displays) = serde_json::from_str::<Vec<sabine_platform::Display>>(json) else {
+            return;
+        };
+        if self.emitter.update_displays(&displays) {
+            self.reports.displays_changed(displays);
         }
     }
 }
