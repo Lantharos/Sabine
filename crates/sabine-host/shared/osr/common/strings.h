@@ -9,7 +9,6 @@ namespace sabine_osr {
 std::vector<std::string> Split(const std::string& value, char separator);
 std::string DecodeControlComponent(const std::string& value);
 std::string HtmlEscape(const std::string& value);
-std::u16string Utf8ToUtf16(const std::string& value);
 bool ParseBridgeResponse(const std::string& line,
                          std::string* browser_id,
                          std::string* request_id,

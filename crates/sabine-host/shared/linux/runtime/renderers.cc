@@ -3,12 +3,17 @@
 #include <unistd.h>
 
 #include <algorithm>
-
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
-#include <thread>
 #include <vector>
+
+#include "include/base/cef_callback.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
+#include "include/wrapper/cef_helpers.h"
 
 namespace sabine_runtime {
 namespace {
@@ -52,8 +57,17 @@ bool IsRenderer(pid_t pid, const std::string& client_switch) {
   return renderer && client;
 }
 
-pid_t FindRenderer(const std::string& client_id) {
-  const std::string client_switch = "--renderer-client-id=" + client_id;
+// Chromium names a frame "<renderer client id in hex>-<frame token>".
+int ClientId(CefRefPtr<CefFrame> frame) {
+  const std::string identifier = frame->GetIdentifier();
+  char* end = nullptr;
+  const long client_id = std::strtol(identifier.c_str(), &end, 16);
+  return *end == '-' ? static_cast<int>(client_id) : 0;
+}
+
+pid_t FindRenderer(int client_id) {
+  const std::string client_switch =
+      "--renderer-client-id=" + std::to_string(client_id);
   std::vector<pid_t> pending = Children(getpid());
   while (!pending.empty()) {
     const pid_t pid = pending.back();
@@ -67,17 +81,26 @@ pid_t FindRenderer(const std::string& client_id) {
   return 0;
 }
 
+void MoveRenderer(int client_id, const std::string& cgroup) {
+  const pid_t renderer = FindRenderer(client_id);
+  if (renderer <= 0) {
+    return;
+  }
+  std::ofstream procs(std::string(kCgroupRoot) + cgroup + "/cgroup.procs");
+  procs << renderer << std::flush;
+}
+
 }  // namespace
 
-void AdoptRenderer(const std::string& client_id, const std::string& cgroup) {
-  std::thread([client_id, cgroup] {
-    const pid_t renderer = FindRenderer(client_id);
-    if (renderer <= 0) {
-      return;
-    }
-    std::ofstream procs(std::string(kCgroupRoot) + cgroup + "/cgroup.procs");
-    procs << renderer << std::flush;
-  }).detach();
+void AdoptRenderer(CefRefPtr<CefFrame> frame, const std::string& cgroup) {
+  CEF_REQUIRE_UI_THREAD();
+  static std::set<int> adopted;
+  const int client_id = ClientId(frame);
+  if (client_id <= 0 || !adopted.insert(client_id).second) {
+    return;
+  }
+  CefPostTask(TID_FILE_USER_VISIBLE,
+              base::BindOnce(&MoveRenderer, client_id, cgroup));
 }
 
 }  // namespace sabine_runtime

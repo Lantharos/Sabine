@@ -15,6 +15,14 @@
 
 using namespace sabine_osr;
 
+namespace {
+
+bool FitsRequestLine(std::string_view field, const char* separators) {
+  return field.find_first_of(separators) == std::string_view::npos;
+}
+
+}  // namespace
+
 bool SabineOsrHandler::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame> frame,
@@ -32,6 +40,13 @@ bool SabineOsrHandler::OnProcessMessageReceived(
                            std::string_view(bytes.body, bytes.body_size));
     return true;
   }
+#if defined(OS_LINUX)
+  if (message->GetName() == sabine_bridge::kRendererMessage) {
+    if (frame->IsMain() && !profile_.renderer_cgroup.empty())
+      sabine_runtime::AdoptRenderer(frame, profile_.renderer_cgroup);
+    return true;
+  }
+#endif
   CefRefPtr<CefListValue> arguments = message->GetArgumentList();
   if (!arguments || arguments->GetSize() < 1) {
     return true;
@@ -41,14 +56,6 @@ bool SabineOsrHandler::OnProcessMessageReceived(
       return true;
     }
   }
-#if defined(OS_LINUX)
-  if (message->GetName() == sabine_bridge::kRendererMessage) {
-    if (!profile_.renderer_cgroup.empty())
-      sabine_runtime::AdoptRenderer(arguments->GetString(0),
-                                    profile_.renderer_cgroup);
-    return true;
-  }
-#endif
   if (message->GetName() == "sabine.clipboard") {
     if (arguments->GetSize() == 1)
       ForwardClipboardRequest(browser, frame, arguments->GetString(0));
@@ -159,7 +166,9 @@ void SabineOsrHandler::HandleBridgeCommand(
     origin = frame->GetURL();
   else if (origin.back() == '/')
     origin.pop_back();
-  if (command.empty()) {
+  if (command.empty() || !FitsRequestLine(request_id, "\t\r\n") ||
+      !FitsRequestLine(command, "\t\r\n") ||
+      !FitsRequestLine(payload, "\r\n")) {
     ResolveBridgeResponse(browser_id, request_id, false,
                           "{\"message\":\"Malformed Sabine bridge request\"}");
     return;

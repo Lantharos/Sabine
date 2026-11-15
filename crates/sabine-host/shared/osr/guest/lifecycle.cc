@@ -13,6 +13,12 @@
 
 using namespace sabine_osr;
 
+namespace {
+
+constexpr size_t kMaxPopupGuests = 16;
+
+}  // namespace
+
 class SabineGuestRequestContextHandler : public CefRequestContextHandler {
  public:
   SabineGuestRequestContextHandler(CefRefPtr<SabineOsrHandler> owner,
@@ -174,6 +180,7 @@ void SabineOsrHandler::ContinueCreateGuest(const GuestCreateRequest& request,
   guest.intercepted_shortcuts = request.intercepted_shortcuts;
   guest.intercept_horizontal_wheel = request.intercept_horizontal_wheel;
   guest.popup_policy = request.popup_policy;
+  guest.opened_by_popup = request.opened_by_popup;
   guest.pending = true;
   guests_.Insert(std::move(guest));
   guests_.Raise(request.id);
@@ -253,6 +260,19 @@ bool SabineOsrHandler::CancelPendingGuest(const std::string& id) {
     callback(false, "guest creation canceled");
   }
   return !callbacks.empty();
+}
+
+size_t SabineOsrHandler::PopupGuestCount() const {
+  size_t count = 0;
+  for (const GuestView* guest : guests_.InZOrder()) {
+    count += guest->opened_by_popup;
+  }
+  for (const auto& entry : guest_creations_.pending) {
+    for (const GuestCreations::Pending& create : entry.second) {
+      count += create.request.opened_by_popup;
+    }
+  }
+  return count;
 }
 
 bool SabineOsrHandler::HasPendingGuest(const std::string& id) const {
@@ -443,13 +463,14 @@ bool SabineOsrHandler::OnBeforePopup(
   const int disposition = static_cast<int>(target_disposition);
   switch (guest->popup_policy) {
     case GuestPopupPolicy::kNavigateSame:
-      if (!url.empty()) {
+      if (!sabine_bridge::Origin(url).empty()) {
         guest->url = url;
         browser->GetMainFrame()->LoadURL(url);
       }
       return true;
     case GuestPopupPolicy::kOpenGuest: {
-      if (url.empty()) {
+      if (!user_gesture || sabine_bridge::Origin(url).empty() ||
+          PopupGuestCount() >= kMaxPopupGuests) {
         return true;
       }
       GuestCreateRequest request;
@@ -459,6 +480,7 @@ bool SabineOsrHandler::OnBeforePopup(
       request.partition = guest->partition;
       request.allow_downloads = guest->allow_downloads;
       request.popup_policy = guest->popup_policy;
+      request.opened_by_popup = true;
       CreateGuest(
           std::move(request), [](bool success, const std::string& result) {
             if (!success) {

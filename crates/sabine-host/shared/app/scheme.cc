@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "app/file_range.h"
+#include "include/cef_origin_whitelist.h"
 #include "include/cef_parser.h"
 #include "include/cef_resource_handler.h"
 
@@ -127,8 +128,10 @@ class FileHandler : public CefResourceHandler {
     } else if (status_ == 416) {
       headers.emplace("Content-Range", "bytes */" + std::to_string(size_));
     }
-    if (!reader_.empty()) {
+    if (!root_) {
       headers.emplace("Access-Control-Allow-Origin", reader_);
+      headers.emplace("Content-Security-Policy", "sandbox");
+      headers.emplace("X-Content-Type-Options", "nosniff");
     }
     response->SetHeaderMap(headers);
     response->SetMimeType(file_.is_open() ? mime_type_ : "text/plain");
@@ -186,7 +189,7 @@ class FileSchemeHandlerFactory : public CefSchemeHandlerFactory {
   IMPLEMENT_REFCOUNTING(FileSchemeHandlerFactory);
 };
 
-std::string PageOrigin(const std::string& page_url) {
+std::string DevelopmentOrigin(const std::string& page_url) {
   CefURLParts parts;
   if (!CefParseURL(page_url, parts)) {
     return kAppOrigin;
@@ -204,15 +207,12 @@ std::string PageOrigin(const std::string& page_url) {
 
 }  // namespace
 
-void RegisterAppScheme(CefRawPtr<CefSchemeRegistrar> registrar,
-                       bool development) {
-  int options = CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE |
-                CEF_SCHEME_OPTION_CORS_ENABLED |
-                CEF_SCHEME_OPTION_FETCH_ENABLED;
-  if (!development) {
-    options |= CEF_SCHEME_OPTION_DISPLAY_ISOLATED;
-  }
-  registrar->AddCustomScheme(kScheme, options);
+void RegisterAppScheme(CefRawPtr<CefSchemeRegistrar> registrar) {
+  registrar->AddCustomScheme(kScheme, CEF_SCHEME_OPTION_STANDARD |
+                                          CEF_SCHEME_OPTION_SECURE |
+                                          CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
+                                          CEF_SCHEME_OPTION_CORS_ENABLED |
+                                          CEF_SCHEME_OPTION_FETCH_ENABLED);
 }
 
 namespace {
@@ -244,9 +244,15 @@ void ServeAppFiles(const std::string& root,
 }
 
 void ServeLocalFiles(const std::string& page_url,
+                     bool development,
                      CefRefPtr<CefRequestContext> context) {
+  const std::string reader =
+      development ? DevelopmentOrigin(page_url) : std::string(kAppOrigin);
+  if (reader != kAppOrigin) {
+    CefAddCrossOriginWhitelistEntry(reader, kScheme, kFileHost, false);
+  }
   Register(context, kFileHost,
-           new FileSchemeHandlerFactory(std::nullopt, PageOrigin(page_url)));
+           new FileSchemeHandlerFactory(std::nullopt, reader));
 }
 
 }  // namespace sabine_app

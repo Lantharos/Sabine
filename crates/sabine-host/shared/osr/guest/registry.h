@@ -45,6 +45,7 @@ struct GuestView {
   bool painted = false;
   bool loading = false;
   GuestPopupPolicy popup_policy = GuestPopupPolicy::kDeny;
+  bool opened_by_popup = false;
   double zoom = 1.0;
 
   bool ShownToPage() const { return !IsInternalGuestId(id); }

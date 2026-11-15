@@ -18,6 +18,7 @@
 #include "include/cef_client.h"
 #include "include/cef_command_line.h"
 #include "include/cef_display_handler.h"
+#include "include/cef_frame_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_permission_handler.h"
 #include "include/cef_render_handler.h"
@@ -65,6 +66,7 @@ struct BrowserViewport {
 class SabineOsrHandler : public CefClient,
                          public CefDisplayHandler,
                          public CefDragHandler,
+                         public CefFrameHandler,
                          public CefKeyboardHandler,
                          public CefLifeSpanHandler,
                          public CefLoadHandler,
@@ -90,6 +92,7 @@ class SabineOsrHandler : public CefClient,
     return downloads_;
   }
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
+  CefRefPtr<CefFrameHandler> GetFrameHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
                   const CefKeyEvent& event,
@@ -116,6 +119,8 @@ class SabineOsrHandler : public CefClient,
                                  TerminationStatus status,
                                  int error_code,
                                  const CefString& error_string) override;
+  void OnFrameDetached(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefFrame> frame) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
@@ -359,6 +364,7 @@ class SabineOsrHandler : public CefClient,
   // End of accelerated paint.
 
   void StartCommandReader();
+  void CommandReaderStopped();
   void ReadControls();
   bool DispatchControl(std::string line,
                        std::optional<std::string> body,
@@ -474,6 +480,7 @@ class SabineOsrHandler : public CefClient,
                                       CefRefPtr<CefRequestContext> context);
   bool CancelPendingGuest(const std::string& id);
   bool HasPendingGuest(const std::string& id) const;
+  size_t PopupGuestCount() const;
   void DestroyGuest(const std::string& id);
   void FocusGuest(const std::string& id);
   void DismissPopupGuest();
@@ -501,6 +508,9 @@ class SabineOsrHandler : public CefClient,
   const std::string endpoint_;
   const std::string authentication_token_;
   sabine_osr::Socket socket_;
+  // Keeps the handler while its command reader runs, so the reader thread
+  // never lets go of the last reference.
+  CefRefPtr<SabineOsrHandler> command_reader_;
   sabine_osr::ControlQueue controls_;
   sabine_osr::PendingResize resize_;
 

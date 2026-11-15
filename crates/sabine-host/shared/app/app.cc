@@ -35,9 +35,7 @@ SabineApp::SabineApp(bool runtime_smoke_test)
 
 void SabineApp::OnRegisterCustomSchemes(
     CefRawPtr<CefSchemeRegistrar> registrar) {
-  sabine_app::RegisterAppScheme(
-      registrar,
-      CefCommandLine::GetGlobalCommandLine()->HasSwitch(kDevelopmentSwitch));
+  sabine_app::RegisterAppScheme(registrar);
 }
 
 void SabineApp::OnContextInitialized() {
@@ -59,24 +57,22 @@ void SabineApp::OnContextInitialized() {
     sabine_app::ServeAppFiles(app_root);
   }
   if (command_line->HasSwitch("sabine-local-files")) {
-    sabine_app::ServeLocalFiles(command_line->GetSwitchValue("url"));
+    sabine_app::ServeLocalFiles(command_line->GetSwitchValue("url"),
+                                command_line->HasSwitch(kDevelopmentSwitch));
   }
   CreateBrowser(command_line);
 }
 
+#if defined(OS_WIN)
 void SabineApp::OnBeforeChildProcessLaunch(
     CefRefPtr<CefCommandLine> command_line) {
-  CefRefPtr<CefCommandLine> browser = CefCommandLine::GetGlobalCommandLine();
-  if (browser->HasSwitch(kDevelopmentSwitch)) {
-    command_line->AppendSwitch(kDevelopmentSwitch);
-  }
-#if defined(OS_WIN)
-  const CefString cef_dir = browser->GetSwitchValue("sabine-cef-dir");
+  const CefString cef_dir =
+      CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("sabine-cef-dir");
   if (!cef_dir.empty()) {
     command_line->AppendSwitchWithValue("sabine-cef-dir", cef_dir);
   }
-#endif
 }
+#endif
 
 bool SabineApp::OnAlreadyRunningAppRelaunch(
     CefRefPtr<CefCommandLine> command_line,

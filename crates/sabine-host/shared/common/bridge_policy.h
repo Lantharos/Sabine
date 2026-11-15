@@ -12,7 +12,7 @@
 #include "include/cef_values.h"
 
 namespace sabine_bridge {
-// Asks a renderer to name itself to the browser, which moves renderers of a
+// Asks a renderer to announce itself to the browser, which moves renderers of a
 // shared runtime into the cgroup of the app they draw for.
 constexpr char kReportRendererKey[] = "reportRenderer";
 constexpr char kRendererMessage[] = "sabine.renderer";
