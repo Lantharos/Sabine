@@ -7,13 +7,12 @@ use std::{
 
 use sabine_platform::{PlatformEvent, PowerEvent, PowerSource, SingleInstancePolicy};
 
-use super::dialogs::DIALOG_ANSWER_LINE;
 use super::emitter::BridgeEventEmitter;
 use super::frame::Frame;
 use super::listeners::WindowReports;
-use super::menus::APP_MENU_LINE;
 use super::request_dispatch::{BridgeIpcRequest, BridgeRequestDispatcher, REQUEST_PREFIX};
 use super::writer::BridgeWriter;
+use super::{APP_MENU_LINE, DIALOG_ANSWER_LINE};
 use crate::desktop::IdleWatches;
 use crate::host::SabineProcessHandle;
 use crate::launch::browser::HOST_CONTROL_PREFIX;

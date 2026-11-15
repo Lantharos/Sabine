@@ -1,5 +1,5 @@
 use super::BridgeEventEmitter;
-use super::emitter::lock;
+use super::lock;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
 use crate::{MenuItem, WindowId};
 

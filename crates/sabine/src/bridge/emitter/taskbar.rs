@@ -5,9 +5,9 @@ use std::sync::MutexGuard;
 
 use sabine_platform::{AppBadge, AppProgress};
 
-use super::emitter::{BridgeEventEmitter, lock};
-use super::frame::Frame;
-use super::writer::BridgeWriter;
+use super::{BridgeEventEmitter, lock};
+use crate::bridge::frame::Frame;
+use crate::bridge::writer::BridgeWriter;
 use crate::launch::browser::HOST_CONTROL_PREFIX;
 
 #[derive(Default)]

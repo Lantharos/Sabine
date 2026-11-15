@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use super::BridgeEventEmitter;
-use super::emitter::lock;
+use super::lock;
 use crate::WindowId;
 
 /// What the window host writes when someone answers a dialog the app showed.
