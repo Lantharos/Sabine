@@ -22,8 +22,9 @@ pub struct AppCleanup {
 impl SabineService {
     /// Removes apps that are gone for good: those whose program has been
     /// missing for a week, and development builds not launched for a month.
-    /// Each loses its registration and everything Sabine keeps for it,
-    /// including its browser profile.
+    /// Each loses its registration and everything Sabine keeps for it. An app
+    /// Sabine installed itself also loses its browser profile; any other
+    /// keeps it, since its program may only be out of reach for now.
     pub fn clean_up_apps(&self) -> ServiceResult<AppCleanup> {
         let mut cleanup = AppCleanup::default();
         for app in self.stale_apps()? {
@@ -43,8 +44,12 @@ impl SabineService {
         let mut changed = false;
         let mut stale = Vec::new();
         for app in registry.apps.values_mut() {
-            let missing_since =
-                (!app.manifest.executable.exists()).then(|| app.missing_since.unwrap_or(now));
+            let missing = app
+                .manifest
+                .executable
+                .try_exists()
+                .is_ok_and(|exists| !exists);
+            let missing_since = missing.then(|| app.missing_since.unwrap_or(now));
             changed |= missing_since != app.missing_since;
             app.missing_since = missing_since;
             if is_stale(app, now) {
@@ -60,11 +65,19 @@ impl SabineService {
     fn remove_stale_app(&self, app: &RegisteredApp) -> ServiceResult<()> {
         let id = &app.manifest.id;
         let directory = self.root.join("apps").join(id);
-        let program_root = program_root(&app.manifest.executable, &directory);
+        let managed = app.manifest.executable.starts_with(&directory);
+        let program_root = if managed {
+            directory.join("install")
+        } else {
+            program_folder(&app.manifest.executable)
+        };
         #[cfg(target_os = "linux")]
         super::desktop::entries::forget_desktop_entries(id, &program_root)?;
         self.forget_app(id, &program_root)?;
         remove_path(&directory)?;
+        if !managed {
+            return Ok(());
+        }
         if let Some(profile) = browser_profile_path(id).parent() {
             remove_path(profile)?;
         }
@@ -84,12 +97,7 @@ fn is_stale(app: &RegisteredApp, now: u64) -> bool {
     missing || idle_development
 }
 
-/// Where the app's own programs live: its managed installation, or the folder
-/// its executable sits in.
-fn program_root(executable: &Path, directory: &Path) -> PathBuf {
-    if executable.starts_with(directory) {
-        return directory.join("install");
-    }
+fn program_folder(executable: &Path) -> PathBuf {
     executable
         .parent()
         .map_or_else(|| executable.to_path_buf(), Path::to_path_buf)
