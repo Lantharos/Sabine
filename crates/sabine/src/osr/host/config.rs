@@ -62,6 +62,8 @@ pub(crate) struct OsrHostConfig {
     #[cfg(target_os = "linux")]
     pub shared_runtime: bool,
     #[cfg(target_os = "linux")]
+    pub password_store: crate::launch::browser::PasswordStore,
+    #[cfg(target_os = "linux")]
     pub parent_window: Option<String>,
     #[cfg(target_os = "linux")]
     pub modal: bool,
@@ -79,6 +81,8 @@ impl OsrHostConfig {
             vaapi_hardware_decode: self.vaapi_hardware_decode,
             #[cfg(target_os = "linux")]
             separate_runtime: !self.shared_runtime,
+            #[cfg(target_os = "linux")]
+            password_store: self.password_store,
         }
     }
 
@@ -241,6 +245,12 @@ impl OsrHostConfig {
                 .get("shared_runtime")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            #[cfg(target_os = "linux")]
+            password_store: value
+                .get("password_store")
+                .and_then(serde_json::Value::as_str)
+                .and_then(crate::launch::browser::PasswordStore::parse)
+                .unwrap_or_default(),
             #[cfg(target_os = "linux")]
             parent_window: value
                 .get("parent_window")

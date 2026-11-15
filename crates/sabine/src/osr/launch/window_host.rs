@@ -264,6 +264,7 @@ fn spawn_osr_host_child(
         body["vaapi_hardware_decode"] = config.browser.vaapi_hardware_decode.into();
         body["activation_token"] = activation_token.into();
         body["shared_runtime"] = config.shares_runtime().into();
+        body["password_store"] = config.password_store().as_str().into();
         body["parent_window"] = config.parent_window.clone().into();
         body["modal"] = config.modal.into();
         body["restoring"] = restoring.into();

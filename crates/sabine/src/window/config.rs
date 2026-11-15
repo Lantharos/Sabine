@@ -234,6 +234,24 @@ impl SabineWindowConfig {
             && self.effective_remote_devtools_port().is_none()
     }
 
+    /// The keyring when the app reaches it, which an app Sabine confines does
+    /// only when its `[sandbox]` talks to the Secret Service.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn password_store(&self) -> crate::launch::browser::PasswordStore {
+        use crate::launch::browser::PasswordStore;
+        match &self.sandbox {
+            Some(sabine_service::Sandbox::Confined { talk, .. })
+                if crate::launch::confine::applies(self)
+                    && !talk
+                        .iter()
+                        .any(|name| name == sabine_platform::secrets::SECRET_SERVICE) =>
+            {
+                PasswordStore::Basic
+            }
+            _ => PasswordStore::Keyring,
+        }
+    }
+
     /// Whether pages in this window can play video on native surfaces.
     pub(crate) fn native_media(&self) -> bool {
         crate::media::supported(self)

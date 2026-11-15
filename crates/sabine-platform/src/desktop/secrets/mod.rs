@@ -14,6 +14,11 @@ mod platform;
 
 const MAX_KEY_LENGTH: usize = 256;
 
+/// The bus name of the Secret Service, which a confined app's `[sandbox]`
+/// talks to for its secrets.
+#[cfg(target_os = "linux")]
+pub const SECRET_SERVICE: &str = "org.freedesktop.secrets";
+
 /// Keeps `value` under `key` for the app, replacing what the key held.
 pub async fn set(app_id: &str, key: &str, value: &str) -> Result<(), String> {
     check_key(key)?;

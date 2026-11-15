@@ -54,6 +54,57 @@ pub(crate) struct BrowserOptions {
     /// Sabine apps share.
     #[cfg(target_os = "linux")]
     pub separate_runtime: bool,
+    #[cfg(target_os = "linux")]
+    pub password_store: PasswordStore,
+}
+
+/// Where Chromium keeps the key it encrypts cookies and saved passwords with
+/// on Linux.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum PasswordStore {
+    /// The person's keyring: KWallet on KDE, which Chromium picks there
+    /// itself, and the Secret Service everywhere else, where Chromium would
+    /// otherwise fall back to a fixed key.
+    #[default]
+    Keyring,
+    /// Chromium's fixed key, for an app confined without the Secret Service.
+    Basic,
+}
+
+#[cfg(target_os = "linux")]
+impl PasswordStore {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "keyring" => Some(Self::Keyring),
+            "basic" => Some(Self::Basic),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Keyring => "keyring",
+            Self::Basic => "basic",
+        }
+    }
+
+    fn switch(self) -> Option<&'static str> {
+        match self {
+            Self::Basic => Some("--password-store=basic"),
+            Self::Keyring if desktop_is_kde() => None,
+            Self::Keyring => Some("--password-store=gnome-libsecret"),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_is_kde() -> bool {
+    std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktops| {
+        desktops
+            .split(':')
+            .any(|desktop| desktop.eq_ignore_ascii_case("KDE"))
+    })
 }
 
 impl BrowserOptions {
@@ -115,8 +166,14 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--metrics-recording-only")
         .arg("--no-default-browser-check")
         .arg("--no-first-run");
+    #[cfg(target_os = "linux")]
+    command.args(options.password_store.switch());
+    // Builds other than `sabine bundle`'s are signed anew whenever they change, and the login
+    // keychain would ask for the person's password each time.
     #[cfg(target_os = "macos")]
-    command.arg("--use-mock-keychain");
+    if !crate::AppEnvironment::production_build() {
+        command.arg("--use-mock-keychain");
+    }
     if let Some(port) = options.effective_remote_devtools_port(dev_mode) {
         command
             .arg(format!("--remote-debugging-port={port}"))
@@ -186,6 +243,8 @@ mod tests {
             vaapi_hardware_decode: false,
             #[cfg(target_os = "linux")]
             separate_runtime: false,
+            #[cfg(target_os = "linux")]
+            password_store: super::PasswordStore::Keyring,
         });
         assert!(debugged.contains(&"--remote-debugging-port=9333".to_string()));
     }

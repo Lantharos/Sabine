@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use futures_util::StreamExt;
 use zbus::{Connection, OwnedObjectPath, OwnedVariant, Proxy, Variant};
 
-const SERVICE: &str = "org.freedesktop.secrets";
+use super::SECRET_SERVICE as SERVICE;
 const PATH: &str = "/org/freedesktop/secrets";
 const SERVICE_INTERFACE: &str = "org.freedesktop.Secret.Service";
 const COLLECTION_INTERFACE: &str = "org.freedesktop.Secret.Collection";
