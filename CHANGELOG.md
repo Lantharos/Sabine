@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.92
 
 - On Linux, an app's sound reaches the sound server under the app's name and id instead of
   Chromium's, so mixers list each app on its own and remember its volume and mute apart from other
