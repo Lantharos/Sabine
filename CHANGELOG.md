@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.96
 
 - A computer whose Sabine is newer than the latest published release no longer reports that
   release as an update its newer apps are holding back.
