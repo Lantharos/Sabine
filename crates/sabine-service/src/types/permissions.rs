@@ -189,6 +189,8 @@ mod tests {
             filesystems: Vec::new(),
             devices: Vec::new(),
             talk: Vec::new(),
+            own: Vec::new(),
+            pipewire: false,
             x11: false,
             microphone: true,
             camera: false,

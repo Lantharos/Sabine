@@ -7,6 +7,7 @@ mod bus;
 pub mod documents;
 mod paths;
 mod seccomp;
+mod sound;
 
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
@@ -20,8 +21,9 @@ use sabine_service::Sandbox;
 
 use crate::error::{SabineError, SabineResult};
 use crate::window::config::SabineWindowConfig;
-pub(crate) use bus::SessionBus;
+use bus::SessionBus;
 use paths::{LANDLOCK, Own, Paths, Runtime};
+use sound::PlaybackServer;
 
 const FULL_ACCESS: &str = "SABINE_FULL_ACCESS";
 
@@ -96,19 +98,28 @@ fn own_runtime_folder(app_id: &str) -> SabineResult<PathBuf> {
         })
 }
 
+/// What a confined app runs on while it lives: its filtered session bus and
+/// the sound server it plays through, which both end with the app.
+pub(crate) struct Confinement {
+    _bus: Option<SessionBus>,
+    _sound: Option<PlaybackServer>,
+}
+
 /// Confines the app to what its `[sandbox]` declares, when [`applies`] says
-/// Sabine does, and hands back its filtered session bus, which runs while
-/// the app holds it.
+/// Sabine does, and hands back what it runs on, which runs while the app
+/// holds it.
 pub(crate) fn apply(
     config: &SabineWindowConfig,
     runtime: &Path,
     host: &Path,
-) -> SabineResult<Option<SessionBus>> {
+) -> SabineResult<Option<Confinement>> {
     let Some(Sandbox::Confined {
         network,
         filesystems,
         devices,
         talk,
+        own,
+        pipewire,
         microphone,
         camera,
         ..
@@ -121,7 +132,10 @@ pub(crate) fn apply(
     }
     let app_id = crate::osr::launch::require_app_id(config)?;
     let own_folder = own_runtime_folder(app_id)?;
-    let bus = bus::filter(talk, &own_folder);
+    let bus = bus::filter(talk, own, &own_folder);
+    let sound = (!*microphone)
+        .then(|| sound::playback(&own_folder))
+        .flatten();
     let program = std::env::current_exe()
         .ok()
         .and_then(|program| program.parent().map(Path::to_path_buf));
@@ -142,7 +156,9 @@ pub(crate) fn apply(
         .runtime(&Runtime {
             own: own_folder,
             instance: instance_socket(config, app_id),
-            media: *microphone
+            records: *microphone,
+            media: *pipewire
+                || *microphone
                 || *camera
                 || config
                     .permissions
@@ -168,5 +184,8 @@ pub(crate) fn apply(
         );
     }
     seccomp::apply().map_err(|error| failed(&error))?;
-    Ok(bus)
+    Ok(Some(Confinement {
+        _bus: bus,
+        _sound: sound,
+    }))
 }

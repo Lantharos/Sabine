@@ -15,7 +15,7 @@ enforce it when the app starts. On Linux, Sabine enforces it itself when nothing
 network = true
 filesystems = ["xdg-documents", "xdg-download:ro"]
 devices = ["usb"]
-talk = ["org.mpris.MediaPlayer2.notes"]
+own = ["org.mpris.MediaPlayer2.notes"]
 ```
 
 ## Declaring what the app needs
@@ -25,7 +25,9 @@ talk = ["org.mpris.MediaPlayer2.notes"]
 | `network` | boolean | `true` | Whether the app goes online |
 | `filesystems` | array of strings | none | Folders the app reaches: `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`. Add `:ro` for read-only access, such as `xdg-download:ro` |
 | `devices` | array of strings | none | `usb`, `serial` or `all` |
-| `talk` | array of strings | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it, and `name@/object/path` reaches only that object of the name |
+| `talk` | array of strings | none | Session bus names the app calls, such as `org.freedesktop.FileManager1`. A trailing `.*` covers every name below it, and `name@/object/path` reaches only that object of the name |
+| `own` | array of strings | none | Session bus names the app owns, such as its media player `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it |
+| `pipewire` | boolean | `false` | Whether the app speaks to PipeWire itself instead of through PulseAudio. PipeWire doesn't tell playing from recording, so this lets the app record sound and see every audio device and stream too |
 | `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
 | `microphone` | boolean | `false` | Whether the app records sound. Its pages also need `microphone` in [`[permissions]`](/docs/web/permissions/) |
 | `camera` | boolean | `false` | Whether the app uses cameras. Its pages also need `camera` in `[permissions]` |
@@ -51,6 +53,14 @@ talk = ["com.example.Shell@/com/example/Shell/Appearance"]
 ```
 
 The path must be a valid D-Bus object path, and the name before it can't end in `.*`.
+
+`own` takes the names the app answers to, such as the media player it shows in the desktop's
+media controls. It refuses everything `talk` refuses, every name of the desktop's own services,
+where an app could stand in for them (`org.freedesktop.*`, `org.gnome.*`, `org.kde.*`,
+`com.canonical.*`, `org.ayatana.*` and `org.a11y.*`, among them the portals, notifications, the
+Secret Service and the tray's watcher), and a wildcard over every media player, such as
+`org.mpris.MediaPlayer2.*`. Name the app's own player instead, with `.*` after it for players of
+its own windows.
 
 ### Apps that can't be sandboxed
 
@@ -93,14 +103,17 @@ A confined app:
   desktop settings
 - writes the folders named after its app id in the XDG data, config, cache and state folders, its
   Chromium profile, the temporary folders and a runtime folder of its own
-- reaches the desktop's display and sound server, PipeWire when it declares `microphone` or
-  `camera` or its pages may record the screen, and the cameras with `camera`, but no other socket in your runtime folder, such as the
-  session bus, the service manager or other apps'
+- reaches the desktop's display; plays sound through a PulseAudio server of its own that refuses
+  to record, or reaches the desktop's PulseAudio with `microphone`; reaches PipeWire with
+  `pipewire` or `microphone` or `camera` or when its pages may record the screen, and the cameras
+  with `camera`; but no other socket in your runtime folder, such as the session bus, the service
+  manager or other apps'
 - talks over the session bus only to the names in `talk` and to what Sabine itself uses: the
   desktop and document portals, notifications, the tray, GNOME's idle monitor and whether a screen
   reader runs. An app that keeps [secrets](/docs/web/store-and-secrets/#secrets) adds
   `org.freedesktop.secrets`, which also lets Chromium keep its cookie key in the keyring instead of
   using a fixed one
+- owns only the names in `own`, and the media player Chromium shows for what its pages play
 - offers its own accessibility to screen readers, but can't read or drive other apps through the
   accessibility bus
 - reads its own program, web assets, Sabine's host and the CEF runtime, and writes Sabine's logs
@@ -145,8 +158,12 @@ diagnostics.
 A confined app never joins the [shared runtime](/docs/concepts/shared-runtime/), which runs outside
 its confinement.
 
-The sound server records as well as plays, so `microphone` decides only whether the app reaches
-PipeWire itself. `x11` is a declaration for a system that sandboxes the app, such as Luft; Sabine
+An app without `microphone` plays through its own `pipewire-pulse`, which Sabine starts in the
+app's runtime folder in front of the desktop's PipeWire and which refuses every record stream,
+monitors of what other apps play included, whatever the app says about itself. Without
+`pipewire-pulse`, such an app plays no sound and records that in its diagnostics. PipeWire itself
+can't keep a client from recording, so `pipewire = true` opens recording as `microphone` does, and
+a store shows it that way. `x11` is a declaration for a system that sandboxes the app, such as Luft; Sabine
 carries it into the bundle's manifest and doesn't enforce it itself. Apps with
 `unsandboxed = true`, apps without a `[sandbox]` table, and apps started with
 `SABINE_FULL_ACCESS` set run unconfined. A system sets `SABINE_FULL_ACCESS` for an app the person

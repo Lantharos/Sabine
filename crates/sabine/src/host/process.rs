@@ -91,10 +91,10 @@ pub struct SabineProcess {
     pub(crate) windows: WindowContext,
     #[cfg(target_os = "linux")]
     pub(crate) installation: Option<crate::host::Installation>,
-    /// The filtered session bus of an app Sabine confines, which ends with
-    /// the app.
+    /// The filtered session bus and sound server of an app Sabine confines,
+    /// which end with the app.
     #[cfg(target_os = "linux")]
-    pub(crate) _session_bus: Option<crate::launch::confine::SessionBus>,
+    pub(crate) _confinement: Option<crate::launch::confine::Confinement>,
 }
 
 /// Identifier for a window opened via [`SabineProcess::open_window`].

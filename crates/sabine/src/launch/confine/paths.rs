@@ -89,8 +89,11 @@ pub(super) struct Runtime {
     pub(super) own: PathBuf,
     /// The socket later launches of a single-instance app reach it through.
     pub(super) instance: Option<PathBuf>,
-    /// Whether the app records sound or screens, or uses cameras, through
-    /// PipeWire.
+    /// Whether the app records sound, so it reaches the person's PulseAudio
+    /// socket instead of its own server that only plays.
+    pub(super) records: bool,
+    /// Whether the app reaches PipeWire: it speaks to it itself, records
+    /// sound or screens, or uses cameras.
     pub(super) media: bool,
 }
 
@@ -221,18 +224,21 @@ impl Paths {
         self
     }
 
-    /// The desktop's display, sound, and PipeWire when the app records sound
-    /// or screens or uses cameras, the documents the portal hands the app and its own
-    /// folder: none of the other sockets in the person's runtime folder, such
-    /// as the session bus, the service manager's or other apps'.
+    /// The desktop's display, PulseAudio when the app records sound, PipeWire
+    /// when it speaks to it, records sound or screens or uses cameras, the
+    /// documents the portal hands the app and its own folder: none of the
+    /// other sockets in the person's runtime folder, such as the session bus,
+    /// the service manager's or other apps'.
     pub(super) fn runtime(&mut self, runtime: &Runtime) -> &mut Self {
         if let Some(folder) = dirs::runtime_dir() {
             let display = std::env::var_os(WAYLAND_DISPLAY)
                 .filter(|display| !display.is_empty())
                 .unwrap_or_else(|| DEFAULT_WAYLAND_DISPLAY.into());
             self.allow(folder.join(display), AccessFs::ResolveUnix.into())
-                .allow(folder.join(SOUND_SOCKET), AccessFs::ResolveUnix.into())
                 .allow(folder.join(DOCUMENTS), write());
+            if runtime.records {
+                self.allow(folder.join(SOUND_SOCKET), AccessFs::ResolveUnix.into());
+            }
             if runtime.media {
                 self.allow(folder.join(MEDIA_SOCKET), AccessFs::ResolveUnix.into());
             }

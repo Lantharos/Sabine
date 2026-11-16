@@ -1,8 +1,9 @@
 //! The session bus a confined app reaches: `xdg-dbus-proxy` in front of the
 //! person's bus, passing on only the names and objects the app declares in
-//! `talk` and the names Sabine itself talks to, so the app can't ask the
-//! service manager or anything else on the bus to run a program outside its
-//! confinement.
+//! `talk` and the names Sabine itself talks to, and letting it own only the
+//! names in `own`, so the app can't ask the service manager or anything else
+//! on the bus to run a program outside its confinement, or stand in for
+//! another service.
 
 use super::accessibility;
 use std::{
@@ -43,6 +44,10 @@ fn rules(entry: &str) -> Vec<String> {
     }
 }
 
+/// The media player Chromium shows for what the app's pages play, named
+/// after its browser process, which starts after the bus.
+const SABINE_OWNED: [&str; 1] = ["org.mpris.MediaPlayer2.chromium.*"];
+
 /// Keeps the app's filtered bus running: the proxy ends, and removes its
 /// socket, once the app closes its end of the pipe they share.
 pub(crate) struct SessionBus {
@@ -52,8 +57,8 @@ pub(crate) struct SessionBus {
 /// Starts the app's filtered session and accessibility buses in its own
 /// runtime folder and points the app and everything it starts at them.
 /// Without `xdg-dbus-proxy`, the app and its children reach neither.
-pub(super) fn filter(talk: &[String], folder: &Path) -> Option<SessionBus> {
-    let (bus, address) = match start(talk, folder) {
+pub(super) fn filter(talk: &[String], own: &[String], folder: &Path) -> Option<SessionBus> {
+    let (bus, address) = match start(talk, own, folder) {
         Ok((bus, socket, accessibility)) => {
             if let Some(accessibility) = accessibility {
                 accessibility::point_at(&accessibility);
@@ -74,7 +79,11 @@ pub(super) fn filter(talk: &[String], folder: &Path) -> Option<SessionBus> {
     bus
 }
 
-fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf, Option<PathBuf>)> {
+fn start(
+    talk: &[String],
+    own: &[String],
+    folder: &Path,
+) -> io::Result<(SessionBus, PathBuf, Option<PathBuf>)> {
     let upstream = std::env::var_os(ADDRESS)
         .filter(|address| !address.is_empty())
         .or_else(|| {
@@ -98,6 +107,13 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf, Opt
         .arg("--filter")
         .args(SABINE_NAMES.iter().map(|name| format!("--talk={name}")))
         .args(talk.iter().flat_map(|entry| rules(entry)))
+        .args(
+            SABINE_OWNED
+                .iter()
+                .copied()
+                .chain(own.iter().map(String::as_str))
+                .map(|name| format!("--own={name}")),
+        )
         .args(accessibility::STATUS_RULES)
         .args(accessibility.iter().flatten())
         .stdin(Stdio::null())
@@ -124,7 +140,7 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf, Opt
 
 /// A pipe whose read end the app keeps and whose write end the proxy gets,
 /// to say it's ready and to notice when the app ends.
-fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
+pub(super) fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut ends = [0 as RawFd; 2];
     if unsafe { libc::pipe2(ends.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
         return Err(io::Error::last_os_error());

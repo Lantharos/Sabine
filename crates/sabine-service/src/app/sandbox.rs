@@ -25,6 +25,21 @@ const REFUSED_NAMES: [&str; 5] = [
     "org.freedesktop.DBus",
 ];
 
+/// Name spaces of the desktop's own services, which an app that owned a name
+/// in them could stand in for: the portals, notifications, the Secret
+/// Service, the tray's watcher, the shell, accessibility and the like.
+const DESKTOP_NAMESPACES: [&str; 6] = [
+    "org.freedesktop.*",
+    "org.gnome.*",
+    "org.kde.*",
+    "com.canonical.*",
+    "org.ayatana.*",
+    "org.a11y.*",
+];
+/// Where every media player's name sits, which a wildcard over it would let
+/// the app take from players that aren't running.
+const PLAYERS: &str = "org.mpris.MediaPlayer2";
+
 /// `[sandbox]` as written in `Sabine.toml`.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,6 +48,8 @@ pub struct SandboxSection {
     filesystems: Option<Vec<String>>,
     devices: Option<Vec<String>>,
     talk: Option<Vec<String>>,
+    own: Option<Vec<String>>,
+    pipewire: Option<bool>,
     x11: Option<bool>,
     microphone: Option<bool>,
     camera: Option<bool>,
@@ -49,6 +66,8 @@ pub enum Sandbox {
         filesystems: Vec<String>,
         devices: Vec<String>,
         talk: Vec<String>,
+        own: Vec<String>,
+        pipewire: bool,
         x11: bool,
         microphone: bool,
         camera: bool,
@@ -65,6 +84,8 @@ impl SandboxSection {
                 || self.filesystems.is_some()
                 || self.devices.is_some()
                 || self.talk.is_some()
+                || self.own.is_some()
+                || self.pipewire.is_some()
                 || self.x11.is_some()
                 || self.microphone.is_some()
                 || self.camera.is_some()
@@ -89,6 +110,7 @@ impl SandboxSection {
         let filesystems = self.filesystems.unwrap_or_default();
         let devices = self.devices.unwrap_or_default();
         let talk = self.talk.unwrap_or_default();
+        let own = self.own.unwrap_or_default();
         for entry in &filesystems {
             let place = entry.strip_suffix(READ_ONLY).unwrap_or(entry);
             if !PLACES.contains(&place) {
@@ -117,11 +139,17 @@ impl SandboxSection {
             validate_talk(entry)?;
         }
         unique("talk", talk.iter().map(String::as_str))?;
+        for name in &own {
+            validate_owned_name(name)?;
+        }
+        unique("own", own.iter().map(String::as_str))?;
         Ok(Sandbox::Confined {
             network: self.network.unwrap_or(true),
             filesystems,
             devices,
             talk,
+            own,
+            pipewire: self.pipewire.unwrap_or(false),
             x11: self.x11.unwrap_or(false),
             microphone: self.microphone.unwrap_or(false),
             camera: self.camera.unwrap_or(false),
@@ -142,6 +170,8 @@ impl Sandbox {
                 filesystems,
                 devices,
                 talk,
+                own,
+                pipewire,
                 x11,
                 microphone,
                 camera,
@@ -151,6 +181,7 @@ impl Sandbox {
                     ("filesystems", filesystems),
                     ("devices", devices),
                     ("talk", talk),
+                    ("own", own),
                 ] {
                     if !values.is_empty() {
                         let list = values
@@ -161,8 +192,12 @@ impl Sandbox {
                         table.push_str(&format!("{key} = [{list}]\n"));
                     }
                 }
-                for (key, wanted) in [("x11", x11), ("microphone", microphone), ("camera", camera)]
-                {
+                for (key, wanted) in [
+                    ("pipewire", pipewire),
+                    ("x11", x11),
+                    ("microphone", microphone),
+                    ("camera", camera),
+                ] {
                     if *wanted {
                         table.push_str(&format!("{key} = true\n"));
                     }
@@ -228,7 +263,37 @@ fn valid_object_path(path: &str) -> bool {
         })
 }
 
+fn validate_owned_name(name: &str) -> Result<(), String> {
+    if name.contains(OBJECT) {
+        return Err(format!(
+            "[sandbox] own has `{name}`; an app owns whole names, without an object"
+        ));
+    }
+    validate_name("own", name)?;
+    if let Some(service) = DESKTOP_NAMESPACES
+        .iter()
+        .find(|service| names_overlap(name, service))
+    {
+        return Err(format!(
+            "[sandbox] own can't name `{name}`: it reaches `{service}`, where the app could stand in for the desktop's own services"
+        ));
+    }
+    if name
+        .strip_suffix(WILDCARD)
+        .is_some_and(|base| base == PLAYERS || PLAYERS.starts_with(&format!("{base}.")))
+    {
+        return Err(format!(
+            "[sandbox] own can't name `{name}`, which covers every media player; name the app's own player, such as `{PLAYERS}.notes`"
+        ));
+    }
+    Ok(())
+}
+
 fn validate_bus_name(name: &str) -> Result<(), String> {
+    validate_name("talk", name)
+}
+
+fn validate_name(key: &str, name: &str) -> Result<(), String> {
     let base = name.strip_suffix(WILDCARD).unwrap_or(name);
     let elements: Vec<&str> = base.split('.').collect();
     let valid = name.len() <= MAX_BUS_NAME
@@ -242,7 +307,7 @@ fn validate_bus_name(name: &str) -> Result<(), String> {
         });
     if !valid {
         return Err(format!(
-            "[sandbox] talk has `{name}`, which isn't a D-Bus name"
+            "[sandbox] {key} has `{name}`, which isn't a D-Bus name"
         ));
     }
     if let Some(refused) = REFUSED_NAMES
@@ -250,7 +315,7 @@ fn validate_bus_name(name: &str) -> Result<(), String> {
         .find(|refused| names_overlap(name, refused))
     {
         return Err(format!(
-            "[sandbox] talk can't name `{name}`: it reaches `{refused}`, which would let the app leave its sandbox. Declare `unsandboxed = true` instead"
+            "[sandbox] {key} can't name `{name}`: it reaches `{refused}`, which would let the app leave its sandbox. Declare `unsandboxed = true` instead"
         ));
     }
     Ok(())
@@ -325,6 +390,32 @@ mod tests {
         assert!(parse("talk = [\"org.freedesktop.Flatpak\"]").is_err());
         assert!(parse("talk = [\"notdbus\"]").is_err());
         assert!(parse("talk = [\"org.kde.StatusNotifierItem-1.*\"]").is_ok());
+    }
+
+    #[test]
+    fn owns_its_own_names_only() {
+        let sandbox = parse("own = [\"org.mpris.MediaPlayer2.notes\", \"org.mpris.MediaPlayer2.notes.*\"]\npipewire = true").unwrap();
+        assert_eq!(
+            sandbox.manifest(),
+            "\n[sandbox]\nnetwork = true\nown = [\"org.mpris.MediaPlayer2.notes\", \"org.mpris.MediaPlayer2.notes.*\"]\npipewire = true\n"
+        );
+        for refused in [
+            "org.freedesktop.Notifications",
+            "org.freedesktop.portal.Desktop",
+            "org.kde.StatusNotifierWatcher",
+            "org.gnome.Mutter.IdleMonitor",
+            "org.*",
+            "org.mpris.MediaPlayer2.*",
+            "org.mpris.*",
+            "com.example.Shell@/com/example",
+            "org.freedesktop.systemd1",
+        ] {
+            assert!(
+                parse(&format!("own = [\"{refused}\"]")).is_err(),
+                "{refused}"
+            );
+        }
+        assert!(parse("unsandboxed = true\nreason = \"x\"\npipewire = true").is_err());
     }
 
     #[test]

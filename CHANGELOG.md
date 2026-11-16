@@ -1,8 +1,18 @@
-# Sabine 0.94
+# Unreleased
 
 - A `[sandbox]` `talk` entry can reach one object of a name, as `name@/object/path`: the app calls
   its methods, reads its properties and hears its signals, and the name's other objects stay out of
   reach.
+- `own` in `[sandbox]` lists the session bus names a confined app owns, such as its media player
+  `org.mpris.MediaPlayer2.<app>`. It refuses the names `talk` refuses, the desktop's own services,
+  such as the portals, notifications and the tray's watcher, and a wildcard over every media player.
+- A confined app without `microphone` plays sound through a PulseAudio server of its own that
+  refuses every record stream, monitors included. Until now it reached the desktop's PulseAudio,
+  which let it record whatever it declared.
+- `pipewire = true` lets a confined app speak to PipeWire itself, such as a music player that plays
+  through it directly. PipeWire can't keep a client from recording, so it opens recording too.
+- Chromium's media controls for what a confined app's pages play reach the desktop again; the bus
+  filter kept Chromium from owning its media player name.
 
 # Sabine 0.93
 

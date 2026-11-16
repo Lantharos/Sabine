@@ -36,7 +36,7 @@ pub(crate) fn launch_process(
     #[cfg(target_os = "linux")]
     let installation = crate::host::Installation::hold(config);
     #[cfg(target_os = "linux")]
-    let session_bus = crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
+    let confinement = crate::launch::confine::apply(config, runtime_dir, &host_binary)?;
     metrics.mark("host.ready");
     let (child_exit_sender, child_exit_receiver) = crossbeam_channel::unbounded();
     let mut process = SabineProcess {
@@ -71,7 +71,7 @@ pub(crate) fn launch_process(
         #[cfg(target_os = "linux")]
         installation,
         #[cfg(target_os = "linux")]
-        _session_bus: session_bus,
+        _confinement: confinement,
     };
     if !config.app_menu.is_empty() {
         process.bridge_emitter.set_app_menu(&config.app_menu);
