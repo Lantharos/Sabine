@@ -1,3 +1,8 @@
+# Unreleased
+
+- A computer whose Sabine is newer than the latest published release no longer reports that
+  release as an update its newer apps are holding back.
+
 # Sabine 0.95
 
 - A `[sandbox]` `talk` entry can reach one object of a name, as `name@/object/path`: the app calls

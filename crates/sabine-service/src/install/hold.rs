@@ -59,16 +59,19 @@ pub(super) fn installable_release(
     ))
 }
 
-/// The apps `current` runs that `candidate` would not, other than `excluded`.
+/// The apps `current` runs that a newer `candidate` would not, other than
+/// `excluded`.
 fn blocking_apps(
     current: SystemCompatibility,
     candidate: SystemCompatibility,
     apps: &[InstalledApp],
     excluded: &[String],
 ) -> Vec<InstalledApp> {
+    let newer = (candidate.major, candidate.build) > (current.major, current.build);
     apps.iter()
         .filter(|app| {
-            current.accepts(app.sabine)
+            newer
+                && current.accepts(app.sabine)
                 && !candidate.accepts(app.sabine)
                 && !excluded.contains(&app.id)
         })
@@ -158,6 +161,12 @@ mod tests {
         let blocking = blocking_apps(system(58, 53), system(60, 57), &apps, &[]);
         assert_eq!(blocking, [app("old", 55)]);
         assert!(blocking_apps(system(58, 53), system(60, 57), &apps, &["old".into()]).is_empty());
+    }
+
+    #[test]
+    fn an_older_release_waits_for_nothing() {
+        let apps = [app("current", 95), app("older", 91)];
+        assert!(blocking_apps(system(95, 91), system(90, 66), &apps, &[]).is_empty());
     }
 
     #[test]
