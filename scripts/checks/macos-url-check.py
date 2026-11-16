@@ -23,7 +23,7 @@ folders = set()
 for line in build.stdout.splitlines():
     message = json.loads(line)
     if message.get("reason") == "compiler-artifact":
-        version = message["package_id"].rsplit("#", 1)[1].rsplit("@", 1)[-1].split("-")[0]
+        version = message["package_id"].rsplit("#", 1)[1].rsplit("@", 1)[-1].split("+")[0].split("-")[0]
         version = tuple(int(part) for part in version.split("."))
         for filename in message["filenames"]:
             folders.add(str(Path(filename).parent))
