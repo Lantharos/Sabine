@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.93
 
 - Typed bindings write 64-bit integers as `number` again instead of refusing them, so sizes,
   counts and timestamps need no change. Send values that can go beyond 2⁵³ as strings.
