@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.95
 
 - A `[sandbox]` `talk` entry can reach one object of a name, as `name@/object/path`: the app calls
   its methods, reads its properties and hears its signals, and the name's other objects stay out of
