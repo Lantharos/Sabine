@@ -288,7 +288,7 @@ platform applies it.
 | `network` | boolean | `true` | Whether the app goes online |
 | `filesystems` | array of strings | `[]` | `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`, optionally ending in `:ro` |
 | `devices` | array of strings | `[]` | `usb`, `serial` or `all` |
-| `talk` | array of strings | `[]` | Session bus names the app calls; a trailing `.*` covers the names below it |
+| `talk` | array of strings | `[]` | Session bus names the app calls; a trailing `.*` covers the names below it, and `name@/object/path` only that object |
 | `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
 | `microphone` | boolean | `false` | Whether the app records sound |
 | `camera` | boolean | `false` | Whether the app uses cameras |

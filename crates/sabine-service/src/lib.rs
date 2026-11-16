@@ -35,7 +35,7 @@ pub use app::desktop::native_messaging::{NativeMessagingBrowser, native_messagin
 pub use app::environment::AppEnvironment;
 pub use app::installed::unsupported_system_apps;
 pub use app::payload::{remove_app_payload, write_install_inventory};
-pub use app::sandbox::{Sandbox, SandboxSection};
+pub use app::sandbox::{Sandbox, SandboxSection, talk_target};
 pub use identity::{ICON_NAME, icon_png};
 pub use schelf::{StoreNotice, installed_by_store};
 pub use uninstall::{installer_guid, uninstall_system, uninstall_with_prompt};

@@ -1,7 +1,8 @@
 //! The session bus a confined app reaches: `xdg-dbus-proxy` in front of the
-//! person's bus, passing on only the names the app declares in `talk` and the
-//! ones Sabine itself talks to, so the app can't ask the service manager or
-//! anything else on the bus to run a program outside its confinement.
+//! person's bus, passing on only the names and objects the app declares in
+//! `talk` and the names Sabine itself talks to, so the app can't ask the
+//! service manager or anything else on the bus to run a program outside its
+//! confinement.
 
 use super::accessibility;
 use std::{
@@ -29,6 +30,18 @@ const SABINE_NAMES: [&str; 5] = [
     "org.kde.StatusNotifierWatcher",
     "org.gnome.Mutter.IdleMonitor",
 ];
+
+/// The proxy's rules for a `talk` entry: the whole name, or only calls to and
+/// signals from one of its objects.
+fn rules(entry: &str) -> Vec<String> {
+    match sabine_service::talk_target(entry) {
+        (name, None) => vec![format!("--talk={name}")],
+        (name, Some(path)) => vec![
+            format!("--call={name}=*@{path}"),
+            format!("--broadcast={name}=*@{path}"),
+        ],
+    }
+}
 
 /// Keeps the app's filtered bus running: the proxy ends, and removes its
 /// socket, once the app closes its end of the pipe they share.
@@ -83,13 +96,8 @@ fn start(talk: &[String], folder: &Path) -> io::Result<(SessionBus, PathBuf, Opt
         .arg(upstream)
         .arg(&socket)
         .arg("--filter")
-        .args(
-            SABINE_NAMES
-                .iter()
-                .copied()
-                .chain(talk.iter().map(String::as_str))
-                .map(|name| format!("--talk={name}")),
-        )
+        .args(SABINE_NAMES.iter().map(|name| format!("--talk={name}")))
+        .args(talk.iter().flat_map(|entry| rules(entry)))
         .args(accessibility::STATUS_RULES)
         .args(accessibility.iter().flatten())
         .stdin(Stdio::null())

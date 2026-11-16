@@ -1,3 +1,9 @@
+# Unreleased
+
+- A `[sandbox]` `talk` entry can reach one object of a name, as `name@/object/path`: the app calls
+  its methods, reads its properties and hears its signals, and the name's other objects stay out of
+  reach.
+
 # Sabine 0.93
 
 - Typed bindings write 64-bit integers as `number` again instead of refusing them, so sizes,

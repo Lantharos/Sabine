@@ -13,6 +13,7 @@ const READ_ONLY: &str = ":ro";
 const DEVICES: [&str; 3] = ["usb", "serial", "all"];
 const WILDCARD: &str = ".*";
 const MAX_BUS_NAME: usize = 255;
+const OBJECT: char = '@';
 
 /// Names an app would use to widen its own sandbox: the permission store
 /// and portal backends, Flatpak's command runners, systemd and the bus itself.
@@ -112,8 +113,8 @@ impl SandboxSection {
             }
         }
         unique("devices", devices.iter().map(String::as_str))?;
-        for name in &talk {
-            validate_bus_name(name)?;
+        for entry in &talk {
+            validate_talk(entry)?;
         }
         unique("talk", talk.iter().map(String::as_str))?;
         Ok(Sandbox::Confined {
@@ -185,6 +186,46 @@ fn unique<'a>(key: &str, values: impl Iterator<Item = &'a str>) -> Result<(), St
         seen.push(value);
     }
     Ok(())
+}
+
+/// The bus name a `talk` entry reaches, and the one object on it when the
+/// entry is scoped to an object, as `name@/object/path`.
+pub fn talk_target(entry: &str) -> (&str, Option<&str>) {
+    match entry.split_once(OBJECT) {
+        Some((name, path)) => (name, Some(path)),
+        None => (entry, None),
+    }
+}
+
+fn validate_talk(entry: &str) -> Result<(), String> {
+    let (name, path) = talk_target(entry);
+    validate_bus_name(name)?;
+    let Some(path) = path else {
+        return Ok(());
+    };
+    if name.ends_with(WILDCARD) {
+        return Err(format!(
+            "[sandbox] talk has `{entry}`; an object belongs to one name, so name it without `{WILDCARD}`"
+        ));
+    }
+    if !valid_object_path(path) {
+        return Err(format!(
+            "[sandbox] talk has `{entry}`, whose `{path}` isn't a D-Bus object path"
+        ));
+    }
+    Ok(())
+}
+
+fn valid_object_path(path: &str) -> bool {
+    path == "/"
+        || path.strip_prefix('/').is_some_and(|elements| {
+            elements.split('/').all(|element| {
+                !element.is_empty()
+                    && element
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            })
+        })
 }
 
 fn validate_bus_name(name: &str) -> Result<(), String> {
@@ -284,5 +325,17 @@ mod tests {
         assert!(parse("talk = [\"org.freedesktop.Flatpak\"]").is_err());
         assert!(parse("talk = [\"notdbus\"]").is_err());
         assert!(parse("talk = [\"org.kde.StatusNotifierItem-1.*\"]").is_ok());
+    }
+
+    #[test]
+    fn talk_scoped_to_one_object() {
+        assert!(parse("talk = [\"com.example.Shell@/com/example/Shell/Appearance\"]").is_ok());
+        assert!(parse("talk = [\"com.example.Shell@/\"]").is_ok());
+        assert!(parse("talk = [\"com.example.Shell@com/example\"]").is_err());
+        assert!(parse("talk = [\"com.example.Shell@/com/example/\"]").is_err());
+        assert!(parse("talk = [\"com.example.Shell@/com//example\"]").is_err());
+        assert!(parse("talk = [\"com.example.Shell@/com/ex-ample\"]").is_err());
+        assert!(parse("talk = [\"com.example.*@/com/example\"]").is_err());
+        assert!(parse("talk = [\"org.freedesktop.systemd1@/org/freedesktop/systemd1\"]").is_err());
     }
 }

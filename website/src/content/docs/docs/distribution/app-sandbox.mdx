@@ -25,7 +25,7 @@ talk = ["org.mpris.MediaPlayer2.notes"]
 | `network` | boolean | `true` | Whether the app goes online |
 | `filesystems` | array of strings | none | Folders the app reaches: `home`, `xdg-desktop`, `xdg-documents`, `xdg-download`, `xdg-music`, `xdg-pictures` or `xdg-videos`. Add `:ro` for read-only access, such as `xdg-download:ro` |
 | `devices` | array of strings | none | `usb`, `serial` or `all` |
-| `talk` | array of strings | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it |
+| `talk` | array of strings | none | Session bus names the app calls, such as `org.mpris.MediaPlayer2.notes`. A trailing `.*` covers every name below it, and `name@/object/path` reaches only that object of the name |
 | `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
 | `microphone` | boolean | `false` | Whether the app records sound. Its pages also need `microphone` in [`[permissions]`](/docs/web/permissions/) |
 | `camera` | boolean | `false` | Whether the app uses cameras. Its pages also need `camera` in `[permissions]` |
@@ -40,6 +40,17 @@ together count as twice.
 store (`org.freedesktop.impl.portal.*`), `org.freedesktop.portal.Flatpak`, `org.freedesktop.Flatpak`,
 `org.freedesktop.systemd1` and `org.freedesktop.DBus`, and wildcards that cover any of them, such as
 `org.freedesktop.*`. Names must be valid D-Bus names with at least two elements.
+
+An entry with an object path reaches only that object: the app calls its methods, reads its
+properties and hears its signals, and every other object of the name stays out of reach. Grant the
+objects an app uses rather than a whole service that offers more:
+
+```toml
+[sandbox]
+talk = ["com.example.Shell@/com/example/Shell/Appearance"]
+```
+
+The path must be a valid D-Bus object path, and the name before it can't end in `.*`.
 
 ### Apps that can't be sandboxed
 
