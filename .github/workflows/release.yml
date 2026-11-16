@@ -81,7 +81,7 @@ jobs:
           $state = Join-Path $env:LOCALAPPDATA 'Sabine/daemon-state.json'
           $daemon = Start-Process 'target/release/sabine-service-daemon.exe' -PassThru -WindowStyle Hidden
           $deadline = (Get-Date).AddSeconds(30)
-          while (-not $daemon.HasExited -and (Get-Content $state -Raw -ErrorAction Ignore) -notmatch "`"pid`":$($daemon.Id)\b") {
+          while (-not $daemon.HasExited -and (Get-Content $state -Raw -ErrorAction Ignore) -notmatch "`"pid`":\s*$($daemon.Id)\b") {
             if ((Get-Date) -gt $deadline) { throw 'sabine-service-daemon.exe did not take the daemon role within 30 seconds' }
             Start-Sleep -Milliseconds 100
           }
