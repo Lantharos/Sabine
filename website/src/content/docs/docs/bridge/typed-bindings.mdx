@@ -211,7 +211,7 @@ attributes shape the TypeScript types exactly as they shape the JSON.
 | --- | --- |
 | `String`, `&str`, `char` | `string` |
 | `bool` | `boolean` |
-| `f32`, `f64` and integers up to 32 bits | `number` |
+| `f32`, `f64` and integers | `number` |
 | `Option<T>` | `T \| null`; a params field may also be left out |
 | `Vec<T>`, slices | `T[]` |
 | A field with `#[serde(default)]` in params | an optional field |
@@ -220,17 +220,16 @@ attributes shape the TypeScript types exactly as they shape the JSON.
 | Structs and enums | named types, shaped by serde |
 
 Numbers are `number`, because that is what the page's JSON parser makes of them. A `number`
-holds integers exactly only up to 2⁵³, so `sabine bindings` refuses `i64`, `u64`, `i128`, `u128`,
-`isize` and `usize` and names the type that holds one. Use an integer of 32 bits or fewer, or send
-the value as a string:
+holds integers exactly only up to 2⁵³, which covers sizes in bytes, counts and timestamps. Send a
+value that can go beyond that, such as a 64-bit id or hash, as a string:
 
 ```rust
 #[serde_with::serde_as]
 #[derive(Serialize, Type)]
-struct FileInfo {
+struct Photo {
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[specta(type = String)]
-    size: u64,
+    id: u64,
 }
 ```
 

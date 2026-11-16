@@ -1,3 +1,8 @@
+# Unreleased
+
+- Typed bindings write 64-bit integers as `number` again instead of refusing them, so sizes,
+  counts and timestamps need no change. Send values that can go beyond 2⁵³ as strings.
+
 # Sabine 0.92
 
 - On Linux, an app's sound reaches the sound server under the app's name and id instead of
