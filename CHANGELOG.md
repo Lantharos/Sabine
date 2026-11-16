@@ -63,8 +63,8 @@
   and `system.displays()` with `events.displaysChanged` describe the displays.
 - `Store` and `store.*` keep JSON values for the app, and `Secrets` and `secrets.*` keep text in
   the Secret Service, Credential Manager or login keychain.
-- Chromium writes crash reports into the app's data folder, `[crash] upload_url` sends them where
-  the app says, and `CrashReports` lists and removes them. `.logging(...)` keeps the app's log and
+- On Linux and Windows, Chromium writes crash reports into the app's data folder,
+  `[crash] upload_url` sends them where the app says, and `CrashReports` lists and removes them. `.logging(...)` keeps the app's log and
   its pages' console in a file that starts over at 4 MB.
 - `sabine new` asks for the app's id and starts from vanilla, React, Svelte, Vue or Solid.
   `sabine info` describes the setup, `sabine icon` makes the icon set, `sabine dev` rebuilds and
