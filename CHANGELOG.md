@@ -1,3 +1,9 @@
+# Unreleased
+
+- Files a person picks in a page's file input reach a confined app even outside its declared
+  `filesystems`, through the document portal as dropped files do. The page couldn't read them
+  until now.
+
 # Sabine 0.96
 
 - A computer whose Sabine is newer than the latest published release no longer reports that

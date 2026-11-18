@@ -132,11 +132,13 @@ call filter, and the app records that once in its diagnostics.
 
 ### Files the person hands the app
 
-A file someone drops on a confined app's window or opens with the app reaches it even outside its
-declared `filesystems`, as one picked in a file dialog does in a sandbox. Sabine shares each such
-file the app can't open itself through the document portal and hands over the path where the
-portal shows it, below `$XDG_RUNTIME_DIR/doc`: in a drop's files, which the page reads and sees as
-`file.path`, and in what `app.takeOpenUrls` returns. Files the app can already open keep their
+A file someone drops on a confined app's window, opens with the app or picks in a page's file
+input reaches it even outside its declared `filesystems`, as one picked in a file dialog does in a
+sandbox. Sabine shares each such file the app can't open itself through the document portal and
+hands over the path where the portal shows it, below `$XDG_RUNTIME_DIR/doc`: in a drop's files and
+a file input's files, which the page reads and sees as `file.path`, and in what
+`app.takeOpenUrls` returns. A file picked to save as through a page's file chooser comes through
+the portal the same way. Files the app can already open keep their
 paths, and so does everything outside a confined app. A dropped or opened folder always goes
 through the portal, since nothing shows whether the app may change it.
 

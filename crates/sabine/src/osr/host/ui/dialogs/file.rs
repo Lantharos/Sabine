@@ -2,13 +2,16 @@ use std::path::PathBuf;
 
 use rfd::{AsyncFileDialog, FileHandle};
 
+#[cfg(target_os = "linux")]
+use crate::launch::confine::documents::{self, Handed};
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::types::OsrHostEvent;
 use crate::osr::protocol::{FileDialogMode, FileDialogRequest};
 
 impl OsrNativeHost {
     /// Shows the page's file chooser as a desktop dialog attached to this
-    /// window, and hands the chosen paths back to the page when it closes.
+    /// window, and hands the chosen paths back to the page when it closes,
+    /// within a confined app's reach so its Chromium can read them.
     pub(in crate::osr::host) fn show_file_dialog(&self, request: FileDialogRequest) {
         let mut dialog = AsyncFileDialog::new();
         if let Some(window) = &self.window {
@@ -39,6 +42,8 @@ impl OsrNativeHost {
         let mode = request.mode;
         std::thread::spawn(move || {
             let paths = pollster::block_on(choose(dialog, mode));
+            #[cfg(target_os = "linux")]
+            let paths = paths.map(|paths| within_reach(paths, mode));
             if sender
                 .send(OsrHostEvent::FileDialogClosed(generation, id, paths))
                 .is_ok()
@@ -68,4 +73,18 @@ async fn choose(dialog: AsyncFileDialog, mode: FileDialogMode) -> Option<Vec<Pat
         FileDialogMode::OpenFolder => single(dialog.pick_folder().await),
         FileDialogMode::Save => single(dialog.save_file().await),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn within_reach(paths: Vec<PathBuf>, mode: FileDialogMode) -> Vec<PathBuf> {
+    let handed = match mode {
+        FileDialogMode::Save => Handed::New,
+        _ => Handed::Existing,
+    };
+    sabine_platform::async_runtime()
+        .block_on(documents::within_reach(paths.clone(), handed))
+        .unwrap_or_else(|error| {
+            sabine_runtime::report_error("file dialog", error);
+            paths
+        })
 }
