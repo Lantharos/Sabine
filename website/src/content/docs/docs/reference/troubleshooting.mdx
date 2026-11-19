@@ -186,9 +186,14 @@ The app was built against a Sabine build older than the oldest one the installed
 
 ### The app needs a newer Sabine
 
-> *App* needs Sabine *N*, but this computer could not update past Sabine *M*.
+Installing or opening the app updated Sabine right away, and the notice says why that didn't work:
 
-The app pulled the Sabine release it needs, and installing it failed or was held. Run `sabine update` to see why: it names the installed apps a release waits for, and `maintenance.jsonl` records failed updates. A release that would stop another installed app installs once that app updates or is removed.
+- *App* needs Sabine *N*, but updating to it failed: … names the error. Check the network, then
+  try again; `maintenance.jsonl` records failed updates.
+- *App* needs Sabine *N*, which would stop *other apps* from opening until they update. The
+  release that runs the app is held for those apps, and installs once they update or are removed.
+- *App* needs Sabine *N*, which hasn't been released yet. The app was built with a Sabine that
+  isn't published, so it opens once that release is out.
 
 ### The app says Schelf stopped this version
 

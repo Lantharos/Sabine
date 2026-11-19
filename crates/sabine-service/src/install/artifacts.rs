@@ -109,6 +109,18 @@ pub(super) fn published_versions() -> ServiceResult<Vec<SabineVersion>> {
         .collect())
 }
 
+/// The signed manifest of the newest published stable release.
+pub(super) fn newest_release() -> ServiceResult<SystemReleaseManifest> {
+    if manifest_override().is_some() {
+        return fetch_system_manifest(None);
+    }
+    let version = published_versions()?
+        .into_iter()
+        .max()
+        .ok_or_else(|| ServiceError::Update("no published stable Sabine release found".into()))?;
+    fetch_system_manifest(Some(&version.label()))
+}
+
 pub(super) fn manifest_override() -> Option<String> {
     std::env::var("SABINE_RELEASE_MANIFEST_URL").ok()
 }

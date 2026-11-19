@@ -48,6 +48,7 @@ impl SabineService {
     /// Registers an app, or records what changed about it. An app a store
     /// installed stays the store's to update, whatever it says itself.
     pub fn register(&self, mut manifest: AppManifest) -> ServiceResult<RegisteredApp> {
+        self.make_sabine_run(&manifest)?;
         let _lock = RegistryLock::acquire(&self.root)?;
         let mut registry = self.load_registry()?;
         if let Some(existing) = registry.apps.get(&manifest.id)
@@ -56,12 +57,6 @@ impl SabineService {
             manifest.update = existing.manifest.update.clone();
         }
         manifest.validate()?;
-        if let Some(message) = incompatibility_message(
-            &manifest,
-            crate::install::system_compatibility_in(&self.root, &self.system_root),
-        ) {
-            return Err(ServiceError::IncompatibleApp(message));
-        }
         if let Some(existing) = registry.apps.get(&manifest.id)
             && version_is_newer(&existing.manifest.version, &manifest.version)
             && existing.manifest.executable.is_file()
@@ -143,12 +138,29 @@ impl SabineService {
             .ok_or_else(|| ServiceError::AppNotFound(id.to_string()))
     }
 
+    /// Refuses an app this Sabine can't run. An app that needs a newer Sabine
+    /// gets it installed first, and is refused only when that doesn't work.
+    fn make_sabine_run(&self, app: &AppManifest) -> ServiceResult<()> {
+        let system = crate::install::system_compatibility_in(&self.root, &self.system_root);
+        if system.accepts(app.sabine) {
+            return Ok(());
+        }
+        if !system.predates(app.sabine) {
+            return Err(ServiceError::IncompatibleApp(format!(
+                "The developer of {} has not updated it to work with this version of Sabine. The app was not added to Sabine.",
+                app.name
+            )));
+        }
+        crate::install::install_required_system_update(app.sabine, &app.id)
+            .map_err(|missing| ServiceError::IncompatibleApp(missing.notice(&app.name, app.sabine)))
+    }
+
     pub(crate) fn incompatible_apps(&self) -> ServiceResult<Vec<String>> {
         let compatibility = crate::install::system_compatibility_in(&self.root, &self.system_root);
         Ok(self
             .apps()?
             .into_iter()
-            .filter(|app| incompatibility_message(&app.manifest, compatibility).is_some())
+            .filter(|app| !compatibility.accepts(app.manifest.sabine))
             .map(|app| app.manifest.id)
             .collect())
     }
@@ -189,32 +201,6 @@ impl SabineService {
             registry,
         )?)
     }
-}
-
-fn incompatibility_message(
-    app: &AppManifest,
-    system: crate::SystemCompatibility,
-) -> Option<String> {
-    let required = app.sabine;
-    if required.major != system.major || required.build < system.minimum_app_build {
-        return Some(format!(
-            "The developer of {} has not updated it to work with this version of Sabine. The app was not added to Sabine.",
-            app.name
-        ));
-    }
-    if required.build > system.build {
-        return Some(format!(
-            "{} needs Sabine {}, but this computer could not update past Sabine {}.",
-            app.name,
-            required.label(),
-            crate::SabineVersion {
-                major: system.major,
-                build: system.build,
-            }
-            .label()
-        ));
-    }
-    None
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

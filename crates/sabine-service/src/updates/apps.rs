@@ -110,7 +110,13 @@ impl SabineService {
                     sabine: release.requires_sabine,
                 });
             }
-            crate::install::install_required_system_update(release.requires_sabine, id)?;
+            crate::install::install_required_system_update(release.requires_sabine, id).map_err(
+                |missing| {
+                    ServiceError::Update(
+                        missing.notice(&app.manifest.name, release.requires_sabine),
+                    )
+                },
+            )?;
         }
         let system = crate::install::installed_system_compatibility();
         if !system.accepts(release.requires_sabine) {

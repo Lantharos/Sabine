@@ -21,9 +21,9 @@ pub fn held_system_update() -> Option<HeldSystemUpdate> {
 }
 
 /// The release to install for `mode` when `latest` is the newest one: `latest`
-/// itself, or while it would stop installed apps from running, the newest
-/// earlier release that runs them all. A held release is recorded until the
-/// apps it waits for update or are removed.
+/// itself, or while it would stop installed apps from running or doesn't run
+/// the app that requires it, the newest earlier release that does both. A
+/// held release is recorded until the apps it waits for update or are removed.
 pub(super) fn installable_release(
     mode: &SystemUpdateMode,
     latest: SystemReleaseManifest,
@@ -31,29 +31,31 @@ pub(super) fn installable_release(
     let candidate = normalized_release_compatibility(&latest)?;
     let current = installed_system_compatibility();
     let apps = installed_apps(&SabineService::default())?;
-    let requiring = match mode {
-        SystemUpdateMode::Required(requirement) => requirement.apps.as_slice(),
-        _ => &[],
+    let requirement = match mode {
+        SystemUpdateMode::Required(requirement) => Some(requirement),
+        _ => None,
     };
+    let requiring = requirement.map_or(&[][..], |requirement| requirement.apps.as_slice());
     let blocking = blocking_apps(current, candidate, &apps, requiring);
-    if blocking.is_empty() {
-        if matches!(mode, SystemUpdateMode::Routine | SystemUpdateMode::Manual) {
+    let runs_required = requirement.is_none_or(|requirement| candidate.accepts(requirement.sabine));
+    if blocking.is_empty() && runs_required {
+        if requirement.is_none() {
             clear_hold()?;
         }
         return Ok(Some(latest));
     }
-    record_hold(&HeldSystemUpdate {
-        version: latest.version,
-        compatibility: candidate,
-        apps: blocking,
-    })?;
-    if matches!(mode, SystemUpdateMode::Required(_)) {
-        return Ok(None);
+    if !blocking.is_empty() {
+        record_hold(&HeldSystemUpdate {
+            version: latest.version,
+            compatibility: candidate,
+            apps: blocking,
+        })?;
     }
     Ok(newest_compatible_release(
         current,
         candidate,
         &apps,
+        requirement,
         published_versions()?,
         |version| fetch_system_manifest(Some(&version.label())).ok(),
     ))
@@ -80,30 +82,35 @@ fn blocking_apps(
 }
 
 /// The newest of the `published` releases between `current` and `held` that
-/// runs every app, fetching only the manifests of those releases.
+/// runs every app and what `requirement` asks for, fetching only the
+/// manifests of those releases.
 fn newest_compatible_release(
     current: SystemCompatibility,
     held: SystemCompatibility,
     apps: &[InstalledApp],
+    requirement: Option<&SystemRequirement>,
     published: Vec<SabineVersion>,
     fetch: impl Fn(SabineVersion) -> Option<SystemReleaseManifest>,
 ) -> Option<SystemReleaseManifest> {
     if held.major != current.major {
         return None;
     }
+    let requiring = requirement.map_or(&[][..], |requirement| requirement.apps.as_slice());
     let mut candidates = published
         .into_iter()
         .filter(|version| {
-            version.major == held.major && (current.build + 1..held.build).contains(&version.build)
+            version.major == held.major
+                && (current.build + 1..held.build).contains(&version.build)
+                && requirement.is_none_or(|requirement| *version >= requirement.sabine)
         })
         .collect::<Vec<_>>();
     candidates.sort_unstable_by(|left, right| right.cmp(left));
     candidates.into_iter().find_map(|version| {
         let manifest = fetch(version)?;
         let compatibility = normalized_release_compatibility(&manifest).ok()?;
-        blocking_apps(current, compatibility, apps, &[])
-            .is_empty()
-            .then_some(manifest)
+        (blocking_apps(current, compatibility, apps, requiring).is_empty()
+            && requirement.is_none_or(|requirement| compatibility.accepts(requirement.sabine)))
+        .then_some(manifest)
     })
 }
 
@@ -184,12 +191,66 @@ mod tests {
                 .map(|build| SabineVersion { major: 0, build })
                 .to_vec()
         };
-        let chosen =
-            newest_compatible_release(system(58, 53), system(62, 57), &apps, published(), fetch);
+        let chosen = newest_compatible_release(
+            system(58, 53),
+            system(62, 57),
+            &apps,
+            None,
+            published(),
+            fetch,
+        );
         assert_eq!(chosen.map(|release| release.version), Some("0.60".into()));
         assert!(
-            newest_compatible_release(system(60, 56), system(62, 57), &apps, published(), fetch)
-                .is_none()
+            newest_compatible_release(
+                system(60, 56),
+                system(62, 57),
+                &apps,
+                None,
+                published(),
+                fetch
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn a_required_update_installs_the_newest_release_that_runs_the_app_and_stops_no_other() {
+        let apps = [app("notes", 56), app("tern", 55)];
+        let releases = [release(59, 54), release(60, 56), release(61, 57)];
+        let fetch = |version: SabineVersion| {
+            releases
+                .iter()
+                .find(|release| release.compatibility.build == version.build)
+                .cloned()
+        };
+        let published = || {
+            [59, 60, 61]
+                .map(|build| SabineVersion { major: 0, build })
+                .to_vec()
+        };
+        let requirement = |build| SystemRequirement {
+            sabine: SabineVersion { major: 0, build },
+            apps: vec!["tern".into()],
+        };
+        let chosen = newest_compatible_release(
+            system(58, 53),
+            system(62, 57),
+            &apps,
+            Some(&requirement(60)),
+            published(),
+            fetch,
+        );
+        assert_eq!(chosen.map(|release| release.version), Some("0.60".into()));
+        assert!(
+            newest_compatible_release(
+                system(58, 53),
+                system(62, 57),
+                &apps,
+                Some(&requirement(63)),
+                published(),
+                fetch
+            )
+            .is_none()
         );
     }
 }

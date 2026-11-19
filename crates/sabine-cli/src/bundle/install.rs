@@ -47,7 +47,7 @@ pub fn install_bundle(
         executable: staged.binary.clone(),
         args: Vec::new(),
         update: updates,
-        sabine: sabine_service::SabineVersion::current(),
+        sabine: sabine_service::SabineVersion::app_interface(),
     };
     manifest.validate().map_err(|error| error.to_string())?;
     let mut log = sabine_runtime::ProgressLog::default();

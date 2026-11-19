@@ -116,7 +116,7 @@ pub(crate) fn write_manifest(request: ManifestRequest) -> Result<(), String> {
         version: app.version,
         channel: channel.to_string(),
         published_at: unix_now(),
-        requires_sabine: sabine_service::SabineVersion::current(),
+        requires_sabine: sabine_service::SabineVersion::app_interface(),
         artifacts,
         rollout: None,
         key: None,

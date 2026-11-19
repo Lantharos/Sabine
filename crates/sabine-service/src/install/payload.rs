@@ -5,7 +5,7 @@ use sabine_runtime::sabine_data_dir;
 pub(super) fn seed_managed_install(service: &Path) -> ServiceResult<PathBuf> {
     let _lock = lock_system_installation()?;
     if let Some((version, directory)) = current_installation()
-        && !managed_system_is_older(&version)
+        && !lacks_app_interface(&version)
     {
         return Ok(directory.join(service_binary_name()));
     }

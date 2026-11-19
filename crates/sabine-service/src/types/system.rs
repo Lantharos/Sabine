@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{MIN_SUPPORTED_APP_BUILD, SABINE_BUILD, SABINE_MAJOR};
+use super::{APP_INTERFACE_BUILD, MIN_SUPPORTED_APP_BUILD, SABINE_BUILD, SABINE_MAJOR};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SabineVersion {
@@ -13,6 +13,15 @@ impl SabineVersion {
         Self {
             major: SABINE_MAJOR,
             build: SABINE_BUILD,
+        }
+    }
+
+    /// The Sabine an app built with this one needs: the oldest build that
+    /// offers everything the app relies on.
+    pub const fn app_interface() -> Self {
+        Self {
+            major: SABINE_MAJOR,
+            build: APP_INTERFACE_BUILD,
         }
     }
 
@@ -60,9 +69,14 @@ impl SystemCompatibility {
     pub fn accepts(self, app: SabineVersion) -> bool {
         app.major == self.major && app.build >= self.minimum_app_build && app.build <= self.build
     }
+
+    /// Whether `app` needs a newer Sabine than this one.
+    pub fn predates(self, app: SabineVersion) -> bool {
+        (app.major, app.build) > (self.major, self.build)
+    }
 }
 
-/// An app on this machine, by the Sabine build it was made with.
+/// An app on this machine, by the Sabine build it needs.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InstalledApp {
     pub id: String,

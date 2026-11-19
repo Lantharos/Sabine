@@ -345,8 +345,8 @@ replaces the menu bar the manifest sets. See [Menus](/docs/windows/menus/#the-ap
 `sabine bundle` writes its own `Sabine.toml` into the bundle, next to the executable in
 `resources/` (`Contents/Resources/` on macOS). It holds:
 
-- `[app]` with `id`, `name`, `version`, `sabine` (the Sabine build the app was made with, such as
-  `"0.65"`), `shared_runtime = false` when you set it, `mime_types` and `[app.extensions]`
+- `[app]` with `id`, `name`, `version`, `sabine` (the oldest Sabine build that runs the app, such
+  as `"0.95"`; see [Compatibility](/docs/distribution/releases-and-updates/#compatibility)), `shared_runtime = false` when you set it, `mime_types` and `[app.extensions]`
 - `[web]` with `entry` pointing at the packaged assets in `web/`, or `url` for a remote app, plus
   `allowed_origins` and `local_files`
 - `[resources]` pointing at the copies in `files/`

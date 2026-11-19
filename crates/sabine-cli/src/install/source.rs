@@ -146,7 +146,7 @@ fn register_app(app: &SourceApp, desktop: bool) -> Result<(), String> {
             executable: launcher.program.clone(),
             args: launcher.arguments.clone(),
             update: None,
-            sabine: sabine_service::SabineVersion::current(),
+            sabine: sabine_service::SabineVersion::app_interface(),
         })
         .map_err(|error| error.to_string())?;
 

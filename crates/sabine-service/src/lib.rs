@@ -105,7 +105,7 @@ mod tests {
                 public_key: "VXtTlN3HZuGwYByjJu+3HQGavjJwRo0i9/RGrT6Ua6M=".to_string(),
                 package_kind: None,
             }),
-            sabine: SabineVersion::current(),
+            sabine: SabineVersion::app_interface(),
         }
     }
 

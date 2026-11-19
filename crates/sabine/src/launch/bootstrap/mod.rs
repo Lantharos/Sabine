@@ -319,7 +319,7 @@ pub(crate) fn app_manifest(config: &SabineWindowConfig) -> Option<AppManifest> {
         executable,
         args: Vec::new(),
         update: config.app_update.clone(),
-        sabine: sabine_service::SabineVersion::current(),
+        sabine: sabine_service::SabineVersion::app_interface(),
     })
 }
 

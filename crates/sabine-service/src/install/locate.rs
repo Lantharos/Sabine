@@ -77,7 +77,7 @@ pub fn ensure_service_executable(
     }
     if let Some((version, directory)) = current {
         let current = directory.join(service_binary_name());
-        if !managed_system_is_older(&version) {
+        if !lacks_app_interface(&version) {
             return Ok(current);
         }
         report(&mut on_progress, "Updating Sabine service");
@@ -132,7 +132,7 @@ fn repair_service(
     active: String,
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<Option<PathBuf>> {
-    if managed_system_is_older(&active) {
+    if lacks_app_interface(&active) {
         return install_required_service(on_progress);
     }
     let installed = SabineVersion::parse(&active).ok_or_else(|| {
@@ -173,8 +173,7 @@ fn system_service() -> Option<PathBuf> {
     let (version, directory) = system_installation()?;
     let superseded = current_installation()
         .is_some_and(|(user, _)| crate::types::version_is_newer(&user, &version));
-    (!managed_system_is_older(&version) && !superseded)
-        .then(|| directory.join(service_binary_name()))
+    (!lacks_app_interface(&version) && !superseded).then(|| directory.join(service_binary_name()))
 }
 
 fn adjacent_service() -> Option<PathBuf> {

@@ -55,14 +55,3 @@ pub fn update_components(
     result.held = held_system_update();
     Ok(result)
 }
-
-fn newest_release() -> ServiceResult<SystemReleaseManifest> {
-    if manifest_override().is_some() {
-        return fetch_system_manifest(None);
-    }
-    let version = published_versions()?
-        .into_iter()
-        .max()
-        .ok_or_else(|| ServiceError::Update("no published stable Sabine release found".into()))?;
-    fetch_system_manifest(Some(&version.label()))
-}

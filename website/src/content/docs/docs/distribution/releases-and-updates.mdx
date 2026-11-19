@@ -406,9 +406,9 @@ copies never see a manifest whose packages aren't there yet.
 }
 ```
 
-`published_at` is in Unix seconds, `requires_sabine` is the Sabine build the app was made with, and
-`kind` is inferred from the file name: `archive` for `.tar.gz` and `.zip`, or `deb`, `rpm`, `msi`,
-`exe`, `dmg` or `app-image`. The signature is over the manifest as compact JSON, with its keys in
+`published_at` is in Unix seconds, `requires_sabine` is the Sabine the app needs (see
+[Compatibility](#compatibility)), and `kind` is inferred from the file name: `archive` for `.tar.gz`
+and `.zip`, or `deb`, `rpm`, `msi`, `exe`, `dmg` or `app-image`. The signature is over the manifest as compact JSON, with its keys in
 the order above and an empty `signature`.
 
 Manifests from Schelf can carry two more keys, between `artifacts` and `signature`: `rollout`, the
@@ -521,13 +521,17 @@ Chromium starts and renders on them before using them, and keeps the newest two.
 
 ### Compatibility
 
-Every app records the Sabine build it was made with, `requires_sabine` in its release manifest and
-`sabine` in its bundled `Sabine.toml`. Every Sabine release records its own build and the oldest app
-build it still runs. An app runs on a Sabine with the same major version whose build is at least
-that oldest build and no newer than its own.
+Every app records the Sabine it needs, `requires_sabine` in its release manifest and `sabine` in
+its bundled `Sabine.toml`. That's the oldest Sabine build offering everything the app relies on
+from the installed Sabine, the app interface of the Sabine that built it, so an app built with
+Sabine 0.98 can need only 0.95. Every Sabine release records its own build and the oldest app build
+it still runs. An app runs on a Sabine with the same major version whose build is at least that
+oldest build and no older than the one the app needs.
 
-- **An app needs a newer Sabine.** Installing or updating it fetches that exact Sabine release and
-  installs it first, without waiting for the soak.
+- **An app needs a newer Sabine.** Installing, opening or updating it installs the newest published
+  Sabine that runs it first, without waiting for the soak or the rollout; signatures and version
+  checks still apply. The app is refused only when that update fails, when the release would stop
+  other installed apps, or when no release that runs it is published yet.
 - **A Sabine release would stop an installed app.** Sabine holds that release and installs the
   newest earlier release that runs every installed app instead, so fixes keep arriving. The held
   release installs on the next check after those apps update or are removed. `sabine update` names
@@ -536,11 +540,12 @@ that oldest build and no newer than its own.
   its newest release right away, and offers a downloaded update before explaining the problem.
 
 The oldest accepted build moves up only when Sabine's host protocol changes, so most Sabine releases
-run every app built since the last such change.
+run every app built since the last such change. The app interface moves up only in a release that
+changes what apps rely on, so most apps run on the Sabine a computer already has.
 
 When an app can't run, it shows a notice instead of its window:
 
 > The developer of Tern has not updated it to work with this version of Sabine. The app was not added to Sabine.
 
-When the app needs a newer Sabine than this computer could update to, the notice names both
-versions instead.
+When the app needs a newer Sabine and updating to it didn't work, the notice names that Sabine and
+whether the update failed, waits for other apps, or hasn't been released.

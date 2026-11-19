@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from release_versions import current_version, git, normalize_version, prepare_changes
+from release_versions import app_interface, current_version, git, normalize_version, prepare_changes
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "Lantharos/Sabine"
@@ -57,6 +57,7 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--dry-run", action="store_true", help="show version edits and publishing steps without changing files or remote state")
     modes.add_argument("--prepare", action="store_true", help="write version edits and run checks, without committing, tagging or pushing")
+    parser.add_argument("--app-interface", action="store_true", help="this release changes what apps rely on from the installed Sabine")
     args = parser.parse_args()
     current = current_version(ROOT)
     requested = args.version
@@ -64,9 +65,9 @@ def main():
             ["git", "rev-parse", "--verify", f"refs/tags/v{current}"], cwd=ROOT, capture_output=True).returncode:
         requested = current
     version = normalize_version(requested, current)
-    changes = prepare_changes(ROOT, version)
+    changes = prepare_changes(ROOT, version, args.app_interface)
     tag = f"v{version}"
-    print(f"Sabine {current_version(ROOT)} -> {version}")
+    print(f"Sabine {current_version(ROOT)} -> {version}, apps built with it need Sabine {app_interface(ROOT, version, changes)}")
     for name in changes:
         print(f"  update {name}")
     if args.dry_run:

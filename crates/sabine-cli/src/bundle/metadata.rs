@@ -12,7 +12,7 @@ pub(super) fn runtime_manifest(
         quote(&app.id),
         quote(&app.name),
         quote(&app.version),
-        sabine_service::SABINE_VERSION
+        sabine_service::SabineVersion::app_interface().label()
     );
     if !app.shared_runtime {
         manifest.push_str("shared_runtime = false\n");

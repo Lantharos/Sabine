@@ -56,7 +56,7 @@ pub struct AppSection {
     pub id: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
-    /// The Sabine build a bundle was made with, which bundles record.
+    /// The oldest Sabine build that runs the app, which bundles record.
     pub sabine: Option<String>,
     pub publisher: Option<String>,
     pub maintainer: Option<String>,

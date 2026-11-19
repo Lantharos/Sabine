@@ -1,3 +1,14 @@
+# Unreleased
+
+- An app records the oldest Sabine that runs it instead of the Sabine that built it, so an app
+  built with a newer Sabine installs and opens on the Sabine a computer already has unless it
+  relies on something that Sabine lacks. Apps built with this release need Sabine 0.95.
+- Installing, opening or updating an app that needs a newer Sabine installs the newest published
+  Sabine that runs it right away, skipping the soak and rollout, or an earlier one when the newest
+  would stop other installed apps. When that doesn't work, its notice says whether the update
+  failed, would stop other apps, or the Sabine it needs hasn't been released. Until now it said
+  the computer couldn't update, even when no update had been tried.
+
 # Sabine 0.97
 
 - Files a person picks in a page's file input reach a confined app even outside its declared

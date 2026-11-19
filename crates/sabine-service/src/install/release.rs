@@ -31,38 +31,73 @@ pub(crate) fn stage_required_system_update(
     install_latest_system(SystemUpdateMode::Required(required), &mut |_| {})
 }
 
-/// Installs the Sabine an update of `app` needs and restarts the daemon on it.
-/// The daemon itself hands over through [`stage_required_system_update`].
-pub(crate) fn install_required_system_update(
-    required: SabineVersion,
-    app: &str,
-) -> ServiceResult<()> {
-    let requirement = SystemRequirement {
-        sabine: required,
-        apps: vec![app.to_string()],
-    };
-    let Some(_) = stage_required_system_update(requirement)? else {
-        return Err(ServiceError::Update(match held_system_update() {
-            Some(held) => format!(
-                "Sabine {} is waiting for {} to update",
-                held.version,
-                held.apps
-                    .iter()
+/// Why the Sabine an app needs isn't installed.
+#[derive(Debug)]
+pub(crate) enum MissingSabine {
+    /// No published release runs the app.
+    Unreleased,
+    /// The release that runs it waits for these installed apps to update.
+    Held(Vec<InstalledApp>),
+    Failed(ServiceError),
+}
+
+impl MissingSabine {
+    /// What keeps `app` from running, which needs Sabine `required`.
+    pub(crate) fn notice(&self, app: &str, required: SabineVersion) -> String {
+        let required = required.label();
+        match self {
+            Self::Unreleased => {
+                format!("{app} needs Sabine {required}, which hasn't been released yet.")
+            }
+            Self::Held(apps) => format!(
+                "{app} needs Sabine {required}, which is waiting for {} to update.",
+                apps.iter()
                     .map(|app| app.name.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            None => format!("Sabine {} is not available", required.label()),
-        }));
+            Self::Failed(ServiceError::Update(reason)) => {
+                format!("{app} needs Sabine {required}, but updating to it failed: {reason}")
+            }
+            Self::Failed(error) => {
+                format!("{app} needs Sabine {required}, but updating to it failed: {error}")
+            }
+        }
+    }
+}
+
+/// Installs the Sabine `app` needs right away and restarts the daemon on it.
+/// The daemon itself hands over through [`stage_required_system_update`].
+pub(crate) fn install_required_system_update(
+    required: SabineVersion,
+    app: &str,
+) -> Result<(), MissingSabine> {
+    let requirement = SystemRequirement {
+        sabine: required,
+        apps: vec![app.to_string()],
     };
-    crate::ensure_daemon_running()?;
+    if stage_required_system_update(requirement)
+        .map_err(MissingSabine::Failed)?
+        .is_none()
+    {
+        return Err(match held_system_update() {
+            Some(held) if held.compatibility.accepts(required) => MissingSabine::Held(
+                held.apps
+                    .into_iter()
+                    .filter(|held| held.id != app)
+                    .collect(),
+            ),
+            _ => MissingSabine::Unreleased,
+        });
+    }
+    crate::ensure_daemon_running().map_err(MissingSabine::Failed)?;
     if installed_system_compatibility().accepts(required) {
         Ok(())
     } else {
-        Err(ServiceError::Update(format!(
+        Err(MissingSabine::Failed(ServiceError::Update(format!(
             "Sabine {} did not become active",
             required.label()
-        )))
+        ))))
     }
 }
 
@@ -120,14 +155,13 @@ pub(super) fn install_latest_system(
     mode: SystemUpdateMode,
     on_progress: &mut impl FnMut(PrepareProgress),
 ) -> ServiceResult<Option<StagedSystemUpdate>> {
-    let requested_version = match &mode {
-        SystemUpdateMode::Required(required) => Some(required.sabine.label()),
+    let manifest = match &mode {
         SystemUpdateMode::Repair {
             release_version, ..
-        } => Some(release_version.clone()),
-        SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
+        } => fetch_system_manifest(Some(release_version))?,
+        SystemUpdateMode::Required(_) => newest_release()?,
+        SystemUpdateMode::Routine | SystemUpdateMode::Manual => fetch_system_manifest(None)?,
     };
-    let manifest = fetch_system_manifest(requested_version.as_deref())?;
     let manifest = if matches!(mode, SystemUpdateMode::Repair { .. }) {
         manifest
     } else {
@@ -152,7 +186,7 @@ pub(super) fn install_system_release(
         SystemUpdateMode::Routine | SystemUpdateMode::Manual => None,
     };
     if let Some(required) = required
-        && (compatibility.major != required.major || compatibility.build < required.build)
+        && !compatibility.accepts(required)
     {
         return Err(ServiceError::Update(format!(
             "latest Sabine system {} cannot run an app requiring Sabine {}",

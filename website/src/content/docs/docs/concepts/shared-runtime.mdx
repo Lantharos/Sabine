@@ -101,14 +101,14 @@ The old daemon hands over to the new one from outside the service manager's job,
 
 Routine releases, of Sabine and of apps, become eligible 24 hours after they are published, plus a rollout offset between zero and six hours that is fixed for each installation. That spreads the load and leaves time to withdraw a bad release before most machines see it. Apps that update from Schelf follow the store's own rollout instead; see [Updating from Schelf](/docs/distribution/releases-and-updates/#updating-from-schelf).
 
-An app that needs a newer Sabine than the machine has doesn't wait. Its bundled bootstrap fetches the signed manifest of that exact Sabine build, installs it, hands the daemon over, and only then registers the app.
+An app that needs a newer Sabine than the machine has doesn't wait. Installing or opening it fetches the signed manifest of the newest published Sabine that runs it, installs that release, hands the daemon over, and only then registers the app.
 
 ### Compatibility in both directions
 
-Each Sabine release states its own build and the oldest app build it still runs. An app records the Sabine build it was made with in its bundled `Sabine.toml`.
+Each Sabine release states its own build and the oldest app build it still runs. An app records the Sabine it needs in its bundled `Sabine.toml`: the oldest build that offers everything the app relies on from the installed Sabine, which is usually older than the Sabine that built it.
 
 - **An app older than the oldest build Sabine accepts** isn't registered again and shows a notice explaining that its developer hasn't updated it for this version of Sabine. It stays registered so its update source can still deliver a compatible build: the service fetches the app's newest release right away instead of waiting for the rollout, and the app offers a downloaded update before showing the notice.
-- **An app newer than the installed Sabine** pulls the Sabine release it needs, as above.
+- **An app that needs a newer Sabine** pulls the Sabine release it needs, as above. It's refused only when that update fails, when installing the release would stop other installed apps, or when no release that runs it has been published yet, and its notice says which.
 - **A Sabine release that would stop an installed app** is held. Before installing a release, the service checks its oldest accepted build against every installed app, both those the user installed and those installed for every user. Development builds registered by `sabine dev` never hold a release back. While a release is held, the service installs the newest earlier release that still runs every app, so fixes keep arriving. The held release and the apps it waits for are recorded in `bin/held-update.json`, and it installs on the first check after those apps update or are removed.
 
 `sabine update` does the same from the command line, without waiting for the daemon: it checks published releases, verifies them, applies the rollout delay, updates Sabine and the runtime, and holds a release that would stop an installed app, naming the apps it waits for. `sabine update --force` skips only the rollout delay; signatures, checksums, version ordering and the backoff after a failed release still apply.

@@ -1,6 +1,6 @@
 use crate::{
-    PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult, SystemCompatibility,
-    SystemReleaseManifest, SystemRequirement, verify_system_release,
+    InstalledApp, PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult,
+    SystemCompatibility, SystemReleaseManifest, SystemRequirement, verify_system_release,
 };
 use std::{
     fs,
@@ -40,7 +40,7 @@ use release::{SystemUpdateMode, install_latest_system, install_system_release};
 pub use system::{install_system_service, stage_system_files};
 
 use artifacts::{
-    cli_binary_name, download_system_artifact, fetch_system_manifest, manifest_override,
+    cli_binary_name, download_system_artifact, fetch_system_manifest, newest_release,
     published_versions, sabine_host_relative_path, service_binary_name, service_daemon_binary_name,
     system_asset_name,
 };
@@ -74,13 +74,15 @@ pub(crate) fn system_compatibility_in(root: &Path, system_root: &Path) -> System
 
 fn this_app_requirement() -> SystemRequirement {
     SystemRequirement {
-        sabine: SabineVersion::current(),
+        sabine: SabineVersion::app_interface(),
         apps: Vec::new(),
     }
 }
 
-fn managed_system_is_older(installed: &str) -> bool {
-    crate::types::version_is_newer(crate::SABINE_VERSION, installed)
+/// Whether the installed Sabine `installed` is older than the one this app needs.
+fn lacks_app_interface(installed: &str) -> bool {
+    SabineVersion::parse(installed)
+        .is_some_and(|installed| installed < SabineVersion::app_interface())
 }
 
 fn normalized_release_compatibility(

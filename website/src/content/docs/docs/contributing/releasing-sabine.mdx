@@ -38,6 +38,10 @@ The script takes an optional version, such as `0.66`, `v0.66` or `0.66.0`; it ca
 current version. Without one it picks the next build, or, when the current version has no tag
 yet, the current version, so a release you prepared and committed is published as it is.
 
+Pass `--app-interface` with any mode when the release changes what apps rely on from the installed
+Sabine; see [Raising the app interface](#raising-the-app-interface). Every mode prints the Sabine
+that apps built with the release will need.
+
 ### What publishing does
 
 <Steps>
@@ -49,7 +53,8 @@ yet, the current version, so a release you prepared and committed is published a
 2. Writes the version edits: the workspace and internal dependency versions in `Cargo.toml` and
    `Cargo.lock`, `package.json`, the version constants in `crates/sabine-service/src/types/mod.rs`,
    the version in `README.md`, `packages/sabine/README.md` and the Windows runtime check workflow,
-   and the changelog heading.
+   and the changelog heading. It raises the app interface and the oldest supported app build when
+   the release calls for it, as the next sections describe.
 
 3. Runs `cargo fmt --all --check`, `cargo build`, `cargo test` and warning-free `cargo clippy` for
    the workspace, `actionlint` when it's installed, extracts the release notes, and runs
@@ -85,6 +90,35 @@ It then writes `sabine-release.json` with `sabine system-release-manifest`, sign
 own `SABINE_UPDATE_SIGNING_KEY`, records build provenance attestations, and publishes the GitHub
 release with that version's changelog section as its notes. The release is published outside
 GitHub's `latest` channel.
+
+## Raising the app interface
+
+An app built with a Sabine needs only part of what the installed Sabine provides, so apps don't
+record the build that made them. They record `APP_INTERFACE_BUILD` from
+`crates/sabine-service/src/types/mod.rs`: the oldest Sabine build that offers everything an app
+built with this one relies on. Installed Sabines compare it with their own build, so an app runs
+on every Sabine since that build, and a computer only updates Sabine early for an app that needs
+something new.
+
+What an app relies on from the installed Sabine:
+
+- the CEF host it starts: its protocol, the switches and arguments apps pass it, and the requests
+  apps send a shared runtime
+- the service's commands apps run, such as `apply-update`, and what the daemon does for them
+- the files apps and the service both read and write in Sabine's data folder, such as the app
+  registry and the installation state
+- `Sabine.toml` as the installed service reads it from a bundle a store installs, including keys
+  that sections such as `[sandbox]` refuse when they don't know them, and the release manifests
+  the daemon reads for app updates
+
+What changes only inside the app, such as its windows, its bridge, the sandbox it sets up for
+itself or the way it talks to the desktop, doesn't count.
+
+Preparation raises the app interface to the release's own build when the host protocol changed
+since the last release. For any other change on that list, such as a new `[sandbox]` key, publish
+with `--app-interface`. An app interface that's too low lets apps open on
+a Sabine that can't run them, and one raised for nothing makes computers update Sabine early, so
+when in doubt check the list against the changes since the last tag.
 
 ## Raising the oldest supported app build
 

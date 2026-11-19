@@ -151,7 +151,7 @@ mod tests {
             version: "1.0.0".to_string(),
             channel: "stable".to_string(),
             published_at: "12345".to_string(),
-            requires_sabine: crate::SabineVersion::current(),
+            requires_sabine: crate::SabineVersion::app_interface(),
             artifacts: BTreeMap::new(),
             rollout: None,
             key: None,
