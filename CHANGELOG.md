@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.97
 
 - Files a person picks in a page's file input reach a confined app even outside its declared
   `filesystems`, through the document portal as dropped files do. The page couldn't read them
