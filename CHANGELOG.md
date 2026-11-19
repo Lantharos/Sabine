@@ -1,3 +1,9 @@
+# Unreleased
+
+- Sabine follows CEF's stable channel again: the daemon installs each new stable Chromium as it
+  comes out, checks it against the size and SHA-1 CEF's build index lists, and validates it before
+  any app uses it, instead of waiting for a Sabine release to move to it.
+
 # Sabine 0.98
 
 - An app records the oldest Sabine that runs it instead of the Sabine that built it, so an app

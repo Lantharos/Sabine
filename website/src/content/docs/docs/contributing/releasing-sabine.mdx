@@ -11,13 +11,6 @@ Sabine's CLI, service, daemon and prebuilt CEF host are released together as one
 `MAJOR.BUILD.0` in `Cargo.toml` and `package.json`. Ordinary releases advance the build; a
 fundamental break in Sabine's contract advances the major.
 
-## Moving to a newer Chromium
-
-Each release installs the CEF build pinned in `crates/sabine-runtime/src/download/cef.json`, with
-the size and SHA-256 of every platform's archive. Run `scripts/cef/pin-cef.py` before preparing a
-release to move to the newest stable build, or pass it a CEF version to pin that one. It downloads
-each archive to hash it and checks it against the SHA-1 the CEF build index lists.
-
 ## Publishing
 
 Release from a clean `main` branch that matches `origin/main`, with the GitHub CLI signed in:

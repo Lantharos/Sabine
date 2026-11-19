@@ -1,5 +1,5 @@
 pub(crate) mod http;
-pub(crate) mod pin;
+pub(crate) mod index;
 pub(crate) mod transfer;
 
 use std::{
@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sha2::Sha256;
+use sha1::Sha1;
 
 use crate::error::RuntimeError;
 use crate::types::{RuntimeInstallProgress, RuntimeInstallStep};
@@ -51,7 +51,8 @@ pub fn download_to(
     Ok(())
 }
 
-/// Checks that `path` holds exactly `size` bytes whose SHA-256 is `expected`.
+/// Checks that `path` holds exactly `size` bytes whose SHA-1 is `expected`,
+/// as CEF's build index lists them.
 pub(crate) fn verify_with_progress(
     path: &Path,
     size: u64,
@@ -68,7 +69,7 @@ pub(crate) fn verify_with_progress(
     let mut last_report = Instant::now()
         .checked_sub(Duration::from_secs(1))
         .unwrap_or_else(Instant::now);
-    let actual = crate::digest::digest_reader::<Sha256>(std::fs::File::open(path)?, |read| {
+    let actual = crate::digest::digest_reader::<Sha1>(std::fs::File::open(path)?, |read| {
         read_total = read_total.saturating_add(read as u64);
         if last_report.elapsed() >= Duration::from_millis(100) {
             let portion = (read_total as f32 / size as f32).clamp(0.0, 1.0);

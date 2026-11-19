@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
+import urllib.request
 from pathlib import Path
 
 PLATFORMS = {
@@ -12,9 +14,32 @@ PLATFORMS = {
 }
 
 root = Path(__file__).resolve().parents[2]
-pin = json.loads((root / "crates/sabine-runtime/src/download/cef.json").read_text())
-cef_version = pin["version"]
+runtime_source = (root / "crates/sabine-runtime/src/lib.rs").read_text()
+minimum_major = int(re.search(r"pub const MIN_CEF_MAJOR: u32 = (\d+);", runtime_source)[1])
 platform = PLATFORMS[os.environ["RUNNER_OS"], os.environ["RUNNER_ARCH"]]
+
+
+def version_key(version):
+    return [int(part) for part in re.split(r"[.+\-_]", version) if part.isascii() and part.isdigit()]
+
+
+def major(version):
+    head = re.split(r"[.+]", version)[0]
+    return int(head) if head.isascii() and head.isdigit() else 0
+
+
+with urllib.request.urlopen("https://cef-builds.spotifycdn.com/index.json", timeout=60) as response:
+    builds = json.load(response)[platform]["versions"]
+cef_version = max(
+    (
+        build["cef_version"]
+        for build in builds
+        if build.get("channel", "stable") == "stable"
+        and major(build["cef_version"]) >= minimum_major
+        and any(file["type"] == "minimal" for file in build["files"])
+    ),
+    key=version_key,
+)
 
 if os.environ["RUNNER_OS"] == "Windows":
     data = Path(os.environ["LOCALAPPDATA"]) / "Sabine"

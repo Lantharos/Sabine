@@ -21,7 +21,7 @@ use crate::discovery::host::runtime_is_valid;
 use crate::discovery::paths::user_runtime_path;
 use crate::discovery::resolve::resolve_runtime;
 use crate::discovery::version::{detect_version, runtime_sort_key};
-use crate::download::pin::pinned_install_plan;
+use crate::download::index::latest_install_plan;
 use crate::download::{download_file, first_extracted_runtime_dir, verify_with_progress};
 use crate::error::RuntimeError;
 use crate::lease::{runtime_is_leased, runtime_mutation_lock};
@@ -33,8 +33,8 @@ use crate::types::{
 const INSTALL_LOCK_TIMEOUT: Duration = Duration::from_secs(600);
 const INSTALL_LOCK_WAIT_HEARTBEAT: Duration = Duration::from_secs(3);
 
-/// Makes sure a compatible runtime is installed, downloading the pinned CEF
-/// build when none is.
+/// Makes sure a compatible runtime is installed, downloading the newest
+/// stable CEF build when none is.
 pub fn install_user_runtime_with_progress(
     config: &RuntimeConfig,
     progress: impl FnMut(RuntimeInstallProgress),
@@ -42,7 +42,8 @@ pub fn install_user_runtime_with_progress(
     install_user_runtime_inner(config, progress, false).map(|update| update.runtime)
 }
 
-/// Makes sure the pinned CEF build is installed, downloading it when it isn't.
+/// Makes sure the newest stable CEF build is installed, downloading it when
+/// it isn't.
 pub fn update_user_runtime_with_progress(
     config: &RuntimeConfig,
     progress: impl FnMut(RuntimeInstallProgress),
@@ -53,14 +54,14 @@ pub fn update_user_runtime_with_progress(
 fn install_user_runtime_inner(
     config: &RuntimeConfig,
     mut progress: impl FnMut(RuntimeInstallProgress),
-    require_pinned: bool,
+    require_latest: bool,
 ) -> Result<RuntimeUpdate, RuntimeError> {
     if !config.allow_user_install {
         return Err(RuntimeError::DownloadsDisabled);
     }
     std::fs::create_dir_all(user_runtime_path())?;
     let _lock = RuntimeInstallLock::acquire(&mut progress)?;
-    if !require_pinned && let Ok(runtime) = resolve_runtime(config) {
+    if !require_latest && let Ok(runtime) = resolve_runtime(config) {
         return Ok(already_installed(runtime, &mut progress));
     }
     progress(RuntimeInstallProgress::new(
@@ -68,7 +69,7 @@ fn install_user_runtime_inner(
         Some(0.02),
         "Preparing runtime",
     ));
-    let plan = pinned_install_plan()?;
+    let plan = latest_install_plan()?;
     let unusable_marker = plan.install_dir.join(".sabine-unusable");
     if unusable_marker.is_file() {
         if let Ok(runtime) = resolve_runtime(config) {
@@ -107,12 +108,7 @@ fn install_user_runtime_inner(
             Some(0.70),
             "Checking downloaded runtime archive",
         ));
-        match verify_with_progress(
-            &archive_path,
-            plan.archive_size,
-            &plan.sha256,
-            &mut progress,
-        ) {
+        match verify_with_progress(&archive_path, plan.archive_size, &plan.sha1, &mut progress) {
             Ok(()) => archive_ready = true,
             Err(_) => {
                 progress(RuntimeInstallProgress::new(
@@ -137,12 +133,7 @@ fn install_user_runtime_inner(
             Some(0.72),
             "Verifying runtime",
         ));
-        verify_with_progress(
-            &archive_path,
-            plan.archive_size,
-            &plan.sha256,
-            &mut progress,
-        )?;
+        verify_with_progress(&archive_path, plan.archive_size, &plan.sha1, &mut progress)?;
     }
     progress(RuntimeInstallProgress::new(
         RuntimeInstallStep::Extracting,
