@@ -8,6 +8,10 @@
   later Sabine release can't change it. It updates itself from its installer packages: while it
   runs, it checks its update source every six hours, and offers a downloaded release the next time
   it opens.
+- A Chromium runtime takes about 370 MB on Linux instead of 1.6 GB, and standalone apps that carry
+  one shrink with it. Installing a runtime removes the debug info and symbol tables CEF ships inside
+  its Linux libraries and keeps each library's build ID, so crash reports still symbolicate against
+  CEF's download of that version.
 
 # Sabine 0.98
 

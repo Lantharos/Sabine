@@ -5,6 +5,8 @@ pub(crate) mod payload;
 pub(crate) mod progress_log;
 #[cfg(windows)]
 pub(crate) mod sandbox_windows;
+#[cfg(target_os = "linux")]
+mod strip;
 pub(crate) mod system;
 
 use std::{
@@ -146,6 +148,8 @@ fn install_user_runtime_inner(
     let extracted = first_extracted_runtime_dir(&extracted).ok_or_else(|| {
         RuntimeError::InstallationFailed("download did not contain a runtime directory".to_string())
     })?;
+    #[cfg(target_os = "linux")]
+    strip::strip_runtime_binaries(&extracted)?;
     std::fs::write(extracted.join(".sabine-version"), &plan.version)?;
     crate::prepare_runtime_assets(&extracted)?;
     if !runtime_is_valid(&extracted) {
