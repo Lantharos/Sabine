@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.99
 
 - Sabine follows CEF's stable channel again: the daemon installs each new stable Chromium as it
   comes out, checks it against the size and SHA-1 CEF's build index lists, and validates it before
