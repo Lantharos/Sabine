@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.98
 
 - An app records the oldest Sabine that runs it instead of the Sabine that built it, so an app
   built with a newer Sabine installs and opens on the Sabine a computer already has unless it
