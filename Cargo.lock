@@ -3344,7 +3344,6 @@ dependencies = [
  "serde_json",
  "shell-words",
  "specta",
- "sys-locale",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

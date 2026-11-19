@@ -15,6 +15,7 @@
 
 #include "app/app.h"
 #include "app/probe.h"
+#include "common/accept_languages.h"
 #include "include/base/cef_build.h"
 #include "include/base/cef_compiler_specific.h"
 #include "include/cef_app.h"
@@ -79,8 +80,9 @@ int RunSabineHost(CefMainArgs main_args,
   if (!locales_dir_path.empty()) {
     CefString(&settings.locales_dir_path).FromString(locales_dir_path);
   }
-  CefString(&settings.accept_language_list)
-      .FromString(command_line->GetSwitchValue("sabine-accept-languages"));
+#if defined(OS_LINUX) || defined(OS_WIN)
+  CefString(&settings.accept_language_list).FromString(SystemAcceptLanguages());
+#endif
 
   const std::string root_cache_path =
       command_line->GetSwitchValue("root-cache-path");
