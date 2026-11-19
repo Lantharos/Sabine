@@ -71,6 +71,7 @@ impl RuntimeUnit {
             ),
             ("SocketMode", Variant::from(0o600u32)),
             ("RemoveOnStop", Variant::from(true)),
+            ("CollectMode", Variant::from("inactive-or-failed")),
         ];
         let service_name = self.name("service");
         let auxiliary = vec![(service_name.as_str(), service)];

@@ -145,6 +145,7 @@ The runtime is a socket-activated systemd user service, `sabine-runtime@<key>.se
 
 - A runtime quits 30 seconds after its last window closed, and its socket goes with it.
 - A runtime that crashes is started again by systemd. Its windows keep showing their last frame, reconnect, and reload their pages.
+- A runtime that systemd gives up starting again is removed along with its socket, so the next app starts a fresh one.
 - The browser's renderers move into the systemd unit of the window that asked for them, so the desktop's memory accounting and out-of-memory handling count an app's pages as part of the app. The browser, GPU and network processes stay in the runtime's unit.
 
 A request names the app and carries only what applies to that window: its page, bridge policy, app files, local file access, frame rates, background color and transparency.

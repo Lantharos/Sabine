@@ -3,6 +3,12 @@
 - Files a person picks in a page's file input reach a confined app even outside its declared
   `filesystems`, through the document portal as dropped files do. The page couldn't read them
   until now.
+- On Linux with NVIDIA's driver, the shared runtime no longer crashes as it quits after its last
+  window closed. Each crash left a crash report behind, and systemd started the runtime again for
+  nothing.
+- When systemd gives up starting a shared runtime again, the next app starts a fresh one at once.
+  Until now every later launch waited 10 seconds for the dead runtime, then started a Chromium of
+  its own.
 
 # Sabine 0.96
 
