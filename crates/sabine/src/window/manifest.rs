@@ -51,6 +51,7 @@ impl SabineWindow {
         if base.join("runtimes/cef").is_dir() {
             self.config.runtime.bundled_dir = Some(base.to_path_buf());
         }
+        self.config.standalone = file.app.standalone == Some(true);
         #[cfg(target_os = "linux")]
         if file.app.shared_runtime == Some(false) {
             self = self.shared_runtime(false);

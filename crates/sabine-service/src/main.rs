@@ -181,7 +181,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             relaunch,
         } => {
             if let Some(pid) = wait_pid {
-                wait_for_process(pid);
+                sabine_runtime::wait_for_exit(pid);
             }
             if service.apply_pending_app_update(&id, relaunch.as_deref())? {
                 println!("applied pending update for {id}");
@@ -200,7 +200,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Remove { id, wait_pid } => {
             if let Some(pid) = wait_pid {
-                wait_for_process(pid);
+                sabine_runtime::wait_for_exit(pid);
             }
             service.remove_app(&id)?;
             println!("removed {id}");
@@ -240,25 +240,4 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
-}
-
-#[cfg(unix)]
-fn wait_for_process(pid: u32) {
-    while sabine_runtime::process_alive(pid) {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn wait_for_process(pid: u32) {
-    use windows::Win32::{
-        Foundation::CloseHandle,
-        System::Threading::{INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
-    };
-    if let Ok(handle) = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
-        unsafe {
-            WaitForSingleObject(handle, INFINITE);
-            let _ = CloseHandle(handle);
-        }
-    }
 }

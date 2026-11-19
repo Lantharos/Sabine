@@ -181,6 +181,10 @@ registrations. The setup program then asks whether to delete the files the app k
 `%APPDATA%\<app id>`, when there are any, and keeps them unless you say yes or the uninstaller runs
 silently (`/S`). Sabine's runtime and service stay for other apps.
 
+A [standalone app](/docs/distribution/bundling/#standalone-apps)'s setup copies the app with its own
+Chromium into the folder and only has the app check that it starts. It prepares no Sabine and
+registers nothing with it.
+
 The MSI package follows the same steps with the standard Windows Installer dialogs: Sabine's
 preparation reports its progress on the installer's own bar and in its log, cancelling returns
 Windows Installer's cancellation code 1602, a failed install rolls back the registration with the

@@ -157,7 +157,7 @@ impl SabineService {
             release.requires_sabine,
             &executable,
             || {
-                self.download_verified(&download, artifact)?;
+                download_verified(&download, artifact)?;
                 Ok(download.clone())
             },
         )?;
@@ -237,19 +237,6 @@ impl SabineService {
             .join(format!("{version}.{}", artifact_extension(kind)))
     }
 
-    /// Downloads `artifact` to `path`, keeping a copy already there that
-    /// matches its checksum.
-    fn download_verified(&self, path: &Path, artifact: &AppArtifact) -> ServiceResult<()> {
-        std::fs::create_dir_all(path.parent().expect("downloads have a folder"))?;
-        if path.is_file() && verify_sha256(path, &artifact.sha256).is_err() {
-            std::fs::remove_file(path)?;
-        }
-        if !path.is_file() {
-            download_artifact(&update_download_url(&artifact.url), path, None, |_| {})?;
-        }
-        verify_sha256(path, &artifact.sha256)
-    }
-
     fn stage_update(
         &self,
         id: &str,
@@ -258,7 +245,7 @@ impl SabineService {
         executable: Option<PathBuf>,
     ) -> ServiceResult<PendingAppUpdate> {
         let path = self.download_path(id, &release.version, artifact.kind);
-        self.download_verified(&path, artifact)?;
+        download_verified(&path, artifact)?;
         let existing = self
             .pending_app_update(id)?
             .filter(|pending| pending.version == release.version);
@@ -347,7 +334,20 @@ fn validate_app_id(id: &str) -> ServiceResult<()> {
     }
 }
 
-fn fetch_release(url: &str) -> ServiceResult<AppReleaseManifest> {
+/// Downloads `artifact` to `path`, keeping a copy already there that matches
+/// its checksum.
+pub(super) fn download_verified(path: &Path, artifact: &AppArtifact) -> ServiceResult<()> {
+    std::fs::create_dir_all(path.parent().expect("downloads have a folder"))?;
+    if path.is_file() && verify_sha256(path, &artifact.sha256).is_err() {
+        std::fs::remove_file(path)?;
+    }
+    if !path.is_file() {
+        download_artifact(&update_download_url(&artifact.url), path, None, |_| {})?;
+    }
+    verify_sha256(path, &artifact.sha256)
+}
+
+pub(super) fn fetch_release(url: &str) -> ServiceResult<AppReleaseManifest> {
     if !is_https_url(url) {
         return Err(ServiceError::Update(
             "release manifest URL must use HTTPS".to_string(),
@@ -356,7 +356,11 @@ fn fetch_release(url: &str) -> ServiceResult<AppReleaseManifest> {
     crate::download::fetch_manifest(url)
 }
 
-fn validate_release(release: &AppReleaseManifest, id: &str, channel: &str) -> ServiceResult<()> {
+pub(super) fn validate_release(
+    release: &AppReleaseManifest,
+    id: &str,
+    channel: &str,
+) -> ServiceResult<()> {
     if release.schema != 1 {
         return Err(ServiceError::Update(format!(
             "unsupported release manifest schema {}",
@@ -378,7 +382,7 @@ fn validate_release(release: &AppReleaseManifest, id: &str, channel: &str) -> Se
     Ok(())
 }
 
-fn validate_artifact(artifact: &AppArtifact) -> ServiceResult<()> {
+pub(super) fn validate_artifact(artifact: &AppArtifact) -> ServiceResult<()> {
     if !is_https_url(&artifact.url) {
         return Err(ServiceError::Update(
             "artifact URL must use HTTPS".to_string(),

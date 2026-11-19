@@ -9,6 +9,13 @@ pub fn install_bundle(
     options: InstallOptions,
     env_files: Vec<PathBuf>,
 ) -> Result<ExitCode, String> {
+    if crate::project::read_sabine_file(&options.source)?
+        .app
+        .standalone
+        .unwrap_or(false)
+    {
+        return Err("A standalone app doesn't install into this computer's Sabine; install it from one of its bundles instead".to_string());
+    }
     let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
     let (app, staged) = stage_portable(&options, env_files.clone(), temporary.path(), false)?;
     let service = sabine_service::SabineService::default();

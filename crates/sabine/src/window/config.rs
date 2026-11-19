@@ -76,6 +76,9 @@ pub(crate) struct SabineWindowConfig {
     pub documents: DocumentTypes,
     pub lifecycle: SabineLifecyclePolicy,
     pub runtime: RuntimeConfig,
+    /// `standalone` in the bundled `Sabine.toml`: the app ships its own
+    /// Chromium and host and never uses the Sabine installed on the computer.
+    pub(crate) standalone: bool,
     pub bridge: BridgeRegistry,
     pub security: ContentSecurity,
     pub local_files: bool,
@@ -146,6 +149,7 @@ impl Default for SabineWindowConfig {
             documents: DocumentTypes::default(),
             lifecycle: SabineLifecyclePolicy::default(),
             runtime: RuntimeConfig::default(),
+            standalone: false,
             bridge: BridgeRegistry::default(),
             security: ContentSecurity::default(),
             local_files: false,
@@ -269,18 +273,26 @@ impl SabineWindowConfig {
         crate::AppEnvironment::current() == crate::AppEnvironment::Development
     }
 
+    /// Whether this run uses only what the app ships. Development runs use
+    /// the computer's Sabine, as every other app's do.
+    pub(crate) fn standalone(&self) -> bool {
+        self.standalone && !self.dev_mode()
+    }
+
     pub fn effective_remote_devtools_port(&self) -> Option<u16> {
         self.browser.effective_remote_devtools_port(self.dev_mode())
     }
 
-    /// Whether the app's pages can join a shared runtime: its Chromium flags
-    /// are the same as every other app's, and neither an app sandbox, which
-    /// the runtime's service can't reach into, nor Sabine's own confinement,
-    /// which a runtime started outside the app never inherits, holds it.
+    /// Whether the app's pages can join a shared runtime: the app uses the
+    /// computer's Sabine, its Chromium flags are the same as every other
+    /// app's, and neither an app sandbox, which the runtime's service can't
+    /// reach into, nor Sabine's own confinement, which a runtime started
+    /// outside the app never inherits, holds it.
     #[cfg(target_os = "linux")]
     pub(crate) fn shares_runtime(&self) -> bool {
         !self.browser.separate_runtime
             && !self.dev_mode()
+            && !self.standalone
             && !crate::launch::sandbox::in_app_sandbox()
             && !crate::launch::confine::applies(self)
             && self.effective_remote_devtools_port().is_none()

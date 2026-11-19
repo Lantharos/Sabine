@@ -1,4 +1,4 @@
-mod offline;
+mod runtime;
 
 use std::{
     fs,
@@ -35,8 +35,8 @@ pub(super) fn stage_bundle(
     if format.target() == BuildTarget::Macos {
         crate::desktop::macos::validate_executable(binary)?;
     }
-    if offline {
-        offline::validate_platform(format, binary)?;
+    if offline || app.standalone {
+        runtime::validate_platform(format, binary)?;
     }
     if let Some(web) = &app.web {
         web.assets()?;
@@ -92,8 +92,10 @@ pub(super) fn stage_bundle(
         app_dir,
         executable,
     };
-    if offline {
-        offline::stage_offline_runtime(format, &staged)?;
+    if app.standalone {
+        runtime::stage_standalone_runtime(format, &staged)?;
+    } else if offline {
+        runtime::stage_offline_runtime(format, &staged)?;
     }
     Ok(staged)
 }

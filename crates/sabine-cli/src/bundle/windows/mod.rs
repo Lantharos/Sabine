@@ -33,8 +33,20 @@ pub(super) fn nsis_script(
     let id = escape(&app.id);
     let executable = escape(executable);
     let uninstall_files = uninstall_commands(&source, &source)?;
-    sabine_service::write_install_inventory(&source, &app.id, &["Uninstall.exe"])
-        .map_err(|error| error.to_string())?;
+    let setup = if app.standalone {
+        Setup::standalone(&name)
+    } else {
+        sabine_service::write_install_inventory(&source, &app.id, &["Uninstall.exe"])
+            .map_err(|error| error.to_string())?;
+        Setup::shared(&name)
+    };
+    let Setup {
+        welcome,
+        payload,
+        clear_previous,
+        install_to,
+        message,
+    } = setup;
     let icon = icon
         .map(|path| {
             format!(
@@ -108,7 +120,7 @@ Var ProgressBar
 Var ProgressStart
 {icon}
 {welcome_bitmap}!define MUI_CUSTOMFUNCTION_ABORT CancelSetup
-!define MUI_WELCOMEPAGE_TEXT "Setup installs {name} and prepares its shared Sabine runtime.$\r$\n$\r$\nIf the runtime is not already available, setup downloads it before finishing. You can rerun this installer to repair the installation."
+!define MUI_WELCOMEPAGE_TEXT "{welcome}"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -133,9 +145,9 @@ Section "Install"
   SetShellVarContext current
   InitPluginsDir
   ClearErrors
-  SetOutPath "$PLUGINSDIR\payload"
+{clear_previous}  SetOutPath "{payload}"
   File /r "{source}"
-  WriteUninstaller "$PLUGINSDIR\payload\Uninstall.exe"
+  WriteUninstaller "{payload}\Uninstall.exe"
   IfErrors setup_failed
   StrCpy $ProgressBar 0
   StrCpy $ProgressStart 0
@@ -151,8 +163,8 @@ setup_retry:
   StrCpy $SetupRunning "1"
   GetDlgItem $CancelButton $HWNDPARENT 2
   EnableWindow $CancelButton 1
-  DetailPrint "Preparing the shared Sabine runtime..."
-  nsExec::ExecToLog '"$PLUGINSDIR\payload\{executable}" --sabine-install --sabine-install-to "$INSTDIR" --sabine-install-cancel "$PLUGINSDIR\cancel" --sabine-install-progress-bar $ProgressBar'
+  DetailPrint "{message}"
+  nsExec::ExecToLog '"{payload}\{executable}" --sabine-install{install_to} --sabine-install-cancel "$PLUGINSDIR\cancel" --sabine-install-progress-bar $ProgressBar'
   Pop $0
   StrCpy $SetupRunning "0"
   GetDlgItem $CancelButton $HWNDPARENT 2
@@ -209,6 +221,42 @@ SectionEnd
         source = escape(&source.join("*").display().to_string()),
         version = escape(&app.version),
     ))
+}
+
+/// How setup puts the app in place: through the app itself into the
+/// computer's Sabine, or, for a standalone app, by copying it there.
+struct Setup {
+    welcome: String,
+    payload: &'static str,
+    clear_previous: &'static str,
+    install_to: &'static str,
+    message: String,
+}
+
+impl Setup {
+    fn shared(name: &str) -> Self {
+        Self {
+            welcome: format!(
+                r"Setup installs {name} and prepares its shared Sabine runtime.$\r$\n$\r$\nIf the runtime is not already available, setup downloads it before finishing. You can rerun this installer to repair the installation."
+            ),
+            payload: r"$PLUGINSDIR\payload",
+            clear_previous: "",
+            install_to: r#" --sabine-install-to "$INSTDIR""#,
+            message: "Preparing the shared Sabine runtime...".to_string(),
+        }
+    }
+
+    fn standalone(name: &str) -> Self {
+        Self {
+            welcome: format!(
+                "Setup installs {name}. You can rerun this installer to repair the installation."
+            ),
+            payload: "$INSTDIR",
+            clear_previous: "  RMDir /r \"$INSTDIR\\resources\\runtimes\"\n",
+            install_to: "",
+            message: format!("Checking {name}..."),
+        }
+    }
 }
 
 fn handler_commands(app: &BundleApp, name: &str, executable: &str) -> (String, String) {

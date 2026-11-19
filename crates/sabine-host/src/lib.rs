@@ -84,6 +84,11 @@ pub const CRASH_FOLDER_ENV: &str = "BREAKPAD_DUMP_LOCATION";
 /// Where Chromium sends crash reports. Without it, reports stay on disk.
 pub const CRASH_UPLOAD_ENV: &str = "CEF_CRASH_REPORTER_SERVER_URL";
 
+/// The host a standalone app ships beside its executable.
+pub fn bundled_host() -> Option<PathBuf> {
+    installed::bundled_host()
+}
+
 pub fn available_host(runtime_dir: &Path) -> Option<PathBuf> {
     installed::prebuilt_host_path().or_else(|| {
         let path = compile::host_release_binary(runtime_dir);

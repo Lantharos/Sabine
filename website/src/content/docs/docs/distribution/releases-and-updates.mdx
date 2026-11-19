@@ -464,6 +464,10 @@ has run. A downloaded package is checked against the installed version again bef
 offered, and deleted once it's installed. Apps installed through an app store are left to the
 store; see [App stores](/docs/distribution/installing/#app-stores).
 
+[Standalone apps](/docs/distribution/bundling/#standalone-apps) don't involve Sabine's service: the
+app itself checks its update source while it runs and follows the same steps, except that a
+release never needs a newer Sabine. Only its installer packages update this way.
+
 ### Apps that are running
 
 On Linux, an archive update or a store install puts the new version beside the one that runs, and a

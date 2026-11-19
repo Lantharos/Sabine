@@ -37,6 +37,8 @@ pub(crate) struct BundleApp {
     pub updates: Option<sabine_service::AppUpdateConfig>,
     pub window: WindowSection,
     pub shared_runtime: bool,
+    /// The app ships its own Chromium and Sabine host.
+    pub standalone: bool,
     pub sandbox: Option<Sandbox>,
     /// What the app's pages may ask people for.
     pub permissions: Vec<DeclaredPermission>,
@@ -61,6 +63,14 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
     let listing = Listing::of(&sabine.app);
     let cargo_manifest = sabine.cargo_manifest(&source_dir);
     let updates = resolve_updates(sabine.updates)?;
+    let standalone = sabine.app.standalone.unwrap_or(false);
+    if standalone
+        && updates
+            .as_ref()
+            .is_some_and(|update| update.source == sabine_service::AppUpdateSource::Schelf)
+    {
+        return Err("a standalone app can't update from Schelf, which installs apps into the computer's Sabine".to_string());
+    }
     let sandbox = sabine.sandbox.map(SandboxSection::resolve).transpose()?;
     let permissions = sabine.permissions.resolve(sandbox.as_ref())?;
     sabine.spellcheck.validate()?;
@@ -176,6 +186,7 @@ pub(crate) fn resolve_app(source: &Path, overrides: ConfigOverrides) -> Result<B
         updates,
         window: sabine.window,
         shared_runtime: sabine.app.shared_runtime.unwrap_or(true),
+        standalone,
         sandbox,
         permissions,
         spellcheck: sabine.spellcheck,

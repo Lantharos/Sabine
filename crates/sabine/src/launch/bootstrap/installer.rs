@@ -18,15 +18,17 @@ pub(crate) fn requested(args: &[OsString]) -> bool {
 pub(crate) fn run(config: &SabineWindowConfig, args: &[OsString]) -> ! {
     let cancelled =
         || option(args, "--sabine-install-cancel").is_some_and(|path| Path::new(path).exists());
-    let result = if args.iter().any(|arg| arg == UNINSTALL_ARG) {
-        unregister(config)
-    } else {
-        prepare(
+    let uninstalling = args.iter().any(|arg| arg == UNINSTALL_ARG);
+    let result = match (config.standalone(), uninstalling) {
+        (true, true) => Ok(()),
+        (true, false) => check_standalone(config),
+        (false, true) => unregister(config),
+        (false, false) => prepare(
             config,
             option(args, "--sabine-install-to").map(Path::new),
             cancelled,
             SetupProgress::from_args(args),
-        )
+        ),
     };
     match result {
         Ok(()) => std::process::exit(0),
@@ -99,6 +101,17 @@ fn prepare(
     }
     progress.report("Installation is ready", Some(1.0));
     Ok(())
+}
+
+/// A standalone app's setup installs its files itself and registers nothing:
+/// the app only checks that the Chromium and host it ships with start.
+fn check_standalone(config: &SabineWindowConfig) -> Result<(), String> {
+    let runtime = super::standalone::bundled_runtime(config).map_err(|error| error.to_string())?;
+    sabine_runtime::prepare_runtime_assets(runtime.location.path())
+        .map_err(|error| error.to_string())?;
+    let host = sabine_host::bundled_host()
+        .ok_or("The Sabine host this app ships with is missing. Retry setup to repair it.")?;
+    sabine_host::validate_host_protocol(&host, runtime.location.path())
 }
 
 fn unregister(config: &SabineWindowConfig) -> Result<(), String> {

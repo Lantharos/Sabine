@@ -44,7 +44,7 @@ pub use app::registry::SabineService;
 pub use install::{
     CLI_PINNED_ENV, ensure_service_executable, find_service_executable, held_system_update,
     install_system_service, installed_service_version, newer_installed_cli, service_daemon_path,
-    stage_system_files, update_components,
+    stage_host, stage_system_files, update_components,
 };
 #[cfg(target_os = "linux")]
 pub use lifecycle::install_system_unit;
@@ -69,7 +69,7 @@ pub use types::{
 pub(crate) use types::{
     RegisteredApp, ServiceResult, UPDATE_ROLLOUT_WINDOW, UPDATE_SOAK, default_maintenance_interval,
 };
-pub use updates::retry_quarantined_runtimes;
+pub use updates::{StandaloneUpdates, apply_standalone_update, retry_quarantined_runtimes};
 
 #[cfg(test)]
 mod tests {

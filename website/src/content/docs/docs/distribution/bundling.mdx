@@ -179,6 +179,36 @@ service, host and runtime match the app; `sabine bundle` refuses otherwise. The 
 On first launch the app adopts the bundled pieces into Sabine's normal shared layout, and from then
 on they update like any other installation.
 
+## Standalone apps
+
+A standalone app carries its own Chromium and Sabine host and never uses the Sabine installed on the
+computer. It installs and runs without a network connection or a Sabine service, and a later Sabine
+release can't change how it behaves. Turn it on in `Sabine.toml`:
+
+```toml
+[app]
+id = "com.example.kiosk"
+standalone = true
+```
+
+Every bundle of the app then carries this machine's CEF runtime and host, so, like an offline
+bundle, it has to be built on the operating system and CPU architecture it is for. `sabine dev` is
+unaffected and keeps using the computer's Sabine.
+
+What changes for the installed app:
+
+- It never registers with Sabine, starts no daemon and, on Linux, never joins the
+  [shared runtime](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux).
+- Its Chromium is the one it shipped with until the app itself updates, so security fixes reach
+  people only through your releases. Release often.
+- Each package carries a full Chromium, a few hundred megabytes compressed.
+- It updates itself from installer packages: deb, rpm, AppImage, MSI, setup `.exe` and DMG. While it
+  runs, the app checks its update source every six hours and downloads a release once it has been
+  out for a day, then offers it the next time it opens, as other apps do. Archives such as portable
+  tarballs don't update themselves, and Schelf isn't available as an update source.
+- `sabine install --bundle` refuses it, since that installs into the computer's Sabine. Install one
+  of its packages instead.
+
 ## Choosing what goes in
 
 | Flag | Effect |

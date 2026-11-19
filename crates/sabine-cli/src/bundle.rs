@@ -76,6 +76,12 @@ pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
     let (json, offline, build_only) = (options.json, options.offline, options.build_only);
     let out = std::path::absolute(&options.out).map_err(|error| error.to_string())?;
     let build = build(options.build, formats[0])?;
+    if offline && build.app.standalone {
+        return Err(
+            "A standalone app's bundles always carry Chromium and its host; leave out --offline"
+                .to_string(),
+        );
+    }
     if build_only {
         if json {
             println!(

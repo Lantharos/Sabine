@@ -37,7 +37,7 @@ pub(crate) use release::{
     stage_system_update,
 };
 use release::{SystemUpdateMode, install_latest_system, install_system_release};
-pub use system::{install_system_service, stage_system_files};
+pub use system::{install_system_service, stage_host, stage_system_files};
 
 use artifacts::{
     cli_binary_name, download_system_artifact, fetch_system_manifest, newest_release,

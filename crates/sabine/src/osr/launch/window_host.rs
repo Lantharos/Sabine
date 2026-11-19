@@ -31,7 +31,7 @@ pub(crate) fn launch_process(
             message: format!("failed to lease Sabine runtime: {error}"),
         }
     })?;
-    let host_binary = crate::host::ensure_host(runtime_dir)
+    let host_binary = crate::host::app_host(config, runtime_dir)
         .map_err(|message| SabineError::CreationFailed { message })?;
     #[cfg(target_os = "linux")]
     let installation = crate::host::Installation::hold(config);

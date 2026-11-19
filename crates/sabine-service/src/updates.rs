@@ -15,8 +15,10 @@ mod apps;
 mod dmg;
 pub(crate) mod installers;
 mod packages;
+mod standalone;
 
 use apps::{ArchiveUpdates, SystemUpdates};
+pub use standalone::{StandaloneUpdates, apply_standalone_update};
 
 impl SabineService {
     pub fn maintain(&self) -> ServiceResult<MaintenanceReport> {

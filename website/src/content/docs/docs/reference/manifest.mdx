@@ -73,7 +73,7 @@ builder runs, so values you set in Rust win. Sabine looks for the manifest in th
 4. `Sabine.toml` in the current folder, then in `CARGO_MANIFEST_DIR`
 
 `SabineWindow::with_manifest(path)` applies a particular file instead. At runtime the app uses
-`[app]` `id`, `name`, `version`, `mime_types`, `extensions` and `shared_runtime`, the production
+`[app]` `id`, `name`, `version`, `mime_types`, `extensions`, `shared_runtime` and `standalone`, the production
 keys of `[web]`, `[window]`, `[updates]`, `[resources]` and, on Linux, `[sandbox]`. The other keys
 are for the CLI.
 
@@ -101,6 +101,7 @@ the app needs at runtime; see [The production manifest](#the-production-manifest
 | `autostart_arguments` | string | | Arguments desktops add to the command when someone turns on starting at login, such as `"--background"` |
 | `mime_types` | array of strings | `[]` | Document MIME types the app opens, and `x-scheme-handler/<scheme>` entries for URL schemes it handles |
 | `shared_runtime` | boolean | `true` | Linux only: whether the app's pages run in the Chromium Sabine apps share. `false` starts a Chromium of the app's own |
+| `standalone` | boolean | `false` | Whether the app ships its own Chromium and Sabine host instead of using the Sabine installed on the computer. See [Standalone apps](/docs/distribution/bundling/#standalone-apps) |
 | `cargo_manifest` | string | `"Cargo.toml"` | The Cargo manifest of the app's executable, for projects whose app lives in another crate |
 | `command` | string | | A native command that development launchers run instead of `cargo run`; `[install] command` wins over it |
 
@@ -346,7 +347,9 @@ replaces the menu bar the manifest sets. See [Menus](/docs/windows/menus/#the-ap
 `resources/` (`Contents/Resources/` on macOS). It holds:
 
 - `[app]` with `id`, `name`, `version`, `sabine` (the oldest Sabine build that runs the app, such
-  as `"0.95"`; see [Compatibility](/docs/distribution/releases-and-updates/#compatibility)), `shared_runtime = false` when you set it, `mime_types` and `[app.extensions]`
+  as `"0.95"`; see [Compatibility](/docs/distribution/releases-and-updates/#compatibility)),
+  `shared_runtime = false` and `standalone = true` when you set them, `mime_types` and
+  `[app.extensions]`
 - `[web]` with `entry` pointing at the packaged assets in `web/`, or `url` for a remote app, plus
   `allowed_origins` and `local_files`
 - `[resources]` pointing at the copies in `files/`

@@ -13,18 +13,20 @@ pub(crate) fn prebuilt_host_path() -> Option<PathBuf> {
     {
         return Some(path);
     }
-    if let Ok(executable) = std::env::current_exe()
-        && let Some(directory) = executable.parent()
-    {
-        let path = installed_host_path(directory);
-        if host_is_complete(&path) {
-            return Some(path);
-        }
+    if let Some(path) = bundled_host() {
+        return Some(path);
     }
     if cfg!(debug_assertions) {
         return None;
     }
     installed_host()
+}
+
+/// The host a bundle ships beside the app's executable.
+pub(crate) fn bundled_host() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let path = installed_host_path(executable.parent()?);
+    host_is_complete(&path).then_some(path)
 }
 
 /// The host of the newest Sabine installed for this user or for every user.

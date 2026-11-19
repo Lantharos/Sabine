@@ -29,6 +29,7 @@ pub(crate) fn dispatch_host_mode_from_args(args: &[OsString]) -> bool {
         bootstrap::NOTICE_ARG,
         bootstrap::CONFIRM_UPDATE_ARG,
         bootstrap::BLOCKED_ARG,
+        bootstrap::standalone::APPLY_UPDATE_ARG,
     ];
     if args.iter().any(|arg| modes.iter().any(|mode| arg == mode)) {
         return bootstrap::run_from_args(args);

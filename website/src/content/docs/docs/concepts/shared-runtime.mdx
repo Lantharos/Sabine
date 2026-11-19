@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, FileTree, TabItem, Tabs } from "@astrojs/starlight/components";
 
-Sabine apps don't ship a browser. A machine has one Sabine system, installed by the first Sabine app that runs there, and every app uses it: the Sabine service, a maintenance daemon, the Sabine host, the `sabine` command, and one or two Chromium runtimes. Your app's installer only carries your app and a small bootstrap, and the Sabine system updates on its own schedule while your app updates on yours.
+Sabine apps don't ship a browser. A machine has one Sabine system, installed by the first Sabine app that runs there, and every app uses it: the Sabine service, a maintenance daemon, the Sabine host, the `sabine` command, and one or two Chromium runtimes. Your app's installer only carries your app and a small bootstrap, and the Sabine system updates on its own schedule while your app updates on yours. An app that should never depend on it can ship its own Chromium as a [standalone app](/docs/distribution/bundling/#standalone-apps).
 
 ## What the Sabine system is
 

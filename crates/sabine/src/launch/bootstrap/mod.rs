@@ -1,6 +1,7 @@
 mod emergency;
 mod icons;
 pub(crate) mod installer;
+pub(crate) mod standalone;
 mod standing;
 
 use crate::launch::executable::launch_executable;
@@ -58,6 +59,9 @@ pub(crate) fn run_from_args(args: &[OsString]) -> bool {
                     })
                 });
         std::process::exit(if accepted { 0 } else { 2 });
+    }
+    if args.iter().any(|arg| arg == standalone::APPLY_UPDATE_ARG) {
+        standalone::apply_update(&args);
     }
     if let Some(index) = args.iter().position(|arg| arg == BLOCKED_ARG) {
         let remove = args
@@ -138,6 +142,9 @@ fn confirm_update(app_name: &str, version: &str) -> Result<bool, String> {
 /// Makes sure this machine has the Sabine service and a runtime, registering
 /// the app, and returns the runtime to launch with.
 pub(crate) fn prepare(config: &SabineWindowConfig) -> SabineResult<RuntimeInfo> {
+    if config.standalone() {
+        return standalone::prepare(config);
+    }
     let register = app_manifest(config);
     let runtime = match resolve_runtime(&config.runtime) {
         Ok(runtime) => {
@@ -227,13 +234,7 @@ fn offer_pending_update(config: &SabineWindowConfig) {
     if !update.ready_for_prompt() {
         return;
     }
-    let accepted = std::env::current_exe().ok().is_some_and(|executable| {
-        background_command(executable)
-            .args([CONFIRM_UPDATE_ARG, &config.title, &update.version])
-            .status()
-            .is_ok_and(|status| status.success())
-    });
-    if !accepted {
+    if !update_accepted(config, &update.version) {
         let _ = service.defer_pending_app_update(id);
         return;
     }
@@ -257,6 +258,16 @@ fn offer_pending_update(config: &SabineWindowConfig) {
     if spawned {
         std::process::exit(0);
     }
+}
+
+/// Asks whether to install `version` of the app now.
+pub(crate) fn update_accepted(config: &SabineWindowConfig, version: &str) -> bool {
+    std::env::current_exe().ok().is_some_and(|executable| {
+        background_command(executable)
+            .args([CONFIRM_UPDATE_ARG, &config.title, version])
+            .status()
+            .is_ok_and(|status| status.success())
+    })
 }
 
 fn run_bootstrap_install(

@@ -66,6 +66,9 @@ pub struct AppSection {
     pub icon: Option<String>,
     pub installer_image: Option<String>,
     pub shared_runtime: Option<bool>,
+    /// The app carries its own Chromium and Sabine host and never uses the
+    /// Sabine installed on the computer.
+    pub standalone: Option<bool>,
     #[serde(default)]
     pub mime_types: Vec<String>,
     #[serde(default)]

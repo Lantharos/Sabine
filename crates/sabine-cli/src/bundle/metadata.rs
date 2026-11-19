@@ -17,6 +17,9 @@ pub(super) fn runtime_manifest(
     if !app.shared_runtime {
         manifest.push_str("shared_runtime = false\n");
     }
+    if app.standalone {
+        manifest.push_str("standalone = true\n");
+    }
     let associations = &app.associations;
     if !associations.mime_types.is_empty() {
         manifest.push_str(&format!(

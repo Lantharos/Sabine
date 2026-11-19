@@ -26,6 +26,11 @@ pub fn stage_system_files(
         fs::copy(&source, &target)?;
         sabine_runtime::make_executable(&target)?;
     }
+    stage_host(destination, host)
+}
+
+/// Copies the CEF host and the files it needs beside it into `destination`.
+pub fn stage_host(destination: &Path, host: &Path) -> ServiceResult<()> {
     if cfg!(target_os = "macos") {
         let bundle = host
             .ancestors()

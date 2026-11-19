@@ -53,6 +53,7 @@ pub use install::{
 pub use lease::RuntimeLease;
 pub use process::{
     ProcessIdentity, background_command, configure_background_command, find_program, process_alive,
+    wait_for_exit,
 };
 pub use types::{
     RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, RuntimeLocation, RuntimeMode, RuntimeUpdate,

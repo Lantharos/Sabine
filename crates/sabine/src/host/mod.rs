@@ -15,11 +15,27 @@ pub(crate) use installation::Installation;
 pub(crate) use process::{PrimaryWindow, ProcessCommand};
 pub use process::{SabineProcess, WindowId};
 pub(crate) use process_tree::{ManagedChild, prepare_detachable_child_command, spawn_child};
+
+/// The host the app's windows run in: the one a standalone app ships, or
+/// the one this computer's Sabine provides.
+pub(crate) fn app_host(
+    config: &crate::window::config::SabineWindowConfig,
+    runtime_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    if config.standalone() {
+        return sabine_host::bundled_host().ok_or_else(|| {
+            "The Sabine host this app ships with is missing. Reinstall the app to repair it."
+                .to_string()
+        });
+    }
+    ensure_host(runtime_dir)
+}
+
 #[cfg(debug_assertions)]
-pub(crate) use sabine_host::ensure_host;
+use sabine_host::ensure_host;
 
 #[cfg(not(debug_assertions))]
-pub(crate) fn ensure_host(runtime_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+fn ensure_host(runtime_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
     sabine_host::available_host(runtime_dir).ok_or_else(||
         "The shared Sabine host is missing. Repair or update the Sabine installation before launching this app.".to_string())
 }

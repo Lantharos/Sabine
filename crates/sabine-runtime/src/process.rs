@@ -55,6 +55,27 @@ pub fn process_alive(pid: u32) -> bool {
     }
 }
 
+/// Returns once the process `pid` has exited.
+pub fn wait_for_exit(pid: u32) {
+    #[cfg(unix)]
+    while process_alive(pid) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::{
+            Foundation::CloseHandle,
+            System::Threading::{INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+        };
+        if let Ok(process) = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) } {
+            unsafe {
+                WaitForSingleObject(process, INFINITE);
+                let _ = CloseHandle(process);
+            }
+        }
+    }
+}
+
 /// A process by its id and the moment it started, which together never repeat
 /// even when the system hands the id to a later process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

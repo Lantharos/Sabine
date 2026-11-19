@@ -3,6 +3,11 @@
 - Sabine follows CEF's stable channel again: the daemon installs each new stable Chromium as it
   comes out, checks it against the size and SHA-1 CEF's build index lists, and validates it before
   any app uses it, instead of waiting for a Sabine release to move to it.
+- `standalone = true` under `[app]` makes an app carry its own Chromium and Sabine host. It installs
+  and runs without a network connection or the Sabine service, never registers with Sabine, and a
+  later Sabine release can't change it. It updates itself from its installer packages: while it
+  runs, it checks its update source every six hours, and offers a downloaded release the next time
+  it opens.
 
 # Sabine 0.98
 
