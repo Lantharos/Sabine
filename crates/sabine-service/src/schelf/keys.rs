@@ -127,7 +127,9 @@ pub(crate) fn key_id(key: &VerifyingKey) -> String {
 }
 
 pub(crate) fn timestamp(value: &str) -> ServiceResult<SystemTime> {
-    humantime::parse_rfc3339(value)
+    value
+        .parse::<jiff::Timestamp>()
+        .and_then(SystemTime::try_from)
         .map_err(|error| untrusted(&format!("invalid timestamp {value}: {error}")))
 }
 

@@ -3,7 +3,6 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard},
-    time::SystemTime,
 };
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
@@ -98,8 +97,8 @@ impl Log for FileLog {
             return;
         }
         let line = format!(
-            "{} {:<5} {}: {}\n",
-            humantime::format_rfc3339_millis(SystemTime::now()),
+            "{:.3} {:<5} {}: {}\n",
+            jiff::Timestamp::now(),
             record.level(),
             record.target(),
             record.args()
