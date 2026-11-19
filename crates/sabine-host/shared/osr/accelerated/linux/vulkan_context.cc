@@ -383,8 +383,8 @@ std::unique_ptr<VulkanContext> CreateContext() {
   return context;
 }
 
-std::unique_ptr<VulkanContext>& SharedContext() {
-  static std::unique_ptr<VulkanContext> context = CreateContext();
+VulkanContext*& SharedContext() {
+  static VulkanContext* context = CreateContext().release();
   return context;
 }
 
@@ -409,14 +409,14 @@ VulkanContext::~VulkanContext() {
 }
 
 VulkanContext* SharedVulkanContext() {
-  return SharedContext().get();
+  return SharedContext();
 }
 
 VulkanContext* ReopenSharedVulkanContext() {
-  std::unique_ptr<VulkanContext>& context = SharedContext();
-  context.reset();
-  context = CreateContext();
-  return context.get();
+  VulkanContext*& context = SharedContext();
+  delete context;
+  context = CreateContext().release();
+  return context;
 }
 
 }  // namespace sabine_osr

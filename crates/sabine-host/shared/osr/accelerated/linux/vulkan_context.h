@@ -84,7 +84,9 @@ VkFormat UnormFormat(SharedFormat format);
 // Opens the Vulkan device used to copy Chromium's frames into Sabine-owned
 // dma-bufs on first use, on the GPU the desktop composites on when it can,
 // which is the one Chromium renders on. Returns null when this machine cannot
-// share dma-bufs through Vulkan.
+// share dma-bufs through Vulkan. The device is left to the kernel when the
+// process exits: NVIDIA's driver tears itself down in an exit handler of its
+// own that runs first, and destroying the device after it crashes.
 VulkanContext* SharedVulkanContext();
 
 // Replaces the shared device after it was lost. The new one comes from a new
