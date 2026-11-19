@@ -88,6 +88,7 @@ void SabineOsrHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   media_.Report();
   clipboard_.Forget(browser);
   permissions_.Forget(browser_id);
+  dialogs_->Forget(browser);
   if (devtools_inspected_ && devtools_inspected_->IsSame(browser)) {
     CloseDevTools();
   }

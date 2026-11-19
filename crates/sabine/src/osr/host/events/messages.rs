@@ -83,9 +83,6 @@ impl OsrNativeHost {
                 operations,
                 image,
             } => self.begin_page_drag(content, operations, image),
-            OsrMessage::ContextMenu { x, y, guest, items } => {
-                self.open_context_menu(x, y, guest, items);
-            }
             OsrMessage::FileDialog(request) => self.show_file_dialog(request),
             OsrMessage::JsDialog(request) => self.show_js_dialog(request),
             OsrMessage::JsDialogClosed(id) => self.drop_js_dialog(id),
@@ -96,7 +93,6 @@ impl OsrNativeHost {
             OsrMessage::PrintJob(job) => self.print_page(job),
             OsrMessage::PrintDocument(outcome) => self.finish_print_document(outcome),
             OsrMessage::MediaPlaying(playing) => self.set_page_media_playing(playing),
-            OsrMessage::ContextMenuDismissed => self.dismiss_context_menu(),
             OsrMessage::PermissionRequest(ask) => self.ask_permission(ask),
             OsrMessage::PermissionWithdrawn(id) => self.permission_withdrawn(id),
             OsrMessage::DragOperation(operation) => {
@@ -136,7 +132,6 @@ impl OsrNativeHost {
                 } else {
                     self.report_page_started();
                 }
-                self.dismiss_context_menu();
                 self.clear_media();
                 self.main_load_ready = false;
                 self.main_frame_presented = false;

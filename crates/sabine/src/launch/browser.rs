@@ -166,7 +166,11 @@ pub(crate) fn apply_browser_launch_args(
         .arg("--disable-sync")
         .arg("--metrics-recording-only")
         .arg("--no-default-browser-check")
-        .arg("--no-first-run");
+        .arg("--no-first-run")
+        .arg(format!(
+            "--sabine-accept-languages={}",
+            super::languages::accept_languages(sys_locale::get_locales())
+        ));
     #[cfg(target_os = "linux")]
     command.args(options.password_store.switch());
     #[cfg(target_os = "macos")]

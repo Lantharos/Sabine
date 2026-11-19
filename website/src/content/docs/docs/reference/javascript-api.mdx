@@ -958,14 +958,32 @@ const { "text/plain": text } = await clipboard.read({ types: ["text/plain"] });
 
 ```ts
 const menu: {
-  setContextMenu(items: MenuItem[]): Promise<void>;
+  onContext(callback: (context: MenuContext) => void): () => void;
+  run(role: MenuRole): Promise<void>;
   popup(items: MenuItem[], at: { x: number; y: number }): Promise<string | null>;
   setAppMenu(items: MenuItem[]): Promise<void>;
   appMenu(): Promise<MenuItem[]>;
   activate(id: string): Promise<void>;
-  onSelect(callback: (selection: { id: string; menu: "context" | "app" }) => void): () => void;
+  onSelect(callback: (selection: { id: string }) => void): () => void;
   onAppMenuChanged(callback: (items: MenuItem[]) => void): () => void;
 };
+
+interface MenuContext {
+  x: number; // CSS pixels of the app's page
+  y: number;
+  guest: string | null;
+  editable: boolean;
+  selection: string;
+  link: string | null;
+  misspelled: string | null;
+  suggestions: string[];
+  canUndo: boolean;
+  canRedo: boolean;
+  canCut: boolean;
+  canCopy: boolean;
+  canPaste: boolean;
+  canSelectAll: boolean;
+}
 
 interface MenuItem {
   id?: string;
@@ -979,11 +997,13 @@ interface MenuItem {
 }
 ```
 
-`setContextMenu` replaces the app's items in the window's context menu. `popup` shows a menu at a
-point of the page in CSS pixels and resolves with the id chosen, or `null`. `setAppMenu` replaces
-the menu bar of every window; `appMenu` reads it with labels, accelerators and ids filled in, for
-pages that draw it, and `activate` chooses one of its items. `onSelect` hears the items chosen from
-the context menu and the menu bar. Available to the app's own pages; elsewhere the methods throw.
+`onContext` hears each time someone asks for a context menu in the page or one of its guests, for
+the page to draw; Chromium opens none of its own. `run` does what a role does, such as pasting into
+the focused field. `popup` shows a menu at a point of the page in CSS pixels and resolves with the
+id chosen, or `null`. `setAppMenu` replaces the menu bar of every window; `appMenu` reads it with
+labels, accelerators and ids filled in, for pages that draw it, and `activate` chooses one of its
+items. `onSelect` hears the items chosen from the menu bar. Available to the app's own pages;
+elsewhere the methods throw.
 See [Menus](/docs/windows/menus/).
 
 ## `dialog`
@@ -1045,6 +1065,7 @@ const spellcheck: {
   get(): Promise<SpellcheckSettings>;
   set(settings: Partial<SpellcheckSettings>): Promise<SpellcheckSettings>;
   addWord(word: string): Promise<void>;
+  replace(word: string): Promise<void>;
 };
 
 interface SpellcheckSettings {
@@ -1053,7 +1074,8 @@ interface SpellcheckSettings {
 }
 ```
 
-Reads and changes spellchecking in the app's profile, and adds words to its custom dictionary. See
+Reads and changes spellchecking in the app's profile, adds words to its custom dictionary, and
+replaces the misspelled word the last context menu was asked for over. See
 [Spellcheck](/docs/web/spellcheck/).
 
 ## `print`

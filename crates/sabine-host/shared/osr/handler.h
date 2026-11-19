@@ -92,6 +92,10 @@ class SabineOsrHandler : public CefClient,
   CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
   CefRefPtr<CefFrameHandler> GetFrameHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override;
   bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
                   const CefKeyEvent& event,
                   CefEventHandle os_event) override;

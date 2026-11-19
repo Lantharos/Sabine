@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
-use super::MenuOrigin;
-use super::items::app_items;
+use super::items::panel_items;
 use crate::MenuItem;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::page::BridgeRequest;
@@ -31,12 +30,14 @@ impl OsrNativeHost {
         };
         let zoom = self.page_zoom as f32;
         let anchor = (popup.x * zoom, popup.y * zoom + self.titlebar_height());
-        let entries = app_items(&popup.items, &self.config.title);
-        let origin = MenuOrigin::Popup {
-            browser_id: request.browser_id.to_string(),
-            request_id: request.request_id.to_string(),
-        };
-        if !self.show_menu(anchor, entries, origin, popup.items) {
+        let entries = panel_items(&popup.items, &self.config.title);
+        if !self.show_menu(
+            anchor,
+            entries,
+            request.browser_id,
+            request.request_id,
+            popup.items,
+        ) {
             self.send_bridge_response(
                 request.browser_id,
                 request.request_id,

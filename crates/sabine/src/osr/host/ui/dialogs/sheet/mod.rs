@@ -173,7 +173,7 @@ impl OsrNativeHost {
         let Some(SheetRequest { origin, dialog }) = self.sheets.queue.pop_front() else {
             return;
         };
-        self.cancel_context_menu();
+        self.cancel_popup_menu();
         self.send_control("capture_lost\n");
         let field = dialog
             .input

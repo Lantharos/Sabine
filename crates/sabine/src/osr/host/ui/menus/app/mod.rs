@@ -21,11 +21,10 @@ use crate::{MenuItem, MenuKind};
 
 /// Sent to pages when the app menu bar changes, so pages that draw it can.
 const APP_MENU_EVENT: &str = "menu.appMenu";
-/// Sent to pages when someone chooses an item of the app's menus.
+/// Sent to pages when someone chooses an item of the app menu bar.
 const SELECT_EVENT: &str = "menu.select";
 
-/// The app menu bar in the window. The app's items in the context menu stay
-/// in the window's configuration.
+/// The app menu bar in the window.
 #[derive(Default)]
 pub(in crate::osr::host) struct Menus {
     /// The menu bar as the app set it, empty while it set none.
@@ -45,11 +44,6 @@ pub(in crate::osr::host) struct Menus {
 }
 
 impl OsrNativeHost {
-    pub(in crate::osr::host) fn set_context_menu_items(&mut self, items: Vec<MenuItem>) {
-        self.config.context_menu = items;
-        self.send_menu_state();
-    }
-
     pub(in crate::osr::host) fn set_app_menu(&mut self, items: Vec<MenuItem>) {
         self.menus.bar = items;
         #[cfg(not(target_os = "linux"))]
@@ -71,38 +65,27 @@ impl OsrNativeHost {
         Cow::Borrowed(&self.menus.bar)
     }
 
-    /// Tells the browser which keys the app's menus take when the page
-    /// leaves them unhandled, and whether the app adds context menu items.
+    /// Tells the browser which keys the app menu bar takes when the page
+    /// leaves them unhandled.
     pub(in crate::osr::host) fn send_menu_state(&self) {
-        let bar = self.shown_bar();
-        let accelerators = shortcuts(&bar)
+        let accelerators = shortcuts(&self.shown_bar())
             .into_iter()
-            .chain(shortcuts(&self.config.context_menu))
             .map(|(accelerator, _)| accelerator.canonical())
             .collect::<Vec<_>>();
         self.send_control(format!(
             "menu_accelerators\t{}\n",
             serde_json::json!({ "accelerators": accelerators })
         ));
-        self.send_control(format!(
-            "context_menu_items\t{}\n",
-            u8::from(!self.config.context_menu.is_empty())
-        ));
     }
 
     pub(in crate::osr::host) fn run_menu_accelerator(&mut self, accelerator: &str) {
         let bar = self.shown_bar().into_owned();
-        let context = self.config.context_menu.clone();
-        let chosen = [(&bar, MenuKind::App), (&context, MenuKind::Context)]
+        let chosen = shortcuts(&bar)
             .into_iter()
-            .find_map(|(items, kind)| {
-                shortcuts(items)
-                    .into_iter()
-                    .find(|(shortcut, _)| shortcut.canonical() == accelerator)
-                    .map(|(_, item)| (items, item.chosen_id().to_string(), kind))
-            });
-        if let Some((items, id, kind)) = chosen {
-            self.choose_menu_item(items, &id, kind);
+            .find(|(shortcut, _)| shortcut.canonical() == accelerator)
+            .map(|(_, item)| item.chosen_id().to_string());
+        if let Some(id) = chosen {
+            self.choose_menu_item(&bar, &id, MenuKind::App);
         }
     }
 
@@ -126,10 +109,10 @@ impl OsrNativeHost {
         let mut output = std::io::stdout().lock();
         let _ = writeln!(output, "{}", menu_item_line(id, kind));
         let _ = output.flush();
-        if kind != MenuKind::Popup {
+        if kind == MenuKind::App {
             self.send_control(format!(
                 "SABINE_BRIDGE_EVENT\t\"{SELECT_EVENT}\"\t{}\n",
-                serde_json::json!({ "id": id, "menu": kind })
+                serde_json::json!({ "id": id })
             ));
         }
     }

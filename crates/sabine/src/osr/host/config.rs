@@ -54,7 +54,6 @@ pub(crate) struct OsrHostConfig {
     pub drag_regions: Vec<WindowRegionRect>,
     pub drag_exclusion_regions: Vec<WindowRegionRect>,
     pub control_regions: Vec<SabineWindowControlRegion>,
-    pub context_menu: Vec<crate::MenuItem>,
     pub lifecycle: SabineLifecyclePolicy,
     pub dev_mode: bool,
     pub remote_devtools_port: Option<u16>,
@@ -230,13 +229,6 @@ impl OsrHostConfig {
             drag_regions: rects_from_json(value.get("drag_regions")),
             drag_exclusion_regions: rects_from_json(value.get("drag_exclusion_regions")),
             control_regions: control_regions_from_json(value.get("control_regions")),
-            context_menu: value
-                .get("context_menu")
-                .cloned()
-                .map(serde_json::from_value)
-                .transpose()
-                .map_err(|error| format!("OSR host config has an invalid context menu: {error}"))?
-                .unwrap_or_default(),
             lifecycle: lifecycle_from_json(value.get("lifecycle")),
             dev_mode: value
                 .get("dev_mode")

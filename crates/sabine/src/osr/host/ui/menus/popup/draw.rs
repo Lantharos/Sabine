@@ -6,7 +6,6 @@ use super::panel::{
 };
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::ui::surface::{Palette, RADIUS};
-use crate::osr::protocol::MenuMark;
 use crate::render::{
     DisplayList, RectCommand, RoundedRectCommand, TextAlign, TextCommand, TextWeight,
 };
@@ -15,8 +14,8 @@ use crate::window::style::Color;
 const LINE_HEIGHT: f32 = 18.0;
 
 impl OsrNativeHost {
-    pub(in crate::osr::host) fn draw_context_menu(&self, list: &mut DisplayList) {
-        let Some(menu) = &self.context_menu else {
+    pub(in crate::osr::host) fn draw_popup_menu(&self, list: &mut DisplayList) {
+        let Some(menu) = &self.popup_menu else {
             return;
         };
         let palette = Palette::new(self.appearance());
@@ -122,12 +121,5 @@ fn draw_entry(list: &mut DisplayList, panel: &MenuPanel, entry: &MenuEntry, pale
 }
 
 fn mark_glyph(entry: &MenuEntry) -> Option<&'static str> {
-    if !entry.item.checked {
-        return None;
-    }
-    match entry.item.mark {
-        MenuMark::Check => Some("✓"),
-        MenuMark::Radio => Some("•"),
-        MenuMark::None => None,
-    }
+    (entry.item.checkable && entry.item.checked).then_some("✓")
 }

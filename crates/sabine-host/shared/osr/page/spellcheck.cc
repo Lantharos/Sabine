@@ -131,7 +131,7 @@ bool RunSpellcheckCommand(CefRefPtr<CefBrowser> browser,
     return false;
   }
   if (operation != "set" && operation != "get") {
-    *error = "sabine.spellcheck takes get, set and addWord";
+    *error = "sabine.spellcheck takes get, set, addWord and replace";
     return false;
   }
   *result = SettingsJson(context);

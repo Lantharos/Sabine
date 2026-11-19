@@ -86,14 +86,6 @@ pub(crate) enum OsrMessage {
     },
     /// The drop the page under the pointer would accept.
     DragOperation(u32),
-    ContextMenu {
-        x: i32,
-        y: i32,
-        /// Whether a guest's page asks, which shows none of the app's items.
-        guest: bool,
-        items: Vec<ContextMenuItem>,
-    },
-    ContextMenuDismissed,
     /// A page asks for permissions the app declares.
     PermissionRequest(PermissionAsk),
     /// Chromium took back a permission request, as when its page went away.
@@ -171,42 +163,6 @@ pub(crate) struct CursorImage {
     pub height: u16,
     pub hotspot_x: u16,
     pub hotspot_y: u16,
-}
-
-/// One entry of a page's context menu, as Chromium offers it. An entry
-/// with items opens them as a submenu.
-#[derive(Clone, Debug, Default, serde::Deserialize)]
-#[serde(default)]
-pub(crate) struct ContextMenuItem {
-    pub id: i32,
-    pub label: String,
-    pub enabled: bool,
-    pub separator: bool,
-    pub mark: MenuMark,
-    pub checked: bool,
-    pub items: Vec<ContextMenuItem>,
-}
-
-impl ContextMenuItem {
-    /// The bytes the entry and its submenu hold.
-    pub fn retained_bytes(&self) -> usize {
-        self.label.capacity()
-            + self
-                .items
-                .iter()
-                .map(ContextMenuItem::retained_bytes)
-                .sum::<usize>()
-    }
-}
-
-/// How a context menu entry shows whether it is on.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum MenuMark {
-    #[default]
-    None,
-    Check,
-    Radio,
 }
 
 /// A page's permission request, from the app's own document or a guest the

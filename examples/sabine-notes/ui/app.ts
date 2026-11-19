@@ -1,5 +1,6 @@
 import { appWindow, type ControlsOverlay } from "@lantharos/sabine";
 import { commands } from "./bindings";
+import "./context-menu";
 
 interface Note {
   id: string;

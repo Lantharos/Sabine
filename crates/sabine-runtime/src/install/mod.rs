@@ -1,6 +1,8 @@
 pub(crate) mod archive;
 pub(crate) mod assets;
 pub(crate) mod directory;
+#[cfg(any(target_os = "linux", windows))]
+mod locales;
 pub(crate) mod payload;
 pub(crate) mod progress_log;
 #[cfg(windows)]
@@ -150,6 +152,8 @@ fn install_user_runtime_inner(
     })?;
     #[cfg(target_os = "linux")]
     strip::strip_runtime_binaries(&extracted)?;
+    #[cfg(any(target_os = "linux", windows))]
+    locales::link_locale_packs(&extracted)?;
     std::fs::write(extracted.join(".sabine-version"), &plan.version)?;
     crate::prepare_runtime_assets(&extracted)?;
     if !runtime_is_valid(&extracted) {

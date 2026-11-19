@@ -79,6 +79,8 @@ int RunSabineHost(CefMainArgs main_args,
   if (!locales_dir_path.empty()) {
     CefString(&settings.locales_dir_path).FromString(locales_dir_path);
   }
+  CefString(&settings.accept_language_list)
+      .FromString(command_line->GetSwitchValue("sabine-accept-languages"));
 
   const std::string root_cache_path =
       command_line->GetSwitchValue("root-cache-path");

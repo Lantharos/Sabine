@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::items::PanelItem;
-use crate::osr::protocol::MenuMark;
 use crate::render::GpuRenderer;
 
 pub(super) const MENU_PADDING: f32 = 5.0;
@@ -41,7 +40,7 @@ impl MenuPanel {
         let mut top = MENU_PADDING;
         let mut label_width = 0.0_f32;
         let mut trailing_width = 0.0_f32;
-        let marks = items.iter().any(|item| item.mark != MenuMark::None);
+        let marks = items.iter().any(|item| item.checkable);
         let entries = items
             .into_iter()
             .map(|item| {

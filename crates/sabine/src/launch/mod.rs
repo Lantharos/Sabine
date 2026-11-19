@@ -4,6 +4,7 @@ pub(crate) mod browser;
 pub(crate) mod confine;
 pub(crate) mod dev_server;
 pub(crate) mod executable;
+mod languages;
 pub(crate) mod metrics;
 #[cfg(target_os = "linux")]
 pub(crate) mod sandbox;

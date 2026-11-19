@@ -119,7 +119,7 @@ impl OsrNativeHost {
     fn page_stays_direct(&self) -> bool {
         self.overlays.is_empty()
             && self.tooltip.as_ref().is_none_or(|tooltip| !tooltip.shown)
-            && self.context_menu.is_none()
+            && self.popup_menu.is_none()
             && self.permission_prompt.is_none()
             && !self.sheets.is_open()
             && self.media.holes().next().is_none()

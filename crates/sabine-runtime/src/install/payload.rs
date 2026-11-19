@@ -1,7 +1,7 @@
 use std::{fs, io, path::Path};
 
 /// Copies the parts of a runtime that apps load, leaving out the build SDK,
-/// leases, and hosts compiled against it.
+/// leases, and hosts compiled against it. Files the runtime links stay links.
 pub fn copy_runtime_payload(source: &Path, destination: &Path) -> io::Result<()> {
     fs::create_dir_all(destination)?;
     let source = source.canonicalize()?;
@@ -20,7 +20,32 @@ pub fn copy_runtime_payload(source: &Path, destination: &Path) -> io::Result<()>
             fs::copy(&path, destination.join(name))?;
         }
     }
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        super::locales::copy_locale_packs(&source, destination)?;
+        super::assets::link_release_assets(destination)?;
+    }
     Ok(())
+}
+
+/// Whether the file at `relative` in the runtime is a link that copying the
+/// payload makes again.
+fn linked_after_copy(relative: &Path) -> bool {
+    #[cfg(any(target_os = "linux", windows))]
+    {
+        relative == Path::new("Resources/locales")
+            || relative.parent() == Some(Path::new("Release"))
+                && relative.file_name().is_some_and(|name| {
+                    super::assets::RELEASE_ASSETS
+                        .iter()
+                        .any(|asset| name == *asset)
+                })
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = relative;
+        false
+    }
 }
 
 fn copy_runtime_recursive(source: &Path, destination: &Path, root: &Path) -> io::Result<()> {
@@ -29,14 +54,15 @@ fn copy_runtime_recursive(source: &Path, destination: &Path, root: &Path) -> io:
         let entry = entry?;
         let name = entry.file_name();
         let name_text = name.to_string_lossy();
+        let source_path = entry.path();
         if matches!(
             name_text.as_ref(),
             ".leases" | ".sabine-host-build" | ".sabine-hosts"
         ) || name_text.ends_with(".installing")
+            || source_path.strip_prefix(root).is_ok_and(linked_after_copy)
         {
             continue;
         }
-        let source_path = entry.path();
         let destination_path = destination.join(name);
         if entry.file_type()?.is_symlink() {
             let target = fs::read_link(&source_path)?;

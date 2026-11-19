@@ -103,7 +103,7 @@ impl ApplicationHandler for OsrNativeHost {
                     if pressed {
                         self.sheet_key_pressed(&event);
                     }
-                } else if self.context_menu.is_some() {
+                } else if self.popup_menu.is_some() {
                     if pressed {
                         self.menu_key_pressed(&event.logical_key);
                     }
@@ -160,7 +160,7 @@ impl ApplicationHandler for OsrNativeHost {
                 self.pointer_button(event_loop, state, position, button, primary);
             }
             WindowEvent::MouseWheel { .. }
-                if self.context_menu.is_some() || self.sheets.is_open() => {}
+                if self.popup_menu.is_some() || self.sheets.is_open() => {}
             WindowEvent::MouseWheel { delta, .. } => self.forward_mouse_wheel(delta),
             WindowEvent::PinchGesture { delta, .. } => self.forward_pinch(delta),
             WindowEvent::DragEntered { id, position } if !self.clipboard_owns_drops() => {

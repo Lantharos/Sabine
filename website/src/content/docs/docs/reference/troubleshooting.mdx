@@ -135,7 +135,7 @@ Sandboxed Chromium processes, such as the GPU and renderer processes, can't open
 
 ### In development
 
-Right-click a page in a development run and choose **Open DevTools**. DevTools dock along the bottom of the window, rendered off screen like the page itself, and **Close DevTools** in the same menu closes them. Pages that cancel the `contextmenu` event get no menu; use remote debugging instead.
+Press F12 or Ctrl+Shift+I (⌥⌘I on macOS) in a development run to open DevTools for the page or guest that has focus. DevTools dock along the bottom of the window, rendered off screen like the page itself, and the same keys close them.
 
 Development runs also listen for remote debugging on port 9222. Open `chrome://inspect` in Chrome or Chromium, or `http://127.0.0.1:9222` in any browser, and pick the page. To debug several apps at once, give each its own port:
 

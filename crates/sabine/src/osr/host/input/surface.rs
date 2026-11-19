@@ -40,7 +40,7 @@ impl OsrNativeHost {
     }
 
     fn apply_surface_geometry(&mut self, size: PhysicalSize<u32>, scale: f64) {
-        self.cancel_context_menu();
+        self.cancel_popup_menu();
         self.surface_size = size;
         self.scale_factor = scale;
         self.lay_out_sheet();
@@ -69,7 +69,7 @@ impl OsrNativeHost {
             self.refresh_appearance();
             report_focus();
         } else {
-            self.cancel_context_menu();
+            self.cancel_popup_menu();
             self.lose_pointer_capture();
         }
         self.send_control(if focused { "focus\t1\n" } else { "focus\t0\n" });

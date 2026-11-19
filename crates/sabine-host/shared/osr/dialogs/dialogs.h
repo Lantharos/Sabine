@@ -12,9 +12,10 @@
 
 class SabineOsrHandler;
 
-// The context menus, file dialogs and JavaScript dialogs the window shows for
-// its pages. Offscreen browsers have no window for Chromium to put its own
-// alert, confirm, prompt and leave-page dialogs on, so the window draws them.
+// The file dialogs and JavaScript dialogs the window shows for its pages, and
+// the context menus the app's page draws. Offscreen browsers have no window for
+// Chromium to put its own alert, confirm, prompt and leave-page dialogs on, so
+// the window draws them.
 class PageDialogs : public CefContextMenuHandler,
                     public CefDialogHandler,
                     public CefJSDialogHandler {
@@ -25,18 +26,6 @@ class PageDialogs : public CefContextMenuHandler,
                            CefRefPtr<CefFrame> frame,
                            CefRefPtr<CefContextMenuParams> params,
                            CefRefPtr<CefMenuModel> model) override;
-  bool RunContextMenu(CefRefPtr<CefBrowser> browser,
-                      CefRefPtr<CefFrame> frame,
-                      CefRefPtr<CefContextMenuParams> params,
-                      CefRefPtr<CefMenuModel> model,
-                      CefRefPtr<CefRunContextMenuCallback> callback) override;
-  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
-                            CefRefPtr<CefFrame> frame,
-                            CefRefPtr<CefContextMenuParams> params,
-                            int command_id,
-                            EventFlags event_flags) override;
-  void OnContextMenuDismissed(CefRefPtr<CefBrowser> browser,
-                              CefRefPtr<CefFrame> frame) override;
   bool OnFileDialog(CefRefPtr<CefBrowser> browser,
                     FileDialogMode mode,
                     const CefString& title,
@@ -58,11 +47,10 @@ class PageDialogs : public CefContextMenuHandler,
                             CefRefPtr<CefJSDialogCallback> callback) override;
   void OnResetDialogState(CefRefPtr<CefBrowser> browser) override;
 
-  void ChooseContextMenuCommand(int command_id);
-  // Whether the app adds items of its own to the page's context menu, which
-  // then opens even where Chromium offers none. Guests' menus keep only
-  // Chromium's.
-  void SetAppContextItems(bool present) { app_context_items_ = present; }
+  // Replaces the misspelled word of the page or guest a context menu was last
+  // asked for.
+  void ReplaceMisspelling(const std::string& word);
+  void Forget(CefRefPtr<CefBrowser> browser);
   void FinishFileDialog(const std::vector<std::string>& parts);
   void FinishJsDialog(const std::vector<std::string>& parts);
 
@@ -77,8 +65,7 @@ class PageDialogs : public CefContextMenuHandler,
                     CefRefPtr<CefJSDialogCallback> callback);
 
   SabineOsrHandler* const owner_;
-  CefRefPtr<CefRunContextMenuCallback> context_menu_;
-  bool app_context_items_ = false;
+  CefRefPtr<CefBrowser> context_browser_;
   uint32_t file_serial_ = 0;
   std::map<uint32_t, CefRefPtr<CefFileDialogCallback>> files_;
   uint32_t js_dialog_serial_ = 0;

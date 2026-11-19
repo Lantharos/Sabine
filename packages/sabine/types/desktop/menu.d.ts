@@ -39,12 +39,44 @@ export interface MenuItem {
 
 export interface MenuSelection {
   id: string;
-  menu: "context" | "app";
+}
+
+/** Where someone asked for a context menu, and what applies there. */
+export interface MenuContext {
+  /** Where to open the menu, in the CSS pixels of the app's page. */
+  x: number;
+  y: number;
+  /** The guest asked over, or `null` for the app's own page. */
+  guest: string | null;
+  /** Whether the menu was asked for over text that can be edited. */
+  editable: boolean;
+  /** The selected text, or an empty string. */
+  selection: string;
+  /** The link asked over, or `null`. */
+  link: string | null;
+  /** The misspelled word asked over, which `spellcheck.replace` corrects. */
+  misspelled: string | null;
+  suggestions: string[];
+  canUndo: boolean;
+  canRedo: boolean;
+  canCut: boolean;
+  canCopy: boolean;
+  canPaste: boolean;
+  canSelectAll: boolean;
 }
 
 export interface SabineMenuApi {
-  /** Replaces the app's items in the window's context menu, after Chromium's. */
-  setContextMenu(items: MenuItem[]): Promise<void>;
+  /**
+   * Calls `callback` each time someone asks for a context menu, with the
+   * mouse or the keyboard, in the app's page or a guest it shows. Pages draw
+   * the menu themselves; without one, nothing opens.
+   */
+  onContext(callback: (context: MenuContext) => void): () => void;
+  /**
+   * Does what a role does, such as pasting into the focused field. Items that
+   * edit should keep the field focused, by cancelling `mousedown`.
+   */
+  run(role: MenuRole): Promise<void>;
   /**
    * Shows a menu at a point of the page in CSS pixels, such as under a button
    * the page draws. Resolves with the id chosen, or `null` when it closes
@@ -60,13 +92,13 @@ export interface SabineMenuApi {
   appMenu(): Promise<MenuItem[]>;
   /** Chooses an item of the app menu bar, as a page that draws it does. */
   activate(id: string): Promise<void>;
-  /** Calls `callback` with each item chosen from the context menu or app menu bar. */
+  /** Calls `callback` with each item chosen from the app menu bar. */
   onSelect(callback: (selection: MenuSelection) => void): () => void;
   onAppMenuChanged(callback: (items: MenuItem[]) => void): () => void;
 }
 
 /**
- * The app's items in the context menu, menus at a point of the page, and the
- * app menu bar, in the app's own pages.
+ * The page's own context menu, menus at a point of the page, and the app menu
+ * bar, in the app's own pages.
  */
 export declare const menu: SabineMenuApi;

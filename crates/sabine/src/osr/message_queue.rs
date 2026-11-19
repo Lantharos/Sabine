@@ -4,8 +4,7 @@ use std::{
 };
 
 use super::protocol::{
-    ContextMenuItem, FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect,
-    accessibility::AxLocation,
+    FrameBytes, OsrMessage, OsrPaintBatch, PageCursorMessage, PaintRect, accessibility::AxLocation,
 };
 
 const MAX_QUEUED_MESSAGES: usize = 256;
@@ -273,9 +272,6 @@ fn message_retained_bytes(message: &OsrMessage) -> usize {
         | OsrMessage::GuestHidden(text)
         | OsrMessage::TooltipChanged(text) => text.capacity(),
         OsrMessage::Cursor(PageCursorMessage::Custom(image)) => image.rgba.capacity(),
-        OsrMessage::ContextMenu { items, .. } => {
-            items.iter().map(ContextMenuItem::retained_bytes).sum()
-        }
         OsrMessage::BridgeRequest(frame) => {
             frame.line.capacity() + frame.body.as_ref().map_or(0, Vec::capacity)
         }

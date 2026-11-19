@@ -191,7 +191,7 @@ impl OsrNativeHost {
         self.draw_tooltip(list, width, height);
         self.draw_sheet(list, width, height);
         self.draw_permission_prompt(list);
-        self.draw_context_menu(list);
+        self.draw_popup_menu(list);
     }
 }
 

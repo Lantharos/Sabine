@@ -1,15 +1,14 @@
 use std::io::Write;
 
 use sabine_bridge::menu::{
-    ACTIVATE_COMMAND, APP_MENU_COMMAND, POPUP_COMMAND, SET_APP_MENU_COMMAND,
-    SET_CONTEXT_MENU_COMMAND,
+    ACTIVATE_COMMAND, APP_MENU_COMMAND, POPUP_COMMAND, RUN_COMMAND, SET_APP_MENU_COMMAND,
 };
 use serde::Deserialize;
 
 use crate::bridge::APP_MENU_LINE;
 use crate::osr::host::native::OsrNativeHost;
 use crate::osr::host::page::BridgeRequest;
-use crate::{MenuItem, MenuKind};
+use crate::{MenuItem, MenuKind, MenuRole};
 
 #[derive(Deserialize)]
 struct Items {
@@ -21,14 +20,16 @@ struct Activation {
     id: String,
 }
 
+#[derive(Deserialize)]
+struct Run {
+    role: MenuRole,
+}
+
 impl OsrNativeHost {
     /// Answers a page's `menu` calls.
     pub(in crate::osr::host) fn answer_menu(&mut self, request: &BridgeRequest) {
         let result = match request.command {
             POPUP_COMMAND => return self.open_popup_menu(request),
-            SET_CONTEXT_MENU_COMMAND => {
-                items(request).map(|items| self.set_context_menu_items(items))
-            }
             SET_APP_MENU_COMMAND => items(request).map(|items| {
                 let mut output = std::io::stdout().lock();
                 let _ = writeln!(output, "{APP_MENU_LINE}\t{}", serde_json::json!(items));
@@ -53,6 +54,13 @@ impl OsrNativeHost {
                         .ok_or_else(|| format!("the app menu has no item {}", activation.id))?;
                     self.choose_menu_item(&bar, &activation.id, MenuKind::App);
                     Ok(())
+                }),
+            RUN_COMMAND => serde_json::from_str::<Run>(request.payload)
+                .map_err(|error| error.to_string())
+                .and_then(|Run { role }| {
+                    self.run_menu_role(role)
+                        .then_some(())
+                        .ok_or_else(|| format!("the {} role does nothing here", role.name()))
                 }),
             command => Err(format!("{command} is not a menu command")),
         };

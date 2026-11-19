@@ -19,8 +19,8 @@ const BUTTON_GAP: f32 = 8.0;
 const ROW_GAP: f32 = 12.0;
 
 /// The question the window asks over the page when a page wants a
-/// permission, laid out at the top of the window, in the context menu's
-/// look.
+/// permission, laid out at the top of the window, in the look of the menus
+/// the window shows.
 pub(in crate::osr::host) struct PermissionPrompt {
     message: Arc<str>,
     width: f32,

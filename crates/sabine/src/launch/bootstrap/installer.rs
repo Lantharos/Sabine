@@ -62,6 +62,8 @@ fn prepare(
     mut progress: SetupProgress,
 ) -> Result<(), String> {
     config.validate().map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    link_shipped_runtimes(config)?;
     let manifest = super::app_manifest(config).ok_or("The app has no installation identity")?;
     let report = prepare_machine_with_progress(config.runtime.clone(), None, |update| {
         if cancelled() {
@@ -106,12 +108,26 @@ fn prepare(
 /// A standalone app's setup installs its files itself and registers nothing:
 /// the app only checks that the Chromium and host it ships with start.
 fn check_standalone(config: &SabineWindowConfig) -> Result<(), String> {
+    #[cfg(windows)]
+    link_shipped_runtimes(config)?;
     let runtime = super::standalone::bundled_runtime(config).map_err(|error| error.to_string())?;
     sabine_runtime::prepare_runtime_assets(runtime.location.path())
         .map_err(|error| error.to_string())?;
     let host = sabine_host::bundled_host()
         .ok_or("The Sabine host this app ships with is missing. Retry setup to repair it.")?;
     sabine_host::validate_host_protocol(&host, runtime.location.path())
+}
+
+/// Windows installers copy every file they install, so the runtime an app
+/// ships gets its links back once its files are in place.
+#[cfg(windows)]
+fn link_shipped_runtimes(config: &SabineWindowConfig) -> Result<(), String> {
+    match &config.runtime.bundled_dir {
+        Some(bundled_dir) => sabine_runtime::link_bundled_runtimes(bundled_dir).map_err(|error| {
+            format!("Could not prepare the Chromium this app ships with: {error}")
+        }),
+        None => Ok(()),
+    }
 }
 
 fn unregister(config: &SabineWindowConfig) -> Result<(), String> {

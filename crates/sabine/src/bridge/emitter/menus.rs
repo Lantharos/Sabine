@@ -8,16 +8,6 @@ use crate::{MenuItem, WindowId};
 pub(crate) const APP_MENU_LINE: &str = "SABINE_APP_MENU";
 
 impl BridgeEventEmitter {
-    /// Replaces the app's items in one window's context menu, which follow
-    /// the edit and spelling items Chromium offers.
-    pub fn set_context_menu(&self, window: WindowId, items: &[MenuItem]) -> bool {
-        self.host_control(
-            Some(window),
-            "context-menu",
-            &serde_json::json!(items).to_string(),
-        )
-    }
-
     /// Replaces the app menu bar of every window, also the ones opened
     /// later. On macOS an empty menu brings back the standard app, Edit,
     /// View and Window menus.

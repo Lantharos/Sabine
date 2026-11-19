@@ -1,14 +1,14 @@
 ---
 title: Menus
-description: Add your own items to the context menu, show menus from buttons your page draws, and give the app a menu bar.
+description: Draw your own context menu, show menus from buttons your page draws, and give the app a menu bar.
 sidebar:
   order: 7
 ---
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-Sabine draws the window's menus itself, in the desktop's light or dark colors. Your app can add
-items to the context menu, open a menu anywhere on the page, and set a menu bar, which macOS and
-Windows show natively.
+Your pages draw their own context menu, in the app's style. Sabine draws the menus your page opens
+at a point and the menu bar, in the desktop's light or dark colors, and macOS and Windows show the
+menu bar natively.
 
 ## Menu items
 
@@ -64,17 +64,39 @@ role's name when they have no `id`.
 
 ## The context menu
 
-The window's context menu keeps the edit and spelling items Chromium offers where the page was
-clicked. Your items follow them, and open a menu of their own where Chromium offers nothing:
+Chromium never opens a context menu of its own, so right-clicking does nothing until your page
+draws one. `menu.onContext` hears each time someone asks for one, with the mouse or the keyboard,
+in your page or a guest it shows, with what applies there:
 
-```rust
-window
-    .context_menu(vec![MenuItem::new("pin", "Pin Note")])
-    .on_menu_item(|chosen| println!("{} chose {}", chosen.window, chosen.id))
+```ts
+import { menu, spellcheck } from "@lantharos/sabine";
+
+menu.onContext((context) => {
+  const items = [];
+  for (const word of context.suggestions) {
+    items.push({ label: word, run: () => spellcheck.replace(word) });
+  }
+  if (context.canCut) items.push({ label: "Cut", run: () => menu.run("cut") });
+  if (context.canCopy) items.push({ label: "Copy", run: () => menu.run("copy") });
+  if (context.canPaste) items.push({ label: "Paste", run: () => menu.run("paste") });
+  if (items.length > 0) showContextMenu(context.x, context.y, items);
+});
 ```
 
-Pages replace the items with `menu.setContextMenu`, and the app with
-`BridgeEventEmitter::set_context_menu`. Guests' context menus keep only Chromium's items.
+| Field | Meaning |
+| --- | --- |
+| `x`, `y` | Where to open the menu, in your page's CSS pixels |
+| `guest` | The guest asked over, or `null` for your page |
+| `editable` | Whether it was asked for over text that can be edited |
+| `selection` | The selected text |
+| `link` | The link asked over, or `null` |
+| `misspelled`, `suggestions` | The misspelled word asked over and its corrections |
+| `canUndo`, `canRedo`, `canCut`, `canCopy`, `canPaste`, `canSelectAll` | Which edits apply |
+
+`menu.run` does what a [role](#roles) does, so `menu.run("paste")` pastes into the focused field,
+which pages can't do on their own. `spellcheck.replace` corrects the misspelled word, and
+`spellcheck.addWord` adds it to the dictionary. Cancel `mousedown` on your menu's items so the
+field keeps its focus and selection while they run.
 
 ## Menus from the page
 
@@ -172,9 +194,9 @@ what choosing it from a native menu bar does.
 
 ## Hearing what was chosen
 
-`SabineWindow::on_menu_item` hears every item chosen from the context menu, a page's menu or the
-menu bar, unless the item has a role. `MenuActivation` carries the window, the item's id, and
-`menu`: `Context`, `Popup` or `App`. Pages hear the context menu and the menu bar through
-`menu.onSelect`; a page's own menus answer it through `menu.popup` instead.
+`SabineWindow::on_menu_item` hears every item chosen from a page's menu or the menu bar, unless the
+item has a role. `MenuActivation` carries the window, the item's id, and `menu`: `Popup` or `App`.
+Pages hear the menu bar through `menu.onSelect`; a page's own menus answer it through `menu.popup`
+instead.
 
 Only the app's own pages, and origins the app allows, can use `menu`.

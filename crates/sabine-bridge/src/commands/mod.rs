@@ -72,10 +72,11 @@ pub const DOWNLOAD_COMMANDS: [&str; 3] = [
 ];
 /// Reads and changes spellchecking in the window's profile, which the
 /// browser host answers itself.
-pub const SPELLCHECK_COMMANDS: [&str; 3] = [
+pub const SPELLCHECK_COMMANDS: [&str; 4] = [
     "sabine.spellcheck.get",
     "sabine.spellcheck.set",
     "sabine.spellcheck.addWord",
+    "sabine.spellcheck.replace",
 ];
 
 const WINDOW_COMMANDS: [&str; 21] = [

@@ -82,7 +82,7 @@ impl OsrNativeHost {
         {
             return;
         }
-        if !pressed && self.context_menu.is_none() && self.prompt_pointer_released(x, y) {
+        if !pressed && self.popup_menu.is_none() && self.prompt_pointer_released(x, y) {
             return;
         }
         #[cfg(windows)]

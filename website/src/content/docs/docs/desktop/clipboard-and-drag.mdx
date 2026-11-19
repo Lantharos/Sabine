@@ -13,9 +13,10 @@ carry the paths of the files people drop.
 
 ## Copy and paste
 
-Keyboard shortcuts, context menu entries, `copy`, `cut` and `paste` events and `navigator.clipboard`
-all work with the desktop clipboard. The app's own pages may read the clipboard at any time, for
-example with `navigator.clipboard.readText()`, without a permission prompt.
+Keyboard shortcuts, edit roles such as `menu.run("paste")`, `copy`, `cut` and `paste` events and
+`navigator.clipboard` all work with the desktop clipboard. The app's own pages may read the
+clipboard at any time, for example with `navigator.clipboard.readText()`, without a permission
+prompt.
 
 [Guests](/docs/web/guests/) and other pages that aren't the app's own keep a browser's rules. On
 Linux they only read the clipboard while someone pastes into them with Ctrl+V, Shift+Insert or a

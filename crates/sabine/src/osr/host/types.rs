@@ -258,7 +258,6 @@ pub(super) enum HostControl {
     /// A dialog the app shows over the page, by the number its answer
     /// carries back.
     Dialog(u64, crate::MessageDialog),
-    ContextMenu(Vec<crate::MenuItem>),
     AppMenu(Vec<crate::MenuItem>),
 }
 

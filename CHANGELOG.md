@@ -8,10 +8,19 @@
   later Sabine release can't change it. It updates itself from its installer packages: while it
   runs, it checks its update source every six hours, and offers a downloaded release the next time
   it opens.
-- A Chromium runtime takes about 370 MB on Linux instead of 1.6 GB, and standalone apps that carry
+- A Chromium runtime takes about 320 MB on Linux instead of 1.6 GB, and standalone apps that carry
   one shrink with it. Installing a runtime removes the debug info and symbol tables CEF ships inside
   its Linux libraries and keeps each library's build ID, so crash reports still symbolicate against
   CEF's download of that version.
+- Pages draw their own context menu. Chromium never opens one: `menu.onContext` tells the page where
+  someone asked for one, over the page or a guest, and which edits and spelling corrections apply
+  there, `menu.run` does what a role such as `paste` does, and `spellcheck.replace` corrects the
+  misspelled word. The window's context menu items are gone, with `SabineWindow::context_menu`,
+  `menu.setContextMenu`, `BridgeEventEmitter::set_context_menu` and `MenuKind::Context`.
+  Development runs open DevTools with F12 or Ctrl+Shift+I.
+- Chromium's own text in pages, such as form validation messages, is English, and its locale packs
+  are links to the English one, which saves 50 MB per runtime on Linux and Windows. Dates and
+  numbers keep the system's format, and `navigator.languages` still lists the system's languages.
 
 # Sabine 0.98
 

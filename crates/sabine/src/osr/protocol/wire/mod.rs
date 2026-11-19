@@ -245,13 +245,6 @@ impl WireReader {
             ),
             KIND_DRAG_STARTED => parse_drag_start(width, height, x, y, payload)?,
             KIND_DRAG_OPERATION => OsrMessage::DragOperation(width),
-            KIND_CONTEXT_MENU => OsrMessage::ContextMenu {
-                x,
-                y,
-                guest: width != 0,
-                items: parse_json(&payload)?,
-            },
-            KIND_CONTEXT_MENU_DISMISSED => OsrMessage::ContextMenuDismissed,
             KIND_PERMISSION_REQUEST => OsrMessage::PermissionRequest(parse_json(&payload)?),
             KIND_PERMISSION_WITHDRAWN => OsrMessage::PermissionWithdrawn(width),
             KIND_FILE_DIALOG => OsrMessage::FileDialog(parse_json(&payload)?),

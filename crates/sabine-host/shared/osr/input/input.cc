@@ -103,14 +103,6 @@ void SabineOsrHandler::HandleControlLine(
     dialogs_->FinishJsDialog(parts);
     return;
   }
-  if (parts.size() == 2 && parts[0] == "context_menu") {
-    dialogs_->ChooseContextMenuCommand(std::atoi(parts[1].c_str()));
-    return;
-  }
-  if (parts.size() == 2 && parts[0] == "context_menu_items") {
-    dialogs_->SetAppContextItems(parts[1] == "1");
-    return;
-  }
   if (parts.size() == 2 && parts[0] == "menu_accelerators") {
     menu_accelerators_ =
         ParseKeyChords(JsonObject::Parse(parts[1]).Strings("accelerators"));

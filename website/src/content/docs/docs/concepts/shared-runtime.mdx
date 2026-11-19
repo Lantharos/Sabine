@@ -40,12 +40,13 @@ Sabine follows CEF's stable channel: the daemon reads the build index at `cef-bu
 ### Installing a runtime
 
 ```text
-lock → read the build index → download → size and SHA-1 verify → extract → strip on Linux → install the version folder → ready
+lock → read the build index → download → size and SHA-1 verify → extract → strip on Linux → link the locale packs → install the version folder → ready
 ```
 
 - Downloads resume with HTTP byte ranges after an interruption, and restart when the server doesn't support ranges. The archive must match the size and SHA-1 the index lists before anything is extracted. Transient failures get up to four attempts within a 30-minute deadline.
 - Extraction runs inside the process and rejects unsafe paths and device entries. Links are created after every other entry and must resolve inside the extracted folder.
 - On Linux, CEF's libraries come with their debug info and symbol tables, about 1.2 GB that Chromium never loads. Sabine removes them after extracting, which brings a runtime from about 1.6 GB to about 370 MB. What Chromium loads stays byte for byte the same, and each library keeps its build ID, so crash reports from Linux still symbolicate against the libraries in CEF's download of that version.
+- On Linux and Windows, every locale pack becomes a hard link to the English one, so the packs take 600 KB instead of 50 MB. Apps translate their own pages, so the little text Chromium shows in them, such as form validation messages, is English. Chromium still follows the system's language, so dates and numbers keep the system's format, and pages still hear the system's languages from `navigator.languages`. Bundles keep the links, and Windows installers restore them once the app's files are in place.
 - A runtime needs the CEF library, `icudtl.dat`, `resources.pak` and at least one locale pack to count as installed. Headers and CMake files matter only for building the host.
 - Each version installs into its own immutable folder, so apps keep running on an older version while a newer one installs.
 

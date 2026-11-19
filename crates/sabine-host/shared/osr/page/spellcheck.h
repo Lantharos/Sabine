@@ -8,6 +8,8 @@
 #include "include/cef_values.h"
 
 constexpr char kSpellcheckCommandPrefix[] = "sabine.spellcheck.";
+// Replaces the misspelled word a context menu was last asked for.
+constexpr char kSpellcheckReplaceCommand[] = "sabine.spellcheck.replace";
 
 // Turns spellchecking on or off and picks its languages in |context|, for
 // what |settings| holds of `enabled` and `languages`. Fails with |error| for

@@ -5,8 +5,8 @@ sidebar:
   order: 7
 ---
 
-Text fields in the app's pages check spelling as people type, and the context menu offers
-corrections. Spellchecking belongs to the app's profile, so its settings and custom words are
+Text fields in the app's pages check spelling as people type, and the page's
+[context menu](/docs/windows/menus/#the-context-menu) can offer corrections. Spellchecking belongs to the app's profile, so its settings and custom words are
 shared by every window of the app.
 
 ## Languages
@@ -34,7 +34,8 @@ const { enabled, languages } = await spellcheck.get();
 ```
 
 `set` changes what it's given and keeps the rest, `addWord` adds a word to the app's custom
-dictionary, and `get` reads the settings. Only the app's own pages have `spellcheck`. Rust changes
+dictionary, `replace` corrects the misspelled word the last context menu was asked for over, and
+`get` reads the settings. Only the app's own pages have `spellcheck`. Rust changes
 the same settings with the event emitter's `set_spellcheck` and `add_spellcheck_word`.
 
 ## Dictionaries

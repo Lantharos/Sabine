@@ -151,7 +151,7 @@ pub(super) struct OsrNativeHost {
     /// When the page asked to hold back its first frame until it is ready.
     pub(super) reveal_held_since: Option<Instant>,
     pub(super) tooltip: Option<super::types::NativeTooltip>,
-    pub(super) context_menu: Option<super::ui::menus::context::ContextMenu>,
+    pub(super) popup_menu: Option<super::ui::menus::popup::PopupMenu>,
     pub(super) permissions: super::page::PagePermissions,
     pub(super) permission_prompt: Option<super::ui::dialogs::permission_prompt::PermissionPrompt>,
     pub(super) sheets: super::ui::dialogs::sheet::Sheets,
@@ -320,7 +320,7 @@ impl OsrNativeHost {
             loading_fade: None,
             reveal_held_since: None,
             tooltip: None,
-            context_menu: None,
+            popup_menu: None,
             permissions,
             permission_prompt: None,
             sheets: Default::default(),

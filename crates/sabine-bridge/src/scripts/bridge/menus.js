@@ -1,14 +1,11 @@
-// `window.sabine.menu` and `window.sabine.dialog`: the app's items in the
-// context menu, menus at a point of the page, the app menu bar, and messages
-// over the page, all drawn by the window.
+// `window.sabine.menu` and `window.sabine.dialog`: what the page's own context
+// menu needs, menus at a point of the page and the app menu bar, which the
+// window draws, and messages over the page.
 
 const untilAnswered = { timeoutMs: 2147483647 };
 
 if (commands.has("sabine.menu.popup")) {
   window.sabine.menu = {
-    setContextMenu(items) {
-      return window.sabine.bridge.invoke("sabine.menu.setContextMenu", { items: Array.from(items) });
-    },
     popup(items, { x = 0, y = 0 } = {}) {
       return window.sabine.bridge.invoke(
         "sabine.menu.popup",
@@ -21,6 +18,8 @@ if (commands.has("sabine.menu.popup")) {
     },
     appMenu() { return window.sabine.bridge.invoke("sabine.menu.appMenu"); },
     activate(id) { return window.sabine.bridge.invoke("sabine.menu.activate", { id: String(id) }); },
+    run(role) { return window.sabine.bridge.invoke("sabine.menu.run", { role: String(role) }); },
+    onContext(callback) { return window.sabine.bridge.listen("menu.context", callback); },
     onSelect(callback) { return window.sabine.bridge.listen("menu.select", callback); },
     onAppMenuChanged(callback) {
       return window.sabine.bridge.listen("menu.appMenu", ({ items }) => callback(items));

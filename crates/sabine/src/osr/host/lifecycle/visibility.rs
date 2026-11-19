@@ -24,7 +24,7 @@ impl OsrNativeHost {
     }
 
     pub(in crate::osr::host) fn hide_window(&mut self, reason: &str) {
-        self.cancel_context_menu();
+        self.cancel_popup_menu();
         self.config.visible = false;
         self.focused = false;
         self.overlays.clear();

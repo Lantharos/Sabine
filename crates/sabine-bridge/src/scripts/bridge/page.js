@@ -23,4 +23,7 @@ window.sabine.spellcheck = {
   addWord(word) {
     return window.sabine.bridge.invoke("sabine.spellcheck.addWord", { word: String(word) });
   },
+  replace(word) {
+    return window.sabine.bridge.invoke("sabine.spellcheck.replace", { word: String(word) });
+  },
 };

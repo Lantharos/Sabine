@@ -230,6 +230,15 @@ void SabineOsrHandler::HandleBridgeCommand(
              downloads_->HandleBridgeCommand(command, payload, browser_id,
                                              request_id)) {
     return;
+  } else if (command == kSpellcheckReplaceCommand) {
+    const std::string word = JsonObject::Parse(payload).String("word");
+    if (!word.empty()) {
+      dialogs_->ReplaceMisspelling(word);
+    }
+    ResolveBridgeResponse(
+        browser_id, request_id, !word.empty(),
+        word.empty() ? JsonMessage("a replacement is a word") : "null");
+    return;
   } else if (command.rfind(kSpellcheckCommandPrefix, 0) == 0) {
     std::string result;
     std::string error;

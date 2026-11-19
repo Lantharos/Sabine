@@ -256,7 +256,6 @@ fn spawn_osr_host_child(
         "drag_regions": crate::osr::protocol::rects_to_json(&config.drag_regions),
         "drag_exclusion_regions": crate::osr::protocol::rects_to_json(&config.drag_exclusion_regions),
         "control_regions": crate::osr::protocol::control_regions_to_json(&config.control_regions),
-        "context_menu": config.context_menu,
         "lifecycle": crate::osr::protocol::lifecycle_to_json(&config.lifecycle),
         "dev_mode": config.dev_mode(),
         "remote_devtools_port": config.effective_remote_devtools_port(),

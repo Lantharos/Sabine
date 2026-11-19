@@ -18,6 +18,21 @@ constexpr uint32_t kShortcutModifier = EVENTFLAG_CONTROL_DOWN;
 #endif
 constexpr uint32_t kChordModifiers =
     EVENTFLAG_COMMAND_DOWN | EVENTFLAG_CONTROL_DOWN | EVENTFLAG_ALT_DOWN;
+#if defined(OS_MAC)
+constexpr uint32_t kDevToolsModifiers =
+    EVENTFLAG_COMMAND_DOWN | EVENTFLAG_ALT_DOWN;
+#else
+constexpr uint32_t kDevToolsModifiers =
+    EVENTFLAG_CONTROL_DOWN | EVENTFLAG_SHIFT_DOWN;
+#endif
+constexpr int kKeyCodeF12 = 0x7B;
+
+bool TogglesDevTools(const CefKeyEvent& event) {
+  const uint32_t modifiers =
+      event.modifiers & (kChordModifiers | EVENTFLAG_SHIFT_DOWN);
+  return (event.windows_key_code == kKeyCodeF12 && modifiers == 0) ||
+         (event.windows_key_code == 'I' && modifiers == kDevToolsModifiers);
+}
 
 bool ZoomCommandForKey(int key_code, cef_zoom_command_t* command) {
   switch (key_code) {
@@ -36,6 +51,25 @@ bool ZoomCommandForKey(int key_code, cef_zoom_command_t* command) {
 }
 
 }  // namespace
+
+// Opens and closes DevTools in development runs, as browsers do, before the
+// page can take the keys.
+bool SabineOsrHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                                     const CefKeyEvent& event,
+                                     CefEventHandle os_event,
+                                     bool* is_keyboard_shortcut) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!dev_mode_ || event.type != KEYEVENT_RAWKEYDOWN ||
+      !TogglesDevTools(event)) {
+    return false;
+  }
+  if (devtools_inspected_) {
+    CloseDevTools();
+  } else {
+    ShowDevTools(browser);
+  }
+  return true;
+}
 
 // Runs the shortcuts a browser window would for keys the page leaves
 // unhandled: the app's menu accelerators, zooming the page in, out and back,

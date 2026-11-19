@@ -1,5 +1,5 @@
-//! The menus an app fills: its items in the window's context menu, menus its
-//! pages show at a point, and the app menu bar.
+//! The menus an app fills: menus its pages show at a point, and the app menu
+//! bar.
 
 mod accelerator;
 mod manifest;
@@ -152,8 +152,6 @@ pub struct MenuActivation {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MenuKind {
-    /// The window's context menu.
-    Context,
     /// A menu a page showed with `menu.popup`.
     Popup,
     /// The app menu bar, or a page drawing it.

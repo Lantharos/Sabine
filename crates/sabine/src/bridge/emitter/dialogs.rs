@@ -16,7 +16,7 @@ use crate::WindowId;
 pub(crate) const DIALOG_ANSWER_LINE: &str = "SABINE_DIALOG_ANSWER";
 
 /// A message the window shows over its page until someone picks one of its
-/// buttons, drawn like the window's context menu.
+/// buttons, drawn like the menus the window shows.
 ///
 /// Buttons sit in a row in the order given. Enter picks the default button
 /// and Escape the cancel button. A dialog with an [`DialogInput`] asks for a
