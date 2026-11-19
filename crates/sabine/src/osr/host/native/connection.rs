@@ -12,9 +12,7 @@ impl OsrNativeHost {
         if self.closing_deadline.is_some() {
             return;
         }
-        if let Some(window) = &self.window {
-            window.set_visible(false);
-        }
+        self.unmap_window();
         self.send_control("close\n");
         self.closing_deadline = Some(Instant::now() + CLOSE_GRACE);
         if self.browser_gone() {
