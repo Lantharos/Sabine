@@ -91,6 +91,7 @@ jobs:
       contents: read
     outputs:
       schelf: ${{ steps.plan.outputs.schelf }}
+      standalone: ${{ steps.plan.outputs.standalone }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
@@ -105,8 +106,11 @@ jobs:
           PLATFORMS: ${{ inputs.platforms }}
           ACCEPT_WIX_EULA: ${{ inputs.accept_wix_eula }}
         run: |
-          $schelf = (Get-Content (Join-Path $env:APP Sabine.toml) -Raw) -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
+          $config = Get-Content (Join-Path $env:APP Sabine.toml) -Raw
+          $schelf = $config -match '(?ms)^\[updates\][^\[]*?^provider\s*=\s*"schelf"'
           "schelf=$($schelf.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          $standalone = $config -match '(?ms)^\[app\][^\[]*?^standalone\s*=\s*true'
+          "standalone=$($standalone.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           $windows = if ($env:ACCEPT_WIX_EULA -eq 'true') { 'msi,exe,windows' } else { 'exe,windows' }
           $linux = @{ targets = 'appimage,deb,rpm,portable' }
           $platforms = @(
@@ -211,6 +215,23 @@ jobs:
           if ($IsWindows) { Expand-Archive $path -DestinationPath $directory -Force } else { tar -xzf $path -C $directory }
           if ($LASTEXITCODE -ne 0) { throw "The Sabine CLI archive could not be unpacked" }
           $directory >> $env:GITHUB_PATH
+      - name: Use the matching Sabine host
+        if: needs.plan.outputs.standalone == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archive = if ($IsWindows) { "sabine-system-$env:PLATFORM.zip" } else { "sabine-system-$env:PLATFORM.tar.gz" }
+          $directory = (New-Item (Join-Path $env:RUNNER_TEMP 'sabine-system') -ItemType Directory -Force).FullName
+          gh release download $env:SABINE_VERSION --repo Lantharos/Sabine --pattern $archive --dir $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { throw "Sabine $env:SABINE_VERSION has no system files for $env:PLATFORM" }
+          $path = Join-Path $env:RUNNER_TEMP $archive
+          gh attestation verify $path --repo Lantharos/Sabine --signer-workflow Lantharos/Sabine/.github/workflows/release.yml --source-ref "refs/tags/$env:SABINE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "The Sabine system download isn't attested by Sabine's release workflow" }
+          if ($IsWindows) { Expand-Archive $path -DestinationPath $directory -Force } else { tar -xzf $path -C $directory }
+          if ($LASTEXITCODE -ne 0) { throw "The Sabine system archive could not be unpacked" }
+          $hostBinary = if ($IsMacOS) { 'sabine-host.app/Contents/MacOS/sabine-host' } elseif ($IsWindows) { 'sabine-host.exe' } else { 'sabine-host' }
+          "SABINE_HOST_PATH=$(Join-Path $directory $hostBinary)" >> $env:GITHUB_ENV
       - name: Build application
         id: build
         shell: pwsh
@@ -312,6 +333,7 @@ jobs:
         shell: pwsh
         env:
           UPGRADE_FROM_SABINE_VERSION: ${{ inputs.upgrade_from_sabine_version }}
+          STANDALONE: ${{ needs.plan.outputs.standalone }}
         run: |
           $msi = @(Get-ChildItem dist/release/windows-x86_64-msi -Filter *.msi -File)
           $stagedExe = @(Get-ChildItem dist/msi -Filter *.exe -File -Recurse)
@@ -337,7 +359,7 @@ jobs:
             throw "Sabine.toml app name is missing"
           }
           $appName = $Matches[1]
-          $standalone = $config -match '(?ms)\[app\].*?^standalone\s*=\s*true'
+          $standalone = $env:STANDALONE -eq 'true'
           $expectedSabineVersion = $env:SABINE_VERSION.TrimStart('v')
           $sabineData = Join-Path $env:LOCALAPPDATA 'Sabine'
           if (Test-Path $sabineData) {
