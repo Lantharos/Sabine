@@ -1,3 +1,8 @@
+# Sabine 0.101
+
+- Apps built with this Sabine ask for Sabine 0.100 or newer, the first that installs their tar.zst
+  bundles, so installing or updating one on an older Sabine updates Sabine first instead of failing.
+
 # Sabine 0.100
 
 Apps that carry Chromium download less. A standalone app from the `sabine new` template now
