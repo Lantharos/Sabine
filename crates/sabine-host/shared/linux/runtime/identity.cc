@@ -1,8 +1,10 @@
 #include "linux/runtime/identity.h"
 
 #include <fcntl.h>
+#include <linux/magic.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -110,12 +112,45 @@ std::string RegisteredExecutable(const std::string& data_dir,
   return app ? app->GetString("executable").ToString() : std::string();
 }
 
+bool OwnedBySystem(const struct stat& status) {
+  return status.st_uid == 0 && (status.st_mode & (S_IWGRP | S_IWOTH)) == 0;
+}
+
 bool InstalledForEveryone(const std::string& executable,
                           const std::string& app_id) {
   struct stat status = {};
   return executable.rfind(std::string(kSystemApps) + app_id + "/", 0) == 0 &&
-         stat(executable.c_str(), &status) == 0 && status.st_uid == 0 &&
-         (status.st_mode & (S_IWGRP | S_IWOTH)) == 0;
+         stat(executable.c_str(), &status) == 0 && OwnedBySystem(status);
+}
+
+bool OnOverlay(int fd) {
+  struct statfs filesystem = {};
+  return fstatfs(fd, &filesystem) == 0 &&
+         filesystem.f_type == OVERLAYFS_SUPER_MAGIC;
+}
+
+bool InstalledBeforeUsrChanged(int process,
+                               const std::string& executable,
+                               const std::string& app_id) {
+  const std::string inside_usr =
+      std::string(kSystemApps).substr(sizeof("/usr") - 1) + app_id + "/";
+  if (executable.rfind(inside_usr, 0) != 0 ||
+      executable.find('/', inside_usr.size()) != std::string::npos) {
+    return false;
+  }
+  const std::string path = std::string(kSystemApps) + app_id + "/" +
+                           executable.substr(inside_usr.size());
+  const Descriptor running(openat(process, "exe", O_PATH | O_CLOEXEC));
+  const Descriptor installed(open(path.c_str(), O_PATH | O_CLOEXEC));
+  struct stat was = {};
+  struct stat is = {};
+  return running.get() >= 0 && installed.get() >= 0 &&
+         fstat(running.get(), &was) == 0 && fstat(installed.get(), &is) == 0 &&
+         OwnedBySystem(is) && OnOverlay(running.get()) &&
+         OnOverlay(installed.get()) && was.st_ino == is.st_ino &&
+         was.st_size == is.st_size && was.st_mtim.tv_sec == is.st_mtim.tv_sec &&
+         was.st_mtim.tv_nsec == is.st_mtim.tv_nsec && was.st_uid == is.st_uid &&
+         was.st_mode == is.st_mode;
 }
 
 std::string UnifiedCgroup(const std::string& cgroups) {
@@ -173,7 +208,8 @@ std::optional<Peer> VerifyPeer(int connection,
   const std::string registered =
       Canonical(RegisteredExecutable(data_dir, app_id));
   if ((registered.empty() || registered != executable) &&
-      !InstalledForEveryone(executable, app_id)) {
+      !InstalledForEveryone(executable, app_id) &&
+      !InstalledBeforeUsrChanged(process.get(), executable, app_id)) {
     return std::nullopt;
   }
   return Peer{cgroup};

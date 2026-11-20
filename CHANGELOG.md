@@ -19,6 +19,11 @@ tarball, where it took about 169, 265, 176 and 156 MB.
 - Windows runtimes leave out CEF's console bootstrap, `bootstrapc.exe`, which Sabine never runs.
 - DevTools open with a fixed `SABINE_DEVTOOLS_PORT` and the default port too, not only when
   Chromium picks the port.
+- On Linux, an app that was already running when system extensions were merged over `/usr`, such
+  as a file chooser started at sign-in, opens new windows in the shared runtime again, instead of
+  stopping with "The browser stopped repeatedly".
+- Closing a window on Linux takes it off the screen in one go, with its page, instead of leaving an
+  empty window and its backdrop up for a few frames.
 
 # Sabine 0.99
 
