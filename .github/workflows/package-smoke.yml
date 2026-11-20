@@ -144,6 +144,8 @@ jobs:
         run: |
           cargo run --release --locked -p sabine-cli -- new release-probe
           git init --quiet release-probe
+          $appId = (Select-String -Path release-probe/Sabine.toml -Pattern '^id = "(.+)"').Matches[0].Groups[1].Value
+          "APP_ID=$appId" >> $env:GITHUB_ENV
           $cargoPath = (Join-Path $PWD 'crates/sabine').Replace('\', '/')
           $cargo = Get-Content release-probe/Cargo.toml -Raw
           $cargo = $cargo -replace '(?m)^sabine = .+$', "sabine = { path = `"$cargoPath`" }"
@@ -217,7 +219,7 @@ jobs:
           }
           $log = Join-Path $env:RUNNER_TEMP "sabine-msi-install.log"
           Test-MsiCancellation $msi[0].FullName $log
-          $appDir = Join-Path $env:LOCALAPPDATA 'Programs/dev.sabine.release-probe'
+          $appDir = Join-Path $env:LOCALAPPDATA "Programs/$env:APP_ID"
           if (Test-Path (Join-Path $appDir 'release-probe.exe')) { throw 'Cancelled MSI retained installed application files' }
           $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
           Wait-InstallerExit $install
@@ -225,7 +227,7 @@ jobs:
             Get-Content $log -Tail 100
             throw "MSI installation failed with exit code $($install.ExitCode)"
           }
-          $appDir = Join-Path $env:LOCALAPPDATA 'Programs/dev.sabine.release-probe'
+          $appDir = Join-Path $env:LOCALAPPDATA "Programs/$env:APP_ID"
           $installedExe = Get-Item (Join-Path $appDir 'release-probe.exe')
           if ($null -eq $installedExe -or -not (Test-Path (Join-Path $appDir 'resources/windows-app.ico'))) {
             throw "MSI did not install the x64 application and icon under the current user profile"
@@ -238,7 +240,7 @@ jobs:
           $icon.Dispose()
           $registry = Join-Path $env:LOCALAPPDATA 'Sabine/apps.json'
           $registered = (Get-Content $registry -Raw | ConvertFrom-Json).apps
-          if (-not $registered.PSObject.Properties['dev.sabine.release-probe']) {
+          if (-not $registered.PSObject.Properties[$env:APP_ID]) {
             throw "MSI finished without preparing and registering the application"
           }
           $repair = Start-Process msiexec.exe -ArgumentList @('/fa', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
@@ -258,7 +260,7 @@ jobs:
             Wait-InstallerExit $uninstall
             if ($uninstall.ExitCode -ne 0) { Get-Content $log -Tail 100; throw "MSI uninstall failed" }
             $registered = (Get-Content $registry -Raw | ConvertFrom-Json).apps
-            if ($registered.PSObject.Properties['dev.sabine.release-probe']) { throw "MSI left the app registered" }
+            if ($registered.PSObject.Properties[$env:APP_ID]) { throw "MSI left the app registered" }
             if (Test-Path $installedExe.FullName) { throw "MSI left its application executable" }
             if (Test-Path (Join-Path $appDir 'resources/runtimes')) { throw "MSI left the Chromium it shipped" }
           }
@@ -287,7 +289,7 @@ jobs:
           . ./scripts/checks/windows-package-check.ps1
           . ./scripts/checks/windows-browser-check.ps1
           $setup = Get-ChildItem dist/artifacts -Filter *.exe -File | Select-Object -First 1
-          $appId = 'dev.sabine.release-probe'
+          $appId = $env:APP_ID
           $appDir = Join-Path $env:LOCALAPPDATA "Programs/$appId"
           $registry = Join-Path $env:LOCALAPPDATA 'Sabine/apps.json'
           $logs = Join-Path $env:LOCALAPPDATA 'Sabine/logs/installer.jsonl'
@@ -360,7 +362,7 @@ jobs:
           . ./scripts/checks/windows-package-check.ps1
           . ./scripts/checks/windows-browser-check.ps1
           $package = Get-ChildItem dist/artifacts -Filter "*$env:PACKAGE_EXTENSION" -File | Select-Object -First 1
-          $appDir = Join-Path $env:LOCALAPPDATA 'Programs/dev.sabine.release-probe'
+          $appDir = Join-Path $env:LOCALAPPDATA "Programs/$env:APP_ID"
           $log = Join-Path $env:RUNNER_TEMP 'sabine-msi-standalone.log'
           function Invoke-Package([string] $Operation) {
             $process = if ($env:PACKAGE_TARGET -eq 'msi') {
@@ -384,7 +386,7 @@ jobs:
               Assert-RuntimeLinks (Join-Path $appDir 'resources/runtimes/cef')
             }
             $registry = Join-Path $env:LOCALAPPDATA 'Sabine/apps.json'
-            if ((Test-Path $registry) -and (Get-Content $registry -Raw | ConvertFrom-Json).apps.PSObject.Properties['dev.sabine.release-probe']) {
+            if ((Test-Path $registry) -and (Get-Content $registry -Raw | ConvertFrom-Json).apps.PSObject.Properties[$env:APP_ID]) {
               throw 'A standalone app registered with Sabine'
             }
             $env:SABINE_TRACE = '1'
