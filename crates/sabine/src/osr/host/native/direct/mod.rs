@@ -87,7 +87,6 @@ enum Placement {
 /// stays in the subsurface whenever the window draws nothing over it, so a
 /// frame costs the window no drawing of its own.
 pub(in crate::osr::host) struct DirectPresenter {
-    connection: Connection,
     commands: Sender<Command>,
     wake: UnixStream,
     stop: Arc<AtomicBool>,
@@ -160,7 +159,6 @@ impl DirectPresenter {
             .spawn(move || worker::run(queue, state, receiver, wake_reader, worker_stop))
             .map_err(|error| error.to_string())?;
         Ok(Self {
-            connection,
             commands,
             wake,
             stop,
@@ -277,6 +275,5 @@ impl Drop for DirectPresenter {
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
-        let _ = self.connection.flush();
     }
 }

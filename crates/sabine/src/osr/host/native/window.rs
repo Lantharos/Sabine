@@ -228,12 +228,6 @@ impl OsrNativeHost {
         }
         self.release_shortcut_inhibitor();
         self.retain_frames();
-        #[cfg(target_os = "linux")]
-        {
-            self.direct = None;
-            self.exported_window = None;
-            self.foreign_parent = None;
-        }
         self.renderer_starting = false;
         #[cfg(windows)]
         self.touch_keyboard.forget_window();
@@ -241,6 +235,12 @@ impl OsrNativeHost {
         self.window = None;
         self.renderer = None;
         self.effect = None;
+        #[cfg(target_os = "linux")]
+        {
+            self.direct = None;
+            self.exported_window = None;
+            self.foreign_parent = None;
+        }
         self.presented = false;
         self.hovered_control = None;
         self.pressed_control = None;
