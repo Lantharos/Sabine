@@ -124,6 +124,7 @@ jobs:
           Copy-Item $hostPath target/release/sabine-host.exe
           Copy-Item ([IO.Path]::ChangeExtension($hostPath, '.dll')) target/release/sabine-host.dll
           Copy-Item (Join-Path (Split-Path $hostPath) 'chrome_elf.dll') target/release/chrome_elf.dll
+          Copy-Item (Join-Path (Split-Path $hostPath) 'crash_reporter.cfg') target/release/crash_reporter.cfg
       - name: Leave the host build tree out of the cache
         if: runner.os == 'Windows' && steps.cef-cache.outputs.cache-hit != 'true'
         shell: pwsh
@@ -142,6 +143,7 @@ jobs:
           STANDALONE: ${{ matrix.standalone }}
         run: |
           cargo run --release --locked -p sabine-cli -- new release-probe
+          git init --quiet release-probe
           $cargoPath = (Join-Path $PWD 'crates/sabine').Replace('\', '/')
           $cargo = Get-Content release-probe/Cargo.toml -Raw
           $cargo = $cargo -replace '(?m)^sabine = .+$', "sabine = { path = `"$cargoPath`" }"
@@ -172,9 +174,10 @@ jobs:
           PACKAGE_TARGET: ${{ matrix.target }}
           PACKAGE_EXTENSION: ${{ matrix.extension }}
           UPDATE_TARGET: ${{ matrix.update_target }}
+          STANDALONE: ${{ matrix.standalone }}
         run: |
           $offline = @()
-          if ($IsWindows) { $offline = @('--offline') }
+          if ($IsWindows -and $env:STANDALONE -ne 'true') { $offline = @('--offline') }
           if ($env:PACKAGE_TARGET -eq 'exe') {
             New-Item release-probe/ui/public -ItemType Directory -Force | Out-Null
             Set-Content release-probe/ui/public/obsolete.txt 'Owned by the first release'
