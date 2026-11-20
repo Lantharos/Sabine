@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.100
 
 Apps that carry Chromium download less. A standalone app from the `sabine new` template now
 takes about 139 MB as a setup program, 152 MB as an MSI, 111 MB as a DMG and 122 MB as a portable
