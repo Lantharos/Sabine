@@ -325,7 +325,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: Lantharos/Sabine
-          ref: 7dd92a4987fb12b4b8f89a4162e7e1809321777b
+          ref: ${{ inputs.sabine_version }}
           path: .sabine-release
           persist-credentials: false
       - name: Verify installed Windows application
