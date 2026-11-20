@@ -307,7 +307,7 @@ jobs:
             $destination = New-Item "dist/release/$updateTarget" -ItemType Directory -Force
             $artifact = [IO.FileInfo]::new($result.artifacts[0])
             if (-not $artifact.Exists) { throw "Bundling $target reported a missing artifact: $($artifact.FullName)" }
-            $extension = if ($artifact.Name.EndsWith('.tar.gz')) { '.tar.gz' } else { $artifact.Extension }
+            $extension = if ($artifact.Name.EndsWith('.tar.zst')) { '.tar.zst' } else { $artifact.Extension }
             $base = $artifact.Name.Substring(0, $artifact.Name.Length - $extension.Length)
             $artifact.MoveTo((Join-Path $destination.FullName "$base-$updateTarget$extension"))
             if ($target -in @('portable', 'windows', 'macos')) {

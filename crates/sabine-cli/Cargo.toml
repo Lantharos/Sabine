@@ -38,6 +38,7 @@ icns.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 self-replace.workspace = true
+zstd = { workspace = true, features = ["zstdmt"] }
 dotenvy.workspace = true
 tempfile.workspace = true
 

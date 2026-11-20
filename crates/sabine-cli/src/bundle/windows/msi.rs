@@ -5,7 +5,10 @@
 // and unregister before RemoveFiles; XML that builds can still fail at install.
 
 use crate::{desktop::types::prog_id, project::BundleApp, util::xml};
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub(in crate::bundle) fn wix_source(
     app: &BundleApp,
@@ -42,18 +45,14 @@ pub(in crate::bundle) fn wix_source(
     } else {
         ""
     };
-    let inventory = directory_inventory(
-        app,
-        Path::new(staged_app_dir),
-        Path::new(staged_app_dir),
-        executable,
-        icon.is_some(),
-    )?;
+    let root = Path::new(staged_app_dir);
+    let links = super::runtime_links(root)?;
+    let inventory = directory_inventory(app, root, root, &links, executable, icon.is_some())?;
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
     <Package Name="{}" Manufacturer="{}" Version="{}" UpgradeCode="{}" Scope="perUser">
-      <MediaTemplate EmbedCab="yes"/>
+      <MediaTemplate EmbedCab="yes" CompressionLevel="high"/>
       <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of this application is already installed."/>
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">
@@ -102,6 +101,7 @@ fn directory_inventory(
     app: &BundleApp,
     root: &Path,
     directory: &Path,
+    links: &[PathBuf],
     executable: &str,
     has_icon: bool,
 ) -> Result<String, String> {
@@ -128,13 +128,25 @@ fn directory_inventory(
 <RemoveFolder Id="R{id}" On="uninstall"/>
 "#
     );
+    for link in links
+        .iter()
+        .filter(|link| root.join(link).parent() == Some(directory))
+    {
+        let identity = format!("{}:{}", app.id, link.to_string_lossy().replace('\\', "/"));
+        contents.push_str(&format!(
+            r#"<RemoveFile Id="L{}" Name="{}" On="uninstall"/>
+"#,
+            sabine_service::installer_guid(&identity).replace('-', ""),
+            xml(&link.file_name().unwrap().to_string_lossy())
+        ));
+    }
     let mut children = String::new();
     for entry in entries {
         let path = entry.path();
         let kind = entry.file_type().map_err(|error| error.to_string())?;
         if kind.is_dir() {
             children.push_str(&directory_inventory(
-                app, root, &path, executable, has_icon,
+                app, root, &path, links, executable, has_icon,
             )?);
         } else if kind.is_file() {
             let main = directory == root && entry.file_name() == executable;

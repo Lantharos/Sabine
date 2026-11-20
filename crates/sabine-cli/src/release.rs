@@ -285,7 +285,7 @@ fn artifact_kind(path: &Path) -> Result<AppArtifactKind, String> {
         .and_then(|name| name.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if name.ends_with(".tar.gz") || name.ends_with(".zip") {
+    if name.ends_with(".tar.zst") || name.ends_with(".zip") {
         Ok(AppArtifactKind::Archive)
     } else if name.ends_with(".deb") {
         Ok(AppArtifactKind::Deb)

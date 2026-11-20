@@ -1,10 +1,30 @@
 # Unreleased
 
-- Windows setup programs and MSI packages that carry Chromium no longer hold a full copy of each
-  file the runtime links, such as every locale pack: they hold an empty file that setup links once
-  the app is installed. That takes about 25 MB off a setup program and up to 70 MB off an MSI.
-- DMGs are compressed with LZMA instead of zlib, which takes about a third off one that carries
-  Chromium.
+Apps that carry Chromium download less:
+
+| Standalone Sabine Notes | Before | Now |
+| --- | --- | --- |
+| Setup program | ~169 MB | ~143 MB |
+| MSI | ~265 MB | ~150 MB |
+| DMG | ~176 MB | ~115 MB |
+| Portable tarball | ~156 MB | ~122 MB |
+| rpm | ~158 MB | ~130 MB |
+
+- Windows setup programs and MSIs no longer carry the files a runtime links, such as every locale
+  pack. The runtime lists them in `.sabine-links`, setup links them once the app is installed and
+  uninstalling removes them, so repairing an app never touches them. A setup program that installs
+  for the shared Sabine links its copy of the runtime again, which it used to leave as about
+  170 MB of copies.
+- MSIs are compressed with LZX, DMGs with LZMA, debs with `xz -9e` and rpms with zstd's long-range
+  mode.
+- Portable, `linux`, `windows` and `macos` bundles are `.tar.zst` tarballs, compressed with zstd's
+  long-range mode, instead of gzip tarballs, and Sabine installs and updates apps from them. The
+  `tar.gz` target alias is now `tar.zst`.
+- The locale packs of a Chromium runtime are links to the English one on macOS too, which saves
+  50 MB per runtime and per app that carries one.
+- Windows runtimes leave out CEF's console bootstrap, `bootstrapc.exe`, which Sabine never runs.
+- DevTools open with a fixed `SABINE_DEVTOOLS_PORT` and the default port too, not only when
+  Chromium picks the port.
 
 # Sabine 0.99
 

@@ -7,7 +7,7 @@ on:
         description: Package format to validate
         type: choice
         default: all
-        options: [all, exe, msi, dmg, appimage, deb, rpm]
+        options: [all, standalone, exe, msi, dmg, appimage, deb, rpm]
 
 permissions:
   contents: read
@@ -32,9 +32,17 @@ jobs:
               {'os': 'ubuntu-24.04', 'target': 'appimage', 'update_target': 'linux-x86_64-appimage', 'extension': '.AppImage'},
               {'os': 'ubuntu-24.04', 'target': 'deb', 'update_target': 'linux-x86_64-deb', 'extension': '.deb'},
               {'os': 'ubuntu-24.04', 'target': 'rpm', 'update_target': 'linux-x86_64-rpm', 'extension': '.rpm'},
+              {'os': 'windows-latest', 'target': 'msi', 'update_target': 'windows-x86_64-msi', 'extension': '.msi', 'standalone': True},
+              {'os': 'windows-latest', 'target': 'exe', 'update_target': 'windows-x86_64-exe', 'extension': '.exe', 'standalone': True},
+              {'os': 'macos-15', 'target': 'dmg', 'update_target': 'macos-aarch64-dmg', 'extension': '.dmg', 'standalone': True},
           ]
+          for target in targets:
+              target.setdefault('standalone', False)
+              target['name'] = target['update_target'] + ('-standalone' if target['standalone'] else '')
           selected = os.environ['PACKAGE_TARGET']
-          if selected != 'all':
+          if selected == 'standalone':
+              targets = [target for target in targets if target['standalone']]
+          elif selected != 'all':
               targets = [target for target in targets if target['target'] == selected]
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               print('matrix=' + json.dumps({'include': targets}), file=output)
@@ -57,7 +65,7 @@ jobs:
       - run: rustup override set stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          shared-key: package-${{ matrix.target }}
+          shared-key: package-${{ matrix.name }}
           cache-on-failure: true
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'
@@ -130,6 +138,8 @@ jobs:
           key: ${{ steps.cef-cache.outputs.cache-primary-key }}
       - name: Generate real app and signing key
         shell: pwsh
+        env:
+          STANDALONE: ${{ matrix.standalone }}
         run: |
           cargo run --release --locked -p sabine-cli -- new release-probe
           $cargoPath = (Join-Path $PWD 'crates/sabine').Replace('\', '/')
@@ -142,6 +152,7 @@ jobs:
           [IO.File]::WriteAllText((Join-Path $PWD 'release-probe/package.json'), ($package | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
           $config = Get-Content release-probe/Sabine.toml -Raw
           $config = $config.Replace('[app]', "[app]`nmaintainer = `"Package Tests <packages@example.test>`"`nlicense = `"MIT`"")
+          if ($env:STANDALONE -eq 'true') { $config = $config.Replace('[app]', "[app]`nstandalone = true") }
           [IO.File]::WriteAllText((Join-Path $PWD 'release-probe/Sabine.toml'), $config, [Text.UTF8Encoding]::new($false))
           $privateKey = cargo run --release --locked -p sabine-cli -- release-keygen --public-output release-probe/update-public-key.txt | Select-Object -Last 1
           if ([string]::IsNullOrWhiteSpace($privateKey)) {
@@ -180,7 +191,7 @@ jobs:
             throw "release manifest signature is missing"
           }
       - name: Install and launch Windows MSI
-        if: matrix.target == 'msi'
+        if: matrix.target == 'msi' && !matrix.standalone
         shell: pwsh
         run: |
           . ./scripts/checks/windows-package-check.ps1
@@ -229,6 +240,7 @@ jobs:
           $repair = Start-Process msiexec.exe -ArgumentList @('/fa', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
           Wait-InstallerExit $repair
           if ($repair.ExitCode -ne 0) { Get-Content $log -Tail 100; throw "MSI repair failed" }
+          Assert-RuntimeLinks (Join-Path $appDir 'resources/runtimes/cef')
           $app = $null
           try {
             $env:SABINE_TRACE = '1'
@@ -244,6 +256,7 @@ jobs:
             $registered = (Get-Content $registry -Raw | ConvertFrom-Json).apps
             if ($registered.PSObject.Properties['dev.sabine.release-probe']) { throw "MSI left the app registered" }
             if (Test-Path $installedExe.FullName) { throw "MSI left its application executable" }
+            if (Test-Path (Join-Path $appDir 'resources/runtimes')) { throw "MSI left the Chromium it shipped" }
           }
       - name: Validate macOS bundle metadata and native icon decoding
         if: runner.os == 'macOS'
@@ -264,7 +277,7 @@ jobs:
           $images = @(Get-ChildItem $iconSet -Filter '*.png')
           if ($images.Count -lt 8) { throw 'Application icon is missing standard or Retina sizes' }
       - name: Install, repair, launch, and uninstall Windows setup
-        if: matrix.target == 'exe'
+        if: matrix.target == 'exe' && !matrix.standalone
         shell: pwsh
         run: |
           . ./scripts/checks/windows-package-check.ps1
@@ -308,6 +321,7 @@ jobs:
             if ((Get-Content $userFile -Raw).Trim() -ne 'Keep my notes') { throw 'Upgrade changed user data' }
             $registered = (Get-Content $registry -Raw | ConvertFrom-Json).apps
             if ($registered.$appId.version -ne '0.1.1') { throw 'Upgrade left the old application registration' }
+            Assert-RuntimeLinks (Join-Path $appDir 'resources/runtimes/cef')
             $env:SABINE_TRACE = '1'
             $appLog = Join-Path $env:RUNNER_TEMP 'sabine-exe-app.log'
             $app = Start-Process (Join-Path $appDir 'release-probe.exe') -RedirectStandardError $appLog -PassThru
@@ -332,11 +346,104 @@ jobs:
               }
             }
           }
+      - name: Install, repair, launch, and uninstall the standalone Windows package
+        if: runner.os == 'Windows' && matrix.standalone
+        shell: pwsh
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
+          PACKAGE_EXTENSION: ${{ matrix.extension }}
+        run: |
+          . ./scripts/checks/windows-package-check.ps1
+          . ./scripts/checks/windows-browser-check.ps1
+          $package = Get-ChildItem dist/artifacts -Filter "*$env:PACKAGE_EXTENSION" -File | Select-Object -First 1
+          $appDir = Join-Path $env:LOCALAPPDATA 'Programs/dev.sabine.release-probe'
+          $log = Join-Path $env:RUNNER_TEMP 'sabine-msi-standalone.log'
+          function Invoke-Package([string] $Operation) {
+            $process = if ($env:PACKAGE_TARGET -eq 'msi') {
+              $action = @{ install = '/i'; repair = '/fa'; uninstall = '/x' }[$Operation]
+              Start-Process msiexec.exe -ArgumentList @($action, $package.FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
+            } elseif ($Operation -eq 'uninstall') {
+              Start-Process (Join-Path $appDir 'Uninstall.exe') -ArgumentList '/S' -PassThru
+            } else {
+              Start-Process $package.FullName -ArgumentList '/S' -PassThru
+            }
+            Wait-InstallerExit $process
+            if ($process.ExitCode -ne 0) {
+              if (Test-Path $log) { Get-Content $log -Tail 100 }
+              throw "Standalone $Operation failed with code $($process.ExitCode)"
+            }
+          }
+          $app = $null
+          try {
+            foreach ($operation in @('install', 'repair')) {
+              Invoke-Package $operation
+              Assert-RuntimeLinks (Join-Path $appDir 'resources/runtimes/cef')
+            }
+            $registry = Join-Path $env:LOCALAPPDATA 'Sabine/apps.json'
+            if ((Test-Path $registry) -and (Get-Content $registry -Raw | ConvertFrom-Json).apps.PSObject.Properties['dev.sabine.release-probe']) {
+              throw 'A standalone app registered with Sabine'
+            }
+            $env:SABINE_TRACE = '1'
+            $appLog = Join-Path $env:RUNNER_TEMP "sabine-$env:PACKAGE_TARGET-standalone-app.log"
+            $app = Start-Process (Join-Path $appDir 'release-probe.exe') -RedirectStandardError $appLog -PassThru
+            Wait-SabineAppFrame $app $appLog
+          } finally {
+            if ($null -ne $app -and -not $app.HasExited) { $app.Kill($true); $app.WaitForExit() }
+            Invoke-Package 'uninstall'
+            for ($attempt = 0; $attempt -lt 100 -and (Test-Path $appDir); $attempt++) {
+              Start-Sleep -Milliseconds 100
+            }
+            if (Test-Path $appDir) {
+              Get-ChildItem $appDir -Recurse -Force | Select-Object -First 20 -ExpandProperty FullName
+              throw 'Uninstalling left files of the app behind'
+            }
+          }
+      - name: Open the standalone macOS disk image
+        if: runner.os == 'macOS' && matrix.standalone
+        shell: pwsh
+        run: |
+          $image = Get-ChildItem dist/artifacts -Filter *.dmg -File | Select-Object -First 1
+          $format = & hdiutil imageinfo -format $image.FullName
+          if ($format -ne 'ULMO') { throw "The disk image is $format, not LZMA" }
+          $mount = Join-Path $env:RUNNER_TEMP 'sabine-dmg'
+          & hdiutil attach -quiet -nobrowse -readonly -mountpoint $mount $image.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Could not mount the disk image' }
+          $app = Join-Path $env:RUNNER_TEMP 'release-probe.app'
+          try {
+            $bundled = Get-ChildItem $mount -Filter '*.app' -Directory | Select-Object -First 1
+            $locales = @(Get-ChildItem $bundled.FullName -Filter locale.pak -File -Recurse)
+            if ($locales.Count -lt 2) { throw 'The bundled Chromium carries no locale packs' }
+            foreach ($pack in $locales) {
+              if ([int](& stat -f %l $pack.FullName) -ne $locales.Count) {
+                throw "$($pack.FullName) is not a link to the English locale pack"
+              }
+            }
+            & ditto $bundled.FullName $app
+            if ($LASTEXITCODE -ne 0) { throw 'Could not copy the app out of the disk image' }
+          } finally {
+            & hdiutil detach -quiet $mount
+          }
+          $env:SABINE_TRACE = '1'
+          $appLog = Join-Path $env:RUNNER_TEMP 'sabine-dmg-standalone-app.log'
+          $process = Start-Process (Join-Path $app 'Contents/MacOS/release-probe') -RedirectStandardError $appLog -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(60)
+            while ((Get-Date) -lt $deadline -and -not $process.HasExited) {
+              if ((Get-Content $appLog -Raw -ErrorAction Ignore) -match 'browser\.first_paint') {
+                Write-Host 'The standalone app presented its Chromium frame'
+                return
+              }
+              Start-Sleep -Milliseconds 200
+            }
+            throw "The standalone app did not present its Chromium frame: $(Get-Content $appLog -Raw -ErrorAction Ignore)"
+          } finally {
+            if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
+          }
       - name: Preserve Windows installer diagnostics
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
-          name: installer-logs-${{ matrix.target }}
+          name: installer-logs-${{ matrix.name }}
           path: |
             ${{ runner.temp }}/sabine-msi-*.log
             ${{ runner.temp }}/sabine-exe-*.log
@@ -344,7 +451,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: package-${{ matrix.update_target }}
+          name: package-${{ matrix.name }}
           path: |
             dist/artifacts/*
             dist/sabine-update.json

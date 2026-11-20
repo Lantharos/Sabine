@@ -22,14 +22,22 @@ namespace {
 // request carries an id of its own, far above the ones Chromium assigns.
 constexpr int kTargetInfoRequest = 1 << 30;
 
+// Chromium writes the port it picked to DevToolsActivePort only when the app
+// lets it pick one.
 std::string DevToolsPort() {
-  const std::filesystem::path root(CefCommandLine::GetGlobalCommandLine()
-                                       ->GetSwitchValue("root-cache-path")
-                                       .ToString());
+  CefRefPtr<CefCommandLine> command_line =
+      CefCommandLine::GetGlobalCommandLine();
+  const std::string port =
+      command_line->GetSwitchValue("remote-debugging-port").ToString();
+  if (port != "0") {
+    return port;
+  }
+  const std::filesystem::path root(
+      command_line->GetSwitchValue("root-cache-path").ToString());
   std::ifstream file(root / "DevToolsActivePort");
-  std::string port;
-  std::getline(file, port);
-  return port;
+  std::string picked;
+  std::getline(file, picked);
+  return picked;
 }
 
 class DevToolsTarget : public CefDevToolsMessageObserver {

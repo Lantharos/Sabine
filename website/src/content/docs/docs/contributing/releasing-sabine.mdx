@@ -103,6 +103,7 @@ What an app relies on from the installed Sabine:
 - `Sabine.toml` as the installed service reads it from a bundle a store installs, including keys
   that sections such as `[sandbox]` refuse when they don't know them, and the release manifests
   the daemon reads for app updates
+- the package formats the service installs and updates apps from, such as `.tar.zst` archives
 
 What changes only inside the app, such as its windows, its bridge, the sandbox it sets up for
 itself or the way it talks to the desktop, doesn't count.

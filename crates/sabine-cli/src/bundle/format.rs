@@ -16,7 +16,7 @@ impl BundleFormat {
     pub(super) fn parse(value: &str) -> Option<Self> {
         match value {
             "linux" => Some(Self::Linux),
-            "portable" | "tar" | "tar.gz" => Some(Self::Portable),
+            "portable" | "tar" | "tar.zst" => Some(Self::Portable),
             "deb" => Some(Self::Deb),
             "rpm" => Some(Self::Rpm),
             "appimage" => Some(Self::AppImage),

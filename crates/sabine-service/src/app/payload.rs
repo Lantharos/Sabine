@@ -48,7 +48,7 @@ pub fn remove_app_payload(root: &Path, id: &str) -> ServiceResult<()> {
 
 /// Records every file of the payload at `root`, and the `later` ones its
 /// installer adds, so setup installs and removes exactly those files.
-pub fn write_install_inventory(root: &Path, id: &str, later: &[&str]) -> ServiceResult<()> {
+pub fn write_install_inventory(root: &Path, id: &str, later: &[PathBuf]) -> ServiceResult<()> {
     fn walk(root: &Path, directory: &Path, files: &mut BTreeSet<PathBuf>) -> ServiceResult<()> {
         for entry in fs::read_dir(directory)? {
             let entry = entry?;
@@ -61,7 +61,7 @@ pub fn write_install_inventory(root: &Path, id: &str, later: &[&str]) -> Service
         }
         Ok(())
     }
-    let mut files = later.iter().map(PathBuf::from).collect();
+    let mut files = later.iter().cloned().collect();
     walk(root, root, &mut files)?;
     files.remove(Path::new(INVENTORY));
     let inventory = Inventory {

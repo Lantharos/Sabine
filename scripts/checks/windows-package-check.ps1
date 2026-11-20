@@ -115,3 +115,19 @@ public static class MsiCancellation {
         throw "Cancelled MSI returned $result instead of 1602"
     }
 }
+
+function Assert-RuntimeLinks([string] $Runtimes) {
+    $lists = @(Get-ChildItem $Runtimes -Filter .sabine-links -File -Recurse -Force)
+    if ($lists.Count -ne 1) { throw "Expected one Chromium listing its links under $Runtimes" }
+    $runtime = $lists[0].Directory.FullName
+    $links = @(Get-Content $lists[0].FullName -Raw | ConvertFrom-Json -NoEnumerate)
+    if ($links.Count -eq 0) { throw 'The installed Chromium lists no links' }
+    foreach ($link in $links) {
+        $file = Get-Item (Join-Path $runtime $link[0])
+        $target = Get-Item (Join-Path $runtime $link[1])
+        if ($file.LinkType -ne 'HardLink' -or $file.Length -ne $target.Length -or $target.Length -eq 0) {
+            throw "Setup did not link $($file.FullName) to $($target.FullName)"
+        }
+    }
+    Write-Host "Setup linked the $($links.Count) files the installed Chromium shares"
+}

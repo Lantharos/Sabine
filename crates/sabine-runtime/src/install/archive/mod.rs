@@ -11,9 +11,9 @@ use std::{
 const MAX_ENTRIES: usize = 100_000;
 const MAX_EXPANDED_SIZE: u64 = 16 * 1024 * 1024 * 1024;
 
-/// Extracts a zip archive or a plain, gzip or bzip2 tar archive into the empty
-/// directory `destination`, confining every entry and link to it. Callers
-/// validate the payload before activating it.
+/// Extracts a zip archive or a plain, gzip, bzip2 or zstd tar archive into
+/// the empty directory `destination`, confining every entry and link to it.
+/// Callers validate the payload before activating it.
 pub fn extract_archive(archive: &Path, destination: &Path) -> io::Result<()> {
     fs::create_dir_all(destination)?;
     if fs::read_dir(destination)?.next().is_some() {
@@ -32,6 +32,8 @@ pub fn extract_archive(archive: &Path, destination: &Path) -> io::Result<()> {
         tar::extract(flate2::read::MultiGzDecoder::new(input), &destination)?
     } else if signature.starts_with(b"BZh") {
         tar::extract(bzip2::read::MultiBzDecoder::new(input), &destination)?
+    } else if signature == [0x28, 0xb5, 0x2f, 0xfd] {
+        tar::extract(zstd::stream::read::Decoder::new(input)?, &destination)?
     } else {
         tar::extract(input, &destination)?
     };
@@ -113,5 +115,26 @@ mod tests {
         );
         assert!(extract_tar(&tar_with_links(&[("cef/link", "../..")])).is_err());
         assert!(extract_tar(&tar_with_links(&[("cef/d1", "."), ("cef/link", "d1/d1")])).is_ok());
+    }
+
+    #[test]
+    fn extracts_the_zstd_tarballs_bundles_ship_as() {
+        let mut builder = ::tar::Builder::new(Vec::new());
+        let mut header = ::tar::Header::new_gnu();
+        header.set_size(5);
+        builder
+            .append_data(&mut header, "app/notes", &b"notes"[..])
+            .unwrap();
+        let tarball = zstd::encode_all(&builder.into_inner().unwrap()[..], 19).unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let archive = scratch.path().join("app.tar.zst");
+        fs::write(&archive, tarball).unwrap();
+
+        extract_archive(&archive, &scratch.path().join("staging")).unwrap();
+
+        assert_eq!(
+            fs::read(scratch.path().join("staging/app/notes")).unwrap(),
+            b"notes"
+        );
     }
 }

@@ -96,6 +96,8 @@ fn prepare(
         SabineService::default()
             .install_app_payload(&source, destination, manifest, cancelled)
             .map_err(|error| error.to_string())?;
+        #[cfg(windows)]
+        link_installed_runtimes(config, &source, destination)?;
     } else {
         SabineService::default()
             .register(manifest)
@@ -118,16 +120,39 @@ fn check_standalone(config: &SabineWindowConfig) -> Result<(), String> {
     sabine_host::validate_host_protocol(&host, runtime.location.path())
 }
 
-/// Windows installers copy every file they install, so the runtime an app
-/// ships gets its links back once its files are in place.
+/// Windows installers can't hold links, so setup makes the ones the runtime
+/// an app ships lists once its files are in place.
 #[cfg(windows)]
 fn link_shipped_runtimes(config: &SabineWindowConfig) -> Result<(), String> {
     match &config.runtime.bundled_dir {
-        Some(bundled_dir) => sabine_runtime::link_bundled_runtimes(bundled_dir).map_err(|error| {
-            format!("Could not prepare the Chromium this app ships with: {error}")
-        }),
+        Some(bundled_dir) => link_runtimes(bundled_dir),
         None => Ok(()),
     }
+}
+
+/// Links the runtime an app ships again where setup copied the app from
+/// `source` to `destination`, since copying turns its links into copies.
+#[cfg(windows)]
+fn link_installed_runtimes(
+    config: &SabineWindowConfig,
+    source: &Path,
+    destination: &Path,
+) -> Result<(), String> {
+    let Some(bundled_dir) = &config.runtime.bundled_dir else {
+        return Ok(());
+    };
+    let canonical = |path: &Path| dunce::canonicalize(path).map_err(|error| error.to_string());
+    let relative = canonical(bundled_dir)?
+        .strip_prefix(canonical(source)?)
+        .map_err(|_| "The Chromium this app ships with is outside its files")?
+        .to_path_buf();
+    link_runtimes(&destination.join(relative))
+}
+
+#[cfg(windows)]
+fn link_runtimes(bundled_dir: &Path) -> Result<(), String> {
+    sabine_runtime::link_bundled_runtimes(bundled_dir)
+        .map_err(|error| format!("Could not prepare the Chromium this app ships with: {error}"))
 }
 
 fn unregister(config: &SabineWindowConfig) -> Result<(), String> {

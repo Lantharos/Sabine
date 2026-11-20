@@ -86,7 +86,7 @@ fn stage_runtime(
         .map_err(|error| format!("could not stage the CEF runtime: {error}"))?;
     #[cfg(windows)]
     if matches!(format, BundleFormat::Exe | BundleFormat::Msi) {
-        sabine_runtime::empty_runtime_links(&destination)
+        sabine_runtime::list_runtime_links(&destination)
             .map_err(|error| format!("could not stage the CEF runtime: {error}"))?;
     }
     Ok(())

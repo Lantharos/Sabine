@@ -17,7 +17,10 @@ pub(super) use pe::WindowsArchitecture;
 
 use crate::{desktop::types::prog_id, project::BundleApp};
 use signing::WindowsSigning;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub(super) fn nsis_script(
     app: &BundleApp,
@@ -32,11 +35,14 @@ pub(super) fn nsis_script(
     let name = escape(&app.name);
     let id = escape(&app.id);
     let executable = escape(executable);
-    let uninstall_files = uninstall_commands(&source, &source)?;
+    let links = runtime_links(&source)?;
+    let uninstall_files = uninstall_commands(&source, &source, &links)?;
     let setup = if app.standalone {
         Setup::standalone(&name)
     } else {
-        sabine_service::write_install_inventory(&source, &app.id, &["Uninstall.exe"])
+        let mut later = links;
+        later.push("Uninstall.exe".into());
+        sabine_service::write_install_inventory(&source, &app.id, &later)
             .map_err(|error| error.to_string())?;
         Setup::shared(&name)
     };
@@ -310,34 +316,62 @@ document_types_kept:
     (register, unregister)
 }
 
-fn uninstall_commands(root: &Path, directory: &Path) -> Result<String, String> {
+/// The links the Chromium an app ships lists for setup to make, relative to
+/// the app's folder. The installers leave them out and remove them on
+/// uninstall.
+pub(super) fn runtime_links(app_dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let resources = Path::new("resources");
+    Ok(
+        sabine_runtime::listed_runtime_links(&app_dir.join(resources))
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(|link| resources.join(link))
+            .collect(),
+    )
+}
+
+fn uninstall_commands(root: &Path, directory: &Path, links: &[PathBuf]) -> Result<String, String> {
     let mut entries = fs::read_dir(directory)
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
     entries.sort_by_key(|entry| entry.file_name());
     let mut commands = String::new();
+    for link in links
+        .iter()
+        .filter(|link| root.join(link).parent() == Some(directory))
+    {
+        commands.push_str(&delete_command(link));
+    }
     for entry in entries {
         let path = entry.path();
         let relative = path.strip_prefix(root).map_err(|error| error.to_string())?;
         if relative == Path::new(".sabine-install.json") || relative == Path::new("Uninstall.exe") {
             continue;
         }
-        let target = escape(&relative.to_string_lossy().replace('/', "\\"));
         if entry
             .file_type()
             .map_err(|error| error.to_string())?
             .is_dir()
         {
-            commands.push_str(&uninstall_commands(root, &path)?);
-            commands.push_str(&format!("  RMDir \"$INSTDIR\\{target}\"\n"));
+            commands.push_str(&uninstall_commands(root, &path, links)?);
+            commands.push_str(&format!("  RMDir \"$INSTDIR\\{}\"\n", nsis_path(relative)));
         } else {
-            commands.push_str(&format!(
-                "  ClearErrors\n  Delete \"$INSTDIR\\{target}\"\n  IfErrors unregister_failed\n"
-            ));
+            commands.push_str(&delete_command(relative));
         }
     }
     Ok(commands)
+}
+
+fn delete_command(relative: &Path) -> String {
+    format!(
+        "  ClearErrors\n  Delete \"$INSTDIR\\{}\"\n  IfErrors unregister_failed\n",
+        nsis_path(relative)
+    )
+}
+
+fn nsis_path(relative: &Path) -> String {
+    escape(&relative.to_string_lossy().replace('/', "\\"))
 }
 
 fn escape(value: &str) -> String {

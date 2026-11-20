@@ -53,7 +53,7 @@ package.
 
 | Target | Also accepted as | Produces | Packaging tool |
 | --- | --- | --- | --- |
-| `portable` | `tar`, `tar.gz` | The app for the machine building it, ready to unpack anywhere | `tar` |
+| `portable` | `tar`, `tar.zst` | The app for the machine building it, ready to unpack anywhere | `tar` |
 | `linux` | | A tarball of the Linux filesystem tree | `tar` |
 | `deb` | | A Debian package | `dpkg-deb` and `dpkg-shlibdeps` (from `dpkg-dev`) |
 | `rpm` | | An RPM package | `rpmbuild` |
@@ -74,21 +74,21 @@ wherever it is unpacked:
 
 <Tabs syncKey="platform">
   <TabItem label="Linux">
-    A gzip tarball of the filesystem tree, with the program in `usr/lib/sabine/<app id>` and a
+    A zstd tarball of the filesystem tree, with the program in `usr/lib/sabine/<app id>` and a
     launcher in `usr/bin`.
   </TabItem>
   <TabItem label="Windows">
     A zip of the app folder, with the program and its `resources` folder.
   </TabItem>
   <TabItem label="macOS">
-    A gzip tarball of the `.app` bundle.
+    A zstd tarball of the `.app` bundle.
   </TabItem>
 </Tabs>
 
 On first launch the app prepares Sabine's shared service and runtime if the machine has none,
 registers itself like any installed app, and later updates from the same kind of archive. The
 `linux`, `windows` and `macos` targets stage the same layouts for their platform, so you can build
-them from another platform, and always pack them as gzip tarballs.
+them from another platform, and always pack them as zstd tarballs.
 
 ### Linux packages
 
@@ -201,7 +201,7 @@ What changes for the installed app:
   [shared runtime](/docs/concepts/shared-runtime/#the-shared-chromium-on-linux).
 - Its Chromium is the one it shipped with until the app itself updates, so security fixes reach
   people only through your releases. Release often.
-- Each package carries a full Chromium, a few hundred megabytes compressed.
+- Each package carries a full Chromium, which adds about 110 to 190 MB to it.
 - It updates itself from installer packages: deb, rpm, AppImage, MSI, setup `.exe` and DMG. While it
   runs, the app checks its update source every six hours and downloads a release once it has been
   out for a day, then offers it the next time it opens, as other apps do. Archives such as portable

@@ -159,7 +159,7 @@ same operating system. Before the page builds, its dependencies install when it 
 | Argument or flag | Default | Meaning |
 | --- | --- | --- |
 | `[source]` | `.` | The project folder |
-| `--target <target>` | `portable` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.gz` mean `portable`, `nsis` means `exe` and `app` means `macos`. Repeat it, or separate targets with commas, for several |
+| `--target <target>` | `portable` | `portable`, `linux`, `deb`, `rpm`, `appimage`, `windows`, `exe`, `msi`, `macos` or `dmg`. `tar` and `tar.zst` mean `portable`, `nsis` means `exe` and `app` means `macos`. Repeat it, or separate targets with commas, for several |
 | `--out <path>` | `dist` | Where staged bundles and packages go |
 | `--debug` | off | Packages a debug build instead of Cargo's release profile |
 | `--no-build` | off | Packages the executable already in Cargo's default output folder |
@@ -317,7 +317,7 @@ Needs the GitHub CLI, signed in. See
 ## sabine release-manifest
 
 ```sh
-sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.tern-1.0.0-portable.tar.gz \
+sabine release-manifest . --artifact linux-x86_64=dist/artifacts/com.example.tern-1.0.0-portable.tar.zst \
   --executable linux-x86_64=com.example.tern/root/usr/lib/sabine/com.example.tern/tern
 ```
 

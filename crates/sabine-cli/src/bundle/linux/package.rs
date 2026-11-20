@@ -64,6 +64,7 @@ pub(in crate::bundle) fn package_deb(
     let artifact = artifact_path(app, staged, BundleFormat::Deb, "deb");
     ensure_parent(&artifact)?;
     run(Command::new("dpkg-deb")
+        .args(["-Zxz", "-z9", "-Sextreme"])
         .arg("--root-owner-group")
         .arg("--build")
         .arg(&staged.app_dir)
@@ -105,7 +106,9 @@ pub(in crate::bundle) fn package_rpm(
             staged.root.join("rpmbuild").display()
         ))
         .arg("--define")
-        .arg(format!("sabine_source {}", source_dir.display())))?;
+        .arg(format!("sabine_source {}", source_dir.display()))
+        .arg("--define")
+        .arg("_binary_payload w19L.zstdio"))?;
     let built = find_file_with_extension(&rpm_dir, "rpm")
         .ok_or_else(|| "rpmbuild completed without producing an RPM".to_string())?;
     ensure_parent(&artifact)?;
