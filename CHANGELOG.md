@@ -1,14 +1,8 @@
 # Unreleased
 
-Apps that carry Chromium download less:
-
-| Standalone Sabine Notes | Before | Now |
-| --- | --- | --- |
-| Setup program | ~169 MB | ~143 MB |
-| MSI | ~265 MB | ~150 MB |
-| DMG | ~176 MB | ~115 MB |
-| Portable tarball | ~156 MB | ~122 MB |
-| rpm | ~158 MB | ~130 MB |
+Apps that carry Chromium download less. A standalone app from the `sabine new` template now
+takes about 139 MB as a setup program, 152 MB as an MSI, 111 MB as a DMG and 122 MB as a portable
+tarball, where it took about 169, 265, 176 and 156 MB.
 
 - Windows setup programs and MSIs no longer carry the files a runtime links, such as every locale
   pack. The runtime lists them in `.sabine-links`, setup links them once the app is installed and
