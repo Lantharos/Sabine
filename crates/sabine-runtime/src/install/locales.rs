@@ -5,24 +5,37 @@
 //! the dates and numbers pages format the way people expect, and all the
 //! packs together cost what one does.
 
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 const ENGLISH: &str = "en-US.pak";
 
-fn locales_dir(runtime_dir: &Path) -> std::path::PathBuf {
+fn locales_dir(runtime_dir: &Path) -> PathBuf {
     runtime_dir.join("Resources").join("locales")
+}
+
+/// The runtime's locale packs other than the English one, which link to it.
+pub(crate) fn linked_packs(runtime_dir: &Path) -> io::Result<Vec<PathBuf>> {
+    let locales = locales_dir(runtime_dir);
+    let english = locales.join(ENGLISH);
+    let mut packs = Vec::new();
+    for entry in fs::read_dir(&locales)? {
+        let path = entry?.path();
+        if is_pack(&path) && path != english {
+            packs.push(path);
+        }
+    }
+    Ok(packs)
 }
 
 /// Makes every locale pack of the runtime a hard link to the English one.
 pub(crate) fn link_locale_packs(runtime_dir: &Path) -> io::Result<()> {
-    let locales = locales_dir(runtime_dir);
-    let english = locales.join(ENGLISH);
-    for entry in fs::read_dir(&locales)? {
-        let path = entry?.path();
-        if is_pack(&path) && path != english {
-            fs::remove_file(&path)?;
-            fs::hard_link(&english, &path)?;
-        }
+    let english = locales_dir(runtime_dir).join(ENGLISH);
+    for path in linked_packs(runtime_dir)? {
+        fs::remove_file(&path)?;
+        fs::hard_link(&english, &path)?;
     }
     Ok(())
 }

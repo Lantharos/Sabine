@@ -1,3 +1,11 @@
+# Unreleased
+
+- Windows setup programs and MSI packages that carry Chromium no longer hold a full copy of each
+  file the runtime links, such as every locale pack: they hold an empty file that setup links once
+  the app is installed. That takes about 25 MB off a setup program and up to 70 MB off an MSI.
+- DMGs are compressed with LZMA instead of zlib, which takes about a third off one that carries
+  Chromium.
+
 # Sabine 0.99
 
 - Sabine follows CEF's stable channel again: the daemon installs each new stable Chromium as it

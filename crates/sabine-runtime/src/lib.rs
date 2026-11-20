@@ -41,9 +41,9 @@ pub use files::{
     replace_file, sync_directory, write_file_atomic, write_json_atomic,
 };
 pub use install::archive::extract_archive;
-#[cfg(windows)]
-pub use install::assets::link_bundled_runtimes;
 pub use install::assets::prepare_runtime_assets;
+#[cfg(windows)]
+pub use install::assets::{empty_runtime_links, link_bundled_runtimes};
 pub use install::directory::{install_directory, recover_directory_installs};
 pub use install::payload::copy_runtime_payload;
 pub use install::progress_log::ProgressLog;

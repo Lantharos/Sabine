@@ -20,7 +20,7 @@ pub(super) fn package_dmg(app: &BundleApp, staged: &StagedBundle) -> Result<Path
         .arg(&staged.root)
         .arg("-ov")
         .arg("-format")
-        .arg("UDZO")
+        .arg("ULMO")
         .arg(&artifact))?;
     Ok(artifact)
 }

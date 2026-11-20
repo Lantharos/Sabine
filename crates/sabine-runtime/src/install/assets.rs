@@ -33,8 +33,8 @@ pub(crate) fn link_release_assets(runtime_dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Turns the copies a Windows installer makes of the files the runtimes an
-/// app ships share back into hard links, as the runtimes were bundled.
+/// Links the files the runtimes an app ships share again, which its Windows
+/// installer carried empty.
 #[cfg(windows)]
 pub fn link_bundled_runtimes(bundled_dir: &Path) -> io::Result<()> {
     let runtimes = crate::discovery::paths::bundled_runtime_path(bundled_dir);
@@ -51,6 +51,21 @@ pub fn link_bundled_runtimes(bundled_dir: &Path) -> io::Result<()> {
         }
         link_release_assets(&runtime)?;
         super::locales::link_locale_packs(&runtime)?;
+    }
+    Ok(())
+}
+
+/// Windows installers copy every file they carry, so a runtime staged for one
+/// holds an empty file in place of each link, and
+/// [`link_bundled_runtimes`] links them again once setup has put them in place.
+#[cfg(windows)]
+pub fn empty_runtime_links(runtime_dir: &Path) -> io::Result<()> {
+    let assets = RELEASE_ASSETS
+        .iter()
+        .map(|asset| runtime_dir.join("Release").join(asset));
+    for path in assets.chain(super::locales::linked_packs(runtime_dir)?) {
+        std::fs::remove_file(&path)?;
+        std::fs::File::create(&path)?;
     }
     Ok(())
 }
@@ -75,4 +90,47 @@ fn link_runtime_asset(runtime_dir: &Path, asset: &str) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn setup_links_what_the_installer_carried_empty() {
+        let runtime = tempfile::tempdir().unwrap();
+        let root = runtime.path();
+        let locales = root.join("Resources/locales");
+        fs::create_dir_all(&locales).unwrap();
+        fs::create_dir_all(root.join("Release")).unwrap();
+        for asset in RELEASE_ASSETS {
+            fs::write(root.join("Resources").join(asset), asset).unwrap();
+        }
+        fs::write(locales.join("en-US.pak"), "English").unwrap();
+        fs::write(locales.join("de.pak"), "English").unwrap();
+        link_release_assets(root).unwrap();
+
+        empty_runtime_links(root).unwrap();
+        assert_eq!(fs::read(locales.join("de.pak")).unwrap(), b"");
+        assert_eq!(
+            fs::read(root.join("Resources/resources.pak")).unwrap(),
+            b"resources.pak"
+        );
+
+        for asset in RELEASE_ASSETS {
+            crate::remove_file_if_present(&root.join("Release").join(asset)).unwrap();
+        }
+        link_release_assets(root).unwrap();
+        super::super::locales::link_locale_packs(root).unwrap();
+        assert_eq!(
+            fs::read_to_string(locales.join("de.pak")).unwrap(),
+            "English"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("Release/resources.pak")).unwrap(),
+            "resources.pak"
+        );
+    }
 }

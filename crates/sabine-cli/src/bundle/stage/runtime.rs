@@ -83,5 +83,11 @@ fn stage_runtime(
         .ok_or_else(|| "the CEF runtime has no directory name".to_string())?;
     let destination = manifest_dir.join("runtimes/cef").join(runtime_name);
     sabine_runtime::copy_runtime_payload(runtime.location.path(), &destination)
-        .map_err(|error| format!("could not stage the CEF runtime: {error}"))
+        .map_err(|error| format!("could not stage the CEF runtime: {error}"))?;
+    #[cfg(windows)]
+    if matches!(format, BundleFormat::Exe | BundleFormat::Msi) {
+        sabine_runtime::empty_runtime_links(&destination)
+            .map_err(|error| format!("could not stage the CEF runtime: {error}"))?;
+    }
+    Ok(())
 }
