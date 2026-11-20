@@ -163,6 +163,7 @@ jobs:
         working-directory: release-probe
         run: |
           bun install
+          cargo run --release --locked --manifest-path ../Cargo.toml -p sabine-cli -- bindings .
           bun run build
       - name: Build native package and signed metadata
         shell: pwsh
