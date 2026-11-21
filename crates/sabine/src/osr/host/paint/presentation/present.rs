@@ -64,6 +64,9 @@ impl OsrNativeHost {
         if !self.hand_over_direct_presentation() {
             return false;
         }
+        if std::mem::take(&mut self.effect_regions_dirty) {
+            self.update_effect_regions();
+        }
         let scale = self.scale() as f32;
         self.lay_out_sheet();
         let mut list = std::mem::take(&mut self.display_list);
@@ -87,10 +90,6 @@ impl OsrNativeHost {
         self.note_main_frame_presented();
         if !self.page_in_subsurface() {
             self.note_window_frame();
-        }
-        if self.effect_regions_dirty {
-            self.effect_regions_dirty = false;
-            self.update_effect_regions();
         }
         self.drive_loading_fade();
         true

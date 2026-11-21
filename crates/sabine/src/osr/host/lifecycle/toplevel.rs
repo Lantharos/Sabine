@@ -41,6 +41,9 @@ impl OsrNativeHost {
         }
         if state.floating() != self.toplevel.floating() {
             self.effect_regions_dirty = true;
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
         }
         self.toplevel = state;
         self.send_toplevel_state();
