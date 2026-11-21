@@ -71,6 +71,8 @@ pub(crate) fn launch_process(
         #[cfg(target_os = "linux")]
         installation,
         #[cfg(target_os = "linux")]
+        closing_windows: Vec::new(),
+        #[cfg(target_os = "linux")]
         _confinement: confinement,
     };
     if !config.app_menu.is_empty() {

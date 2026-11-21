@@ -102,6 +102,14 @@ impl SabineProcessHandle {
         self.command_sender.send(ProcessCommand::Quit).is_ok()
     }
 
+    /// Tells the app one of its windows is closing for good.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn closing(&self, window: WindowId) {
+        let _ = self
+            .command_sender
+            .send(ProcessCommand::WindowClosing { window });
+    }
+
     /// Asks the app whether it steps down for its newly installed copy, as a
     /// `launch` of that copy or its installer asks.
     #[cfg(target_os = "linux")]

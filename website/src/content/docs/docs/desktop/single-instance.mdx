@@ -68,6 +68,10 @@ running app is in the background with no window open: the running app ends, and 
 on as the app's first one. See
 [Apps that are running](/docs/distribution/releases-and-updates/#apps-that-are-running).
 
+A launch that arrives while the app is ending, after its last window closed or it quit, waits on
+Linux for the app to end and then starts it again, so reopening an app right after closing it
+opens a window. An app that runs in the background keeps hearing such launches.
+
 ## Hearing about later launches
 
 Each later launch reaches the running app's pages as `events.singleInstance`:

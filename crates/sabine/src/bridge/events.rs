@@ -20,6 +20,10 @@ use crate::window::{DISPLAYS_LINE, PAGE_LOST_LINE, PAGE_STARTED_LINE, WindowList
 
 /// A window host writes this when people move focus to its window.
 pub(crate) const FOCUSED_LINE: &str = "SABINE_WINDOW_FOCUSED";
+/// A window host writes this once it is closing for good, so the app knows
+/// it ends with its last such window.
+#[cfg(target_os = "linux")]
+pub(crate) const CLOSING_LINE: &str = "SABINE_WINDOW_CLOSING";
 /// A window host writes this when someone chose to quit the app from its
 /// menus.
 pub(crate) const QUIT_REQUESTED_LINE: &str = "SABINE_QUIT_REQUESTED";
@@ -149,6 +153,8 @@ pub(crate) fn spawn_bridge_dispatch(
             quit: &|| {
                 process.quit();
             },
+            #[cfg(target_os = "linux")]
+            closing: &|| process.closing(window),
         };
         host.read_requests(stdout, || {
             let _ = ready_sender.try_send(());
@@ -172,6 +178,9 @@ struct WindowHost<'a> {
     emitter: &'a BridgeEventEmitter,
     /// Ends the app, as someone chose to from the window's menus.
     quit: &'a dyn Fn(),
+    /// Tells the app the window is closing for good.
+    #[cfg(target_os = "linux")]
+    closing: &'a dyn Fn(),
 }
 
 impl WindowHost<'_> {
@@ -179,6 +188,11 @@ impl WindowHost<'_> {
         let mut reader = BufReader::new(stdout);
         while let Ok(Some(frame)) = Frame::read(&mut reader) {
             let line = frame.line.as_str();
+            #[cfg(target_os = "linux")]
+            if line == CLOSING_LINE {
+                (self.closing)();
+                continue;
+            }
             if line == "SABINE_OSR_READY" {
                 ready();
             } else if line == FOCUSED_LINE {
@@ -267,6 +281,8 @@ mod tests {
             reports: &reports,
             emitter: &emitter,
             quit: &|| {},
+            #[cfg(target_os = "linux")]
+            closing: &|| {},
         }
         .read_requests(host.stdout.take().expect("stdout"), || {});
         let (answered, answer) = crossbeam_channel::bounded(1);

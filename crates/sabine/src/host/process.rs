@@ -36,6 +36,11 @@ pub(crate) enum ProcessCommand {
         ready: bool,
     },
     Quit,
+    /// A window is closing for good, and leaves the screen at once.
+    #[cfg(target_os = "linux")]
+    WindowClosing {
+        window: WindowId,
+    },
     /// A launch of the app's newly installed copy, or its installer, asks the
     /// app to end so that copy runs instead.
     #[cfg(target_os = "linux")]
@@ -91,6 +96,10 @@ pub struct SabineProcess {
     pub(crate) windows: WindowContext,
     #[cfg(target_os = "linux")]
     pub(crate) installation: Option<crate::host::Installation>,
+    /// The windows on their way out, which end the app with them unless it
+    /// runs in the background.
+    #[cfg(target_os = "linux")]
+    pub(crate) closing_windows: Vec<WindowId>,
     /// The filtered session bus and sound server of an app Sabine confines,
     /// which end with the app.
     #[cfg(target_os = "linux")]
@@ -259,6 +268,9 @@ impl SabineProcess {
             }
         }
 
+        if let Some(services) = &self.desktop_services {
+            services.end();
+        }
         if let Some(listener) = &self.windows.primary.quit {
             listener.deliver();
         }
@@ -291,6 +303,11 @@ impl SabineProcess {
                     false
                 }
             });
+        #[cfg(target_os = "linux")]
+        {
+            let open = self.open_windows().collect::<Vec<_>>();
+            self.closing_windows.retain(|window| open.contains(window));
+        }
 
         Ok((self.quitting || !self.background)
             && self.primary.is_none()
@@ -311,7 +328,33 @@ impl SabineProcess {
             ProcessCommand::Present { activation_token } => self.present(activation_token),
             ProcessCommand::PrimaryReady { window, ready } => self.primary_ready(window, ready),
             ProcessCommand::Quit => self.quit(),
+            #[cfg(target_os = "linux")]
+            ProcessCommand::WindowClosing { window } => {
+                if self.open_windows().any(|open| open == window) {
+                    self.closing_windows.push(window);
+                }
+            }
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn open_windows(&self) -> impl Iterator<Item = WindowId> + '_ {
+        self.primary
+            .iter()
+            .map(|primary| primary.child.id())
+            .chain(self.extra_windows.iter().map(ManagedChild::id))
+    }
+
+    /// Whether the app is bound to end: it quits, or every window it has is
+    /// closing and nothing keeps it running without them.
+    #[cfg(target_os = "linux")]
+    fn ending(&self) -> bool {
+        self.quitting
+            || (!self.background
+                && self.pending_windows.is_empty()
+                && self
+                    .open_windows()
+                    .all(|window| self.closing_windows.contains(&window)))
     }
 
     fn quit(&mut self) {
@@ -322,21 +365,23 @@ impl SabineProcess {
 
     /// Ends a background app with no window open once a newer copy of it is
     /// installed, for that copy to take over. A launch that asks while the
-    /// app quits anyway takes over once it ended.
+    /// app ends anyway takes over once it ended, and holds the app to ending.
     #[cfg(target_os = "linux")]
     fn step_down(&mut self, launch: bool, answer: crossbeam_channel::Sender<bool>) {
-        let steps_down = if self.quitting {
-            launch
-        } else {
-            self.background
-                && self.primary.is_none()
-                && self.extra_windows.is_empty()
-                && self
-                    .installation
-                    .as_ref()
-                    .is_some_and(crate::host::Installation::superseded)
-        };
-        if answer.send(steps_down).is_ok() && steps_down && !self.quitting {
+        if self.ending() {
+            if answer.send(launch).is_ok() && launch {
+                self.quitting = true;
+            }
+            return;
+        }
+        let steps_down = self.background
+            && self.primary.is_none()
+            && self.extra_windows.is_empty()
+            && self
+                .installation
+                .as_ref()
+                .is_some_and(crate::host::Installation::superseded);
+        if answer.send(steps_down).is_ok() && steps_down {
             self.quit();
         }
     }

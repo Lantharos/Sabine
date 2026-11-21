@@ -223,6 +223,13 @@ impl DesktopServiceState {
             instance.attach(process);
         }
     }
+
+    /// Lets launches that arrive while the app ends take over once it has.
+    pub(crate) fn end(&self) {
+        if let Some(instance) = &self.single_instance {
+            instance.end();
+        }
+    }
 }
 
 /// The app's login entry, which it can turn on and off while it runs.

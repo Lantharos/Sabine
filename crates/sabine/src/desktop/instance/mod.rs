@@ -53,6 +53,7 @@ enum Claim {
 pub(super) struct SingleInstanceGuard {
     owner: Owner,
     running: Arc<AtomicBool>,
+    ended: Arc<AtomicBool>,
     process: Process,
     thread: Option<JoinHandle<()>>,
 }
@@ -92,17 +93,20 @@ impl SingleInstanceGuard {
         events: EventQueue,
     ) -> Self {
         let running = Arc::new(AtomicBool::new(true));
+        let ended = Arc::new(AtomicBool::new(false));
         let process = Process::default();
         let thread = serve(
             listener,
             policy,
             events,
             Arc::clone(&running),
+            Arc::clone(&ended),
             Arc::clone(&process),
         );
         Self {
             owner,
             running,
+            ended,
             process,
             thread: Some(thread),
         }
@@ -111,6 +115,13 @@ impl SingleInstanceGuard {
     /// Lets the instance answer for the app's process from now on.
     pub(super) fn attach(&self, handle: &SabineProcessHandle) {
         let _ = self.process.set(handle.clone());
+    }
+
+    /// Steps down for every later launch once the app stopped answering
+    /// them on its way out: each waits for this process to end and then
+    /// starts afresh.
+    pub(super) fn end(&self) {
+        self.ended.store(true, Ordering::Release);
     }
 }
 
@@ -129,6 +140,7 @@ fn serve(
     policy: SingleInstancePolicy,
     events: EventQueue,
     running: Arc<AtomicBool>,
+    ended: Arc<AtomicBool>,
     process: Process,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
@@ -139,9 +151,10 @@ fn serve(
                 let events = events.clone();
                 let gate = listener.gate();
                 let process = Arc::clone(&process);
+                let ended = Arc::clone(&ended);
                 thread::spawn(move || {
                     for stream in pending {
-                        if let Some(activation) = receive(policy, &gate, &process, stream) {
+                        if let Some(activation) = receive(policy, &gate, &process, &ended, stream) {
                             let _ = events.send(PlatformEvent::SingleInstance(activation));
                         }
                     }
@@ -164,6 +177,7 @@ fn receive(
     policy: SingleInstancePolicy,
     gate: &platform::Gate,
     process: &Process,
+    ended: &AtomicBool,
     mut stream: Stream,
 ) -> Option<SingleInstanceActivation> {
     stream.set_read_timeout(Some(IO_TIMEOUT)).ok()?;
@@ -180,25 +194,29 @@ fn receive(
         return None;
     }
     #[cfg(target_os = "linux")]
-    if steps_down(process, &value) {
+    if steps_down(process, ended, &value) {
         let _ = io::Write::write_all(&mut stream, sabine_runtime::instance::STEPPING_DOWN);
         return None;
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = process;
+    let _ = (process, ended);
     activation(policy, &value)
 }
 
 /// Whether the app steps down for the copy of it installed while it ran, as
-/// a launch of that copy or its installer asks.
+/// a launch of that copy or its installer asks, or for any launch while the
+/// app ends. A launch the app left unanswered as it ended takes over too.
 #[cfg(target_os = "linux")]
-fn steps_down(process: &Process, message: &Value) -> bool {
+fn steps_down(process: &Process, ended: &AtomicBool, message: &Value) -> bool {
     use sabine_runtime::instance::{SUCCESSOR, UPDATED};
     let launch = message.get(SUCCESSOR).and_then(Value::as_bool) == Some(true);
-    (launch || message.get(UPDATED).is_some())
-        && process
-            .get()
-            .is_some_and(|process| process.step_down(launch))
+    let ended = || launch && ended.load(Ordering::Acquire);
+    ended()
+        || ((launch || message.get(UPDATED).is_some())
+            && process
+                .get()
+                .is_some_and(|process| process.step_down(launch)))
+        || ended()
 }
 
 fn activation(policy: SingleInstancePolicy, value: &Value) -> Option<SingleInstanceActivation> {

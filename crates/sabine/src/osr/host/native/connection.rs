@@ -1,8 +1,12 @@
+#[cfg(target_os = "linux")]
+use std::io::Write;
 use std::{sync::mpsc, time::Instant};
 
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 
 use super::OsrNativeHost;
+#[cfg(target_os = "linux")]
+use crate::bridge::CLOSING_LINE;
 use crate::bridge::frame::Frame;
 use crate::osr::control::ControlRelay;
 use crate::osr::host::types::{CLOSE_GRACE, HostControl, OsrHostEvent};
@@ -12,6 +16,8 @@ impl OsrNativeHost {
         if self.closing_deadline.is_some() {
             return;
         }
+        #[cfg(target_os = "linux")]
+        report_closing();
         self.unmap_window();
         self.send_control("close\n");
         self.closing_deadline = Some(Instant::now() + CLOSE_GRACE);
@@ -38,6 +44,14 @@ impl OsrNativeHost {
             self.surface_broker = None;
         }
     }
+}
+
+/// Tells the app the window is on its way out, before it leaves the screen.
+#[cfg(target_os = "linux")]
+fn report_closing() {
+    let mut output = std::io::stdout().lock();
+    let _ = writeln!(output, "{CLOSING_LINE}");
+    let _ = output.flush();
 }
 
 /// Reads what the app sends the window. The window closes once the app's end
