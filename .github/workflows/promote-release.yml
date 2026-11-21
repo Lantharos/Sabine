@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   promote:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Promote the newest release once it has been out for a day
