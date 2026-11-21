@@ -25,9 +25,9 @@ pub use system::{
 pub use updates_section::AppUpdatesSection;
 
 pub const REGISTRY_VERSION: u32 = 1;
-pub const SABINE_VERSION: &str = "0.104";
+pub const SABINE_VERSION: &str = "0.105";
 pub const SABINE_MAJOR: u32 = 0;
-pub const SABINE_BUILD: u32 = 104;
+pub const SABINE_BUILD: u32 = 105;
 pub const MIN_SUPPORTED_APP_BUILD: u32 = 91;
 /// The oldest Sabine build that offers everything an app built with this one
 /// relies on from the installed Sabine, which apps record as the Sabine they

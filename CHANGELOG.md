@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.105
 
 - A maximized or resized window takes clicks across its whole new size straight away; its input,
   opaque and blur regions now apply with the frame that has the new size.
