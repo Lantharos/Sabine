@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.102
 
 - The CLI shows longer commands step by step in a terminal: `sabine bundle` draws Cargo's progress
   as a bar with the crate being built, compresses with a bar too, keeps the tools' own output for
