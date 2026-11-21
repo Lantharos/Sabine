@@ -1,3 +1,8 @@
+# Unreleased
+
+- A window closing on Linux keeps its page until the window itself is gone, so the compositor's
+  close animation shows the whole window instead of its empty frame.
+
 # Sabine 0.101
 
 - Apps built with this Sabine ask for Sabine 0.100 or newer, the first that installs their tar.zst

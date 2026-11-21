@@ -58,6 +58,10 @@ pub(super) struct OsrNativeHost {
     pub(super) gpu_starts: Vec<std::thread::JoinHandle<()>>,
     #[cfg(target_os = "linux")]
     pub(super) direct: Option<direct::DirectPresenter>,
+    /// The pages of closed windows, kept until winit has destroyed the window
+    /// itself, so the compositor's close animation still shows them.
+    #[cfg(target_os = "linux")]
+    pub(super) closing_pages: Vec<(winit::window::WindowId, direct::DirectPresenter)>,
     /// Whether the window's own device holds a newer page frame than the
     /// directly shown one.
     #[cfg(target_os = "linux")]
@@ -239,6 +243,8 @@ impl OsrNativeHost {
             gpu_starts: Vec::new(),
             #[cfg(target_os = "linux")]
             direct: None,
+            #[cfg(target_os = "linux")]
+            closing_pages: Vec::new(),
             #[cfg(target_os = "linux")]
             direct_handover_ready: false,
             #[cfg(target_os = "linux")]

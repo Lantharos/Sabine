@@ -232,12 +232,15 @@ impl OsrNativeHost {
         #[cfg(windows)]
         self.touch_keyboard.forget_window();
         self.detach_accessibility();
+        #[cfg(target_os = "linux")]
+        if let (Some(window), Some(page)) = (&self.window, self.direct.take()) {
+            self.closing_pages.push((window.id(), page));
+        }
         self.window = None;
         self.renderer = None;
         self.effect = None;
         #[cfg(target_os = "linux")]
         {
-            self.direct = None;
             self.exported_window = None;
             self.foreign_parent = None;
         }

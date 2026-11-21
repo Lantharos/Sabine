@@ -69,6 +69,10 @@ impl ApplicationHandler for OsrNativeHost {
 
     fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
         self.recover_gpu(event_loop);
+        #[cfg(target_os = "linux")]
+        if matches!(event, WindowEvent::Destroyed) {
+            self.closing_pages.retain(|(closed, _)| *closed != id);
+        }
         let Some(window) = self.window.clone() else {
             return;
         };
