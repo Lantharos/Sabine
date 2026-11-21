@@ -8,6 +8,7 @@ mod project;
 mod release;
 mod runtime;
 mod template;
+mod ui;
 mod update;
 mod util;
 
@@ -223,7 +224,7 @@ fn printed(value: &str) -> ExitCode {
 
 fn report(result: Result<ExitCode, String>) -> ExitCode {
     result.unwrap_or_else(|error| {
-        eprintln!("{error}");
+        ui::error(&error);
         ExitCode::FAILURE
     })
 }

@@ -17,6 +17,11 @@ You don't need to update it: it [follows the Sabine on your machine](/docs/conce
 Commands that take a project accept its folder as the first argument and default to the current
 one. `sabine help <command>` and `sabine <command> --help` print the flags of a command.
 
+In a terminal, longer commands show each step as it runs, with a bar for Cargo's progress,
+downloads and compression. They show Cargo's warnings and errors, and the rest of what Cargo, Bun
+and the page's build print only when a step fails. In CI, or with the output piped, they print a line per step and let the tools
+print everything as usual.
+
 | Command | Does |
 | --- | --- |
 | [`sabine new`](#sabine-new) | Creates a project |

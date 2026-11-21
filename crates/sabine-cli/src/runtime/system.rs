@@ -14,13 +14,13 @@ pub(super) fn install(root: Option<&Path>) -> Result<(), String> {
     let service = match sabine_service::find_service_executable() {
         Some(service) => service,
         None => {
-            let mut log = sabine_runtime::ProgressLog::default();
-            sabine_service::ensure_service_executable(|progress| {
-                if let Some(line) = log.line(&progress.message, progress.fraction) {
-                    eprintln!("sabine: {line}");
-                }
+            let step = crate::ui::Step::start("Preparing the Sabine service");
+            let service = sabine_service::ensure_service_executable(|progress| {
+                step.progress(&progress.message, progress.fraction)
             })
-            .map_err(|error| format!("failed to prepare the Sabine service: {error}"))?
+            .map_err(|error| format!("could not prepare the Sabine service: {error}"))?;
+            step.done();
+            service
         }
     };
     let system = path_in_root(root, &system_dir());

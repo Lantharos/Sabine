@@ -1,5 +1,10 @@
 # Unreleased
 
+- The CLI shows longer commands step by step in a terminal: `sabine bundle` draws Cargo's progress
+  as a bar with the crate being built, compresses with a bar too, keeps the tools' own output for
+  when a step fails, and ends with each package's size and the time it all took. Runtime installs
+  and `sabine update` draw their downloads as bars, `info` and `runtime list` are laid out and
+  coloured, and every command and flag has help. Piped or in CI, it prints plain lines as before.
 - A window closing on Linux keeps its page until the window itself is gone, so the compositor's
   close animation shows the whole window instead of its empty frame.
 

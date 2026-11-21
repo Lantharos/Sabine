@@ -67,8 +67,13 @@ pub fn new_app(name: &str, template: &str, id: Option<String>) -> Result<ExitCod
             "left out the release workflow, which `sabine release-init` writes later: {error}"
         ),
     }
-    println!("Created Sabine app {id} at {}", root.display());
-    println!("Run it with: cd {name} && sabine dev");
+    println!(
+        "{} Created {name}  {}\n",
+        console::style("✓").green(),
+        console::style(&id).dim()
+    );
+    println!("  cd {name}");
+    println!("  sabine dev");
     Ok(ExitCode::SUCCESS)
 }
 

@@ -1,6 +1,7 @@
-use sabine_runtime::ProgressLog;
 use sabine_service::{AppUpdateStatus, SabineService};
 use std::{path::Path, process::ExitCode};
+
+use crate::ui::{self, Step};
 
 pub fn run(target: Option<String>, all: bool, force: bool) -> Result<ExitCode, String> {
     match target.as_deref() {
@@ -27,65 +28,53 @@ pub fn run(target: Option<String>, all: bool, force: bool) -> Result<ExitCode, S
 }
 
 fn update_sabine(force: bool) -> Result<(), String> {
-    println!("Checking Sabine components…");
-    let mut log = ProgressLog::default();
+    let step = Step::start("Updating Sabine");
     let report = sabine_service::update_components(force, |progress| {
-        if let Some(line) = log.line(&progress.message, progress.fraction) {
-            println!("{line}");
-        }
+        step.progress(&progress.message, progress.fraction)
     })
     .map_err(|error| error.to_string())?;
-    if let Some(path) = crate::handover::system_owned_entry() {
-        println!(
-            "{} updates with the system; Sabine's updates leave it alone",
-            path.display()
-        );
-    }
     if report.deferred {
-        println!(
-            "Sabine {} is waiting for its soak period; use --force to install it now",
-            report.version
-        );
+        step.done_with(&format!("{} is still being tested", report.version));
+        ui::hint("Add --force to install it now");
         return Ok(());
     }
-    match &report.system {
-        Some(version) => println!("Updated Sabine to {version}"),
-        None if report.held.is_none() => println!("Sabine is current"),
-        None => {}
+    match (&report.system, &report.held) {
+        (Some(version), _) => step.done_with(&format!("now {version}")),
+        (None, None) => step.done_with("up to date"),
+        (None, Some(held)) => {
+            step.done_with(&format!("{} is waiting", held.version));
+            let apps = held
+                .apps
+                .iter()
+                .map(|app| app.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            ui::hint(&format!(
+                "It would no longer run {apps}; update or remove them to install it"
+            ));
+        }
     }
-    if let Some(held) = &report.held {
-        let apps = held
-            .apps
-            .iter()
-            .map(|app| app.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        println!(
-            "Sabine {} is waiting for {apps}, which it would no longer run; update or remove them to install it",
-            held.version
-        );
+    if let Some(path) = crate::handover::system_owned_entry() {
+        ui::hint(&format!(
+            "{} updates with the system, so Sabine leaves it alone",
+            path.display()
+        ));
     }
     Ok(())
 }
 
 fn update_cef() -> Result<(), String> {
-    println!("Checking CEF…");
-    let mut log = ProgressLog::default();
+    let step = Step::start("Updating CEF");
     sabine_service::ensure_service_executable(|progress| {
-        if let Some(line) = log.line(&progress.message, progress.fraction) {
-            println!("{line}");
-        }
+        step.progress(&progress.message, progress.fraction)
     })
     .map_err(|error| error.to_string())?;
-    let mut log = ProgressLog::default();
     let runtime = SabineService::default()
         .update_runtime_with_progress(|progress| {
-            if let Some(line) = log.line(&progress.message, progress.fraction) {
-                println!("{line}");
-            }
+            step.progress(&progress.message, progress.fraction)
         })
         .map_err(|error| error.to_string())?;
-    println!("CEF {} is ready", runtime.version);
+    step.done_with(&runtime.version);
     Ok(())
 }
 
@@ -112,30 +101,36 @@ fn update_app(target: &str, force: bool) -> Result<(), String> {
         if let Some(install) = crate::install::bundle_install(target)? {
             return crate::install::rebuild_bundle(target, install);
         }
-        println!("{target} has no configured update source");
+        ui::result(target, "has nowhere to update from");
         return Ok(());
     }
+    let step = Step::start(format!("Updating {target}"));
     match service
         .update_app_with_soak(target, !force)
         .map_err(|error| error.to_string())?
     {
-        AppUpdateStatus::Current => println!("{target} is current"),
-        AppUpdateStatus::Installed { version } => println!("Updated {target} to {version}"),
-        AppUpdateStatus::Deferred { version } => println!(
-            "{target} {version} is waiting for its soak period; use --force to install it now"
-        ),
-        AppUpdateStatus::StoreManaged => println!("Update {target} through its app store"),
-        AppUpdateStatus::Withdrawn => println!("{target} no longer gets updates from Schelf"),
+        AppUpdateStatus::Current => step.done_with("up to date"),
+        AppUpdateStatus::Installed { version } => step.done_with(&format!("now {version}")),
+        AppUpdateStatus::Deferred { version } => {
+            step.done_with(&format!("{version} is still being tested"));
+            ui::hint("Add --force to install it now");
+        }
+        AppUpdateStatus::StoreManaged => {
+            step.done_with("updates through its app store");
+        }
+        AppUpdateStatus::Withdrawn => {
+            step.done_with("no longer gets updates from Schelf");
+        }
         AppUpdateStatus::RequiresSystem { sabine, .. } => {
             return Err(format!(
-                "{target} requires Sabine {}; run sabine update first",
+                "{target} needs Sabine {}; run `sabine update` first",
                 sabine.label()
             ));
         }
-        AppUpdateStatus::PendingApproval(pending) => println!(
-            "{} {} is downloaded; open the app to approve its package installer",
-            target, pending.version
-        ),
+        AppUpdateStatus::PendingApproval(pending) => {
+            step.done_with(&format!("{} is downloaded", pending.version));
+            ui::hint("Open the app to approve its installer");
+        }
     }
     Ok(())
 }

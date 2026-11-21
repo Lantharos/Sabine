@@ -1,10 +1,14 @@
 use std::process::ExitCode;
 
 use sabine_runtime::{
-    ProgressLog, RuntimeConfig, RuntimeInfo, RuntimeInstallProgress, detect_runtime,
-    prune_user_runtimes, remove_user_runtime_version, resolve_runtime,
+    RuntimeConfig, RuntimeInfo, detect_runtime, prune_user_runtimes, remove_user_runtime_version,
+    resolve_runtime,
 };
 use sabine_service::SabineService;
+
+use console::style;
+
+use crate::ui::{self, Step};
 
 #[cfg(target_os = "linux")]
 mod sandbox;
@@ -57,16 +61,21 @@ pub fn run_runtime(command: RuntimeCommand) -> ExitCode {
 
 /// The shared CEF runtime, downloaded when this machine has none.
 pub(crate) fn ensure_runtime() -> Result<RuntimeInfo, String> {
-    if resolve_runtime(&RuntimeConfig::default()).is_err() {
-        eprintln!("sabine: no CEF runtime found; installing the shared runtime…");
-    }
-    SabineService::default()
-        .ensure_runtime_with_progress(progress_printer())
+    let mut step = None;
+    let runtime = SabineService::default()
+        .ensure_runtime_with_progress(|progress| {
+            step.get_or_insert_with(|| Step::start("Preparing the shared runtime"))
+                .progress(&progress.message, progress.fraction)
+        })
         .map_err(|error| {
             format!(
-                "failed to prepare the Sabine runtime: {error}\ninstall it with `sabine runtime install`"
+                "could not prepare the Sabine runtime: {error}\ninstall it with `sabine runtime install`"
             )
-        })
+        })?;
+    if let Some(step) = step {
+        step.done_with(&format!("CEF {}", runtime.version));
+    }
+    Ok(runtime)
 }
 
 /// The CEF host for the shared runtime, which is installed first when missing.
@@ -74,15 +83,6 @@ pub fn ensure_runtime_ready() -> Result<std::path::PathBuf, String> {
     let runtime = ensure_runtime()?;
     sabine_host::ensure_host(runtime.location.path())
         .map_err(|error| format!("failed to prepare the Sabine CEF host: {error}"))
-}
-
-fn progress_printer() -> impl FnMut(RuntimeInstallProgress) {
-    let mut log = ProgressLog::default();
-    move |progress| {
-        if let Some(line) = log.line(&progress.message, progress.fraction) {
-            eprintln!("sabine: {line}");
-        }
-    }
 }
 
 fn list_runtimes(json: bool) -> ExitCode {
@@ -108,26 +108,30 @@ fn list_runtimes(json: bool) -> ExitCode {
 
         println!("{}", serde_json::json!({ "runtimes": entries }));
     } else if runtimes.is_empty() {
-        println!("No CEF runtimes found.");
-        println!("Run `sabine runtime install` to install the shared runtime.");
+        println!("No CEF runtimes are installed.");
+        println!("  {}", style("sabine runtime install").cyan());
     } else {
-        println!("CEF runtimes:");
+        let width = runtimes
+            .iter()
+            .map(|runtime| runtime.version.len())
+            .max()
+            .unwrap_or_default();
         for runtime in &runtimes {
-            let location_type = match &runtime.location {
+            let location = match &runtime.location {
                 sabine_runtime::RuntimeLocation::System(_) => "system",
                 sabine_runtime::RuntimeLocation::UserLocal(_) => "user",
                 sabine_runtime::RuntimeLocation::Bundled(_) => "bundled",
             };
+            let quarantined = if runtime.verified {
+                String::new()
+            } else {
+                format!("  {}", style("quarantined").yellow())
+            };
             println!(
-                "  {} {} {}{}",
-                runtime.version,
-                location_type,
-                runtime.location.path().display(),
-                if runtime.verified {
-                    ""
-                } else {
-                    " (quarantined)"
-                }
+                "{}  {}  {}{quarantined}",
+                style(format!("{:<width$}", runtime.version)).bold(),
+                style(format!("{location:<7}")).cyan(),
+                style(runtime.location.path().display()).dim(),
             );
         }
     }
@@ -140,22 +144,21 @@ fn install_runtime() -> Result<(), String> {
     let previous = resolve_runtime(&RuntimeConfig::default())
         .ok()
         .map(|runtime| runtime.version);
+    let step = Step::start("Installing the CEF runtime");
     let runtime = SabineService::default()
-        .update_runtime_with_progress(progress_printer())
-        .map_err(|error| format!("failed to install runtime: {error}"))?;
+        .update_runtime_with_progress(|progress| {
+            step.progress(&progress.message, progress.fraction)
+        })
+        .map_err(|error| format!("could not install the runtime: {error}"))?;
     if previous.as_deref() == Some(runtime.version.as_str()) {
-        println!(
-            "CEF runtime {} is already installed at {}.",
-            runtime.version,
-            runtime.location.path().display()
-        );
+        step.done_with("already current");
     } else {
-        println!(
-            "Installed CEF runtime {} at {}.",
-            runtime.version,
-            runtime.location.path().display()
-        );
+        step.done();
     }
+    ui::result(
+        &format!("CEF {}", runtime.version),
+        &runtime.location.path().display().to_string(),
+    );
     Ok(())
 }
 

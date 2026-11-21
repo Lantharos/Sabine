@@ -115,7 +115,9 @@ impl Drop for ImportedCertificate {
         }
         for (provider, container) in &self.keys {
             if let Err(error) = delete_key(provider, container) {
-                eprintln!("sabine: could not remove the imported signing key {container}: {error}");
+                crate::ui::warning(&format!(
+                    "could not remove the imported signing key {container}: {error}"
+                ));
             }
         }
     }

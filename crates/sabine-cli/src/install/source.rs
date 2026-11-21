@@ -49,7 +49,8 @@ pub fn install(options: InstallOptions) -> Result<ExitCode, String> {
     app.name = format!("{} (Development)", app.name);
     app.listing.listed = true;
     register_app(&app, options.desktop)?;
-    println!("installed {} from {}", app.name, app.source.display());
+    crate::ui::summary(&format!("Installed {}", app.name));
+    crate::ui::hint(&format!("Starts from {}", app.source.display()));
     Ok(ExitCode::SUCCESS)
 }
 
@@ -74,7 +75,8 @@ fn update_registered_app(app: &SourceApp) -> Result<(), String> {
     app.name = format!("{} (Development)", app.name);
     app.listing.listed = true;
     register_app(&app, true)?;
-    println!("updated {} from {}", app.name, app.source.display());
+    crate::ui::summary(&format!("Updated {}", app.name));
+    crate::ui::hint(&format!("Starts from {}", app.source.display()));
     Ok(())
 }
 

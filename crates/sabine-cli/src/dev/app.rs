@@ -45,20 +45,22 @@ pub(super) fn run(mut session: Session) -> Result<ExitCode, String> {
             Outcome::Stopped(result) => return result,
             Outcome::Exited(status) if status.success() => return Ok(exit_code(status)),
             Outcome::Exited(status) => {
-                eprintln!("sabine: the app exited with {status}; waiting for changes");
+                crate::ui::warning(&format!(
+                    "The app exited with {status}; waiting for changes"
+                ));
                 if let Some(stopped) = wait_for_change(&mut session, &mut changes) {
                     return stopped;
                 }
             }
             Outcome::Changed => {}
         }
-        eprintln!("sabine: Rust sources changed; rebuilding");
+        crate::ui::status("Rebuilding after changes to the Rust code");
         while let Err(error) = bindings::refresh(
             &session.project.source,
             session.environment,
             session.options.release,
         ) {
-            eprintln!("sabine: {error}; waiting for changes");
+            crate::ui::warning(&format!("{error}; waiting for changes"));
             if let Some(stopped) = wait_for_change(&mut session, &mut changes) {
                 return stopped;
             }

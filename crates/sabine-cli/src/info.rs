@@ -3,11 +3,13 @@ use std::{path::Path, process::Command};
 use sabine_runtime::{RuntimeConfig, RuntimeLocation, resolve_runtime};
 use sabine_service::AppUpdateSource;
 
+use console::style;
+
 use crate::project::{ConfigOverrides, resolve_app};
 
 /// Prints what an app in `source` builds and runs with on this machine.
 pub fn run(source: &Path) {
-    println!("Sabine");
+    println!("{}", style("Sabine").bold());
     row("CLI", sabine_service::SABINE_VERSION);
     row(
         "Service",
@@ -30,14 +32,8 @@ pub fn run(source: &Path) {
             };
             let host = sabine_host::available_host(runtime.location.path())
                 .map_or("host missing", |_| "host ready");
-            row(
-                "CEF",
-                &format!(
-                    "{} ({location}, {host}) at {}",
-                    runtime.version,
-                    runtime.location.path().display()
-                ),
-            );
+            row("CEF", &format!("{} ({location}, {host})", runtime.version));
+            row("", &runtime.location.path().display().to_string());
         }
         Err(error) => row("CEF", &error.to_string()),
     }
@@ -87,16 +83,25 @@ pub fn run(source: &Path) {
                 },
             );
         }
-        Err(error) => row("Status", &error),
+        Err(error) => row("Status", &format!("not an app: {error}")),
     }
 }
 
 fn section(title: &str) {
-    println!("\n{title}");
+    println!("\n{}", style(title).bold());
 }
 
+/// A labelled value, with what's missing or failing picked out.
 fn row(label: &str, value: &str) {
-    println!("  {label:<9} {value}");
+    let missing = value.starts_with("not ") || value.contains("missing");
+    let value = if missing {
+        style(value).yellow()
+    } else if label.is_empty() {
+        style(value).dim()
+    } else {
+        style(value)
+    };
+    println!("  {}  {value}", style(format!("{label:<8}")).dim());
 }
 
 fn version_of(program: &str) -> String {

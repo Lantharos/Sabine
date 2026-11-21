@@ -1,5 +1,6 @@
 use std::{
-    fs, io,
+    fs,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -9,7 +10,7 @@ use super::{
     stage::StagedBundle,
     windows::{self, signing::WindowsSigning},
 };
-use crate::project::BundleApp;
+use crate::{project::BundleApp, ui::Step};
 
 /// Packages the staged bundle with the platform's tool and returns the artifact.
 pub(super) fn package_bundle(
@@ -17,17 +18,23 @@ pub(super) fn package_bundle(
     format: BundleFormat,
     staged: &StagedBundle,
     signing: Option<&WindowsSigning>,
+    step: &Step,
 ) -> Result<PathBuf, String> {
+    step.note("Compressing");
     match format {
-        BundleFormat::Portable if format.target() == BuildTarget::Windows => {
-            archive(&staged.root, &artifact_path(app, staged, format, "zip"))
-        }
+        BundleFormat::Portable if format.target() == BuildTarget::Windows => archive(
+            &staged.root,
+            &artifact_path(app, staged, format, "zip"),
+            step,
+        ),
         BundleFormat::Portable
         | BundleFormat::Linux
         | BundleFormat::Windows
-        | BundleFormat::Macos => {
-            archive(&staged.root, &artifact_path(app, staged, format, "tar.zst"))
-        }
+        | BundleFormat::Macos => archive(
+            &staged.root,
+            &artifact_path(app, staged, format, "tar.zst"),
+            step,
+        ),
         BundleFormat::Deb => linux::package::package_deb(app, staged),
         BundleFormat::Rpm => linux::package::package_rpm(app, staged),
         BundleFormat::AppImage => linux::package::package_appimage(app, staged),
@@ -40,7 +47,7 @@ pub(super) fn package_bundle(
 /// Archives `source` with `tar`: as a zip, which the `tar` of Windows
 /// writes, or as a tarball compressed with zstd, whose long-range matching
 /// finds the runtime's repeated files.
-fn archive(source: &Path, artifact: &Path) -> Result<PathBuf, String> {
+fn archive(source: &Path, artifact: &Path, step: &Step) -> Result<PathBuf, String> {
     ensure_parent(artifact)?;
     let source_name = source
         .file_name()
@@ -52,19 +59,53 @@ fn archive(source: &Path, artifact: &Path) -> Result<PathBuf, String> {
         .extension()
         .is_some_and(|extension| extension == "zip")
     {
-        run(tar
-            .args(["-a", "-c", "-f"])
-            .arg(artifact)
-            .arg("--")
-            .arg(source_name))?;
+        crate::ui::tool(
+            tar.args(["-a", "-c", "-f"])
+                .arg(artifact)
+                .arg("--")
+                .arg(source_name),
+        )?;
     } else {
         tar.args(["-c", "-f", "-", "--"]).arg(source_name);
-        compress_tar(&mut tar, artifact)?;
+        let measured = Measured {
+            step,
+            read: 0,
+            total: size_of(source),
+        };
+        compress_tar(&mut tar, artifact, measured)?;
     }
     Ok(artifact.to_path_buf())
 }
 
-fn compress_tar(tar: &mut Command, artifact: &Path) -> Result<(), String> {
+/// The bytes of every file under `path`, which tar's stream is a little
+/// larger than.
+fn size_of(path: &Path) -> u64 {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if !metadata.is_dir() {
+        return metadata.len();
+    }
+    fs::read_dir(path).map_or(0, |entries| {
+        entries.flatten().map(|entry| size_of(&entry.path())).sum()
+    })
+}
+
+/// Shows how much of the staged app has gone into the archive.
+struct Measured<'a> {
+    step: &'a Step,
+    read: u64,
+    total: u64,
+}
+
+impl Measured<'_> {
+    fn add(&mut self, read: usize) {
+        self.read += read as u64;
+        self.step.bytes(self.read, self.total);
+    }
+}
+
+fn compress_tar(tar: &mut Command, artifact: &Path, mut measured: Measured) -> Result<(), String> {
     let mut child = tar
         .stdout(Stdio::piped())
         .spawn()
@@ -76,10 +117,16 @@ fn compress_tar(tar: &mut Command, artifact: &Path) -> Result<(), String> {
         encoder.multithread(
             std::thread::available_parallelism().map_or(1, |threads| threads.get() as u32),
         )?;
-        io::copy(
-            child.stdout.as_mut().expect("tar's output is piped"),
-            &mut encoder,
-        )?;
+        let stream = child.stdout.as_mut().expect("tar's output is piped");
+        let mut chunk = vec![0; 1 << 20];
+        loop {
+            let read = stream.read(&mut chunk)?;
+            if read == 0 {
+                break;
+            }
+            encoder.write_all(&chunk[..read])?;
+            measured.add(read);
+        }
         encoder.finish()?.sync_all()
     })();
     let status = child.wait().map_err(|error| error.to_string())?;
@@ -117,21 +164,4 @@ pub(super) fn ensure_parent(path: &Path) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     Ok(())
-}
-
-/// Runs a packaging tool, which must be installed.
-pub(super) fn run(command: &mut Command) -> Result<(), String> {
-    let tool = command.get_program().to_string_lossy().into_owned();
-    let status = command.status().map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            format!("{tool} is required to build this package; install it and retry")
-        } else {
-            format!("failed to run {tool}: {error}")
-        }
-    })?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("{tool} failed with {status}"))
-    }
 }

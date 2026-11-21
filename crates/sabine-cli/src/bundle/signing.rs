@@ -1,4 +1,4 @@
-use std::{env, path::Path, process::Command};
+use std::{env, path::Path};
 
 use super::{
     BuildTarget, BundleFormat,
@@ -122,14 +122,4 @@ fn windows() -> Result<Option<WindowsSigning>, String> {
 
 fn variable(name: &str) -> Option<String> {
     env::var(name).ok().filter(|value| !value.trim().is_empty())
-}
-
-pub(super) fn run(command: &mut Command, tool: &str) -> Result<(), String> {
-    let status = command
-        .status()
-        .map_err(|error| format!("failed to run {tool}: {error}"))?;
-    status
-        .success()
-        .then_some(())
-        .ok_or_else(|| format!("{tool} failed with {status}"))
 }

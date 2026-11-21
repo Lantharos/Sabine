@@ -6,7 +6,6 @@ use std::{
 
 #[cfg(windows)]
 use super::certificate::ImportedCertificate;
-use crate::bundle::signing::run;
 
 pub(in crate::bundle) struct WindowsSigning {
     thumbprint: String,
@@ -88,10 +87,7 @@ impl WindowsSigning {
         if paths.is_empty() {
             return Ok(());
         }
-        run(
-            Command::new("signtool").args(self.arguments()).args(paths),
-            "signtool",
-        )
+        crate::ui::tool(Command::new("signtool").args(self.arguments()).args(paths))
     }
 
     /// The NSIS instruction that signs the uninstaller setup writes.

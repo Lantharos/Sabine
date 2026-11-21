@@ -7,8 +7,6 @@ use std::{
 
 use sabine_service::{DeclaredPermission, Permission};
 
-use crate::bundle::signing::run;
-
 /// Code bundles that carry a signature of their own.
 const CODE_BUNDLES: &[&str] = &["app", "framework", "appex", "xpc", "bundle", "plugin"];
 
@@ -64,12 +62,11 @@ impl MacosSigning {
             return Ok(());
         };
         let archive = bundle.with_extension("notarization.zip");
-        run(
+        crate::ui::tool(
             Command::new("ditto")
                 .args(["-c", "-k", "--keepParent"])
                 .arg(bundle)
                 .arg(&archive),
-            "ditto",
         )?;
         let notarized = notary.submit(&archive);
         let _ = fs::remove_file(&archive);
@@ -118,7 +115,7 @@ impl MacosSigning {
                 }
             }
         }
-        run(command.arg(path), "codesign")
+        crate::ui::tool(command.arg(path))
     }
 }
 
@@ -140,14 +137,11 @@ impl Notary {
                 .args(["--key-id", key_id, "--issuer", issuer]),
             Self::KeychainProfile(profile) => command.args(["--keychain-profile", profile]),
         };
-        run(&mut command, "notarytool")
+        crate::ui::tool(&mut command)
     }
 
     fn staple(&self, path: &Path) -> Result<(), String> {
-        run(
-            Command::new("xcrun").args(["stapler", "staple"]).arg(path),
-            "stapler",
-        )
+        crate::ui::tool(Command::new("xcrun").args(["stapler", "staple"]).arg(path))
     }
 }
 

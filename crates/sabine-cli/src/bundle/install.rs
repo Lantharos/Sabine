@@ -57,16 +57,16 @@ pub fn install_bundle(
         sabine: sabine_service::SabineVersion::app_interface(),
     };
     manifest.validate().map_err(|error| error.to_string())?;
-    let mut log = sabine_runtime::ProgressLog::default();
+    let step = crate::ui::Step::start(format!("Installing {}", app.name));
     sabine_service::prepare_machine_with_progress(Default::default(), None, |progress| {
-        if let Some(line) = log.line(&progress.message, progress.fraction) {
-            println!("{line}");
-        }
+        step.progress(&progress.message, progress.fraction)
     })
     .map_err(|error| error.to_string())?;
+    step.note("Copying the app into place");
     service
         .install_app_payload(payload, &release, manifest, || false)
         .map_err(|error| error.to_string())?;
+    step.done();
     let desktop_app = SourceApp {
         id: app.id.clone(),
         name: app.name,
@@ -107,11 +107,10 @@ pub fn install_bundle(
     if options.autostart {
         desktop::install_autostart(&desktop_app, &binary, Some(&desktop_app.id))?;
     }
-    println!(
-        "Installed {} {} at {}",
-        desktop_app.name,
-        desktop_app.version,
-        binary.display()
-    );
+    crate::ui::summary(&format!(
+        "Installed {} {}",
+        desktop_app.name, desktop_app.version
+    ));
+    crate::ui::hint(&binary.display().to_string());
     Ok(ExitCode::SUCCESS)
 }

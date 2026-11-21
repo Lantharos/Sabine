@@ -26,7 +26,7 @@ pub fn to_newer_cli() {
         .args(std::env::args_os().skip(1))
         .env(ENTRY_ENV, entry);
     let error = replace_process(command);
-    eprintln!("sabine: could not start {}: {error}", cli.display());
+    crate::ui::warning(&format!("could not start {}: {error}", cli.display()));
 }
 
 #[cfg(unix)]

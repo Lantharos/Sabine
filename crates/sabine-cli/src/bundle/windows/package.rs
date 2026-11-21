@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf, process::Command};
 use super::{WindowsArchitecture, artwork, msi, msi_actions, nsis_script, signing::WindowsSigning};
 use crate::bundle::{
     BundleFormat,
-    package::{artifact_path, ensure_parent, run},
+    package::{artifact_path, ensure_parent},
     stage::StagedBundle,
 };
 use crate::project::BundleApp;
@@ -38,15 +38,17 @@ pub(in crate::bundle) fn package_msi(
     )
     .map_err(|error| error.to_string())?;
     ensure_parent(&artifact)?;
-    run(Command::new("wix")
-        .arg("build")
-        .args(["-arch", &architecture.to_ascii_lowercase()])
-        .arg("-wx")
-        .args(["-pdbtype", "none"])
-        .args(["-ext", "WixToolset.UI.wixext"])
-        .arg(dunce::simplified(&wxs))
-        .arg("-o")
-        .arg(dunce::simplified(&artifact)))?;
+    crate::ui::tool(
+        Command::new("wix")
+            .arg("build")
+            .args(["-arch", &architecture.to_ascii_lowercase()])
+            .arg("-wx")
+            .args(["-pdbtype", "none"])
+            .args(["-ext", "WixToolset.UI.wixext"])
+            .arg(dunce::simplified(&wxs))
+            .arg("-o")
+            .arg(dunce::simplified(&artifact)),
+    )?;
     Ok(artifact)
 }
 
@@ -79,9 +81,11 @@ pub(in crate::bundle) fn package_exe(
     )
     .map_err(|error| error.to_string())?;
     ensure_parent(&artifact)?;
-    run(Command::new("makensis")
-        .arg("-WX")
-        .current_dir(&staged.root)
-        .arg(dunce::simplified(&script)))?;
+    crate::ui::tool(
+        Command::new("makensis")
+            .arg("-WX")
+            .current_dir(&staged.root)
+            .arg(dunce::simplified(&script)),
+    )?;
     Ok(artifact)
 }

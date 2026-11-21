@@ -129,19 +129,13 @@ pub(crate) fn install_dependencies(root: &Path, package_manager: &str) -> Result
     if root.join("node_modules").is_dir() {
         return Ok(());
     }
-    eprintln!(
-        "sabine: installing JS deps with {package_manager} in {}",
-        root.display()
-    );
-    let status = shell_command(&format!("{package_manager} install"))
-        .current_dir(root)
-        .status()
-        .map_err(|error| format!("failed to run {package_manager} install: {error}"))?;
-    if !status.success() {
-        return Err(format!(
-            "{package_manager} install failed with status {status}"
-        ));
-    }
+    let step = crate::ui::Step::start("Installing JavaScript packages");
+    crate::ui::run(
+        &step,
+        shell_command(&format!("{package_manager} install")).current_dir(root),
+        &format!("{package_manager} install"),
+    )?;
+    step.done_with(package_manager);
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 use crate::bundle::{
     BundleFormat,
-    package::{artifact_path, ensure_parent, run},
+    package::{artifact_path, ensure_parent},
     stage::StagedBundle,
 };
 use crate::project::BundleApp;
@@ -63,12 +63,14 @@ pub(in crate::bundle) fn package_deb(
     .map_err(|error| error.to_string())?;
     let artifact = artifact_path(app, staged, BundleFormat::Deb, "deb");
     ensure_parent(&artifact)?;
-    run(Command::new("dpkg-deb")
-        .args(["-Zxz", "-z9", "-Sextreme"])
-        .arg("--root-owner-group")
-        .arg("--build")
-        .arg(&staged.app_dir)
-        .arg(&artifact))?;
+    crate::ui::tool(
+        Command::new("dpkg-deb")
+            .args(["-Zxz", "-z9", "-Sextreme"])
+            .arg("--root-owner-group")
+            .arg("--build")
+            .arg(&staged.app_dir)
+            .arg(&artifact),
+    )?;
     Ok(artifact)
 }
 
@@ -93,22 +95,24 @@ pub(in crate::bundle) fn package_rpm(
     let spec = fs::canonicalize(&spec).map_err(|error| error.to_string())?;
     let rpm_dir = fs::canonicalize(&rpm_dir).map_err(|error| error.to_string())?;
     let source_dir = fs::canonicalize(&staged.app_dir).map_err(|error| error.to_string())?;
-    run(Command::new("rpmbuild")
-        .arg("-bb")
-        .arg(&spec)
-        .arg("--buildroot")
-        .arg(staged.root.join("rpm-buildroot"))
-        .arg("--define")
-        .arg(format!("_rpmdir {}", rpm_dir.display()))
-        .arg("--define")
-        .arg(format!(
-            "_topdir {}",
-            staged.root.join("rpmbuild").display()
-        ))
-        .arg("--define")
-        .arg(format!("sabine_source {}", source_dir.display()))
-        .arg("--define")
-        .arg("_binary_payload w19L.zstdio"))?;
+    crate::ui::tool(
+        Command::new("rpmbuild")
+            .arg("-bb")
+            .arg(&spec)
+            .arg("--buildroot")
+            .arg(staged.root.join("rpm-buildroot"))
+            .arg("--define")
+            .arg(format!("_rpmdir {}", rpm_dir.display()))
+            .arg("--define")
+            .arg(format!(
+                "_topdir {}",
+                staged.root.join("rpmbuild").display()
+            ))
+            .arg("--define")
+            .arg(format!("sabine_source {}", source_dir.display()))
+            .arg("--define")
+            .arg("_binary_payload w19L.zstdio"),
+    )?;
     let built = find_file_with_extension(&rpm_dir, "rpm")
         .ok_or_else(|| "rpmbuild completed without producing an RPM".to_string())?;
     ensure_parent(&artifact)?;
@@ -123,10 +127,12 @@ pub(in crate::bundle) fn package_appimage(
     let artifact = artifact_path(app, staged, BundleFormat::AppImage, "AppImage");
     let (_, architecture) = architecture(&staged.binary)?;
     ensure_parent(&artifact)?;
-    run(Command::new("appimagetool")
-        .env("ARCH", architecture)
-        .arg(&staged.app_dir)
-        .arg(&artifact))?;
+    crate::ui::tool(
+        Command::new("appimagetool")
+            .env("ARCH", architecture)
+            .arg(&staged.app_dir)
+            .arg(&artifact),
+    )?;
     Ok(artifact)
 }
 

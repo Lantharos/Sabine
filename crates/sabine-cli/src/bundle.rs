@@ -14,13 +14,14 @@ pub use system::install_system_bundle;
 
 use std::{
     path::{Path, PathBuf},
-    process::{Command, ExitCode, Stdio},
+    process::{Command, ExitCode},
 };
 
 use crate::{
     dev::{bindings, web_detect},
     install::source::InstallOptions,
     project::{BundleApp, ConfigOverrides, environment::BuildEnvironment},
+    ui::{self, Step},
     util::shell_command,
 };
 use format::{BuildTarget, BundleFormat};
@@ -63,6 +64,7 @@ struct Build {
 }
 
 pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
+    let started = std::time::Instant::now();
     let formats = parse_formats(&options.targets)?;
     let target = formats[0].target();
     if options.offline && target.as_str() != std::env::consts::OS {
@@ -89,29 +91,43 @@ pub fn bundle(options: BundleOptions) -> Result<ExitCode, String> {
                 serde_json::json!({ "ok": true, "binary": build.binary })
             );
         } else {
-            println!("Built {} at {}", build.app.name, build.binary.display());
+            ui::result(&ui::shown(&build.binary), &file_size(&build.binary));
         }
         return Ok(ExitCode::SUCCESS);
     }
     crate::project::updates::require_public_key(build.app.updates.as_ref())?;
+    let mut artifacts = Vec::new();
     for format in formats {
+        let step = Step::start(format!("Packaging {}", format.as_str()));
+        step.note("Laying out the app");
         let staged = stage_bundle(&build.app, format, &build.binary, &out, offline)?;
+        step.note("Signing");
         signing.sign_payload(format, &staged, &build.app.permissions)?;
-        let artifact = package_bundle(&build.app, format, &staged, signing.windows())?;
+        let artifact = package_bundle(&build.app, format, &staged, signing.windows(), &step)?;
         signing.sign_artifact(format, &artifact)?;
+        step.done_with(&file_size(&artifact));
         if json {
             println!("{}", bundle_json(&build.app, format, &staged, &artifact));
-        } else {
-            println!(
-                "Bundled {} as {} to {}",
-                build.app.name,
-                format.as_str(),
-                staged.root.display()
-            );
-            println!("artifact: {}", artifact.display());
         }
+        artifacts.push(artifact);
+    }
+    if !json {
+        eprintln!();
+        for artifact in &artifacts {
+            ui::result(&ui::shown(artifact), &file_size(artifact));
+        }
+        ui::summary(&format!(
+            "Bundled {} {} in {}",
+            build.app.name,
+            build.app.version,
+            ui::duration(started.elapsed())
+        ));
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn file_size(path: &Path) -> String {
+    std::fs::metadata(path).map_or(String::new(), |metadata| ui::size(metadata.len()))
 }
 
 /// Builds and stages the app as a portable bundle in `out`, for installing
@@ -211,11 +227,13 @@ fn build(options: BuildOptions, format: BundleFormat) -> Result<Build, String> {
             &options.env_files,
             sabine_service::AppEnvironment::Production,
         )?;
+        let step = Step::start("Writing TypeScript bindings");
         if target == BuildTarget::host() {
             bindings::write_with(&app.source_dir, &binary, &environment)?;
         } else {
             bindings::refresh(&app.source_dir, &environment, options.release)?;
         }
+        step.done();
         build_web(&app, &web_environment)?;
     }
     Ok(Build { app, binary })
@@ -232,17 +250,15 @@ fn build_web(app: &BundleApp, environment: &BuildEnvironment) -> Result<(), Stri
         return Ok(());
     };
     web_detect::ensure_dependencies(&web.root)?;
-    println!("Building web assets: {command}");
+    let step = Step::start("Building the interface");
     let mut process = shell_command(command);
     environment.apply(&mut process);
-    let status = process
-        .current_dir(&web.root)
-        .stdin(Stdio::null())
-        .status()
-        .map_err(|error| format!("failed to run web build command `{command}`: {error}"))?;
-    if !status.success() {
-        return Err(format!("web build command failed: {command}"));
-    }
+    ui::run(
+        &step,
+        process.current_dir(&web.root),
+        &format!("`{command}`"),
+    )?;
+    step.done();
     if !web.dist.exists() {
         return Err(format!(
             "web build completed but dist path does not exist: {}",
@@ -284,23 +300,11 @@ fn build_rust(
         }
     }
     command.env("SABINE_BUILD_TARGET", target.as_str());
-    use std::io::{BufRead, BufReader};
-    let mut child = command
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("failed to run cargo build: {error}"))?;
+    let step = Step::start(format!("Building {}", app.name));
     let mut executable = None;
-    for line in BufReader::new(child.stdout.take().ok_or("cargo stdout is unavailable")?).lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error.to_string());
-            }
-        };
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else {
-            continue;
+    ui::run_cargo(&step, &mut command, |line| {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+            return;
         };
         if message["reason"] == "compiler-artifact"
             && message["target"]["name"] == app.cargo_package
@@ -308,11 +312,11 @@ fn build_rust(
         {
             executable = Some(PathBuf::from(path));
         }
-    }
-    if !child.wait().map_err(|error| error.to_string())?.success() {
-        return Err("cargo build failed".into());
-    }
-    executable.ok_or_else(|| format!("cargo did not produce the {} executable", app.cargo_package))
+    })?;
+    let executable = executable
+        .ok_or_else(|| format!("cargo did not produce the {} executable", app.cargo_package))?;
+    step.done();
+    Ok(executable)
 }
 
 /// Windows apps carry the C runtime and start without a console. Cargo

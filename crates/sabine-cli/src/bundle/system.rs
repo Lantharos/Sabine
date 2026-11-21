@@ -26,12 +26,11 @@ pub fn install_system_bundle(
         paths: placed.paths,
     }
     .write(&app.id, root)?;
-    println!(
-        "Installed {} {} for every user at {}",
-        app.name,
-        app.version,
-        placed.executable.display()
-    );
+    crate::ui::summary(&format!(
+        "Installed {} {} for every user",
+        app.name, app.version
+    ));
+    crate::ui::hint(&placed.executable.display().to_string());
     Ok(ExitCode::SUCCESS)
 }
 

@@ -4,7 +4,7 @@ use std::{path::PathBuf, process::Command};
 
 use crate::bundle::{
     BundleFormat,
-    package::{artifact_path, ensure_parent, run},
+    package::{artifact_path, ensure_parent},
     stage::StagedBundle,
 };
 use crate::project::BundleApp;
@@ -12,15 +12,17 @@ use crate::project::BundleApp;
 pub(super) fn package_dmg(app: &BundleApp, staged: &StagedBundle) -> Result<PathBuf, String> {
     let artifact = artifact_path(app, staged, BundleFormat::Dmg, "dmg");
     ensure_parent(&artifact)?;
-    run(Command::new("hdiutil")
-        .arg("create")
-        .arg("-volname")
-        .arg(&app.name)
-        .arg("-srcfolder")
-        .arg(&staged.root)
-        .arg("-ov")
-        .arg("-format")
-        .arg("ULMO")
-        .arg(&artifact))?;
+    crate::ui::tool(
+        Command::new("hdiutil")
+            .arg("create")
+            .arg("-volname")
+            .arg(&app.name)
+            .arg("-srcfolder")
+            .arg(&staged.root)
+            .arg("-ov")
+            .arg("-format")
+            .arg("ULMO")
+            .arg(&artifact),
+    )?;
     Ok(artifact)
 }

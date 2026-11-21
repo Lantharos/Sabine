@@ -65,10 +65,10 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
         let url = &dev_frontend.url;
         match (&dev_frontend.command, dev_frontend.port) {
             (_, Some(port)) if port_is_ready(port) => {
-                eprintln!("sabine: reusing the server at {url}");
+                crate::ui::status(&format!("Using the interface already running at {url}"));
             }
             (Some(command), port) => {
-                eprintln!("sabine: frontend {url} ({command})");
+                crate::ui::status(&format!("Starting the interface at {url} with `{command}`"));
                 let mut child = spawn_frontend(&dev_frontend.root, command, &environment)?;
                 if let Some(port) = port
                     && !wait_for_port(port, url, Some(&mut child), &interrupted)?
@@ -78,20 +78,20 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
                 frontend = Some(child);
             }
             (None, Some(port)) => {
-                eprintln!("sabine: waiting for the server at {url}");
+                crate::ui::status(&format!("Waiting for the interface at {url}"));
                 if !wait_for_port(port, url, None, &interrupted)? {
                     return Ok(ExitCode::from(130));
                 }
             }
-            (None, None) => eprintln!("sabine: frontend {url}"),
+            (None, None) => crate::ui::status(&format!("Interface at {url}")),
         }
         if options.web_only {
-            eprintln!("sabine: web-only mode; Ctrl+C to stop");
+            crate::ui::status("Running only the interface; Ctrl+C stops it");
             let code = app::wait_frontend(frontend.as_mut(), &interrupted)?;
             return Ok(code);
         }
     } else {
-        eprintln!("sabine: static web assets (no frontend dev server)");
+        crate::ui::status("Showing the built interface, which has no dev server");
     }
     if let Some(bindings) = bindings {
         bindings
@@ -99,10 +99,7 @@ pub fn run_dev(options: DevOptions) -> Result<ExitCode, String> {
             .map_err(|_| "writing the bindings panicked".to_string())??;
     }
 
-    eprintln!(
-        "sabine: cargo run --manifest-path {}",
-        project.cargo_manifest.display()
-    );
+    crate::ui::status("Starting the app");
     let result = app::run(app::Session {
         project: &project,
         options: &options,
