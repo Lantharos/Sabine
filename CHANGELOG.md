@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.104
 
 - `SabineWindow::desktop_entry` shows a window as the app of another desktop entry on Linux, with
   its own name and icon, while it keeps the app's data.
