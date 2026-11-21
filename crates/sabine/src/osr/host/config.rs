@@ -70,6 +70,8 @@ pub(crate) struct OsrHostConfig {
     pub parent_window: Option<String>,
     #[cfg(target_os = "linux")]
     pub modal: bool,
+    #[cfg(target_os = "linux")]
+    pub desktop_entry: Option<String>,
     /// The key of the window the desktop opens again, for the window that
     /// opens as it.
     #[cfg(target_os = "linux")]
@@ -273,6 +275,11 @@ impl OsrHostConfig {
                 .get("modal")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            #[cfg(target_os = "linux")]
+            desktop_entry: value
+                .get("desktop_entry")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
             #[cfg(target_os = "linux")]
             restoring: value
                 .get("restoring")

@@ -192,6 +192,15 @@ impl SabineWindow {
         self
     }
 
+    /// Linux only: shows the window as the app of another desktop entry, with
+    /// its name and icon, such as a part of the app that people know by a
+    /// name of its own. The window still keeps the app's data and settings.
+    #[cfg(target_os = "linux")]
+    pub fn desktop_entry(mut self, id: impl Into<String>) -> Self {
+        self.config.desktop_entry = Some(id.into());
+        self
+    }
+
     pub fn transparent(mut self, transparent: bool) -> Self {
         self.config.transparent = transparent;
         if !transparent {

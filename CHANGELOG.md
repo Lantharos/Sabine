@@ -1,3 +1,8 @@
+# Unreleased
+
+- `SabineWindow::desktop_entry` shows a window as the app of another desktop entry on Linux, with
+  its own name and icon, while it keeps the app's data.
+
 # Sabine 0.103
 
 - `appWindow.identifier()` gives a page its window's identifier, which `SabineWindow::parent_window`

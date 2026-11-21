@@ -150,7 +150,12 @@ impl OsrNativeHost {
     #[cfg(target_os = "linux")]
     fn wayland_attributes(&mut self) -> WindowAttributesWayland {
         let mut attributes = WindowAttributesWayland::default();
-        if let Some(app_id) = &self.config.app_id {
+        if let Some(app_id) = self
+            .config
+            .desktop_entry
+            .as_ref()
+            .or(self.config.app_id.as_ref())
+        {
             attributes = attributes.with_name(app_id, app_id);
         }
         let token = self.pending_activation_token.take().or_else(|| {

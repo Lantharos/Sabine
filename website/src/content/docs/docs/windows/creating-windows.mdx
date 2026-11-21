@@ -331,6 +331,21 @@ the parent. Importing the parent needs `zxdg_importer_v2` and modality needs `xd
 on a compositor without one of them, or with an identifier that isn't a Wayland handle, the
 window opens on its own and Sabine's window log says why.
 
+## Windows shown as another app
+
+On Linux, `.desktop_entry(...)` shows a window as the app of another desktop entry, with that
+entry's name and icon in the taskbar, while the window keeps the app's data and settings. It
+suits a part of the app that people know by its own name, such as an installer that opens for
+files. Ship the entry with the app, hidden with `NoDisplay=true` if it shouldn't be launched by
+itself:
+
+```rust
+let installer = SabineWindow::for_current_app()?
+    .app()
+    .title("Parcel")
+    .desktop_entry("com.example.store.installer");
+```
+
 ## Background color
 
 The background color is what the window shows before the page has painted: behind the page while

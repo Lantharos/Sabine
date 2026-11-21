@@ -269,6 +269,7 @@ fn spawn_osr_host_child(
         body["password_store"] = config.password_store().as_str().into();
         body["parent_window"] = config.parent_window.clone().into();
         body["modal"] = config.modal.into();
+        body["desktop_entry"] = config.desktop_entry.clone().into();
         body["restoring"] = restoring.into();
     }
     #[cfg(not(target_os = "linux"))]

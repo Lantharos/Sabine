@@ -52,6 +52,10 @@ pub(crate) struct SabineWindowConfig {
     pub parent_window: Option<String>,
     #[cfg(target_os = "linux")]
     pub modal: bool,
+    /// The desktop entry the desktop shows the window as, when it isn't the
+    /// app's own.
+    #[cfg(target_os = "linux")]
+    pub desktop_entry: Option<String>,
     pub transparent: bool,
     pub background_color: Color,
     /// How long a launching window waits for its page before showing Sabine's
@@ -130,6 +134,8 @@ impl Default for SabineWindowConfig {
             parent_window: None,
             #[cfg(target_os = "linux")]
             modal: false,
+            #[cfg(target_os = "linux")]
+            desktop_entry: None,
             transparent: false,
             background_color: Color::WINDOW,
             splash: None,
