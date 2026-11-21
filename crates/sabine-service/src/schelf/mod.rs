@@ -39,13 +39,13 @@ pub(crate) fn feed_url(app_id: &str, channel: &str) -> String {
 }
 
 /// Where to download an update artifact from, telling Schelf the download is
-/// an update so it counts it as one.
+/// an update, made by Sabine, so it counts it as one.
 pub(crate) fn update_download_url(url: &str) -> String {
     if !url.starts_with(&format!("{DOWNLOAD_ORIGIN}/")) {
         return url.to_string();
     }
     let separator = if url.contains('?') { '&' } else { '?' };
-    format!("{url}{separator}reason=update")
+    format!("{url}{separator}reason=update&via=sabine")
 }
 
 /// What Sabine keeps of Schelf's signed files, under `directory`.
@@ -253,11 +253,11 @@ mod tests {
     fn update_downloads_from_schelf_say_so() {
         assert_eq!(
             update_download_url("https://dl.schelf.store/apps/a/1.0.0/linux-x86_64/a.tar.gz"),
-            "https://dl.schelf.store/apps/a/1.0.0/linux-x86_64/a.tar.gz?reason=update"
+            "https://dl.schelf.store/apps/a/1.0.0/linux-x86_64/a.tar.gz?reason=update&via=sabine"
         );
         assert_eq!(
             update_download_url("https://dl.schelf.store/apps/a.tar.gz?part=1"),
-            "https://dl.schelf.store/apps/a.tar.gz?part=1&reason=update"
+            "https://dl.schelf.store/apps/a.tar.gz?part=1&reason=update&via=sabine"
         );
         assert_eq!(
             update_download_url("https://github.com/a/b/releases/download/v1/a.tar.gz"),
