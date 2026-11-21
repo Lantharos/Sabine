@@ -314,6 +314,18 @@ let dialog = SabineWindow::for_current_app()?
     .modal(true);
 ```
 
+The same works between the app's own windows, which each have a window host of their own. A page
+gets its window's identifier with `appWindow.identifier()` and hands it to a command that opens
+the dialog:
+
+```ts
+const parent = await appWindow.identifier();
+await commands.openDetails({ parent });
+```
+
+It resolves with `null` on other desktops and on compositors without `zxdg_exporter_v2`, where the
+dialog opens as a window of its own.
+
 The compositor keeps the dialog above its parent and moves, minimizes and closes it along with
 the parent. Importing the parent needs `zxdg_importer_v2` and modality needs `xdg_wm_dialog_v1`;
 on a compositor without one of them, or with an identifier that isn't a Wayland handle, the

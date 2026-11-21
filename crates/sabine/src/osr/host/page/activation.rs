@@ -23,4 +23,20 @@ impl OsrNativeHost {
         }
         self.send_bridge_response(request.browser_id, request.request_id, Ok(Value::Null));
     }
+
+    /// Exports the window on Linux, so a window opened with this identifier
+    /// as its `parent_window` stays over it. Other desktops have no such
+    /// identifier.
+    pub(super) fn answer_identifier(&mut self, request: &BridgeRequest) {
+        #[cfg(target_os = "linux")]
+        let identifier =
+            Some(self.exported_identifier()).filter(|identifier| !identifier.is_empty());
+        #[cfg(not(target_os = "linux"))]
+        let identifier: Option<String> = None;
+        self.send_bridge_response(
+            request.browser_id,
+            request.request_id,
+            Ok(identifier.into()),
+        );
+    }
 }

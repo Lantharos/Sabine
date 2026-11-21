@@ -29,7 +29,7 @@ impl OsrNativeHost {
     pub(super) fn print_requester(&mut self) -> Requester {
         Requester {
             app_id: self.config.app_id.clone(),
-            parent: self.portal_parent(),
+            parent: self.exported_identifier(),
         }
     }
 }

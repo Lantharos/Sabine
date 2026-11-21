@@ -83,6 +83,13 @@ export interface SabineWindowApi {
    */
   activationToken(): Promise<string | null>;
   /**
+   * The window as a dialog of it names its parent: pass it to
+   * `SabineWindow::parent_window` to open a window that stays over this one.
+   * Linux exports the window for it, as `wayland:<handle>`; it is `null` on
+   * other desktops and on compositors that cannot share windows.
+   */
+  identifier(): Promise<string | null>;
+  /**
    * What the window showed when the session it was open in ended, as it last
    * passed it to `keepState`, when the desktop opens the window again after
    * signing in. `null` for every other window, and on desktops that open apps

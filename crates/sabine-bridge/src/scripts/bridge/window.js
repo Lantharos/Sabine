@@ -65,6 +65,9 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
   activationToken() {
     return window.sabine.bridge.invoke("sabine.window.activationToken");
   },
+  identifier() {
+    return window.sabine.bridge.invoke("sabine.window.identifier");
+  },
   restoredState() {
     return window.sabine.bridge.invoke("sabine.window.restoredState");
   },

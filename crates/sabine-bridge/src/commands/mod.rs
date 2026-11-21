@@ -20,6 +20,9 @@ pub const PAGE_ZOOM_COMMAND: &str = "sabine.window.pageZoom";
 /// A token another app's window can present to take focus, made for this
 /// window while the person uses it.
 pub const ACTIVATION_TOKEN_COMMAND: &str = "sabine.window.activationToken";
+/// The window as another window names its parent to open as its dialog,
+/// `wayland:<handle>` on Linux and `null` on other desktops.
+pub const IDENTIFIER_COMMAND: &str = "sabine.window.identifier";
 /// Holds back the window's first frame until the page sends
 /// [`REVEAL_COMMAND`], so the window appears with the page's first view.
 pub const HOLD_REVEAL_COMMAND: &str = "sabine.window.holdReveal";
@@ -79,7 +82,7 @@ pub const SPELLCHECK_COMMANDS: [&str; 4] = [
     "sabine.spellcheck.replace",
 ];
 
-const WINDOW_COMMANDS: [&str; 21] = [
+const WINDOW_COMMANDS: [&str; 22] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
@@ -87,6 +90,7 @@ const WINDOW_COMMANDS: [&str; 21] = [
     CONTROLS_OVERLAY_COMMAND,
     WINDOW_CONTROL_COMMAND,
     ACTIVATION_TOKEN_COMMAND,
+    IDENTIFIER_COMMAND,
     HOLD_REVEAL_COMMAND,
     REVEAL_COMMAND,
     RESTORED_STATE_COMMAND,

@@ -172,11 +172,11 @@ impl SabineWindow {
         self
     }
 
-    /// Linux only: keeps the window over a window of another app, as a
-    /// dialog of it. `identifier` names that window the way the desktop
-    /// portal's `parent_window` argument does, `wayland:<handle>` with a
-    /// handle the other app exported through `xdg_foreign`. Other
-    /// identifiers leave the window on its own.
+    /// Linux only: keeps the window over another window, of another app or
+    /// of this one, as a dialog of it. `identifier` names that window the way
+    /// the desktop portal's `parent_window` argument and a page's
+    /// `appWindow.identifier()` do, `wayland:<handle>` with a handle exported
+    /// through `xdg_foreign`. Other identifiers leave the window on its own.
     #[cfg(target_os = "linux")]
     pub fn parent_window(mut self, identifier: impl Into<String>) -> Self {
         self.config.parent_window = Some(identifier.into());

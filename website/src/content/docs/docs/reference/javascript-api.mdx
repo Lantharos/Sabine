@@ -484,6 +484,18 @@ person asked to. Pass it to the app as `XDG_ACTIVATION_TOKEN` in its environment
 `activation_token` in a portal request. It works only while this window is in front, and is
 `null` where the desktop needs none.
 
+### `identifier()`
+
+```ts
+identifier(): Promise<string | null>;
+```
+
+The window as a dialog of it names its parent. Pass it to `SabineWindow::parent_window` to open a
+window that stays over this one; see
+[Dialogs for other apps' windows](/docs/windows/creating-windows/#dialogs-for-other-apps-windows).
+Linux exports the window for it as `wayland:<handle>`. It is `null` on other desktops and on
+compositors that can't share windows.
+
 ### `restoredState()` and `keepState(state)`
 
 ```ts

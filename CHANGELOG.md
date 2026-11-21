@@ -1,3 +1,8 @@
+# Unreleased
+
+- `appWindow.identifier()` gives a page its window's identifier, which `SabineWindow::parent_window`
+  takes, so an app can open one of its own windows as a modal dialog of another on Linux.
+
 # Sabine 0.102
 
 - The CLI shows longer commands step by step in a terminal: `sabine bundle` draws Cargo's progress

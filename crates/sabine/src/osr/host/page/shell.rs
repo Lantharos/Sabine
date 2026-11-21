@@ -71,7 +71,7 @@ impl OsrNativeHost {
     fn with_requester(&mut self, then: impl FnOnce(Requester) + Send + 'static) {
         let mut requester = Requester {
             app_id: self.config.app_id.clone(),
-            parent: self.portal_parent(),
+            parent: self.exported_identifier(),
             activation_token: None,
         };
         match &self.clipboard {
