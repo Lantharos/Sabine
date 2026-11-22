@@ -1,3 +1,15 @@
+function Show-InstallerLog([string] $Log) {
+    if (-not (Test-Path $Log)) { return }
+    $failure = Select-String -Path $Log -Pattern 'Return value 3' -Context 60, 2 | Select-Object -First 1
+    if ($null -eq $failure) {
+        Get-Content $Log -Tail 100
+        return
+    }
+    $failure.Context.PreContext
+    $failure.Line
+    $failure.Context.PostContext
+}
+
 function Wait-InstallerExit([Diagnostics.Process] $Process) {
     if ($Process.WaitForExit(300000)) { return }
     Get-CimInstance Win32_Process |
@@ -6,7 +18,7 @@ function Wait-InstallerExit([Diagnostics.Process] $Process) {
     Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Sabine/logs') -Filter *.jsonl -ErrorAction SilentlyContinue |
         ForEach-Object { Get-Content $_.FullName -Tail 30 }
     Get-ChildItem $env:RUNNER_TEMP -Filter 'sabine-msi-*.log' -ErrorAction SilentlyContinue |
-        ForEach-Object { Get-Content $_.FullName -Tail 100 }
+        ForEach-Object { Show-InstallerLog $_.FullName }
     Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
     throw 'Installer did not exit within five minutes'
 }

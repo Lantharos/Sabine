@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
-
 use crate::types::is_https_url;
 use crate::{
     PrepareProgress, PrepareStage, SabineVersion, ServiceError, ServiceResult,
@@ -87,38 +85,27 @@ pub(super) fn fetch_system_manifest(
     Ok(manifest)
 }
 
-/// The stable Sabine releases. None is listed while
-/// `SABINE_RELEASE_MANIFEST_URL` names the one release to use.
-pub(super) fn published_versions() -> ServiceResult<Vec<SabineVersion>> {
-    #[derive(Deserialize)]
-    struct Release {
-        tag_name: String,
-        draft: bool,
-        prerelease: bool,
-    }
-    if manifest_override().is_some() {
-        return Ok(Vec::new());
-    }
-    let releases: Vec<Release> = crate::download::fetch_manifest(&format!(
-        "https://api.github.com/repos/{SERVICE_REPO}/releases?per_page=100"
-    ))?;
-    Ok(releases
-        .into_iter()
-        .filter(|release| !release.draft && !release.prerelease)
-        .filter_map(|release| SabineVersion::parse(release.tag_name.trim_start_matches('v')))
-        .collect())
-}
-
-/// The signed manifest of the newest published stable release.
+/// The signed manifest of the newest published release.
 pub(super) fn newest_release() -> ServiceResult<SystemReleaseManifest> {
     if manifest_override().is_some() {
         return fetch_system_manifest(None);
     }
-    let version = published_versions()?
-        .into_iter()
+    let feed = crate::download::fetch_release_document(&format!(
+        "https://github.com/{SERVICE_REPO}/releases.atom"
+    ))?;
+    let version = released_versions(&String::from_utf8_lossy(&feed))
         .max()
-        .ok_or_else(|| ServiceError::Update("no published stable Sabine release found".into()))?;
+        .ok_or_else(|| ServiceError::Update("no published Sabine release found".into()))?;
     fetch_system_manifest(Some(&version.label()))
+}
+
+fn released_versions(feed: &str) -> impl Iterator<Item = SabineVersion> + '_ {
+    feed.split("<id>tag:github.com,2008:Repository/")
+        .skip(1)
+        .filter_map(|entry| {
+            let (id, _) = entry.split_once("</id>")?;
+            SabineVersion::parse(id.split_once('/')?.1)
+        })
 }
 
 pub(super) fn manifest_override() -> Option<String> {
@@ -147,5 +134,25 @@ mod tests {
     fn required_updates_keep_the_exact_release_tag() {
         assert!(system_manifest_url(None).contains("/releases/latest/"));
         assert!(system_manifest_url(Some("0.21")).contains("/releases/download/v0.21/"));
+    }
+
+    #[test]
+    fn the_release_feed_names_each_published_version() {
+        let feed = r#"<feed><id>tag:github.com,2008:https://github.com/Lantharos/Sabine/releases</id>
+            <entry><id>tag:github.com,2008:Repository/1259393564/v0.105</id><title>v0.105</title></entry>
+            <entry><id>tag:github.com,2008:Repository/1259393564/v0.99</id><title>v0.99</title></entry></feed>"#;
+        assert_eq!(
+            released_versions(feed).collect::<Vec<_>>(),
+            [
+                SabineVersion {
+                    major: 0,
+                    build: 105
+                },
+                SabineVersion {
+                    major: 0,
+                    build: 99
+                }
+            ]
+        );
     }
 }

@@ -41,8 +41,7 @@ pub use system::{install_system_service, stage_host, stage_system_files};
 
 use artifacts::{
     cli_binary_name, download_system_artifact, fetch_system_manifest, newest_release,
-    published_versions, sabine_host_relative_path, service_binary_name, service_daemon_binary_name,
-    system_asset_name,
+    sabine_host_relative_path, service_binary_name, service_daemon_binary_name, system_asset_name,
 };
 use state::{
     SystemInstallationState, clear_system_failure, compatibility_for_version, current_installation,

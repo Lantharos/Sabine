@@ -8,12 +8,15 @@ const MANIFEST_LIMIT: u64 = 1024 * 1024;
 const ARTIFACT_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 
 pub(crate) fn fetch_manifest<T: DeserializeOwned>(url: &str) -> ServiceResult<T> {
-    let body = sabine_runtime::fetch_bytes(url, MANIFEST_LIMIT).map_err(|error| match error {
+    serde_json::from_slice(&fetch_release_document(url)?)
+        .map_err(|error| ServiceError::Update(format!("invalid release manifest: {error}")))
+}
+
+pub(crate) fn fetch_release_document(url: &str) -> ServiceResult<Vec<u8>> {
+    sabine_runtime::fetch_bytes(url, MANIFEST_LIMIT).map_err(|error| match error {
         sabine_runtime::RuntimeError::Gone(message) => ServiceError::Gone(message),
         error => ServiceError::Update(format!("release manifest: {error}")),
-    })?;
-    serde_json::from_slice(&body)
-        .map_err(|error| ServiceError::Update(format!("invalid release manifest: {error}")))
+    })
 }
 
 /// Downloads a release artifact into place, reporting the bytes received.

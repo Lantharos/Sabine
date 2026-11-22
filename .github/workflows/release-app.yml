@@ -380,7 +380,8 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP "sabine-msi-install.log"
           $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -Wait -PassThru
           if ($install.ExitCode -ne 0) {
-            Get-Content $log -Tail 100
+            . ./.sabine-release/scripts/checks/windows-package-check.ps1
+            Show-InstallerLog $log
             throw "MSI installation failed with exit code $($install.ExitCode)"
           }
           if ($config -notmatch '(?ms)\[app\].*?^id\s*=\s*"([^"]+)"') { throw "Sabine.toml app id is missing" }

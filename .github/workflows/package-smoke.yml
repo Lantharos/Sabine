@@ -224,7 +224,7 @@ jobs:
           $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
           Wait-InstallerExit $install
           if ($install.ExitCode -ne 0) {
-            Get-Content $log -Tail 100
+            Show-InstallerLog $log
             throw "MSI installation failed with exit code $($install.ExitCode)"
           }
           $appDir = Join-Path $env:LOCALAPPDATA "Programs/$env:APP_ID"
@@ -245,7 +245,7 @@ jobs:
           }
           $repair = Start-Process msiexec.exe -ArgumentList @('/fa', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
           Wait-InstallerExit $repair
-          if ($repair.ExitCode -ne 0) { Get-Content $log -Tail 100; throw "MSI repair failed" }
+          if ($repair.ExitCode -ne 0) { Show-InstallerLog $log; throw "MSI repair failed" }
           Assert-RuntimeLinks (Join-Path $appDir 'resources/runtimes/cef')
           $app = $null
           try {
@@ -258,7 +258,7 @@ jobs:
             if ($null -ne $app -and -not $app.HasExited) { $app.Kill($true); $app.WaitForExit() }
             $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $msi[0].FullName, '/qn', '/norestart', '/l*v', $log) -PassThru
             Wait-InstallerExit $uninstall
-            if ($uninstall.ExitCode -ne 0) { Get-Content $log -Tail 100; throw "MSI uninstall failed" }
+            if ($uninstall.ExitCode -ne 0) { Show-InstallerLog $log; throw "MSI uninstall failed" }
             $registered = (Get-Content $registry -Raw | ConvertFrom-Json).apps
             if ($registered.PSObject.Properties[$env:APP_ID]) { throw "MSI left the app registered" }
             if (Test-Path $installedExe.FullName) { throw "MSI left its application executable" }
@@ -375,7 +375,7 @@ jobs:
             }
             Wait-InstallerExit $process
             if ($process.ExitCode -ne 0) {
-              if (Test-Path $log) { Get-Content $log -Tail 100 }
+              Show-InstallerLog $log
               throw "Standalone $Operation failed with code $($process.ExitCode)"
             }
           }

@@ -1,3 +1,9 @@
+# Unreleased
+
+- Installing an app on a computer without Sabine, or one that needs a newer Sabine, finds the
+  newest release from GitHub's release feed instead of its API, which refuses visitors after 60
+  requests an hour from one address and made installs fail on shared networks.
+
 # Sabine 0.105
 
 - A maximized or resized window takes clicks across its whole new size straight away; its input,
