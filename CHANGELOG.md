@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.107
 
 - Installing an app while a new Sabine is still being released, or after a release that never
   published, installs the newest Sabine that did publish instead of failing.
