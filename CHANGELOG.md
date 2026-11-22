@@ -1,3 +1,8 @@
+# Sabine 0.108
+
+- A background app that can no longer open its window, such as one left running after you signed
+  out, ends when you open it, so opening it again starts it afresh instead of doing nothing.
+
 # Sabine 0.107
 
 - Installing an app while a new Sabine is still being released, or after a release that never

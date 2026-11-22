@@ -386,10 +386,15 @@ impl SabineProcess {
         }
     }
 
+    /// A background app with no window left that can no longer open one ends, so the
+    /// next launch starts it afresh instead of asking it again.
     fn present(&mut self, activation_token: Option<String>) {
         if self.background && self.primary.is_none() {
             if let Err(error) = crate::osr::launch::open_primary_window(self, activation_token) {
                 sabine_runtime::report_error("window", error);
+                if self.extra_windows.is_empty() {
+                    self.quit();
+                }
             }
             return;
         }
