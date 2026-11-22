@@ -93,13 +93,21 @@ pub(super) fn newest_release() -> ServiceResult<SystemReleaseManifest> {
     let feed = crate::download::fetch_release_document(&format!(
         "https://github.com/{SERVICE_REPO}/releases.atom"
     ))?;
-    let version = released_versions(&String::from_utf8_lossy(&feed))
-        .max()
+    let mut versions = tagged_versions(&String::from_utf8_lossy(&feed)).collect::<Vec<_>>();
+    versions.sort_unstable_by(|left, right| right.cmp(left));
+    let manifest = versions
+        .into_iter()
+        .find_map(|version| {
+            crate::download::fetch_manifest(&system_manifest_url(Some(&version.label()))).ok()
+        })
         .ok_or_else(|| ServiceError::Update("no published Sabine release found".into()))?;
-    fetch_system_manifest(Some(&version.label()))
+    super::validate_system_release(&manifest)?;
+    Ok(manifest)
 }
 
-fn released_versions(feed: &str) -> impl Iterator<Item = SabineVersion> + '_ {
+/// The versions the release feed names, which include tags whose release
+/// is still being built or never published.
+fn tagged_versions(feed: &str) -> impl Iterator<Item = SabineVersion> + '_ {
     feed.split("<id>tag:github.com,2008:Repository/")
         .skip(1)
         .filter_map(|entry| {
@@ -137,12 +145,12 @@ mod tests {
     }
 
     #[test]
-    fn the_release_feed_names_each_published_version() {
+    fn the_release_feed_names_each_tagged_version() {
         let feed = r#"<feed><id>tag:github.com,2008:https://github.com/Lantharos/Sabine/releases</id>
             <entry><id>tag:github.com,2008:Repository/1259393564/v0.105</id><title>v0.105</title></entry>
             <entry><id>tag:github.com,2008:Repository/1259393564/v0.99</id><title>v0.99</title></entry></feed>"#;
         assert_eq!(
-            released_versions(feed).collect::<Vec<_>>(),
+            tagged_versions(feed).collect::<Vec<_>>(),
             [
                 SabineVersion {
                     major: 0,

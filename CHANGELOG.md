@@ -1,3 +1,8 @@
+# Unreleased
+
+- Installing an app while a new Sabine is still being released, or after a release that never
+  published, installs the newest Sabine that did publish instead of failing.
+
 # Sabine 0.106
 
 - Installing an app on a computer without Sabine, or one that needs a newer Sabine, finds the
