@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.106
 
 - Installing an app on a computer without Sabine, or one that needs a newer Sabine, finds the
   newest release from GitHub's release feed instead of its API, which refuses visitors after 60
