@@ -1,3 +1,7 @@
+# Sabine 0.111
+
+- Keep inset sheets rounded in square windows
+
 # Sabine 0.110
 
 - Windows on Kestrel hear when their glass is Niko, a blur of what is behind them in the lightness
