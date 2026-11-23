@@ -5,6 +5,8 @@
 - Windows can have glass all around an opaque sheet: `WindowRegion::inset` is a sheet kept at set
   distances from the window's edges and `WindowRegion::around_inset` the glass around it, so only
   the glass is blurred and nothing is drawn beneath the sheet at any size.
+- `appWindow.setControlRegions` moves the areas Sabine answers as a window's minimize, maximize and
+  close buttons, for pages whose buttons move between layouts.
 
 # Sabine 0.107
 

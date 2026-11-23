@@ -66,6 +66,12 @@ export interface SabineWindowApi {
    */
   setRegions(regions: WindowRegions): Promise<void>;
   /**
+   * Replaces the areas Sabine answers as the window's minimize, maximize and
+   * close buttons, for a page whose own buttons move, such as between a
+   * layout with a sidebar and one without.
+   */
+  setControlRegions(regions: WindowControlRegion[]): Promise<void>;
+  /**
    * The top corners the system's own window controls cover, which an
    * app-drawn titlebar leaves free. With `AppChrome` on macOS the traffic
    * lights sit at the left; elsewhere the page draws its controls and nothing
@@ -206,6 +212,18 @@ export interface SabinePopupApi {
 
 export declare const appWindow: SabineWindowApi;
 export declare const popup: SabinePopupApi;
+
+/**
+ * An area that minimizes, maximizes or closes the window, in the page's CSS
+ * pixels. A negative `x` counts from the window's right edge.
+ */
+export interface WindowControlRegion {
+  action: "minimize" | "maximize" | "close";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /** Distances from each of the window's edges. */
 export interface WindowInsets {

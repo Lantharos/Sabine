@@ -11,6 +11,7 @@ pub const POPUP_OPEN_COMMAND: &str = "sabine.popup.open";
 pub const POPUP_CLOSE_COMMAND: &str = "sabine.popup.close";
 pub const INHIBIT_SHORTCUTS_COMMAND: &str = "sabine.window.inhibitShortcuts";
 pub const SET_REGIONS_COMMAND: &str = "sabine.window.setRegions";
+pub const SET_CONTROL_REGIONS_COMMAND: &str = "sabine.window.setControlRegions";
 pub const CONTROLS_OVERLAY_COMMAND: &str = "sabine.window.controlsOverlay";
 /// Changes the window as a [`WindowControl`](crate::WindowControl) describes.
 pub const WINDOW_CONTROL_COMMAND: &str = "sabine.window.control";
@@ -82,11 +83,12 @@ pub const SPELLCHECK_COMMANDS: [&str; 4] = [
     "sabine.spellcheck.replace",
 ];
 
-const WINDOW_COMMANDS: [&str; 22] = [
+const WINDOW_COMMANDS: [&str; 23] = [
     POPUP_OPEN_COMMAND,
     POPUP_CLOSE_COMMAND,
     INHIBIT_SHORTCUTS_COMMAND,
     SET_REGIONS_COMMAND,
+    SET_CONTROL_REGIONS_COMMAND,
     CONTROLS_OVERLAY_COMMAND,
     WINDOW_CONTROL_COMMAND,
     ACTIVATION_TOKEN_COMMAND,

@@ -281,6 +281,12 @@ window
     .control_region(SabineWindowControlAction::Close, WindowRegionRect::new(-40, 0, 40, 40))
 ```
 
+When the page's buttons move, `appWindow.setControlRegions` gives Sabine their new places:
+
+```ts
+await appWindow.setControlRegions([{ action: "close", x: -52, y: 28, width: 28, height: 28 }]);
+```
+
 ## Rounded corners
 
 A window the desktop has maximized, made fullscreen or tiled meets the screen's edges, so rounded

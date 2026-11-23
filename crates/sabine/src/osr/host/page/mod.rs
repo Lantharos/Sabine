@@ -20,8 +20,8 @@ use sabine_bridge::{
     ACTIVATION_TOKEN_COMMAND, APPEARANCE_COMMAND, CONTROLS_OVERLAY_COMMAND, DISPLAYS_COMMAND,
     DRAG_FILES_COMMAND, HOLD_REVEAL_COMMAND, IDENTIFIER_COMMAND, INHIBIT_SHORTCUTS_COMMAND,
     KEEP_STATE_COMMAND, OPEN_LINK_COMMAND, PAGE_ZOOM_COMMAND, PRINT_FILES_COMMAND,
-    RESTORED_STATE_COMMAND, REVEAL_COMMAND, SET_REGIONS_COMMAND, SHOW_FOLDER_COMMAND,
-    WINDOW_CONTROL_COMMAND,
+    RESTORED_STATE_COMMAND, REVEAL_COMMAND, SET_CONTROL_REGIONS_COMMAND, SET_REGIONS_COMMAND,
+    SHOW_FOLDER_COMMAND, WINDOW_CONTROL_COMMAND,
 };
 
 use super::native::OsrNativeHost;
@@ -62,6 +62,18 @@ impl OsrNativeHost {
         let result = serde_json::from_str::<serde_json::Value>(request.payload)
             .map(|regions| {
                 self.set_regions(crate::osr::protocol::regions_from_json(Some(&regions)))
+            })
+            .map(|()| serde_json::Value::Null)
+            .map_err(|error| error.to_string());
+        self.send_bridge_response(request.browser_id, request.request_id, result);
+    }
+
+    fn answer_set_control_regions(&mut self, request: &BridgeRequest) {
+        let result = serde_json::from_str::<serde_json::Value>(request.payload)
+            .map(|regions| {
+                self.set_control_regions(crate::osr::protocol::control_regions_from_json(Some(
+                    &regions,
+                )))
             })
             .map(|()| serde_json::Value::Null)
             .map_err(|error| error.to_string());
@@ -114,6 +126,7 @@ impl OsrNativeHost {
         match request.command {
             INHIBIT_SHORTCUTS_COMMAND => self.answer_inhibit_shortcuts(&request),
             SET_REGIONS_COMMAND => self.answer_set_regions(&request),
+            SET_CONTROL_REGIONS_COMMAND => self.answer_set_control_regions(&request),
             WINDOW_CONTROL_COMMAND => self.answer_window_control(&request),
             DISPLAYS_COMMAND => self.answer_displays(&request),
             PAGE_ZOOM_COMMAND => self.follow_page_zoom(&request),

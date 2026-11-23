@@ -59,6 +59,12 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
   async setRegions(regions) {
     await window.sabine.bridge.invoke("sabine.window.setRegions", regions);
   },
+  async setControlRegions(regions) {
+    await window.sabine.bridge.invoke(
+      "sabine.window.setControlRegions",
+      regions.map(({ action, x, y, width, height }) => ({ action, rect: { x, y, width, height } })),
+    );
+  },
   controlsOverlay() {
     return window.sabine.bridge.invoke("sabine.window.controlsOverlay");
   },

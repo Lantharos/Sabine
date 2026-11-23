@@ -358,6 +358,18 @@ impl OsrNativeHost {
         }
     }
 
+    pub(in crate::osr::host) fn set_control_regions(
+        &mut self,
+        regions: Vec<crate::SabineWindowControlRegion>,
+    ) {
+        self.config.control_regions = regions;
+        if self.update_titlebar_hover()
+            && let Some(window) = &self.window
+        {
+            window.request_redraw();
+        }
+    }
+
     pub(in crate::osr::host) fn set_page_zoom(&mut self, zoom: f64) {
         self.page_zoom = zoom;
         self.relayout_media();

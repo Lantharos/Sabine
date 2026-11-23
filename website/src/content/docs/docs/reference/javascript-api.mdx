@@ -535,6 +535,26 @@ Replaces the window's blur, opaque and input regions. A region left out returns 
 blur behind the whole window, nothing opaque, and input everywhere. Build regions with `region`.
 See [Glass and effects](/docs/windows/glass-and-effects/).
 
+### `setControlRegions(regions)`
+
+```ts
+setControlRegions(regions: WindowControlRegion[]): Promise<void>;
+
+interface WindowControlRegion {
+  action: "minimize" | "maximize" | "close";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+```
+
+Replaces the areas Sabine answers as the window's minimize, maximize and close buttons, which
+start as the window's `control_region`s. Positions are in the page's CSS pixels, and a negative `x`
+counts from the window's right edge. A page whose buttons move, for example when a sidebar comes
+and goes, sends their new places so the buttons keep working while the page is busy. See
+[Window chrome](/docs/windows/window-chrome/).
+
 ### `region`
 
 Builds regions for `setRegions`. Sizes and positions are in the page's CSS pixels, so regions grow
