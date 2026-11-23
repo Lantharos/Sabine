@@ -4,11 +4,12 @@ export interface SystemAppearance {
   accentColor: string | null;
   /**
    * The material of the window's glass. On Kestrel, `"maris"` is the
-   * desktop's surface colour over a wide blur of the wallpaper, which already
-   * is the whole surface, so pages draw no tint of their own over it.
-   * Everywhere else glass is `"luca"`.
+   * desktop's surface colour over a wide blur of the wallpaper and `"niko"` a
+   * blur of what is behind the window in the lightness of the surface colour.
+   * Both already are the whole surface, so pages draw no tint of their own
+   * over them. Everywhere else glass is `"luca"`.
    */
-  backdrop: "luca" | "maris";
+  backdrop: "luca" | "maris" | "niko";
 }
 
 /** A rectangle of the desktop in physical pixels. */

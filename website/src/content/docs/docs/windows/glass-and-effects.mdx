@@ -99,13 +99,14 @@ Any effect other than `None` turns on transparency, as `.glass()` does.
   </TabItem>
 </Tabs>
 
-## Luca and Maris on Kestrel
+## Luca, Maris and Niko on Kestrel
 
-Kestrel, the desktop of Luft, draws glass as one of two materials: Luca, a blur of what is behind
-the window or only of the wallpaper, and Maris, the desktop's surface colour over a wide blur of
-the wallpaper, covering most of it. People choose one for app windows and one for panels and
-menus. Maris already is the whole surface, so a page draws no tint of its own over it, while over
-Luca it keeps the translucent backgrounds that make text readable.
+Kestrel, the desktop of Luft, draws glass as one of three materials: Luca, a blur of what is behind
+the window or only of the wallpaper; Maris, the desktop's surface colour over a wide blur of the
+wallpaper, covering most of it; and Niko, a blur of what is behind the window in the lightness of
+the surface colour. People choose one for app windows and one for panels and menus. Maris and Niko
+already are the whole surface, so a page draws no tint of its own over them, while over Luca it
+keeps the translucent backgrounds that make text readable.
 
 Pages hear which material their window's glass has as `backdrop` in
 [`system.appearance()`](/docs/desktop/appearance-and-shell/), and through
@@ -127,7 +128,8 @@ events.appearanceChanged(applyBackdrop);
   background: rgb(20 20 24 / 0.35);
 }
 
-[data-backdrop="maris"] .sidebar {
+[data-backdrop="maris"] .sidebar,
+[data-backdrop="niko"] .sidebar {
   background: transparent;
 }
 ```
@@ -149,6 +151,7 @@ window.glass().backdrop(BackdropRole::Transient, BackdropPreference::User)
 | --- | --- |
 | `BackdropPreference::User` | What people chose for the role, the default |
 | `BackdropPreference::Maris` | Maris |
+| `BackdropPreference::Niko` | Niko, which blurs only the wallpaper whenever people's Luca does |
 | `BackdropPreference::Luca` | Luca, which blurs only the wallpaper whenever people's Luca does, such as while the power saver is on |
 
 Sabine speaks Kestrel's `kestrel_glass_v1` protocol for this. On other desktops, and on other

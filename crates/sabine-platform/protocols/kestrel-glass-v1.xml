@@ -26,15 +26,16 @@
   <interface name="kestrel_glass_manager_v1" version="1">
     <description summary="the material of a surface's glass">
       Glass is the part of a surface a client asks to blur through
-      ext_background_effect_v1. Kestrel draws it as one of two materials:
-      Luca, a blur of what is behind the surface or only of the wallpaper,
-      and Maris, the desktop's surface colour over a wide blur of the
-      wallpaper that covers most of it.
+      ext_background_effect_v1. Kestrel draws it as one of three materials:
+      Luca, a blur of what is behind the surface or only of the wallpaper;
+      Maris, the desktop's surface colour over a wide blur of the wallpaper
+      that covers most of it; and Niko, a blur of what is behind the surface
+      that takes the lightness of the surface colour.
 
       Through a glass object, a client says what kind of surface the glass
       belongs to and which material it would like, and hears which material
       the glass has. A client draws its own tint over Luca glass, and none
-      over Maris glass, whose surface colour is already the whole surface.
+      over Maris or Niko glass, which already are the whole surface.
     </description>
 
     <enum name="error">
@@ -78,6 +79,7 @@
              summary="the material the person chose for this kind of surface"/>
       <entry name="luca" value="1" summary="Luca"/>
       <entry name="maris" value="2" summary="Maris"/>
+      <entry name="niko" value="3" summary="Niko"/>
     </enum>
 
     <enum name="material">
@@ -85,6 +87,8 @@
              summary="a blur of what is behind, or of the wallpaper only"/>
       <entry name="maris" value="1"
              summary="the surface colour over a wide blur of the wallpaper"/>
+      <entry name="niko" value="2"
+             summary="a blur of what is behind, or of the wallpaper only, in the lightness of the surface colour"/>
     </enum>
 
     <request name="destroy" type="destructor">
@@ -101,9 +105,9 @@
 
     <request name="set_preference">
       <description summary="ask for a material">
-        Maris is always granted. Luca is granted too, and then blurs only the
-        wallpaper whenever the person's Luca glass does, such as while the
-        power saver is on. The default is user.
+        Maris is always granted. Luca and Niko are granted too, and then blur
+        only the wallpaper whenever the person's Luca glass does, such as
+        while the power saver is on. The default is user.
       </description>
       <arg name="preference" type="uint" enum="preference"/>
     </request>

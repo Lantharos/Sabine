@@ -34,6 +34,7 @@ pub enum BackdropPreference {
     User,
     Luca,
     Maris,
+    Niko,
 }
 
 impl BackdropPreference {
@@ -42,6 +43,7 @@ impl BackdropPreference {
             "user" => Some(Self::User),
             "luca" => Some(Self::Luca),
             "maris" => Some(Self::Maris),
+            "niko" => Some(Self::Niko),
             _ => None,
         }
     }
@@ -51,19 +53,23 @@ impl BackdropPreference {
             Self::User => "user",
             Self::Luca => "luca",
             Self::Maris => "maris",
+            Self::Niko => "niko",
         }
     }
 }
 
 /// The material a window's glass has. On Kestrel, Luca is a blur of what is
-/// behind the window and Maris the desktop's surface colour over a wide blur
-/// of the wallpaper, which already is the whole surface, so pages draw no
-/// tint of their own over it. Everywhere else glass is Luca.
+/// behind the window, Maris the desktop's surface colour over a wide blur of
+/// the wallpaper and Niko a blur of what is behind the window in the
+/// lightness of the surface colour. Maris and Niko already are the whole
+/// surface, so pages draw no tint of their own over them. Everywhere else
+/// glass is Luca.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BackdropMaterial {
     #[default]
     Luca,
     Maris,
+    Niko,
 }
 
 impl BackdropMaterial {
@@ -71,6 +77,7 @@ impl BackdropMaterial {
         match self {
             Self::Luca => "luca",
             Self::Maris => "maris",
+            Self::Niko => "niko",
         }
     }
 }

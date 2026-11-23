@@ -289,6 +289,7 @@ impl Glass {
     fn material(&self) -> BackdropMaterial {
         match self.material.load(Ordering::Acquire) {
             value if value == BackdropMaterial::Maris as u8 => BackdropMaterial::Maris,
+            value if value == BackdropMaterial::Niko as u8 => BackdropMaterial::Niko,
             _ => BackdropMaterial::Luca,
         }
     }
@@ -323,6 +324,7 @@ fn send_backdrop(glass: &KestrelGlassV1, backdrop: WindowBackdrop) {
         BackdropPreference::User => kestrel_glass_v1::Preference::User,
         BackdropPreference::Luca => kestrel_glass_v1::Preference::Luca,
         BackdropPreference::Maris => kestrel_glass_v1::Preference::Maris,
+        BackdropPreference::Niko => kestrel_glass_v1::Preference::Niko,
     });
 }
 
@@ -338,6 +340,7 @@ impl Dispatch<KestrelGlassV1, ()> for Material {
         let kestrel_glass_v1::Event::Material { material } = event;
         let material = match material.into_result() {
             Ok(kestrel_glass_v1::Material::Maris) => BackdropMaterial::Maris,
+            Ok(kestrel_glass_v1::Material::Niko) => BackdropMaterial::Niko,
             _ => BackdropMaterial::Luca,
         };
         if state.material.swap(material as u8, Ordering::AcqRel) != material as u8 {

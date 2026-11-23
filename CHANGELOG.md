@@ -1,3 +1,9 @@
+# Unreleased
+
+- Windows on Kestrel hear when their glass is Niko, a blur of what is behind them in the lightness
+  of the surface colour, as `backdrop: "niko"`, and can ask for it with
+  `BackdropPreference::Niko`. Pages draw no tint of their own over Niko, as over Maris.
+
 # Sabine 0.109
 
 - Apps built with this Sabine ask for Sabine 0.109 or newer, which gives their pages

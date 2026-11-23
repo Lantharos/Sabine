@@ -263,7 +263,7 @@ impl SabineWindow {
     /// Kestrel gives glass the material people chose for its kind of surface,
     /// or the one asked for, and pages hear which through
     /// `system.appearance().backdrop`. Pages draw no tint of their own over
-    /// Maris glass.
+    /// Maris or Niko glass.
     pub fn backdrop(mut self, role: BackdropRole, preference: BackdropPreference) -> Self {
         self.config.backdrop = WindowBackdrop { role, preference };
         self
