@@ -260,7 +260,7 @@ impl WindowRegion {
     }
 
     /// The same region with square corners, for windows against screen edges.
-    /// A sheet's corners square with the window's.
+    /// An inset sheet keeps its rounded corners, since glass still surrounds it.
     pub fn squared(&self) -> Self {
         let adaptive = self.adaptive.clone().map(|adaptive| match adaptive {
             WindowRegionAdaptive::RoundedRect { .. } => WindowRegionAdaptive::Full,
@@ -284,13 +284,14 @@ impl WindowRegion {
                 sidebar_width,
                 titlebar_height,
             },
-            WindowRegionAdaptive::Inset { insets, .. } => {
-                WindowRegionAdaptive::Inset { insets, radius: 0 }
-            }
-            WindowRegionAdaptive::AroundInset { insets, .. } => WindowRegionAdaptive::AroundInset {
+            WindowRegionAdaptive::AroundInset {
+                insets,
+                inset_radius,
+                ..
+            } => WindowRegionAdaptive::AroundInset {
                 radius: 0,
                 insets,
-                inset_radius: 0,
+                inset_radius,
             },
             square => square,
         });

@@ -368,14 +368,16 @@ mod tests {
     }
 
     #[test]
-    fn maximized_sheet_squares_with_the_window() {
+    fn maximized_sheet_keeps_its_corners_inside_a_square_window() {
         let regions = bold(280).squared();
         assert_tiles(&regions, &WindowRegion::full(), 1280, 720);
         let blur = regions.blur.as_ref().unwrap().resolved_rects(1280, 720);
         let opaque = regions.opaque.as_ref().unwrap().resolved_rects(1280, 720);
         assert!(covers(&blur, 0, 0));
-        assert!(covers(&opaque, 280, 8));
-        assert!(covers(&opaque, 1271, 711));
+        assert!(covers(&blur, 280, 8) && !covers(&opaque, 280, 8));
+        assert!(covers(&blur, 1271, 711) && !covers(&opaque, 1271, 711));
+        assert!(covers(&opaque, 287, 8));
+        assert!(covers(&opaque, 1264, 711));
     }
 
     #[test]
