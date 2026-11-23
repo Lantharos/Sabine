@@ -1,3 +1,8 @@
+# Unreleased
+
+- Apps built with this Sabine ask for Sabine 0.109 or newer, which gives their pages
+  `appWindow.setControlRegions`. Apps built with 0.108 could call it on an older Sabine that lacks it.
+
 # Sabine 0.108
 
 - A background app that can no longer open its window, such as one left running after you signed
