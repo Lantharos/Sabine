@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.109
 
 - Apps built with this Sabine ask for Sabine 0.109 or newer, which gives their pages
   `appWindow.setControlRegions`. Apps built with 0.108 could call it on an older Sabine that lacks it.
