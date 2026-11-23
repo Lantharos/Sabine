@@ -35,7 +35,7 @@ pub use sabine_platform::{
     NotificationAction, NotificationEvent, PlatformEvent, PowerEvent, PowerSource, PowerState,
     Shortcut, ShortcutModifiers, SingleInstanceActivation, SingleInstancePolicy, SleepBlocker,
     TrayActivation, TrayIcon, TrayMenuItem, TrayMenuItemKind, Urgency, WindowBackgroundEffect,
-    WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
+    WindowInsets, WindowRegion, WindowRegionRect, WindowRegions, async_runtime,
 };
 pub use sabine_runtime::{RuntimeConfig, RuntimeMode};
 pub use sabine_service::{AppEnvironment, Permission};
@@ -53,7 +53,7 @@ pub mod prelude {
         AppChrome, AppEnvironment, BridgeCommand, BridgeError, BridgeResponse, BridgeResult,
         SabineColor, SabineError, SabineLifecyclePolicy, SabineProcess, SabineProcessHandle,
         SabineResult, SabineWindow, SabineWindowChrome, TrayIcon, WindowBackgroundEffect,
-        WindowRegion, WindowRegionRect,
+        WindowInsets, WindowRegion, WindowRegionRect,
     };
 }
 

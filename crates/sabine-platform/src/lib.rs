@@ -29,7 +29,7 @@ pub use tasks::async_runtime;
 pub use window::Taskbar;
 pub use window::{
     BackdropMaterial, BackdropPreference, BackdropRole, WindowBackdrop, WindowBackgroundEffect,
-    WindowChrome, WindowEffect, WindowOptions, WindowRegion, WindowRegionAdaptive,
+    WindowChrome, WindowEffect, WindowInsets, WindowOptions, WindowRegion, WindowRegionAdaptive,
     WindowRegionRect, WindowRegions,
 };
 #[cfg(target_os = "linux")]

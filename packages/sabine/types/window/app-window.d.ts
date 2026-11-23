@@ -207,6 +207,14 @@ export interface SabinePopupApi {
 export declare const appWindow: SabineWindowApi;
 export declare const popup: SabinePopupApi;
 
+/** Distances from each of the window's edges. */
+export interface WindowInsets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 /** Regions for `appWindow.setRegions`, sized with the window as it resizes. */
 export declare const region: {
   empty(): WindowRegion;
@@ -221,4 +229,6 @@ export declare const region: {
     titlebarHeight: number,
     radius: number,
   ): WindowRegion;
+  inset(insets: WindowInsets, radius: number): WindowRegion;
+  aroundInset(radius: number, insets: WindowInsets, insetRadius: number): WindowRegion;
 };

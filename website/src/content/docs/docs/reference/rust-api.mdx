@@ -1151,6 +1151,13 @@ impl WindowRegion {
     pub fn titlebar_and_sidebar(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
     pub fn content_after_sidebar(sidebar_width: i32, titlebar_height: i32) -> Self;
     pub fn content_after_sidebar_rounded_right(sidebar_width: i32, titlebar_height: i32, radius: i32) -> Self;
+    pub fn inset(insets: WindowInsets, radius: i32) -> Self;
+    pub fn around_inset(radius: i32, insets: WindowInsets, inset_radius: i32) -> Self;
+}
+
+impl WindowInsets {
+    pub fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self;
+    pub fn uniform(inset: i32) -> Self;
 }
 
 impl WindowRegions {

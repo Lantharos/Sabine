@@ -204,6 +204,26 @@ JavaScript.
 | `WindowRegion::titlebar_and_sidebar(sidebar, titlebar, radius)` | `region.titlebarAndSidebar(sidebar, titlebar, radius)` | A titlebar strip across the top and a sidebar column below it |
 | `WindowRegion::content_after_sidebar(sidebar, titlebar)` | `region.contentAfterSidebar(sidebar, titlebar)` | Everything right of the sidebar and below the titlebar |
 | `WindowRegion::content_after_sidebar_rounded_right(sidebar, titlebar, radius)` | `region.contentAfterSidebarRoundedRight(sidebar, titlebar, radius)` | The same, rounded on its right corners |
+| `WindowRegion::inset(insets, radius)` | `region.inset(insets, radius)` | A sheet whose edges keep `insets` from the window's edges, rounded with `radius` |
+| `WindowRegion::around_inset(radius, insets, inset_radius)` | `region.aroundInset(radius, insets, insetRadius)` | The whole window with rounded corners, around that sheet |
+
+### Inset sheets
+
+A layout with glass all around an opaque sheet uses the same insets for both regions, so only the
+glass is blurred and nothing is drawn beneath the sheet:
+
+```rust
+use sabine::{WindowInsets, WindowRegion, WindowRegions};
+
+let sheet = WindowInsets::new(280, 8, 8, 8);
+WindowRegions::new()
+    .blur(WindowRegion::around_inset(15, sheet, 7))
+    .opaque(WindowRegion::inset(sheet, 7))
+    .input(WindowRegion::rounded_rect(15))
+```
+
+In JavaScript the insets are `{ left, top, right, bottom }`. The sheet's corner radius is the page's,
+so unlike the window's it grows with the page's zoom, and it turns square with the window's corners.
 
 ### Changing regions while the app runs
 

@@ -16,6 +16,8 @@ pub use effect::WindowEffect;
 pub use options::{WindowBackgroundEffect, WindowChrome, WindowOptions};
 #[cfg(target_os = "linux")]
 pub use placement::{CompositorSupport, WindowPlacement, compositor_support};
-pub use regions::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+pub use regions::{
+    WindowInsets, WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions,
+};
 #[cfg(target_os = "windows")]
 pub use taskbar::Taskbar;

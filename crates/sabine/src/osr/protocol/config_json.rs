@@ -1,4 +1,6 @@
-use sabine_platform::{WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions};
+use sabine_platform::{
+    WindowInsets, WindowRegion, WindowRegionAdaptive, WindowRegionRect, WindowRegions,
+};
 use serde_json::Value;
 
 use crate::{SabineLifecyclePolicy, SabineWindowControlAction, SabineWindowControlRegion};
@@ -178,6 +180,25 @@ fn adaptive_to_json(adaptive: Option<&WindowRegionAdaptive>) -> Value {
                 "radius": radius,
             })
         }
+        Some(WindowRegionAdaptive::Inset { insets, radius }) => {
+            serde_json::json!({
+                "kind": "inset",
+                "insets": insets_to_json(insets),
+                "radius": radius,
+            })
+        }
+        Some(WindowRegionAdaptive::AroundInset {
+            radius,
+            insets,
+            inset_radius,
+        }) => {
+            serde_json::json!({
+                "kind": "around_inset",
+                "radius": radius,
+                "insets": insets_to_json(insets),
+                "inset_radius": inset_radius,
+            })
+        }
         None => Value::Null,
     }
 }
@@ -241,8 +262,41 @@ fn adaptive_from_json(value: Option<&Value>) -> Option<WindowRegionAdaptive> {
                 radius: value.get("radius").and_then(Value::as_i64).unwrap_or(0) as i32,
             })
         }
+        "inset" => Some(WindowRegionAdaptive::Inset {
+            insets: insets_from_json(value.get("insets")),
+            radius: int(value, "radius"),
+        }),
+        "around_inset" => Some(WindowRegionAdaptive::AroundInset {
+            radius: int(value, "radius"),
+            insets: insets_from_json(value.get("insets")),
+            inset_radius: int(value, "inset_radius"),
+        }),
         _ => None,
     }
+}
+
+fn int(value: &Value, key: &str) -> i32 {
+    value.get(key).and_then(Value::as_i64).unwrap_or(0) as i32
+}
+
+fn insets_to_json(insets: &WindowInsets) -> Value {
+    serde_json::json!({
+        "left": insets.left,
+        "top": insets.top,
+        "right": insets.right,
+        "bottom": insets.bottom,
+    })
+}
+
+fn insets_from_json(value: Option<&Value>) -> WindowInsets {
+    value.map_or_else(WindowInsets::default, |value| {
+        WindowInsets::new(
+            int(value, "left"),
+            int(value, "top"),
+            int(value, "right"),
+            int(value, "bottom"),
+        )
+    })
 }
 
 fn rect_from_json(value: &Value) -> Option<WindowRegionRect> {
@@ -262,6 +316,16 @@ mod tests {
     fn lifecycle_survives_the_trip_to_the_window_host() {
         let expected = SabineLifecyclePolicy::hidden_window();
         let actual = lifecycle_from_json(Some(&lifecycle_to_json(&expected)));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn inset_sheets_survive_the_trip_to_the_window_host() {
+        let sheet = WindowInsets::new(280, 8, 8, 8);
+        let expected = WindowRegions::new()
+            .blur(WindowRegion::around_inset(15, sheet, 7))
+            .opaque(WindowRegion::inset(sheet, 7));
+        let actual = regions_from_json(Some(&regions_to_json(&expected)));
         assert_eq!(actual, expected);
     }
 }

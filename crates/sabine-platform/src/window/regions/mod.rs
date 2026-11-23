@@ -1,8 +1,8 @@
 mod shapes;
 
 use shapes::{
-    content_after_sidebar, content_after_sidebar_rounded_right, rounded_left, rounded_rect,
-    titlebar_and_sidebar,
+    around_inset, content_after_sidebar, content_after_sidebar_rounded_right, inset, rounded_left,
+    rounded_rect, titlebar_and_sidebar,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,6 +43,40 @@ impl WindowRegionRect {
     }
 }
 
+/// Distances from each of the window's edges, in logical pixels.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowInsets {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl WindowInsets {
+    pub fn new(left: i32, top: i32, right: i32, bottom: i32) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    pub fn uniform(inset: i32) -> Self {
+        Self::new(inset, inset, inset, inset)
+    }
+
+    fn zoomed(self, zoom: f64) -> Self {
+        let scale = |value: i32| (f64::from(value) * zoom).round() as i32;
+        Self::new(
+            scale(self.left),
+            scale(self.top),
+            scale(self.right),
+            scale(self.bottom),
+        )
+    }
+}
+
 /// A part of the window, in logical pixels. Its shapes follow the window's
 /// size as it changes; rectangles from [`WindowRegion::rect`] stay put.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -74,6 +108,15 @@ pub enum WindowRegionAdaptive {
         sidebar_width: i32,
         titlebar_height: i32,
         radius: i32,
+    },
+    Inset {
+        insets: WindowInsets,
+        radius: i32,
+    },
+    AroundInset {
+        radius: i32,
+        insets: WindowInsets,
+        inset_radius: i32,
     },
 }
 
@@ -135,6 +178,22 @@ impl WindowRegion {
         })
     }
 
+    /// A sheet whose edges keep `insets` from the window's edges, rounded
+    /// with `radius`.
+    pub fn inset(insets: WindowInsets, radius: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::Inset { insets, radius })
+    }
+
+    /// The window rounded with `radius`, around the sheet that
+    /// [`WindowRegion::inset`] gives for `insets` and `inset_radius`.
+    pub fn around_inset(radius: i32, insets: WindowInsets, inset_radius: i32) -> Self {
+        Self::adaptive(WindowRegionAdaptive::AroundInset {
+            radius,
+            insets,
+            inset_radius,
+        })
+    }
+
     fn adaptive(adaptive: WindowRegionAdaptive) -> Self {
         Self {
             rects: Vec::new(),
@@ -143,7 +202,8 @@ impl WindowRegion {
     }
 
     /// The region as a page zoomed by `zoom` lays it out. Corner radii belong
-    /// to the window, not the page, and stay as they are.
+    /// to the window, not the page, and stay as they are; a sheet's corners
+    /// belong to the page and grow with it.
     pub fn zoomed(&self, zoom: f64) -> Self {
         let scale = |value: i32| (f64::from(value) * zoom).round() as i32;
         let adaptive = self.adaptive.clone().map(|adaptive| match adaptive {
@@ -178,6 +238,19 @@ impl WindowRegion {
                 titlebar_height: scale(titlebar_height),
                 radius,
             },
+            WindowRegionAdaptive::Inset { insets, radius } => WindowRegionAdaptive::Inset {
+                insets: insets.zoomed(zoom),
+                radius: scale(radius),
+            },
+            WindowRegionAdaptive::AroundInset {
+                radius,
+                insets,
+                inset_radius,
+            } => WindowRegionAdaptive::AroundInset {
+                radius,
+                insets: insets.zoomed(zoom),
+                inset_radius: scale(inset_radius),
+            },
             whole_window => whole_window,
         });
         Self {
@@ -187,6 +260,7 @@ impl WindowRegion {
     }
 
     /// The same region with square corners, for windows against screen edges.
+    /// A sheet's corners square with the window's.
     pub fn squared(&self) -> Self {
         let adaptive = self.adaptive.clone().map(|adaptive| match adaptive {
             WindowRegionAdaptive::RoundedRect { .. } => WindowRegionAdaptive::Full,
@@ -209,6 +283,14 @@ impl WindowRegion {
             } => WindowRegionAdaptive::ContentAfterSidebar {
                 sidebar_width,
                 titlebar_height,
+            },
+            WindowRegionAdaptive::Inset { insets, .. } => {
+                WindowRegionAdaptive::Inset { insets, radius: 0 }
+            }
+            WindowRegionAdaptive::AroundInset { insets, .. } => WindowRegionAdaptive::AroundInset {
+                radius: 0,
+                insets,
+                inset_radius: 0,
             },
             square => square,
         });
@@ -260,6 +342,14 @@ impl WindowRegion {
                 titlebar_height,
                 radius,
             ),
+            Some(WindowRegionAdaptive::Inset { insets, radius }) => {
+                inset(width, height, insets, radius)
+            }
+            Some(WindowRegionAdaptive::AroundInset {
+                radius,
+                insets,
+                inset_radius,
+            }) => around_inset(width, height, radius, insets, inset_radius),
             None => self.rects.clone(),
         }
     }

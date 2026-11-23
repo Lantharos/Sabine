@@ -2,6 +2,9 @@
 
 - A background app that can no longer open its window, such as one left running after you signed
   out, ends when you open it, so opening it again starts it afresh instead of doing nothing.
+- Windows can have glass all around an opaque sheet: `WindowRegion::inset` is a sheet kept at set
+  distances from the window's edges and `WindowRegion::around_inset` the glass around it, so only
+  the glass is blurred and nothing is drawn beneath the sheet at any size.
 
 # Sabine 0.107
 

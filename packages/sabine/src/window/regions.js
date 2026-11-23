@@ -43,4 +43,15 @@ export const region = {
       radius,
     });
   },
+  inset(insets, radius) {
+    return adaptiveRegion({ kind: "inset", insets, radius });
+  },
+  aroundInset(radius, insets, insetRadius) {
+    return adaptiveRegion({
+      kind: "around_inset",
+      radius,
+      insets,
+      inset_radius: insetRadius,
+    });
+  },
 };
