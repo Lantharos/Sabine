@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.113
 
 - Opening an overlay where the desktop can't show one fails with an error the app can handle,
   instead of the window's fatal error. `sabine::overlays_supported()` and
