@@ -44,6 +44,54 @@ impl Default for SabineOverlay {
     }
 }
 
+/// Whether this desktop can show overlay windows. On Linux the compositor
+/// has to offer the overlay layer of `wlr-layer-shell`, which Kestrel offers
+/// only to apps that may record windows; Windows and macOS always can.
+pub fn overlays_supported() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        layer_shell::offered()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod layer_shell {
+    use wayland_client::globals::{GlobalListContents, registry_queue_init};
+    use wayland_client::protocol::wl_registry::{self, WlRegistry};
+    use wayland_client::{Connection, Dispatch, QueueHandle};
+
+    const INTERFACE: &str = "zwlr_layer_shell_v1";
+
+    struct Registry;
+
+    impl Dispatch<WlRegistry, GlobalListContents> for Registry {
+        fn event(
+            _: &mut Self,
+            _: &WlRegistry,
+            _: wl_registry::Event,
+            _: &GlobalListContents,
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
+        }
+    }
+
+    pub(super) fn offered() -> bool {
+        let Ok(connection) = Connection::connect_to_env() else {
+            return false;
+        };
+        registry_queue_init::<Registry>(&connection).is_ok_and(|(globals, _)| {
+            globals
+                .contents()
+                .with_list(|list| list.iter().any(|global| global.interface == INTERFACE))
+        })
+    }
+}
+
 impl SabineWindowConfig {
     pub(crate) fn show_as_overlay(&mut self, placement: SabineOverlay) {
         self.overlay = Some(placement);

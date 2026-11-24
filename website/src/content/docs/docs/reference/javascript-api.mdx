@@ -403,6 +403,7 @@ from `setTitle`, or from `control_window` in Rust, wins over the page's until it
 ```ts
 open(url: string, options?: OpenWindowOptions): Promise<number>;
 close(id: number): Promise<void>;
+overlaysSupported(): Promise<boolean>;
 
 interface OpenWindowOptions {
   title?: string;
@@ -440,7 +441,9 @@ setTimeout(() => appWindow.close(hint), 4000);
 On Linux an overlay is a surface on the overlay layer of `wlr-layer-shell`, so the compositor has to
 offer it: Kestrel offers it to sandboxed apps that declare `windows = "capture"` in
 [`[sandbox]`](/docs/distribution/app-sandbox/) or that the person allowed, and opening one elsewhere
-fails. On Windows and macOS it is a topmost window that never activates and lets clicks through.
+fails: `open` rejects and no window appears. `overlaysSupported()` says beforehand, so the app can
+show a notification instead. On Windows and macOS it is a topmost window that never activates and
+lets clicks through.
 
 ```ts
 const settings = await appWindow.open("settings.html", { title: "Settings", width: 560, height: 420 });

@@ -1,3 +1,9 @@
+# Unreleased
+
+- Opening an overlay where the desktop can't show one fails with an error the app can handle,
+  instead of the window's fatal error. `sabine::overlays_supported()` and
+  `appWindow.overlaysSupported()` say beforehand whether it can.
+
 # Sabine 0.112
 
 - `[sandbox] windows = "capture"` declares that an app records the windows it picks, such as a game,

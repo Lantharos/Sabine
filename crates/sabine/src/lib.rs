@@ -44,7 +44,7 @@ pub use window::{
     AppChrome, Download, DownloadControl, DownloadDecision, DownloadState, PermissionDecision,
     PermissionRequest, SabineColor, SabineLifecyclePolicy, SabineOverlay, SabineOverlayAnchor,
     SabineWindow, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
-    Spellcheck, WindowVisibility, resource_path,
+    Spellcheck, WindowVisibility, overlays_supported, resource_path,
 };
 
 /// Common imports for app authors.

@@ -108,6 +108,14 @@ impl OsrNativeHost {
         }
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::<dyn WinitWindow>::from(window),
+            Err(error) if self.config.overlay.is_some() => {
+                sabine_runtime::report_error(
+                    "window",
+                    format!("the overlay could not open: {error}"),
+                );
+                event_loop.exit();
+                return;
+            }
             Err(error) => {
                 self.fail(format!("Could not create the application window: {error}"));
                 event_loop.exit();

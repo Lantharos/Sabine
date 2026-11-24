@@ -29,7 +29,7 @@ pub use listeners::{
     PermissionRequest, WindowVisibility,
 };
 pub use manifest::resource_path;
-pub use overlay::{SabineOverlay, SabineOverlayAnchor};
+pub use overlay::{SabineOverlay, SabineOverlayAnchor, overlays_supported};
 #[cfg(not(target_os = "windows"))]
 pub(crate) use placement::launch_scale_factor;
 #[cfg(not(target_os = "linux"))]

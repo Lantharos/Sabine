@@ -173,6 +173,11 @@ impl SabineWindow {
                 .map(|window| BridgeResponse::json(serde_json::json!(window)))
                 .map_err(|error| BridgeError::new(error.to_string()))
         })
+        .bridge_handler("app.overlaysSupported", |_| {
+            Ok(BridgeResponse::json(serde_json::json!(
+                crate::overlays_supported()
+            )))
+        })
         .bridge_handler("app.closeWindow", move |command| {
             let window = command
                 .params

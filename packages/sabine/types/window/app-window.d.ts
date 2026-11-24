@@ -12,6 +12,12 @@ export interface SabineWindowApi {
    * its own size. Rejects for pages of other sites.
    */
   open(url: string, options?: OpenWindowOptions): Promise<number>;
+  /**
+   * Whether this desktop can show windows opened with `overlay`. On Linux the
+   * compositor has to offer the overlay layer of `wlr-layer-shell`; opening an
+   * overlay where it can't rejects.
+   */
+  overlaysSupported(): Promise<boolean>;
   minimize(): void;
   maximize(): void;
   unmaximize(): Promise<void>;

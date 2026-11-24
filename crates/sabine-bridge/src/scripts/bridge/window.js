@@ -35,6 +35,9 @@ window.sabine.window = Object.assign(window.sabine.window || {}, {
     if (id == null) return windowCommand("close");
     return window.sabine.bridge.invoke("app.closeWindow", { id }).then(() => {});
   },
+  overlaysSupported() {
+    return window.sabine.bridge.invoke("app.overlaysSupported");
+  },
   open(url, options = {}) {
     return window.sabine.bridge.invoke("app.openWindow", { ...options, url: String(url) });
   },

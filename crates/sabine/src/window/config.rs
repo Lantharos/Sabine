@@ -179,6 +179,13 @@ impl Default for SabineWindowConfig {
 
 impl SabineWindowConfig {
     pub(crate) fn validate(&self) -> SabineResult<()> {
+        if self.overlay.is_some() && !super::overlays_supported() {
+            return Err(SabineError::CreationFailed {
+                message:
+                    "This desktop can't show overlays; check sabine::overlays_supported() first"
+                        .into(),
+            });
+        }
         for registration in &self.desktop_services.deep_links {
             registration
                 .validate()
