@@ -194,6 +194,7 @@ mod tests {
             x11: false,
             microphone: true,
             camera: false,
+            record_windows: false,
         };
         assert!(resolve("microphone = true", Some(&sandbox)).is_ok());
         assert!(resolve("camera = true", Some(&sandbox)).is_err());

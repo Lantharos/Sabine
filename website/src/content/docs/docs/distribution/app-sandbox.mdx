@@ -31,6 +31,7 @@ own = ["org.mpris.MediaPlayer2.notes"]
 | `x11` | boolean | `false` | Whether the app opens X11 windows, which gives it the session's X server |
 | `microphone` | boolean | `false` | Whether the app records sound. Its pages also need `microphone` in [`[permissions]`](/docs/web/permissions/) |
 | `camera` | boolean | `false` | Whether the app uses cameras. Its pages also need `camera` in `[permissions]` |
+| `windows` | string | none | `capture` lets the app record the windows it picks, such as a game, and show overlays over them, through `ext-image-copy-capture-v1` and `wlr-layer-shell`. On Luft the person agrees to it when installing the app, and other apps have to ask first |
 | `unsandboxed` | boolean | `false` | Declares that the app can't run in a sandbox |
 | `reason` | string | | One line, shown to whoever decides, explaining why the app can't run in a sandbox. Only with `unsandboxed = true` |
 

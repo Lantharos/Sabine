@@ -14,6 +14,9 @@ const DEVICES: [&str; 3] = ["usb", "serial", "all"];
 const WILDCARD: &str = ".*";
 const MAX_BUS_NAME: usize = 255;
 const OBJECT: char = '@';
+/// What `windows` takes: recording the windows the app picks, such as a
+/// game, and showing overlays over them.
+const CAPTURE: &str = "capture";
 
 /// Names an app would use to widen its own sandbox: the permission store
 /// and portal backends, Flatpak's command runners, systemd and the bus itself.
@@ -53,6 +56,7 @@ pub struct SandboxSection {
     x11: Option<bool>,
     microphone: Option<bool>,
     camera: Option<bool>,
+    windows: Option<String>,
     #[serde(default)]
     unsandboxed: bool,
     reason: Option<String>,
@@ -71,6 +75,9 @@ pub enum Sandbox {
         x11: bool,
         microphone: bool,
         camera: bool,
+        /// Records the windows it picks and shows overlays over them, which
+        /// Kestrel lets it do without asking.
+        record_windows: bool,
     },
     Unsandboxed {
         reason: String,
@@ -89,6 +96,7 @@ impl SandboxSection {
                 || self.x11.is_some()
                 || self.microphone.is_some()
                 || self.camera.is_some()
+                || self.windows.is_some()
             {
                 return Err(
                     "[sandbox] of an unsandboxed app takes only `unsandboxed` and `reason`"
@@ -143,6 +151,15 @@ impl SandboxSection {
             validate_owned_name(name)?;
         }
         unique("own", own.iter().map(String::as_str))?;
+        if let Some(windows) = self
+            .windows
+            .as_deref()
+            .filter(|windows| *windows != CAPTURE)
+        {
+            return Err(format!(
+                "[sandbox] windows has `{windows}`; use `{CAPTURE}`"
+            ));
+        }
         Ok(Sandbox::Confined {
             network: self.network.unwrap_or(true),
             filesystems,
@@ -153,6 +170,7 @@ impl SandboxSection {
             x11: self.x11.unwrap_or(false),
             microphone: self.microphone.unwrap_or(false),
             camera: self.camera.unwrap_or(false),
+            record_windows: self.windows.is_some(),
         })
     }
 }
@@ -175,6 +193,7 @@ impl Sandbox {
                 x11,
                 microphone,
                 camera,
+                record_windows,
             } => {
                 let mut table = format!("\n[sandbox]\nnetwork = {network}\n");
                 for (key, values) in [
@@ -201,6 +220,9 @@ impl Sandbox {
                     if *wanted {
                         table.push_str(&format!("{key} = true\n"));
                     }
+                }
+                if *record_windows {
+                    table.push_str(&format!("windows = \"{CAPTURE}\"\n"));
                 }
                 table
             }
@@ -378,6 +400,15 @@ mod tests {
             "\n[sandbox]\nnetwork = false\nx11 = true\nmicrophone = true\n"
         );
         assert!(parse("unsandboxed = true\nreason = \"x\"\ncamera = true").is_err());
+    }
+
+    #[test]
+    fn recording_windows_reaches_the_manifest() {
+        assert_eq!(
+            parse("windows = \"capture\"").unwrap().manifest(),
+            "\n[sandbox]\nnetwork = true\nwindows = \"capture\"\n"
+        );
+        assert!(parse("windows = \"control\"").is_err());
     }
 
     #[test]

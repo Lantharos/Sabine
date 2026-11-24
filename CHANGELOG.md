@@ -1,5 +1,8 @@
 # Unreleased
 
+- `[sandbox] windows = "capture"` declares that an app records the windows it picks, such as a game,
+  and shows overlays over them. On Luft the person agrees to it when installing the app, and
+  Kestrel then offers the app the Wayland protocols for it without asking.
 - `NativeVideo` plays several audio tracks of a file at once, mixed, each at its own volume.
   `setAudioTracks([{ id, volume }])` replaces `selectAudioTrack(id)`, `audioTracks` reports each
   track's `volume`, and `mixAudio: true` starts with every track playing, as for a recording with
