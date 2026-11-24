@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.112
 
 - `[sandbox] windows = "capture"` declares that an app records the windows it picks, such as a game,
   and shows overlays over them. On Luft the person agrees to it when installing the app, and
