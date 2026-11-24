@@ -69,6 +69,7 @@ impl MediaHost {
                     volume: create.volume,
                     muted: create.muted,
                     rate: create.rate,
+                    mix_audio: create.mix_audio,
                 };
                 return self.create(options, events).map(|id| json!({ "id": id }));
             }

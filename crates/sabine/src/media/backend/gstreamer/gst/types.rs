@@ -5,6 +5,9 @@ pub(in crate::media) type BusSyncHandler =
     unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> c_int;
 pub(in crate::media) type DestroyNotify = unsafe extern "C" fn(*mut c_void);
 pub(in crate::media) type AppSinkCallback = unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int;
+pub(in crate::media) type ClosureNotify = unsafe extern "C" fn(*mut c_void, *mut c_void);
+pub(in crate::media) type PadProbeCallback =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> c_int;
 
 pub(in crate::media) const TRUE: c_int = 1;
 pub(in crate::media) const FALSE: c_int = 0;
@@ -28,6 +31,12 @@ pub(in crate::media) const SEEK_FLAG_INSTANT_RATE_CHANGE: c_int = 1 << 10;
 pub(in crate::media) const BUS_DROP: c_int = 0;
 pub(in crate::media) const FLOW_OK: c_int = 0;
 pub(in crate::media) const MAP_READ: c_int = 1;
+
+pub(in crate::media) const ITERATOR_OK: c_int = 1;
+pub(in crate::media) const ITERATOR_RESYNC: c_int = 2;
+pub(in crate::media) const PAD_PROBE_TYPE_EVENT_DOWNSTREAM: u32 = 1 << 6;
+pub(in crate::media) const PAD_PROBE_OK: c_int = 1;
+pub(in crate::media) const EVENT_STREAM_START: u32 = (40 << 8) | (1 << 1) | (1 << 2) | (1 << 3);
 
 pub(in crate::media) const MESSAGE_EOS: u32 = 1 << 0;
 pub(in crate::media) const MESSAGE_ERROR: u32 = 1 << 1;
@@ -61,6 +70,12 @@ pub(in crate::media) struct GValue {
     data: [u64; 2],
 }
 
+impl GValue {
+    pub(in crate::media) fn is_set(&self) -> bool {
+        self.g_type != 0
+    }
+}
+
 const MINI_OBJECT_SIZE: usize = 64;
 
 #[repr(C)]
@@ -69,6 +84,12 @@ pub(in crate::media) struct MessageHeader {
     pub(in crate::media) kind: u32,
     _timestamp: u64,
     pub(in crate::media) source: *mut c_void,
+}
+
+#[repr(C)]
+pub(in crate::media) struct EventHeader {
+    _mini_object: [u8; MINI_OBJECT_SIZE],
+    pub(in crate::media) kind: u32,
 }
 
 #[repr(C)]

@@ -892,13 +892,13 @@ class NativeVideo extends EventTarget {
   volume: number;
   muted: boolean;
   loop: boolean;
-  readonly audioTracks: NativeVideoTrack[];
+  readonly audioTracks: NativeVideoAudioTrack[];
   readonly subtitleTracks: NativeVideoTrack[];
   readonly activeCue: NativeVideoCue | null;
   fastSeek(time: number): void;
   play(): Promise<void>;
   pause(): void;
-  selectAudioTrack(id: string): Promise<void>;
+  setAudioTracks(tracks: NativeVideoAudioMix[]): Promise<void>;
   selectSubtitleTrack(id: string | null): Promise<void>;
   attach(element: Element, options?: NativeVideoAttachOptions): void;
   detach(): void;
@@ -917,6 +917,7 @@ interface NativeVideoOptions extends NativeVideoAttachOptions {
   volume?: number;
   muted?: boolean;
   playbackRate?: number;
+  mixAudio?: boolean;
 }
 
 interface NativeVideoTrack {
@@ -925,6 +926,15 @@ interface NativeVideoTrack {
   label: string | null;
   codec: string | null;
   selected: boolean;
+}
+
+interface NativeVideoAudioTrack extends NativeVideoTrack {
+  volume: number;
+}
+
+interface NativeVideoAudioMix {
+  id: string;
+  volume?: number; // from 0 to 1, defaults to 1
 }
 
 interface NativeVideoCue {

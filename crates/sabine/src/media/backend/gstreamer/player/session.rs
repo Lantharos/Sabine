@@ -26,8 +26,11 @@ pub(super) struct Session {
     inbox: Arc<Inbox>,
     uri: String,
     pipeline: Option<Pipeline>,
+    /// Counts pipelines built, so messages from a replaced one are dropped.
+    generation: u64,
     presenter: Presenter,
     tracks: Tracks,
+    mix_audio: bool,
     playing: bool,
     reported_playing: bool,
     looping: bool,
@@ -58,9 +61,11 @@ impl Session {
             inbox,
             uri: options.uri,
             pipeline: None,
+            generation: 0,
             presenter,
-            tracks: Tracks::default(),
+            tracks: Tracks::new(options.mix_audio),
             playing: options.autoplay,
+            mix_audio: options.mix_audio,
             reported_playing: false,
             looping: options.looping,
             rate: options.rate,
@@ -86,6 +91,7 @@ impl Session {
             if mail.stop {
                 return;
             }
+            let generation = self.generation;
             for control in mail.controls {
                 self.control(control);
             }
@@ -94,6 +100,9 @@ impl Session {
                 self.presenter.draw();
             }
             for message in mail.messages {
+                if self.generation != generation {
+                    break;
+                }
                 self.handle(message);
             }
             for cue in mail.cues {
@@ -120,13 +129,35 @@ impl Session {
             self.presenter.gst_display(),
             self.presenter.gst_context(),
             &self.inbox,
+            self.mixing(),
         )?;
-        pipeline.set_volume(self.volume);
+        pipeline.set_volume(self.volume, self.tracks.audio());
         pipeline.set_muted(self.muted);
         pipeline.set_playing(false);
         self.pipeline = Some(pipeline);
+        self.generation += 1;
         self.prerolled = false;
         Ok(())
+    }
+
+    /// Pipelines for `mix_audio` mix from the start, so the page can set
+    /// each track's volume without the pipeline being rebuilt.
+    fn mixing(&self) -> bool {
+        self.mix_audio || self.tracks.audio().len() > 1
+    }
+
+    /// Plays the chosen streams. A pipeline built without a mixer cannot
+    /// start mixing, so it is rebuilt at the same position.
+    fn select_streams(&mut self) {
+        let Some(pipeline) = &self.pipeline else {
+            return;
+        };
+        if self.mixing() && !pipeline.mixes() {
+            self.park();
+            self.resume();
+        } else {
+            pipeline.select_streams(&streams::selection(&self.tracks));
+        }
     }
 
     fn park(&mut self) {
@@ -184,7 +215,7 @@ impl Session {
             Command::Volume(volume) => {
                 self.volume = volume;
                 if let Some(pipeline) = &self.pipeline {
-                    pipeline.set_volume(volume);
+                    pipeline.set_volume(volume, self.tracks.audio());
                 }
             }
             Command::Muted(muted) => {
@@ -195,10 +226,16 @@ impl Session {
             }
             Command::Loop(looping) => self.looping = looping,
             Command::Tracks(request) => {
-                if self.tracks.request(request)
-                    && let Some(pipeline) = &self.pipeline
-                {
-                    pipeline.select_streams(&streams::selection(&self.tracks));
+                let streams = streams::selection(&self.tracks);
+                if self.tracks.request(request) {
+                    if streams::selection(&self.tracks) == streams {
+                        self.emit("tracks", self.tracks.to_json());
+                    } else {
+                        self.select_streams();
+                    }
+                }
+                if let Some(pipeline) = &self.pipeline {
+                    pipeline.set_volume(self.volume, self.tracks.audio());
                 }
                 if !self.tracks.subtitles_enabled() {
                     self.emit("cue", json!({ "text": "", "start": 0, "end": 0 }));
@@ -270,8 +307,9 @@ impl Session {
                 if let Some(tracks) = unsafe { streams::collection(gst, handle) } {
                     self.tracks.set(tracks);
                 }
+                self.select_streams();
                 if let Some(pipeline) = &self.pipeline {
-                    pipeline.select_streams(&streams::selection(&self.tracks));
+                    pipeline.set_volume(self.volume, self.tracks.audio());
                 }
             }
             types::MESSAGE_STREAMS_SELECTED => {

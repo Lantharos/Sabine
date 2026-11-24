@@ -52,6 +52,7 @@ pub(super) struct PlayerOptions {
     pub(super) volume: f64,
     pub(super) muted: bool,
     pub(super) rate: f64,
+    pub(super) mix_audio: bool,
 }
 
 /// A playback request from the page.
@@ -66,10 +67,17 @@ pub(super) enum Command {
     Tracks(TrackRequest),
 }
 
-/// A track choice from the page: `None` keeps the current choice and
-/// `Some(None)` turns the track kind off.
+/// A track choice from the page: `None` keeps the current choice. Every
+/// listed audio track plays, mixed; `Some(None)` turns subtitles off.
 #[derive(Clone, Default)]
 pub(super) struct TrackRequest {
-    pub(super) audio: Option<Option<String>>,
+    pub(super) audio: Option<Vec<AudioMix>>,
     pub(super) subtitle: Option<Option<String>>,
+}
+
+/// An audio track to play and its volume in the mix.
+#[derive(Clone, PartialEq)]
+pub(super) struct AudioMix {
+    pub(super) id: String,
+    pub(super) volume: f64,
 }

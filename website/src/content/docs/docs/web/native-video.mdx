@@ -86,6 +86,7 @@ A page that reloads or navigates away stops its videos.
 | `muted` | `false` | Starts muted. |
 | `volume` | `1` | The volume, from 0 to 1. |
 | `playbackRate` | `1` | The playback speed, above 0 and up to 16. |
+| `mixAudio` | `false` | Plays every audio track together instead of only the default one. |
 
 The player then works like a media element:
 
@@ -117,10 +118,28 @@ native.addEventListener("trackschange", () => {
   renderTrackMenu(native.audioTracks, native.subtitleTracks);
 });
 
-await native.selectAudioTrack(track.id);
+await native.setAudioTracks([{ id: track.id }]);
 await native.selectSubtitleTrack(subtitle.id);
 await native.selectSubtitleTrack(null);
 ```
+
+`setAudioTracks` plays every track it lists at once, mixed, and silences the others. Each track
+has its own `volume` from 0 to 1, which `audioTracks` reports and the player's `volume` and
+`muted` apply on top of. A recording with game audio and a microphone on separate tracks can play
+both and balance them:
+
+```ts
+const native = await NativeVideo.create(url, { element: stage, mixAudio: true });
+const [game, voice] = native.audioTracks;
+await native.setAudioTracks([
+  { id: game.id, volume: 0.6 },
+  { id: voice.id, volume: 1 },
+]);
+```
+
+Pass `mixAudio` when you know you'll mix tracks: on Linux the player needs a mixer for more than
+one track, and going from one track to several without it rebuilds the player, with a short gap
+in the sound. Changing only volumes never interrupts playback.
 
 Subtitles arrive as text for the page to draw, so they match the rest of its design. `activeCue`
 holds the cue showing now, `{ text, start, end }`, or `null`, and changes with `cuechange`:
@@ -182,7 +201,8 @@ resolution. The subsurface updates without redrawing the window. A video paused 
 releases its decoder and resumes from the same position.
 
 Playing a codec takes a GStreamer plugin that decodes it, such as the VA-API and NVDEC decoders
-in `gst-plugins-bad` or the software decoders in `gst-libav`.
+in `gst-plugins-bad` or the software decoders in `gst-libav`. Several audio tracks play through
+`audiomixer`, which sets each one's volume; with one track, nothing is mixed.
 
 </TabItem>
 <TabItem label="Windows">
@@ -191,6 +211,10 @@ Each video runs a Media Foundation Media Engine on its own thread, decoding in h
 device. It presents into a swap chain that is part of the window's DirectComposition tree, beneath
 the page, so frames reach the compositor without redrawing the window. Audio tracks are the
 engine's streams, and subtitles come from its timed-text tracks.
+
+The engine plays one audio stream at a time, so each further track of a mix plays through an
+audio-only engine of its own, which follows the video's position and is moved back when it drifts
+more than 50 milliseconds. Windows mixes their sound.
 
 Windows decodes H.264 and AAC out of the box. HEVC needs the HEVC Video Extensions from the
 Microsoft Store on machines that don't include them.
@@ -202,6 +226,10 @@ Each video is an AVFoundation `AVPlayer` shown by an `AVPlayerLayer` beneath the
 renders into. AVFoundation decodes in hardware and composites the video itself, so frames never
 redraw the window. Audio and subtitle choices use the file's media selection groups, with
 automatic selection by system preferences turned off.
+
+An item plays one option of each group, so each further track of a mix plays through an
+`AVPlayer` of its own without a layer, which follows the video's position and is moved back when
+it drifts more than 50 milliseconds.
 
 Subtitles arrive as cues that last until the next cue replaces or clears them, so a cue's `end`
 is `null` on macOS.

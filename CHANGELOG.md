@@ -1,3 +1,10 @@
+# Unreleased
+
+- `NativeVideo` plays several audio tracks of a file at once, mixed, each at its own volume.
+  `setAudioTracks([{ id, volume }])` replaces `selectAudioTrack(id)`, `audioTracks` reports each
+  track's `volume`, and `mixAudio: true` starts with every track playing, as for a recording with
+  game audio and a microphone on separate tracks.
+
 # Sabine 0.111
 
 - Keep inset sheets rounded in square windows

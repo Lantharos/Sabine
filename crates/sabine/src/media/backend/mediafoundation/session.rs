@@ -2,7 +2,8 @@
 //
 // The engine owns its windowless swapchain and only has one once it knows the
 // video, so the swapchain is bound to the player's visual whenever both exist.
-// Its size follows the page element in physical pixels.
+// Its size follows the page element in physical pixels. The first chosen audio
+// track plays through the engine and the others through companions.
 
 use std::{
     sync::Arc,
@@ -28,6 +29,7 @@ use windows::Win32::{
 };
 use windows::core::{BSTR, HRESULT};
 
+use super::companion::{Companions, Settings};
 use super::engine::Engine;
 use super::streams;
 use super::worker::{Cue, Inbox, Order, Report, Surface};
@@ -52,6 +54,8 @@ pub(super) struct Session {
     bound: bool,
     frame: Option<Frame>,
     tracks: Tracks,
+    companions: Companions,
+    volume: f64,
     loaded: bool,
     reported_playing: bool,
     buffering: bool,
@@ -107,6 +111,13 @@ impl Session {
                 .SetSource(&BSTR::from(options.uri.as_str()))
                 .map_err(|error| error.message())?;
         }
+        let settings = Settings {
+            volume: options.volume,
+            muted: options.muted,
+            rate: options.rate,
+            looping: options.looping,
+        };
+        let companions = Companions::new(options.uri, Arc::clone(&inbox), settings);
         Ok(Self {
             engine,
             events,
@@ -114,7 +125,9 @@ impl Session {
             surface: None,
             bound: false,
             frame: None,
-            tracks: Tracks::default(),
+            tracks: Tracks::new(options.mix_audio),
+            companions,
+            volume: options.volume,
             loaded: false,
             reported_playing: false,
             buffering: false,
@@ -141,6 +154,7 @@ impl Session {
                 .is_some_and(|deadline| deadline <= Instant::now())
             {
                 self.report_time();
+                self.companions.follow(&self.engine.media);
                 self.next_time = Some(Instant::now() + TIME_INTERVAL);
             }
         }
@@ -162,15 +176,25 @@ impl Session {
     }
 
     fn apply(&mut self, command: Command) {
-        if let Command::Tracks(request) = command {
-            if self.tracks.request(request) {
-                streams::apply(&self.engine.media, self.engine.text.as_ref(), &self.tracks);
-                self.report_tracks();
+        match command {
+            Command::Tracks(request) => {
+                if self.tracks.request(request) {
+                    self.select_tracks();
+                }
+                if !self.tracks.subtitles_enabled() {
+                    self.clear_cue();
+                }
+                return;
             }
-            if !self.tracks.subtitles_enabled() {
-                self.clear_cue();
+            Command::Volume(volume) => {
+                self.volume = volume;
+                self.apply_volume();
+                return;
             }
-            return;
+            Command::Muted(muted) => self.companions.set_muted(muted),
+            Command::Rate(rate) => self.companions.set_rate(rate),
+            Command::Loop(looping) => self.companions.set_loop(looping),
+            Command::Play | Command::Pause | Command::Seek { .. } => {}
         }
         let media = &self.engine.media;
         let result = unsafe {
@@ -184,15 +208,35 @@ impl Session {
                 Command::Rate(rate) => media
                     .SetDefaultPlaybackRate(rate)
                     .and_then(|()| media.SetPlaybackRate(rate)),
-                Command::Volume(volume) => media.SetVolume(volume),
                 Command::Muted(muted) => media.SetMuted(muted),
                 Command::Loop(looping) => media.SetLoop(looping),
-                Command::Tracks(_) => Ok(()),
+                Command::Volume(_) | Command::Tracks(_) => Ok(()),
             }
         };
         if let Err(error) = result {
             self.emit("error", json!({ "message": error.message() }));
         }
+        self.companions.follow(media);
+    }
+
+    fn select_tracks(&mut self) {
+        streams::apply(&self.engine.media, self.engine.text.as_ref(), &self.tracks);
+        let extra = self.tracks.audio().get(1..).unwrap_or_default();
+        if let Err(message) = self.companions.arrange(extra) {
+            self.emit("error", json!({ "message": message }));
+        }
+        self.apply_volume();
+        self.report_tracks();
+    }
+
+    fn apply_volume(&mut self) {
+        let audio = self.tracks.audio();
+        let first = audio.first().map_or(1.0, |track| track.volume);
+        if let Err(error) = unsafe { self.engine.media.SetVolume(self.volume * first) } {
+            self.emit("error", json!({ "message": error.message() }));
+        }
+        let extra = audio.get(1..).unwrap_or_default();
+        self.companions.set_volume(self.volume, extra);
     }
 
     fn report(&mut self, report: Report) {
@@ -202,6 +246,12 @@ impl Session {
                 code,
                 result,
             } => self.engine_event(MF_MEDIA_ENGINE_EVENT(event as i32), code, result),
+            Report::Companion { stream, event } => {
+                if MF_MEDIA_ENGINE_EVENT(event as i32) == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA {
+                    self.companions.loaded(stream, &self.engine.media);
+                    self.report_tracks();
+                }
+            }
             Report::TextTracks => self.read_tracks(),
             Report::Cue(cue) => self.show_cue(cue),
             Report::CueEnded(id) => {
@@ -240,9 +290,13 @@ impl Session {
             }
             MF_MEDIA_ENGINE_EVENT_PLAYING => {
                 self.buffering = false;
+                self.companions.follow(&self.engine.media);
                 self.report_state(true);
             }
-            MF_MEDIA_ENGINE_EVENT_PAUSE => self.report_state(false),
+            MF_MEDIA_ENGINE_EVENT_PAUSE => {
+                self.companions.follow(&self.engine.media);
+                self.report_state(false);
+            }
             MF_MEDIA_ENGINE_EVENT_WAITING | MF_MEDIA_ENGINE_EVENT_BUFFERINGSTARTED => {
                 if !std::mem::replace(&mut self.buffering, true) {
                     self.reported_playing = false;
@@ -252,9 +306,11 @@ impl Session {
             }
             MF_MEDIA_ENGINE_EVENT_BUFFERINGENDED => self.buffering = false,
             MF_MEDIA_ENGINE_EVENT_SEEKED => {
+                self.companions.follow(&self.engine.media);
                 self.emit("seeked", json!({ "time": self.time() }));
             }
             MF_MEDIA_ENGINE_EVENT_ENDED => {
+                self.companions.follow(&self.engine.media);
                 self.reported_playing = false;
                 self.next_time = None;
                 self.report_time();
@@ -315,12 +371,12 @@ impl Session {
     fn read_tracks(&mut self) {
         let tracks = streams::tracks(&self.engine.media, self.engine.text.as_ref());
         self.tracks.set(tracks);
-        streams::apply(&self.engine.media, self.engine.text.as_ref(), &self.tracks);
-        self.report_tracks();
+        self.select_tracks();
     }
 
     fn report_tracks(&mut self) {
-        let selected = streams::selected(&self.engine.media, &self.tracks);
+        let mut selected = streams::selected(&self.engine.media, &self.tracks);
+        selected.extend(self.companions.ids());
         self.tracks.set_selected(selected);
         self.emit("tracks", self.tracks.to_json());
     }

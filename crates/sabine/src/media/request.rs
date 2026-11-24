@@ -2,7 +2,7 @@ use sabine_bridge::media as commands;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::command::{Command, TrackRequest};
+use super::command::{AudioMix, Command, TrackRequest};
 use super::geometry::{PageRect, Rect};
 
 pub(super) enum Request {
@@ -26,6 +26,8 @@ pub(super) struct Create {
     pub(super) muted: bool,
     #[serde(default = "one")]
     pub(super) rate: f64,
+    #[serde(default)]
+    pub(super) mix_audio: bool,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +40,28 @@ struct Placement {
     clip: Option<Rect>,
     #[serde(default = "shown")]
     visible: bool,
+}
+
+#[derive(Deserialize)]
+struct Selection {
+    id: u64,
+    audio: Option<Vec<AudioTrack>>,
+    #[serde(default, deserialize_with = "present")]
+    subtitle: Option<Option<String>>,
+}
+
+#[derive(Deserialize)]
+struct AudioTrack {
+    id: String,
+    #[serde(default = "one")]
+    volume: f64,
+}
+
+/// Tells a field set to `null` apart from a missing one.
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error> {
+    Option::deserialize(deserializer).map(Some)
 }
 
 #[derive(Deserialize)]
@@ -146,16 +170,21 @@ impl Request {
                 Self::Command(looping.id, Command::Loop(looping.value))
             }
             commands::SELECT_TRACKS_COMMAND => {
-                let choice = |name: &str| {
-                    params
-                        .get(name)
-                        .map(|value| value.as_str().map(str::to_string))
-                };
+                let selection: Selection = serde_json::from_value(params).map_err(invalid)?;
+                let audio = selection.audio.map(|tracks| {
+                    tracks
+                        .into_iter()
+                        .map(|track| AudioMix {
+                            id: track.id,
+                            volume: volume(track.volume),
+                        })
+                        .collect()
+                });
                 let request = TrackRequest {
-                    audio: choice("audio"),
-                    subtitle: choice("subtitle"),
+                    audio,
+                    subtitle: selection.subtitle,
                 };
-                Self::Command(id(params)?, Command::Tracks(request))
+                Self::Command(selection.id, Command::Tracks(request))
             }
             _ => return Err(format!("unknown media command {command}")),
         })

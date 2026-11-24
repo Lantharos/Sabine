@@ -1,5 +1,6 @@
 //! AVFoundation playback in layers stacked beneath the window's Metal layer.
 
+mod companion;
 mod observer;
 mod playback;
 mod selection;

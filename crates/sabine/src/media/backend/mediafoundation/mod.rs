@@ -4,6 +4,7 @@
 // another one, so every mount builds fresh visuals. Positions are physical
 // pixels, matching the page swapchain above them.
 
+mod companion;
 mod engine;
 mod session;
 mod streams;

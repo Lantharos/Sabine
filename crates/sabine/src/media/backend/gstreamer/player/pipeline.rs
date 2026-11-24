@@ -5,7 +5,9 @@ use std::{
 
 use super::cues::cue_ready;
 use super::inbox::{Inbox, Message};
+use super::mixer::Mixer;
 use crate::media::backend::gstreamer::gst::{self, CudaContext, Gst, Handle, types};
+use crate::media::command::AudioMix;
 
 const PLAYBIN_FLAGS: &CStr = c"video+audio+text+soft-volume+native-video";
 const VIDEO_SINK: &CStr = c"glupload ! glcolorconvert ! appsink name=pictures \
@@ -14,10 +16,12 @@ const VIDEO_SINK: &CStr = c"glupload ! glcolorconvert ! appsink name=pictures \
 
 /// A `playbin3` whose video lands in GL textures the presenter samples and
 /// whose subtitles arrive as text instead of being burnt into the picture.
+/// Only a pipeline built with a mixer can play several audio streams.
 pub(super) struct Pipeline {
     gst: &'static Gst,
     pub(super) playbin: Handle,
     pub(super) pictures: Handle,
+    mixer: Option<Mixer>,
     inbox: Arc<Inbox>,
 }
 
@@ -37,6 +41,7 @@ impl Pipeline {
         gl_display: Handle,
         gl_context: Handle,
         inbox: &Arc<Inbox>,
+        mixing: bool,
     ) -> Result<Self, String> {
         unsafe {
             let playbin = make(gst, c"playbin3")?;
@@ -55,6 +60,22 @@ impl Pipeline {
             gst::set_object_property(gst, playbin, c"text-sink", element_type, subtitles);
             if let Ok(tempo) = make(gst, c"scaletempo") {
                 gst::set_object_property(gst, playbin, c"audio-filter", element_type, tempo);
+            }
+            let mixer = match mixing.then(|| make(gst, c"audiomixer")).transpose() {
+                Ok(mixer) => mixer.map(|element| Mixer::new(gst, element)),
+                Err(error) => {
+                    (gst.gst_object_unref)(playbin);
+                    return Err(error);
+                }
+            };
+            if let Some(mixer) = &mixer {
+                gst::set_object_property(
+                    gst,
+                    playbin,
+                    c"audio-stream-combiner",
+                    element_type,
+                    mixer.element.0,
+                );
             }
             gst::set_property(gst, playbin, c"flags", PLAYBIN_FLAGS);
             gst::set_property(gst, playbin, c"uri", &gst::text(uri));
@@ -95,6 +116,7 @@ impl Pipeline {
                 gst,
                 playbin: Handle(playbin),
                 pictures: Handle(pictures),
+                mixer,
                 inbox: Arc::clone(inbox),
             })
         }
@@ -162,7 +184,20 @@ impl Pipeline {
         }
     }
 
-    pub(super) fn set_volume(&self, volume: f64) {
+    pub(super) fn mixes(&self) -> bool {
+        self.mixer.is_some()
+    }
+
+    /// Plays `mix` at `volume`. Without a mixer, the one track's volume
+    /// scales the whole output.
+    pub(super) fn set_volume(&self, volume: f64, mix: &[AudioMix]) {
+        let volume = match &self.mixer {
+            Some(mixer) => {
+                mixer.set(mix);
+                volume
+            }
+            None => volume * mix.first().map_or(1.0, |track| track.volume),
+        };
         unsafe {
             gst::set_property(
                 self.gst,

@@ -1,9 +1,10 @@
-use std::ffi::{c_char, c_int, c_uint, c_void};
+use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 
 use libloading::Library;
 
 use super::types::{
-    AppSinkCallbacks, BusSyncHandler, DestroyNotify, GError, GType, GValue, MapInfo,
+    AppSinkCallbacks, BusSyncHandler, ClosureNotify, DestroyNotify, GError, GType, GValue, MapInfo,
+    PadProbeCallback,
 };
 
 type Object = *mut c_void;
@@ -45,6 +46,9 @@ libraries! {
     }
     "libgobject-2.0.so.0" {
         fn g_object_set_property(Object, *const c_char, *const GValue);
+        fn g_signal_connect_data(Object, *const c_char, *const c_void, *mut c_void, Option<ClosureNotify>, c_int) -> c_ulong;
+        fn g_value_get_object(*const GValue) -> Object;
+        fn g_value_reset(*mut GValue) -> *mut GValue;
         fn g_value_init(*mut GValue, GType) -> *mut GValue;
         fn g_value_set_object(*mut GValue, Object);
         fn g_value_set_uint(*mut GValue, c_uint);
@@ -79,6 +83,14 @@ libraries! {
         fn gst_element_query_duration(Object, c_int, *mut i64) -> c_int;
         fn gst_element_seek(Object, f64, c_int, c_int, c_int, i64, c_int, i64) -> c_int;
         fn gst_element_send_event(Object, Object) -> c_int;
+        fn gst_element_iterate_sink_pads(Object) -> Object;
+        fn gst_iterator_next(Object, *mut GValue) -> c_int;
+        fn gst_iterator_resync(Object);
+        fn gst_iterator_free(Object);
+        fn gst_pad_get_stream_id(Object) -> *mut c_char;
+        fn gst_pad_add_probe(Object, c_uint, Option<PadProbeCallback>, *mut c_void, Option<DestroyNotify>) -> c_ulong;
+        fn gst_pad_probe_info_get_event(*mut c_void) -> Object;
+        fn gst_event_parse_stream_start(Object, *mut *const c_char);
         fn gst_event_new_select_streams(*mut c_void) -> Object;
         fn gst_context_new(*const c_char, c_int) -> Object;
         fn gst_context_writable_structure(Object) -> Object;

@@ -19,6 +19,7 @@ use objc2_foundation::{
 };
 use serde_json::{Value, json};
 
+use super::companion::Companions;
 use super::observer::{Observer, Target};
 use super::selection::{self, Group, Groups};
 use crate::media::command::{self, Command, Events, PlayerOptions};
@@ -65,6 +66,7 @@ pub(super) struct Playback {
     legible: Retained<AVPlayerItemLegibleOutput>,
     clock: Retained<AnyObject>,
     events: Events,
+    main_thread: MainThreadMarker,
     state: RefCell<State>,
 }
 
@@ -76,8 +78,10 @@ struct State {
     ended: bool,
     looping: bool,
     rate: f64,
+    volume: f64,
     tracks: Tracks,
     groups: Groups,
+    companions: Companions,
 }
 
 impl Playback {
@@ -116,6 +120,7 @@ impl Playback {
                 legible,
                 clock,
                 events,
+                main_thread,
                 state: RefCell::new(State {
                     loaded: false,
                     playing: options.autoplay,
@@ -124,8 +129,10 @@ impl Playback {
                     ended: false,
                     looping: options.looping,
                     rate: options.rate,
-                    tracks: Tracks::default(),
+                    volume: options.volume,
+                    tracks: Tracks::new(options.mix_audio),
                     groups: Groups::default(),
+                    companions: Companions::new(options.volume, options.muted),
                 }),
             }
         });
@@ -185,35 +192,74 @@ impl Playback {
                     self.seek(0.0, false);
                 }
                 unsafe { self.player.setRate(rate as f32) };
+                self.follow();
             }
             Command::Pause => {
                 self.state.borrow_mut().playing = false;
                 unsafe { self.player.pause() };
+                self.follow();
             }
             Command::Seek { time, fast } => self.seek(time, fast),
             Command::Rate(rate) => {
-                let mut state = self.state.borrow_mut();
-                state.rate = rate;
-                if state.playing {
+                let playing = {
+                    let mut state = self.state.borrow_mut();
+                    state.rate = rate;
+                    state.playing
+                };
+                if playing {
                     unsafe { self.player.setRate(rate as f32) };
+                    self.follow();
                 }
             }
-            Command::Volume(volume) => unsafe { self.player.setVolume(volume as f32) },
-            Command::Muted(muted) => unsafe { self.player.setMuted(muted) },
+            Command::Volume(volume) => {
+                let mut state = self.state.borrow_mut();
+                state.volume = volume;
+                self.apply_volume(&mut state);
+            }
+            Command::Muted(muted) => {
+                unsafe { self.player.setMuted(muted) };
+                self.state.borrow_mut().companions.set_muted(muted);
+            }
             Command::Loop(looping) => self.state.borrow_mut().looping = looping,
             Command::Tracks(request) => {
-                let subtitles = {
+                let (known, subtitles) = {
                     let mut state = self.state.borrow_mut();
-                    if state.tracks.request(request) {
-                        selection::apply(&self.item, &state.groups, &state.tracks);
+                    let known = state.tracks.request(request);
+                    if known {
+                        self.select_tracks(&mut state);
                     }
-                    state.tracks.subtitles_enabled()
+                    (known, state.tracks.subtitles_enabled())
                 };
+                if known {
+                    self.follow();
+                    self.selection_changed();
+                }
                 if !subtitles {
                     self.emit("cue", json!({ "text": "", "start": 0, "end": null }));
                 }
             }
         }
+    }
+
+    fn select_tracks(&self, state: &mut State) {
+        selection::apply(&self.item, &state.groups, &state.tracks);
+        let extra = state.tracks.audio().get(1..).unwrap_or_default();
+        state
+            .companions
+            .arrange(&self.item, &state.groups, extra, self.main_thread);
+        self.apply_volume(state);
+    }
+
+    fn apply_volume(&self, state: &mut State) {
+        let audio = state.tracks.audio();
+        let first = audio.first().map_or(1.0, |track| track.volume);
+        unsafe { self.player.setVolume((state.volume * first) as f32) };
+        let extra = audio.get(1..).unwrap_or_default();
+        state.companions.set_volume(state.volume, extra);
+    }
+
+    fn follow(&self) {
+        self.state.borrow().companions.follow(&self.player);
     }
 
     fn seek(&self, time: f64, fast: bool) {
@@ -298,6 +344,7 @@ impl Playback {
             return;
         }
         self.state.borrow_mut().buffering = false;
+        self.follow();
         self.report(status == AVPlayerTimeControlStatus::Playing);
     }
 
@@ -319,6 +366,7 @@ impl Playback {
     fn tick(&self) {
         if self.state.borrow().reported_playing {
             self.report_time();
+            self.follow();
         }
     }
 
@@ -334,11 +382,13 @@ impl Playback {
         state.reported_playing = false;
         drop(state);
         unsafe { self.player.pause() };
+        self.follow();
         self.report_time();
         self.emit("state", json!({ "state": "ended" }));
     }
 
     fn seeked(&self) {
+        self.follow();
         if let Some(time) = self.time() {
             self.emit("seeked", json!({ "time": time }));
         }
@@ -355,14 +405,16 @@ impl Playback {
         }
         let tracks = selection::tracks(&self.item, &state.groups);
         state.tracks.set(tracks);
-        selection::apply(&self.item, &state.groups, &state.tracks);
+        self.select_tracks(&mut state);
         drop(state);
+        self.follow();
         self.selection_changed();
     }
 
     pub(super) fn selection_changed(&self) {
         let mut state = self.state.borrow_mut();
-        let selected = selection::selected(&self.item, &state.groups);
+        let mut selected = selection::selected(&self.item, &state.groups);
+        selected.extend(state.companions.ids());
         state.tracks.set_selected(selected);
         let tracks = state.tracks.to_json();
         drop(state);

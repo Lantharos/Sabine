@@ -14,6 +14,8 @@ export interface NativeVideoOptions extends NativeVideoAttachOptions {
   volume?: number;
   muted?: boolean;
   playbackRate?: number;
+  /** Starts with every audio track playing, mixed, instead of only the file's default one. */
+  mixAudio?: boolean;
 }
 
 export interface NativeVideoTrack {
@@ -22,6 +24,17 @@ export interface NativeVideoTrack {
   label: string | null;
   codec: string | null;
   selected: boolean;
+}
+
+export interface NativeVideoAudioTrack extends NativeVideoTrack {
+  /** The track's volume in the mix, from 0 to 1, before the player's own `volume`. */
+  volume: number;
+}
+
+export interface NativeVideoAudioMix {
+  id: string;
+  /** From 0 to 1; defaults to 1. */
+  volume?: number;
 }
 
 export interface NativeVideoCue {
@@ -78,13 +91,13 @@ export declare class NativeVideo extends EventTarget {
   volume: number;
   muted: boolean;
   loop: boolean;
-  readonly audioTracks: NativeVideoTrack[];
+  readonly audioTracks: NativeVideoAudioTrack[];
   readonly subtitleTracks: NativeVideoTrack[];
   readonly activeCue: NativeVideoCue | null;
   fastSeek(time: number): void;
   play(): Promise<void>;
   pause(): void;
-  selectAudioTrack(id: string): Promise<void>;
+  setAudioTracks(tracks: NativeVideoAudioMix[]): Promise<void>;
   selectSubtitleTrack(id: string | null): Promise<void>;
   attach(element: Element, options?: NativeVideoAttachOptions): void;
   detach(): void;

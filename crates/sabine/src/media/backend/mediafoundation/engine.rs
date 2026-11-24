@@ -3,7 +3,7 @@
 // The engine decodes on our own D3D11 device through a DXGI device manager and
 // presents through a windowless swapchain that a composition visual shows.
 // Windowless mode must be enabled before a source is set, and the swapchain
-// handle stays owned by the engine.
+// handle stays owned by the engine. Audio-only engines need neither.
 
 use std::sync::{Arc, OnceLock};
 
@@ -21,8 +21,9 @@ use windows::Win32::{
         CLSID_MFMediaEngineClassFactory, IMFAttributes, IMFDXGIDeviceManager, IMFGetService,
         IMFMediaEngine, IMFMediaEngineClassFactory, IMFMediaEngineEx, IMFMediaEngineNotify,
         IMFMediaEngineNotify_Impl, IMFTimedText, IMFTimedTextCue, IMFTimedTextNotify,
-        IMFTimedTextNotify_Impl, MF_MEDIA_ENGINE_CALLBACK, MF_MEDIA_ENGINE_DXGI_MANAGER,
-        MF_MEDIA_ENGINE_TIMEDTEXT, MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_TIMED_TEXT_CUE_EVENT,
+        IMFTimedTextNotify_Impl, MF_MEDIA_ENGINE_AUDIOONLY, MF_MEDIA_ENGINE_CALLBACK,
+        MF_MEDIA_ENGINE_DXGI_MANAGER, MF_MEDIA_ENGINE_TIMEDTEXT,
+        MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_TIMED_TEXT_CUE_EVENT,
         MF_TIMED_TEXT_CUE_EVENT_ACTIVE, MF_TIMED_TEXT_CUE_EVENT_CLEAR,
         MF_TIMED_TEXT_CUE_EVENT_INACTIVE, MF_TIMED_TEXT_ERROR_CODE, MF_VERSION, MFCreateAttributes,
         MFCreateDXGIDeviceManager, MFSTARTUP_FULL, MFStartup,
@@ -38,7 +39,7 @@ use super::worker::{Cue, Inbox, Report};
 pub(super) struct Engine {
     pub(super) media: IMFMediaEngineEx,
     pub(super) text: Option<IMFTimedText>,
-    _devices: IMFDXGIDeviceManager,
+    _devices: Option<IMFDXGIDeviceManager>,
 }
 
 impl Engine {
@@ -47,17 +48,31 @@ impl Engine {
         unsafe { Self::create(inbox) }.map_err(|error| error.message())
     }
 
+    /// An engine that plays only audio, reporting its events as `stream`'s.
+    pub(super) fn audio(inbox: &Arc<Inbox>, stream: u32) -> Result<Self, String> {
+        startup()?;
+        unsafe { Self::create_audio(inbox, stream) }.map_err(|error| error.message())
+    }
+
+    unsafe fn create_audio(inbox: &Arc<Inbox>, stream: u32) -> windows::core::Result<Self> {
+        unsafe {
+            let attributes = engine_attributes(inbox, Some(stream))?;
+            let factory: IMFMediaEngineClassFactory =
+                CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)?;
+            let media: IMFMediaEngine =
+                factory.CreateInstance(MF_MEDIA_ENGINE_AUDIOONLY.0 as u32, &attributes)?;
+            Ok(Self {
+                media: media.cast()?,
+                text: None,
+                _devices: None,
+            })
+        }
+    }
+
     unsafe fn create(inbox: &Arc<Inbox>) -> windows::core::Result<Self> {
         unsafe {
             let devices = device_manager()?;
-            let mut attributes: Option<IMFAttributes> = None;
-            MFCreateAttributes(&mut attributes, 3)?;
-            let attributes = attributes.ok_or_else(windows::core::Error::empty)?;
-            let notify: IMFMediaEngineNotify = EngineNotify {
-                inbox: Arc::clone(inbox),
-            }
-            .into();
-            attributes.SetUnknown(&MF_MEDIA_ENGINE_CALLBACK, &notify)?;
+            let attributes = engine_attributes(inbox, None)?;
             attributes.SetUnknown(&MF_MEDIA_ENGINE_DXGI_MANAGER, &devices)?;
             attributes.SetUINT32(
                 &MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT,
@@ -82,9 +97,27 @@ impl Engine {
             Ok(Self {
                 media,
                 text,
-                _devices: devices,
+                _devices: Some(devices),
             })
         }
+    }
+}
+
+unsafe fn engine_attributes(
+    inbox: &Arc<Inbox>,
+    companion: Option<u32>,
+) -> windows::core::Result<IMFAttributes> {
+    unsafe {
+        let mut attributes: Option<IMFAttributes> = None;
+        MFCreateAttributes(&mut attributes, 3)?;
+        let attributes = attributes.ok_or_else(windows::core::Error::empty)?;
+        let notify: IMFMediaEngineNotify = EngineNotify {
+            inbox: Arc::clone(inbox),
+            companion,
+        }
+        .into();
+        attributes.SetUnknown(&MF_MEDIA_ENGINE_CALLBACK, &notify)?;
+        Ok(attributes)
     }
 }
 
@@ -131,20 +164,25 @@ unsafe fn device_manager() -> windows::core::Result<IMFDXGIDeviceManager> {
     }
 }
 
+/// Reports an engine's events: the main engine's in full, a companion's
+/// tagged with the audio stream it plays.
 #[implement(IMFMediaEngineNotify)]
 struct EngineNotify {
     inbox: Arc<Inbox>,
+    companion: Option<u32>,
 }
 
 impl IMFMediaEngineNotify_Impl for EngineNotify_Impl {
     fn EventNotify(&self, event: u32, code: usize, result: u32) -> windows::core::Result<()> {
-        self.inbox.post(|mail| {
-            mail.reports.push(Report::Engine {
+        let report = match self.companion {
+            Some(stream) => Report::Companion { stream, event },
+            None => Report::Engine {
                 event,
                 code,
                 result,
-            })
-        });
+            },
+        };
+        self.inbox.post(|mail| mail.reports.push(report));
         Ok(())
     }
 }

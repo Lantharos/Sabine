@@ -145,12 +145,11 @@ pub(super) fn tracks(item: &AVPlayerItem, groups: &Groups) -> Vec<Track> {
     video.into_iter().chain(options).collect()
 }
 
-/// Selects the tracks the page chose.
+/// Selects the first audio track and the subtitles the page chose;
+/// companions play the other audio tracks.
 pub(super) fn apply(item: &AVPlayerItem, groups: &Groups, tracks: &Tracks) {
-    for (group, chosen) in [
-        (Group::Audio, tracks.audio()),
-        (Group::Subtitles, tracks.subtitle()),
-    ] {
+    let audio = tracks.audio().first().map(|track| track.id.as_str());
+    for (group, chosen) in [(Group::Audio, audio), (Group::Subtitles, tracks.subtitle())] {
         if let Some(selection) = groups.get(group) {
             let option = chosen.and_then(|id| option(selection, group, id));
             unsafe { item.selectMediaOption_inMediaSelectionGroup(option.as_deref(), selection) };
@@ -176,6 +175,15 @@ pub(super) fn selected(item: &AVPlayerItem, groups: &Groups) -> Vec<String> {
             .map(|index| format!("{}{index}", group.prefix()))
     });
     video.into_iter().chain(options).collect()
+}
+
+/// The audible group and the option an audio track's id names.
+pub(super) fn audio_option<'a>(
+    groups: &'a Groups,
+    id: &str,
+) -> Option<(&'a AVMediaSelectionGroup, Retained<AVMediaSelectionOption>)> {
+    let selection = groups.get(Group::Audio)?;
+    option(selection, Group::Audio, id).map(|option| (selection, option))
 }
 
 fn option(

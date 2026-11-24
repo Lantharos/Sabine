@@ -40,6 +40,10 @@ pub(super) enum Report {
         code: usize,
         result: u32,
     },
+    Companion {
+        stream: u32,
+        event: u32,
+    },
     TextTracks,
     Cue(Cue),
     CueEnded(u32),

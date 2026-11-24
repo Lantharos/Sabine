@@ -1,5 +1,6 @@
 mod cues;
 mod inbox;
+mod mixer;
 mod pipeline;
 mod session;
 mod streams;

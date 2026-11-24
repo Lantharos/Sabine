@@ -11,7 +11,7 @@ pub(super) fn selection(tracks: &Tracks) -> Vec<String> {
         .next()
         .map(|track| track.id.as_str())
         .into_iter()
-        .chain(tracks.audio())
+        .chain(tracks.audio().iter().map(|track| track.id.as_str()))
         .chain(tracks.subtitle())
         .map(str::to_string)
         .collect()

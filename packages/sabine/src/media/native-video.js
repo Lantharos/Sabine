@@ -1,5 +1,7 @@
 /** @typedef {import("../../types/media/native-video.js").NativeVideoOptions} NativeVideoOptions */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoTrack} NativeVideoTrack */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoAudioTrack} NativeVideoAudioTrack */
+/** @typedef {import("../../types/media/native-video.js").NativeVideoAudioMix} NativeVideoAudioMix */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoCue} NativeVideoCue */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoError} NativeVideoError */
 /** @typedef {import("../../types/media/native-video.js").NativeVideoAttachOptions} NativeVideoAttachOptions */
@@ -72,6 +74,7 @@ export class NativeVideo extends EventTarget {
           volume: options.volume ?? 1,
           muted: Boolean(options.muted),
           rate: options.playbackRate ?? 1,
+          mixAudio: Boolean(options.mixAudio),
         })
       ));
     } finally {
@@ -104,7 +107,7 @@ export class NativeVideo extends EventTarget {
   #height = 0;
   /** @type {NativeVideoError | null} */
   #error = null;
-  /** @type {{ video: NativeVideoTrack[], audio: NativeVideoTrack[], subtitles: NativeVideoTrack[] }} */
+  /** @type {{ video: NativeVideoTrack[], audio: NativeVideoAudioTrack[], subtitles: NativeVideoTrack[] }} */
   #tracks = { video: [], audio: [], subtitles: [] };
   /** @type {NativeVideoCue | null} */
   #cue = null;
@@ -226,7 +229,7 @@ export class NativeVideo extends EventTarget {
     this.#send("setLoop", { loop: this.#loop });
   }
 
-  /** @returns {NativeVideoTrack[]} */
+  /** @returns {NativeVideoAudioTrack[]} */
   get audioTracks() {
     return this.#tracks.audio;
   }
@@ -262,9 +265,13 @@ export class NativeVideo extends EventTarget {
     this.#emit("pause");
   }
 
-  /** @param {string} id */
-  selectAudioTrack(id) {
-    return this.#request("selectTracks", { audio: id });
+  /**
+   * Plays these audio tracks together, each at its own volume, and silences the rest.
+   * @param {NativeVideoAudioMix[]} tracks
+   */
+  setAudioTracks(tracks) {
+    const audio = tracks.map(({ id, volume = 1 }) => ({ id, volume }));
+    return this.#request("selectTracks", { audio });
   }
 
   /** @param {string | null} id `null` turns subtitles off. */

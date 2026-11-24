@@ -71,9 +71,13 @@ fn subtitle_tracks(text: Option<&IMFTimedText>) -> Vec<Track> {
         .collect()
 }
 
-/// Plays the chosen audio stream and shows the chosen subtitle track.
+/// Plays the first chosen audio stream and shows the chosen subtitle track;
+/// companions play the other audio streams.
 pub(super) fn apply(media: &IMFMediaEngineEx, text: Option<&IMFTimedText>, tracks: &Tracks) {
-    let audio = tracks.audio().and_then(|id| index(id, AUDIO));
+    let audio = tracks
+        .audio()
+        .first()
+        .and_then(|track| audio_stream(&track.id));
     for track in tracks.of(Kind::Audio) {
         if let Some(stream) = index(&track.id, AUDIO) {
             let _ = unsafe { media.SetStreamSelection(stream, Some(stream) == audio) };
@@ -109,6 +113,10 @@ pub(super) fn selected(media: &IMFMediaEngineEx, tracks: &Tracks) -> Vec<String>
         .map(|track| track.id.clone())
         .chain(tracks.subtitle().map(str::to_string))
         .collect()
+}
+
+pub(super) fn audio_stream(id: &str) -> Option<u32> {
+    index(id, AUDIO)
 }
 
 fn index(id: &str, prefix: &str) -> Option<u32> {
