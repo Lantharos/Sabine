@@ -6,6 +6,7 @@ mod launch;
 mod listeners;
 mod manifest;
 pub(crate) mod origins;
+mod overlay;
 mod placement;
 #[cfg(target_os = "linux")]
 pub(crate) mod restore;
@@ -28,8 +29,11 @@ pub use listeners::{
     PermissionRequest, WindowVisibility,
 };
 pub use manifest::resource_path;
+pub use overlay::{SabineOverlay, SabineOverlayAnchor};
 #[cfg(not(target_os = "windows"))]
 pub(crate) use placement::launch_scale_factor;
+#[cfg(not(target_os = "linux"))]
+pub(crate) use placement::overlay_position;
 pub(crate) use placement::{centered_window_position, remembered_size};
 pub use style::Color as SabineColor;
 

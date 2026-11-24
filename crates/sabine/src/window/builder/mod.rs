@@ -172,6 +172,18 @@ impl SabineWindow {
         self
     }
 
+    /// Shows the window as an overlay, such as a hint over a game, at
+    /// `placement` on the screen: transparent and frameless, above every
+    /// other window, full-screen ones included, out of the taskbar, and
+    /// leaving focus and the pointer to what is below. On Linux it is a
+    /// surface on the overlay layer of `wlr-layer-shell`, which Kestrel offers
+    /// sandboxed apps only when they may record windows; on Windows and macOS a
+    /// topmost window that never activates and lets clicks through.
+    pub fn overlay(mut self, placement: crate::SabineOverlay) -> Self {
+        self.config.show_as_overlay(placement);
+        self
+    }
+
     /// Linux only: keeps the window over another window, of another app or
     /// of this one, as a dialog of it. `identifier` names that window the way
     /// the desktop portal's `parent_window` argument and a page's

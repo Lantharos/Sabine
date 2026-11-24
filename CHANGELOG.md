@@ -3,6 +3,11 @@
 - `[sandbox] windows = "capture"` declares that an app records the windows it picks, such as a game,
   and shows overlays over them. On Luft the person agrees to it when installing the app, and
   Kestrel then offers the app the Wayland protocols for it without asking.
+- `appWindow.open(url, { overlay: true })`, or `{ overlay: { anchor, margin } }`, and
+  `SabineWindow::overlay(SabineOverlay)` open a window as an overlay, such as a hint over a game:
+  transparent, above every other window, full-screen ones included, out of the taskbar, and leaving
+  focus and the pointer to what is below. On Linux it is a `wlr-layer-shell` overlay surface; on
+  Windows and macOS a topmost window that never activates and lets clicks through.
 - `NativeVideo` plays several audio tracks of a file at once, mixed, each at its own volume.
   `setAudioTracks([{ id, volume }])` replaces `selectAudioTrack(id)`, `audioTracks` reports each
   track's `volume`, and `mixAudio: true` starts with every track playing, as for a recording with

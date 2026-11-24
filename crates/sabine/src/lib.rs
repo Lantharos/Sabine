@@ -42,9 +42,9 @@ pub use sabine_service::{AppEnvironment, Permission};
 pub use storage::{Secrets, Store, StoreChange};
 pub use window::{
     AppChrome, Download, DownloadControl, DownloadDecision, DownloadState, PermissionDecision,
-    PermissionRequest, SabineColor, SabineLifecyclePolicy, SabineWindow, SabineWindowChrome,
-    SabineWindowControlAction, SabineWindowControlRegion, Spellcheck, WindowVisibility,
-    resource_path,
+    PermissionRequest, SabineColor, SabineLifecyclePolicy, SabineOverlay, SabineOverlayAnchor,
+    SabineWindow, SabineWindowChrome, SabineWindowControlAction, SabineWindowControlRegion,
+    Spellcheck, WindowVisibility, resource_path,
 };
 
 /// Common imports for app authors.

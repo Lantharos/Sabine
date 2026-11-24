@@ -47,11 +47,13 @@ impl OsrNativeHost {
             .with_decorations(self.config.chrome.uses_native_decorations())
             .with_visible(self.config.visible && !defer_visibility)
             .with_active((self.config.active || activating) && !defer_visibility)
-            .with_window_level(if self.config.always_on_top {
-                WindowLevel::AlwaysOnTop
-            } else {
-                WindowLevel::Normal
-            })
+            .with_window_level(
+                if self.config.always_on_top || self.config.overlay.is_some() {
+                    WindowLevel::AlwaysOnTop
+                } else {
+                    WindowLevel::Normal
+                },
+            )
             .with_transparent(self.config.transparent);
         if let Some(size) = self.config.max_size {
             attributes = attributes.with_max_surface_size(LogicalSize::new(
@@ -81,11 +83,27 @@ impl OsrNativeHost {
                     .with_skip_taskbar(self.config.skip_taskbar),
             );
         }
-        if let Some(position) = crate::window::centered_window_position(
+        #[cfg(not(target_os = "linux"))]
+        let position = match self.config.overlay {
+            Some(overlay) => crate::window::overlay_position(
+                event_loop,
+                overlay,
+                self.config.width,
+                self.config.height,
+            ),
+            None => crate::window::centered_window_position(
+                event_loop,
+                self.config.width,
+                self.config.height,
+            ),
+        };
+        #[cfg(target_os = "linux")]
+        let position = crate::window::centered_window_position(
             event_loop,
             self.config.width,
             self.config.height,
-        ) {
+        );
+        if let Some(position) = position {
             attributes = attributes.with_position(position);
         }
         let window = match event_loop.create_window(attributes) {
@@ -101,6 +119,15 @@ impl OsrNativeHost {
         self.occluded = false;
         self.window_generation = self.window_generation.wrapping_add(1);
         self.window = Some(window.clone());
+        #[cfg(not(target_os = "linux"))]
+        if self.config.overlay.is_some()
+            && let Err(error) = window.set_cursor_hittest(false)
+        {
+            sabine_runtime::report_error(
+                "window",
+                format!("the overlay could take clicks: {error}"),
+            );
+        }
         self.attach_accessibility();
         #[cfg(not(target_os = "linux"))]
         self.install_app_menu();
@@ -131,7 +158,9 @@ impl OsrNativeHost {
 
     #[cfg(target_os = "linux")]
     fn place_window(&mut self, window: &dyn WinitWindow) {
-        if !self.config.skip_taskbar && !self.config.always_on_top {
+        if self.config.overlay.is_some()
+            || (!self.config.skip_taskbar && !self.config.always_on_top)
+        {
             return;
         }
         match sabine_platform::WindowPlacement::new(
@@ -169,6 +198,9 @@ impl OsrNativeHost {
         }
         if let Some(memory) = &self.memory {
             attributes = attributes.with_tag(memory.key());
+        }
+        if let Some(overlay) = self.config.overlay {
+            attributes = attributes.with_overlay(overlay_placement(overlay));
         }
         attributes
     }
@@ -423,4 +455,25 @@ fn appearance_json(
         "accentColor": appearance.accent_hex(),
         "backdrop": backdrop.as_str(),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn overlay_placement(overlay: crate::SabineOverlay) -> winit::platform::wayland::OverlayPlacement {
+    use crate::SabineOverlayAnchor::*;
+    use winit::window::WindowAnchor;
+    let anchor = match overlay.anchor {
+        Top => WindowAnchor::Top,
+        TopLeft => WindowAnchor::TopLeft,
+        TopRight => WindowAnchor::TopRight,
+        Bottom => WindowAnchor::Bottom,
+        BottomLeft => WindowAnchor::BottomLeft,
+        BottomRight => WindowAnchor::BottomRight,
+        Left => WindowAnchor::Left,
+        Right => WindowAnchor::Right,
+        Center => WindowAnchor::Center,
+    };
+    winit::platform::wayland::OverlayPlacement {
+        anchor,
+        margin: overlay.margin,
+    }
 }

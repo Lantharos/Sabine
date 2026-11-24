@@ -46,6 +46,9 @@ pub(crate) struct SabineWindowConfig {
     pub background: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
+    /// Shown as an overlay: above every other window, full-screen ones
+    /// included, taking neither focus nor the pointer.
+    pub overlay: Option<super::SabineOverlay>,
     /// Another app's window this one stays over, as the desktop portal names
     /// it.
     #[cfg(target_os = "linux")]
@@ -130,6 +133,7 @@ impl Default for SabineWindowConfig {
             background: false,
             skip_taskbar: false,
             always_on_top: false,
+            overlay: None,
             #[cfg(target_os = "linux")]
             parent_window: None,
             #[cfg(target_os = "linux")]

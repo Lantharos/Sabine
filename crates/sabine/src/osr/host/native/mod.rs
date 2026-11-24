@@ -394,7 +394,10 @@ impl OsrNativeHost {
     /// The app's regions at the page's zoom, with square corners unless the
     /// window rounds them.
     pub(super) fn regions(&self) -> WindowRegions {
-        let regions = self.config.regions.zoomed(self.page_zoom);
+        let mut regions = self.config.regions.zoomed(self.page_zoom);
+        if self.config.overlay.is_some() {
+            regions.input = Some(sabine_platform::WindowRegion::empty());
+        }
         if self.rounds_corners() {
             regions
         } else {

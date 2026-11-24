@@ -245,6 +245,7 @@ fn spawn_osr_host_child(
         "asks_permissions": config.listeners.permission.is_some(),
         "skip_taskbar": config.skip_taskbar,
         "always_on_top": config.always_on_top,
+        "overlay": config.overlay,
         "transparent": config.transparent,
         "background_color": config.background_color.to_rgba8(),
         "splash_delay_ms": config.splash.map(|delay| delay.as_millis() as u64),

@@ -222,6 +222,7 @@ method, and `system.displays()` lists the displays to place windows on.
 | `.hide_on_blur(true)` | Hides the window when it loses focus |
 | `.hide_on_close(true)` | The close button and `appWindow.close()` hide the window instead of closing it; `app.quit()` still ends the app |
 | `.skip_taskbar(true)` | Keeps the window out of the taskbar and window switcher |
+| `.overlay(SabineOverlay::default())` | Shows the window as an overlay over every other window, full-screen games included, without focus or the pointer, at the top right unless `SabineOverlay::new(anchor, margin)` says otherwise |
 | `.always_on_top(true)` | Keeps the window above other windows |
 
 A hidden window keeps its page loaded and reappears with its last frame at once. While it is hidden,

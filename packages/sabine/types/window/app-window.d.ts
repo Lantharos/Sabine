@@ -161,6 +161,20 @@ export interface OpenWindowOptions {
   minHeight?: number;
   resizable?: boolean;
   alwaysOnTop?: boolean;
+  /**
+   * Opens the page as an overlay, such as a hint over a game: transparent and
+   * frameless, above every other window, full-screen ones included, out of
+   * the taskbar, and leaving focus and the pointer to what is below. `true`
+   * puts it 24 pixels from the top right corner of the screen.
+   */
+  overlay?: boolean | OverlayPlacement;
+}
+
+export interface OverlayPlacement {
+  /** The edge or corner of the screen the overlay keeps to, `top-right` unless set. */
+  anchor?: "top" | "top-left" | "top-right" | "bottom" | "bottom-left" | "bottom-right" | "left" | "right" | "center";
+  /** The distance from the edges it keeps to, in logical pixels, 24 unless set. */
+  margin?: number;
 }
 
 export interface ControlsOverlay {

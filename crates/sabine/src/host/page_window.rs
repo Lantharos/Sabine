@@ -18,6 +18,15 @@ pub(crate) struct PageWindow {
     min_height: Option<u32>,
     resizable: Option<bool>,
     always_on_top: Option<bool>,
+    overlay: Option<PageOverlay>,
+}
+
+/// `overlay` in `sabine.window.open`: `true`, or where the overlay sits.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PageOverlay {
+    On(bool),
+    At(crate::SabineOverlay),
 }
 
 impl PageWindow {
@@ -41,6 +50,12 @@ impl PageWindow {
         config.hide_on_close = false;
         config.skip_taskbar = false;
         config.lifecycle = SabineLifecyclePolicy::browser_tab();
+        config.overlay = None;
+        match self.overlay {
+            Some(PageOverlay::On(true)) => config.show_as_overlay(crate::SabineOverlay::default()),
+            Some(PageOverlay::At(placement)) => config.show_as_overlay(placement),
+            _ => {}
+        }
         config
     }
 }

@@ -5,6 +5,31 @@ pub(crate) mod remembered_size;
 
 use winit::{dpi::PhysicalPosition, event_loop::ActiveEventLoop, monitor::MonitorHandle};
 
+/// Where an overlay of `width` × `height` logical pixels goes on the launch
+/// screen, at its placement.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn overlay_position(
+    event_loop: &dyn ActiveEventLoop,
+    overlay: crate::SabineOverlay,
+    width: u32,
+    height: u32,
+) -> Option<PhysicalPosition<i32>> {
+    let monitor = launch_monitor(event_loop)?;
+    let screen = monitor.current_video_mode()?.size();
+    let origin = monitor.position()?;
+    let scale = monitor.scale_factor().max(1.0);
+    let scaled = crate::SabineOverlay {
+        margin: (f64::from(overlay.margin) * scale).round() as u32,
+        ..overlay
+    };
+    let (x, y) = scaled.origin(
+        (f64::from(origin.x), f64::from(origin.y)),
+        (f64::from(screen.width), f64::from(screen.height)),
+        (f64::from(width) * scale, f64::from(height) * scale),
+    );
+    Some(PhysicalPosition::new(x.round() as i32, y.round() as i32))
+}
+
 pub(crate) fn centered_window_position(
     event_loop: &dyn ActiveEventLoop,
     width: u32,

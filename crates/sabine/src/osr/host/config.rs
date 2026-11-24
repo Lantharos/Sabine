@@ -41,6 +41,7 @@ pub(crate) struct OsrHostConfig {
     pub asks_permissions: bool,
     pub skip_taskbar: bool,
     pub always_on_top: bool,
+    pub overlay: Option<crate::SabineOverlay>,
     pub transparent: bool,
     pub background_color: Color,
     pub splash: Option<Duration>,
@@ -187,6 +188,9 @@ impl OsrHostConfig {
                 .get("always_on_top")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            overlay: value
+                .get("overlay")
+                .and_then(|overlay| serde_json::from_value(overlay.clone()).ok()),
             transparent: value
                 .get("transparent")
                 .and_then(serde_json::Value::as_bool)

@@ -234,6 +234,7 @@ On AMD graphics under Linux, Sabine passes `AMD_DEBUG=nodcc` to Chromium, since 
 - **No blur behind a glass window.** The compositor doesn't offer `ext_background_effect_v1`, as GNOME's doesn't. The page shows over a clear window instead.
 - **No tray icon.** The desktop doesn't host StatusNotifierItems. On GNOME, that needs an extension.
 - **`skip_taskbar` or `always_on_top` has no effect.** Wayland has no standard protocol for them, and Sabine uses `kestrel_window_v1` where the compositor offers it. `window.jsonl` records why it was skipped.
+- **An overlay doesn't open on Linux.** It needs `zwlr_layer_shell_v1`. Kestrel offers it to apps that may record windows, as `windows = "capture"` in `[sandbox]` declares, and other compositors may keep it to apps they trust.
 - **The window opens behind others.** Compositors give focus only to a window that carries the activation token of the launch, and only if the person hasn't used another window since. Launch the app from the desktop's launcher rather than a terminal to test focus.
 - **A global shortcut doesn't fire.** The desktop decides through its GlobalShortcuts portal and may have refused it, for example because another app holds it. Pages hear `globalShortcut.failed`, and `desktop.jsonl` records it.
 

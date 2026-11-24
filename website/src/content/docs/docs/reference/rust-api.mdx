@@ -214,6 +214,7 @@ Every builder method takes `self` and returns `Self`, so calls chain. A window t
 | `hide_on_close(bool)` | Hides the window instead of closing it |
 | `skip_taskbar(bool)` | Off the Windows taskbar, out of the macOS Dock, and out of the taskbar on Wayland compositors with `kestrel_window_v1` |
 | `always_on_top(bool)` | Above other windows on Windows, macOS, and Wayland compositors with `kestrel_window_v1` |
+| `overlay(SabineOverlay)` | An overlay, such as a hint over a game, at `SabineOverlay::new(anchor, margin)`: transparent, above full-screen windows, out of the taskbar, taking neither focus nor the pointer. Needs `wlr-layer-shell` on Linux |
 | `parent_window(impl Into<String>)` | Linux only. Opens the window as a dialog of another app's window, named `wayland:<handle>` as the desktop portal does |
 | `modal(bool)` | Linux only. Keeps people from using the `parent_window` while this window is open, on compositors with `xdg_wm_dialog_v1` |
 

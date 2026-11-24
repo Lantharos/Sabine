@@ -412,6 +412,12 @@ interface OpenWindowOptions {
   minHeight?: number;
   resizable?: boolean;
   alwaysOnTop?: boolean;
+  overlay?: boolean | OverlayPlacement;
+}
+
+interface OverlayPlacement {
+  anchor?: "top" | "top-left" | "top-right" | "bottom" | "bottom-left" | "bottom-right" | "left" | "right" | "center";
+  margin?: number;
 }
 ```
 
@@ -420,6 +426,21 @@ URL resolves against the page's, and must stay on the app's origin; other sites 
 window opens like the app's first window, with its chrome, glass and commands, as an ordinary
 window: shown, in the taskbar, and closed when it is closed. Its `title` shows while the page has no
 `document.title`. `close(id)` closes one of the app's windows as its close button does.
+
+`overlay` opens the page as an overlay, such as a hint over a game: transparent, frameless and out
+of the taskbar, above every other window, full-screen ones included, and leaving focus and the
+pointer to whatever is below it. It keeps to `anchor` of the screen at `margin` logical pixels from
+the edges; `true` means the top right corner, 24 pixels in. The window keeps the size it opens with.
+
+```ts
+const hint = await appWindow.open("hint.html", { width: 320, height: 72, overlay: { anchor: "top-right" } });
+setTimeout(() => appWindow.close(hint), 4000);
+```
+
+On Linux an overlay is a surface on the overlay layer of `wlr-layer-shell`, so the compositor has to
+offer it: Kestrel offers it to sandboxed apps that declare `windows = "capture"` in
+[`[sandbox]`](/docs/distribution/app-sandbox/) or that the person allowed, and opening one elsewhere
+fails. On Windows and macOS it is a topmost window that never activates and lets clicks through.
 
 ```ts
 const settings = await appWindow.open("settings.html", { title: "Settings", width: 560, height: 420 });
