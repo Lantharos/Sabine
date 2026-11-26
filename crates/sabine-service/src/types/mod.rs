@@ -25,14 +25,14 @@ pub use system::{
 pub use updates_section::AppUpdatesSection;
 
 pub const REGISTRY_VERSION: u32 = 1;
-pub const SABINE_VERSION: &str = "0.113";
+pub const SABINE_VERSION: &str = "0.114";
 pub const SABINE_MAJOR: u32 = 0;
-pub const SABINE_BUILD: u32 = 113;
+pub const SABINE_BUILD: u32 = 114;
 pub const MIN_SUPPORTED_APP_BUILD: u32 = 91;
 /// The oldest Sabine build that offers everything an app built with this one
 /// relies on from the installed Sabine, which apps record as the Sabine they
 /// need. It moves up only in a release that changes what apps rely on.
-pub const APP_INTERFACE_BUILD: u32 = 113;
+pub const APP_INTERFACE_BUILD: u32 = 114;
 const _: () =
     assert!(MIN_SUPPORTED_APP_BUILD <= APP_INTERFACE_BUILD && APP_INTERFACE_BUILD <= SABINE_BUILD);
 pub const UPDATE_SOAK: Duration = Duration::from_secs(24 * 60 * 60);
