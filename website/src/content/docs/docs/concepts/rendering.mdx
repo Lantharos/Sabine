@@ -19,6 +19,10 @@ Each platform has exactly one paint policy. Apps don't choose a renderer, a tran
 
 The GPU instance is shared by every window in a process and survives window recreation, so a recreated window reuses the driver connection instead of initializing the driver again. A new instance replaces it only after a lost device, or when it no longer finds an adapter.
 
+## WebGPU
+
+Pages can use WebGPU on every platform. On Linux, Chromium offers it only through Vulkan, which its Wayland platform doesn't support and its GPU sandbox can't load drivers for, so Sabine has WebGPU run on Dawn's OpenGL ES backend instead, on the EGL context the GPU process already uses. It stays inside the sandbox and gives pages a compatibility-mode adapter: ask for it with `navigator.gpu.requestAdapter({ featureLevel: 'compatibility' })`, and stay within [compatibility mode's limits](https://github.com/gpuweb/gpuweb/blob/main/proposals/compatibility-mode.md), such as no storage buffers in fragment shaders and one view format per texture.
+
 ## Why Sabine copies each frame
 
 CEF lends its frame to the callback and gives it back to Chromium's pool as soon as the callback returns, and Chromium starts drawing the next frame into it right away. A window that sampled Chromium's texture later could show a half-drawn frame. So the host copies each frame, on the GPU, into one of four slots Sabine owns for each surface, and the window samples the slot:

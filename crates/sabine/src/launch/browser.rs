@@ -28,6 +28,12 @@ const LINUX_DISABLED_CEF_FEATURES: &str = "WaylandFractionalScaleV1";
 #[cfg(target_os = "linux")]
 const LINUX_GTK_VERSION: &str = "--gtk-version=3";
 
+/// Chromium only offers WebGPU on Linux through Vulkan, which its Wayland platform refuses and its
+/// GPU sandbox can't load drivers for. Dawn's OpenGL ES backend runs on the EGL context the GPU
+/// process already has, inside the sandbox, as a compatibility-mode adapter.
+#[cfg(target_os = "linux")]
+const LINUX_WEBGPU: [&str; 2] = ["--enable-unsafe-webgpu", "--use-webgpu-adapter=opengles"];
+
 /// Mesa's radeonsi gives the buffers Chromium hands each frame over in a layout with delta color
 /// compression, which Chromium can't use, so on AMD graphics no frame ever reaches the window.
 #[cfg(target_os = "linux")]
@@ -133,7 +139,8 @@ pub(crate) fn apply_browser_launch_args(
             let mut features = vec!["UseOzonePlatform"];
             command
                 .arg("--ozone-platform=wayland")
-                .arg(LINUX_GTK_VERSION);
+                .arg(LINUX_GTK_VERSION)
+                .args(LINUX_WEBGPU);
             if options.vaapi_hardware_decode {
                 features.push("VaapiVideoDecoder");
             }

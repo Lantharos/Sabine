@@ -1,3 +1,8 @@
+# Sabine 0.114
+
+- Pages on Linux can use WebGPU. It runs on Dawn's OpenGL ES backend inside Chromium's GPU sandbox,
+  as a compatibility-mode adapter: request it with `featureLevel: 'compatibility'`.
+
 # Sabine 0.113
 
 - Opening an overlay where the desktop can't show one fails with an error the app can handle,
