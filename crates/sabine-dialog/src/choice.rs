@@ -5,7 +5,6 @@ use std::{
 };
 use winit::{
     application::ApplicationHandler,
-    cursor::{Cursor, CursorIcon},
     dpi::{LogicalSize, PhysicalPosition},
     event::{ButtonSource, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
@@ -247,13 +246,6 @@ impl ApplicationHandler for Dialog {
                 let before = self.hovered();
                 self.cursor = position;
                 if self.hovered() != before {
-                    if let Some(window) = &self.window {
-                        window.set_cursor(Cursor::Icon(if self.hovered().is_some() {
-                            CursorIcon::Pointer
-                        } else {
-                            CursorIcon::Default
-                        }));
-                    }
                     self.request_redraw();
                 }
             }

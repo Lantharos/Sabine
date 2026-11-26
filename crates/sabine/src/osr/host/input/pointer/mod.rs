@@ -144,7 +144,7 @@ impl OsrNativeHost {
         if let Some(direction) = self.resize_edge_under_cursor() {
             self.set_native_cursor(CursorIcon::from(direction));
         } else if self.hovered_control.is_some() {
-            self.set_native_cursor(CursorIcon::Pointer);
+            self.set_native_cursor(CursorIcon::Default);
             self.forward_mouse_move();
         } else if self.content_position(x, y).is_some() {
             self.clear_native_cursor();
