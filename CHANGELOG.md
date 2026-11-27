@@ -1,3 +1,8 @@
+# Unreleased
+
+- Further windows of an app open in the Chromium it already runs, so an overlay or a second window
+  starts no new browser process.
+
 # Sabine 0.114
 
 - Pages on Linux can use WebGPU. It runs on Dawn's OpenGL ES backend inside Chromium's GPU sandbox,
