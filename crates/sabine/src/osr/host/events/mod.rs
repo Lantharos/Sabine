@@ -125,6 +125,11 @@ impl OsrNativeHost {
                     Flow::Continue
                 }
                 #[cfg(target_os = "linux")]
+                OsrHostEvent::OwnBrowserReached(generation, reached) => {
+                    self.own_browser_reached(generation, reached);
+                    Flow::Continue
+                }
+                #[cfg(target_os = "linux")]
                 OsrHostEvent::DroppedFilesReached(drag, files) => {
                     self.dropped_files_reached(drag, files);
                     Flow::Continue

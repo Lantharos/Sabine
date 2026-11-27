@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -22,6 +22,8 @@ pub(crate) struct BrowserLaunch {
     pub(crate) own: Command,
     #[cfg(target_os = "linux")]
     pub(crate) shared: Option<crate::launch::shared::SharedLaunch>,
+    #[cfg(target_os = "linux")]
+    pub(crate) handover: crate::launch::singleton::Handover,
 }
 
 pub(crate) fn browser_launch(
@@ -58,11 +60,25 @@ pub(crate) fn browser_launch(
             )
         })
         .flatten();
-    let own = own_browser_command(runtime_dir, &host_binary, &binary_dir, config, &window)?;
+    let profile = own_browser_profile(config)?;
+    let own = own_browser_command(
+        runtime_dir,
+        &host_binary,
+        &binary_dir,
+        &profile,
+        config,
+        &window,
+    )?;
     Ok(BrowserLaunch {
         own,
         #[cfg(target_os = "linux")]
         shared,
+        #[cfg(target_os = "linux")]
+        handover: crate::launch::singleton::Handover {
+            profile,
+            program: host_binary,
+            switches: window,
+        },
     })
 }
 
@@ -123,24 +139,29 @@ fn window_switches(
     switches
 }
 
-/// A Chromium of the window's own, sharing its profile only with the app's
-/// other windows.
-fn own_browser_command(
-    runtime_dir: &Path,
-    host_binary: &Path,
-    binary_dir: &Path,
-    config: &crate::osr::host::OsrHostConfig,
-    window: &[OsString],
-) -> Result<Command, String> {
+/// The profile the app's windows share in a Chromium of their own.
+fn own_browser_profile(config: &crate::osr::host::OsrHostConfig) -> Result<PathBuf, String> {
     let cache_dir = browser_profile_dir(&browser_profile_key(config));
-    let cache_dir = std::fs::create_dir_all(&cache_dir)
+    std::fs::create_dir_all(&cache_dir)
         .and_then(|()| dunce::canonicalize(&cache_dir))
         .map_err(|error| {
             format!(
                 "could not create Sabine browser profile {}: {error}",
                 cache_dir.display()
             )
-        })?;
+        })
+}
+
+/// A Chromium of the window's own, sharing its profile only with the app's
+/// other windows.
+fn own_browser_command(
+    runtime_dir: &Path,
+    host_binary: &Path,
+    binary_dir: &Path,
+    cache_dir: &Path,
+    config: &crate::osr::host::OsrHostConfig,
+    window: &[OsString],
+) -> Result<Command, String> {
     #[cfg(target_os = "linux")]
     let mut command = crate::launch::sandbox::browser_command(host_binary, binary_dir);
     #[cfg(not(target_os = "linux"))]

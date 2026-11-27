@@ -126,17 +126,16 @@ impl OsrNativeHost {
             self.browser_shared = shared.is_some();
         }
         #[cfg(target_os = "linux")]
-        let spawned = match shared {
-            Some(shared) => {
-                self.open_in_shared_runtime(generation, shared, command);
-                Ok(None)
+        let child = {
+            match shared {
+                Some(shared) => self.open_in_shared_runtime(generation, shared, command),
+                None => self.open_in_own_browser(generation, launch.handover, command),
             }
-            None => command.spawn().map(Some),
+            None
         };
         #[cfg(not(target_os = "linux"))]
-        let spawned = command.spawn().map(Some);
-        let child = match spawned {
-            Ok(child) => child,
+        let child = match command.spawn() {
+            Ok(child) => Some(child),
             Err(error) => {
                 self.awaiting_connection = false;
                 endpoint.unlink();
@@ -186,6 +185,50 @@ impl OsrNativeHost {
             });
         if let Err(error) = opening {
             self.shared_runtime_opened(generation, Err(error.to_string()));
+        }
+    }
+
+    /// Hands the window to the app's running Chromium off the event loop, and
+    /// starts one only when none runs.
+    #[cfg(target_os = "linux")]
+    fn open_in_own_browser(
+        &mut self,
+        generation: u64,
+        handover: crate::launch::singleton::Handover,
+        own: std::process::Command,
+    ) {
+        self.own_browser = Some((generation, own));
+        let sender = self.sender.clone();
+        let proxy = self.proxy.clone();
+        let reaching = std::thread::Builder::new()
+            .name("sabine-browser-reach".to_string())
+            .spawn(move || {
+                let event = OsrHostEvent::OwnBrowserReached(generation, handover.reach());
+                if sender.send(event).is_ok() {
+                    proxy.wake_up();
+                }
+            });
+        if reaching.is_err() {
+            self.own_browser_reached(generation, false);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(in crate::osr::host) fn own_browser_reached(&mut self, generation: u64, reached: bool) {
+        let Some((own_generation, mut command)) = self.own_browser.take() else {
+            return;
+        };
+        if own_generation != generation {
+            return;
+        }
+        if reached {
+            self.cef_handed_off = true;
+            crate::osr::host::trace_host(&self.config, "cef.handed_off.waiting_for_primary");
+            return;
+        }
+        match command.spawn() {
+            Ok(child) => self.watch_browser(generation, child),
+            Err(error) => self.fail(format!("Could not launch the browser: {error}")),
         }
     }
 

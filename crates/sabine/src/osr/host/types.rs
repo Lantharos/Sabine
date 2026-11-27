@@ -102,6 +102,9 @@ pub(super) enum OsrHostEvent {
     DirectPresentation(u64, super::native::DirectOutcome),
     #[cfg(target_os = "linux")]
     SharedRuntimeOpened(u64, Result<(), String>),
+    /// Whether the Chromium holding the app's profile took the window.
+    #[cfg(target_os = "linux")]
+    OwnBrowserReached(u64, bool),
     /// The files of the drag over the window, by the drag's number, within
     /// reach of a confined app.
     #[cfg(target_os = "linux")]
@@ -118,7 +121,9 @@ impl OsrHostEvent {
             | Self::IncompatibleHost(generation)
             | Self::FileDialogClosed(generation, ..) => Some(*generation),
             #[cfg(target_os = "linux")]
-            Self::SharedRuntimeOpened(generation, _) => Some(*generation),
+            Self::SharedRuntimeOpened(generation, _) | Self::OwnBrowserReached(generation, _) => {
+                Some(*generation)
+            }
             Self::HostControl(_)
             | Self::SheetPaste(_)
             | Self::FrozenPageMessaged
