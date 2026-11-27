@@ -1,4 +1,4 @@
-# Unreleased
+# Sabine 0.115
 
 - Further windows of an app open in the Chromium it already runs, so an overlay or a second window
   starts no new browser process.
